@@ -29,7 +29,9 @@ class SignalFreeLiveReleaseEvidenceTests(unittest.TestCase):
     def test_static_installer_exact_baseline_or_refuse_unknown_content(self):
         text = (ROOT / "scripts/update_mojplaywin_moj_prop_catalog.py").read_text("utf-8")
         self.assertIn("BASELINE_SIGNAL_FREE_PREVIEW", text)
-        self.assertIn("before not in (after, old_signal, free_preview_signal)", text)
+        self.assertIn("PRESERVED_LIVE_FILES", text)
+        self.assertIn("neither plan, deploy, nor rollback lists it", text)
+        self.assertIn("signals/index.html", text)
         self.assertIn("refusing replacement", text)
         self.assertIn("def verified_manifest(", text)
         self.assertIn("Backup checksum mismatch", text)
