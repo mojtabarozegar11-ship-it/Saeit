@@ -139,7 +139,7 @@ jobs:
       - name: Pin exact approved source without environment leaks
         run: |
           set -euo pipefail
-          test "$(git hash-object -- scripts/mojprop_starter30_file_restore_c28.py)" = "61da74335362b3efb7c28b7935b2530f2a14bc63"
+          test "$(git hash-object -- scripts/mojprop_starter30_file_restore_c28.py)" = "46ca90b95dfd5259138850dfdec05e8f5b263303"
           test -n "$HOST_KEY"
           [[ "$APPROVED_COMMENT_ID" =~ ^[1-9][0-9]{5,18}$ ]]
           python3 -B -m unittest tests.test_mojprop_starter30_file_restore_c28 -q
