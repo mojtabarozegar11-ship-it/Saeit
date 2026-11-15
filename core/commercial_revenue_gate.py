@@ -875,6 +875,16 @@ class SQLiteCommercialLedger:
             )
             if previous + sun > original_sun:
                 raise CommercialGateError("refund_exceeds_original_payment")
+            if self.connection.execute(
+                "SELECT 1 FROM independently_confirmed_refunds WHERE refund_tx = ?",
+                (refund_tx,),
+            ).fetchone():
+                raise CommercialGateError("refund_transfer_already_recorded")
+            if self.connection.execute(
+                "SELECT 1 FROM independently_confirmed_refunds WHERE source_id = ?",
+                (evidence.source_id,),
+            ).fetchone():
+                raise CommercialGateError("refund_source_already_used")
             # Only plausible, authorized local order/transfer identities may
             # reach the external settlement reviewer.
             if self._refund_verifier is None:
