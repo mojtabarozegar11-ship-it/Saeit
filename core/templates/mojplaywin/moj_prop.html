@@ -134,6 +134,30 @@
     <p class="mp-fineprint">{{ plans_copy.notice }}</p>
   </section>
 
+
+  <section class="mp-section" id="plan-one-interest" aria-labelledby="mp-interest-title">
+    <div class="mp-section-head">
+      <p class="mp-index">PLAN 01 / CONTACT REQUEST</p>
+      <h2 id="mp-interest-title">Request information about MOJ PROP Plan 1</h2>
+      <p>Starting challenge capital: $100. Owner-confirmed proposed fee: 30 TRX.
+        This is a contact request only — not checkout, payment, enrollment or guaranteed funding.</p>
+    </div>
+    <form method="post" action="/moj-prop/interest/" style="max-width:580px;padding:20px;border:1px solid #536277;border-radius:12px">
+      {% csrf_token %}
+      <input type="hidden" name="plan_code" value="MOJ-PROP-01">
+      <input type="hidden" name="consent_version" value="moj-prop-interest-v1">
+      <label for="mp-interest-email">Email for this request</label>
+      <input id="mp-interest-email" name="email" type="email" autocomplete="email" required maxlength="254"
+             style="display:block;max-width:100%;width:100%;padding:12px;margin:8px 0 16px" aria-required="true">
+      <label style="display:block;margin-bottom:15px">
+        <input type="checkbox" name="contact_consent" value="yes" required>
+        I agree that MojPlayWin may retain this email to contact me about MOJ PROP Plan 1.
+        No order or TRX invoice is created by this form.
+      </label>
+      <button class="mp-button mp-button-gold" type="submit">Request Plan 1 information</button>
+    </form>
+  </section>
+
   <section class="mp-section mp-rules" id="rules" aria-labelledby="mp-rules-title">
     <div class="mp-section-head">
       <p class="mp-index">03 / {{ rule_title }}</p>

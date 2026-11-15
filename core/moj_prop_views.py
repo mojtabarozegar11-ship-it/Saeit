@@ -5,6 +5,9 @@ No customer registration, wallet payment, promise of funded eligibility, or trad
 """
 from django.http import Http404
 from django.shortcuts import render
+from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.http import require_POST
 
 from prop_firm.moj_prop_page import page_context
 
@@ -68,4 +71,70 @@ def moj_prop_dashboard(request, lang="en"):
     response["Pragma"] = "no-cache"
     response["X-Robots-Tag"] = "noindex, nofollow"
     response["X-Frame-Options"] = "DENY"
+    return response
+
+@never_cache
+@csrf_protect
+@require_POST
+def moj_prop_interest(request):
+    """Accept an opt-in contact request for Plan 1; NEVER sell or issue a TRX invoice."""
+    import hashlib
+    import hmac
+    from django.conf import settings
+    from django.core.cache import cache
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+    from django.db import transaction
+    from django.http import HttpResponse, HttpResponseNotAllowed
+    from prop_firm.models import PropInterest
+
+    # The route is deliberately not mounted on other domains or plaintext HTTP.
+    try:
+        host = request.get_host().split(":")[0].lower()
+    except Exception:
+        raise Http404
+    if host not in ("mojplaywin.com", "www.mojplaywin.com") or not request.is_secure():
+        raise Http404
+    if (request.content_type != "application/x-www-form-urlencoded"
+            or len(request.body) > 4096):
+        return HttpResponse("Invalid form", status=400)
+    if (request.POST.get("plan_code") != "MOJ-PROP-01"
+            or request.POST.get("contact_consent") != "yes"
+            or request.POST.get("consent_version") != "moj-prop-interest-v1"):
+        return HttpResponse("Plan 1 and contact consent required", status=400)
+    raw = request.POST.get("email", "")
+    if type(raw) is not str or not raw or len(raw) > 254:
+        return HttpResponse("Valid email required", status=400)
+    email = raw.strip().lower()
+    try:
+        validate_email(email)
+    except ValidationError:
+        return HttpResponse("Valid email required", status=400)
+
+    # Do not store IP addresses; HMAC-keyed throttling is fail-closed.
+    ip = request.META.get("REMOTE_ADDR", "")
+    if type(ip) is not str or not 1 <= len(ip) <= 80:
+        return HttpResponse("Request unavailable", status=503)
+    bucket = hmac.new(str(settings.SECRET_KEY).encode(), ip.encode(), hashlib.sha256).hexdigest()
+    key = "moj-prop:interest:v1:" + bucket
+    try:
+        if not cache.add(key, 1, timeout=3600) and cache.incr(key) > 8:
+            return HttpResponse("Too many requests", status=429)
+    except Exception:
+        return HttpResponse("Request unavailable", status=503)
+
+    with transaction.atomic():
+        PropInterest.objects.get_or_create(email=email, defaults={
+            "plan_code": "MOJ-PROP-01", "source_language": "en",
+            "consent_version": "moj-prop-interest-v1",
+        })
+    # Do not reveal whether this email was previously registered.
+    response = HttpResponse(
+        "Your interest in MOJ PROP Plan 1 was recorded. "
+        "No payment has been requested, no challenge account has been created. "
+        "MojPlayWin will contact you only about this request.",
+        status=202, content_type="text/plain; charset=utf-8",
+    )
+    response["Cache-Control"] = "private, no-store"
+    response["X-Robots-Tag"] = "noindex, nofollow"
     return response

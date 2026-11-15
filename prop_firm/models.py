@@ -478,3 +478,6 @@ class PropSocialEvidence(models.Model):
 
     def __str__(self):
         return f"social-review:{self.enrollment_id}:{self.platform}"
+
+# Contact-only applications are not paid challenge enrollments.
+from .lead_models import PropInterest
