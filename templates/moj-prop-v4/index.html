@@ -153,12 +153,12 @@
              !/^MOJPROP-[0-9]{8}-[A-F0-9]{8}$/.test(data.request_id) ||
              typeof data.receipt_token!=='string' ||
              data.receipt_token.length<20 || data.receipt_token.length>256 ||
-             /\\s/.test(data.receipt_token)){
+             /\s/.test(data.receipt_token)){
             throw new Error(data.detail||'The request was not confirmed by the intake service.');
           }
           receipt=draft(name,email,service,horizon,notes,'received for manual review',data.request_id,selectedProduct)+
-            '\\nPrivate status token (keep secret): '+data.receipt_token+
-            '\\nUse the Track Request form; no payment status is implied.';
+            '\nPrivate status token (keep secret): '+data.receipt_token+
+            '\nUse the Track Request form; no payment status is implied.';
           statusInput.value=data.receipt_token;
           result.textContent=receipt;
           copy.disabled=false;
