@@ -2273,6 +2273,56 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def _digital_offer_bound_order(self, directory):
+        ledger = self._offline_ledger(str(Path(directory) / "ledger.sqlite3"))
+        self._prepare_private_invoice(ledger, "order-52")
+        approved = self._approved_merchant_offer_for_binding(
+            offer_type=OfferType.DIGITAL_PRODUCT,
+            delivery_manifest_sha256="d" * 64)
+        ledger.bind_approved_merchant_order(
+            order_id="order-52", offer=approved,
+            tenant_registry={"moj_prop": "mojplaywin.com"},
+            independent_release_verifier=lambda offer: True,
+            release_evidence_sha256="e" * 64,
+            independent_release_evidence_verifier=lambda offer, digest: True)
+        ev = self.payment()
+        digest = validate_payment_evidence(
+            ev, expected_order_id="order-52", expected_invoice_id="invoice-52",
+            expected_amount=Decimal("30"), expected_currency="TRX")
+        ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                       event_id="paid-52", payload_digest=digest, payment_evidence=ev)
+        ledger.advance(order_id="order-52", target=CommercialState.FULFILLMENT_PENDING,
+                       event_id="fulfill-pending-52", payload_digest="a" * 64)
+        return ledger
+
+    def test_merchant_digital_delivery_cannot_switch_approved_file_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._digital_offer_bound_order(directory)
+            with self.assertRaisesRegex(CommercialGateError, "merchant_delivery_manifest_mismatch"):
+                ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                    event_id="fulfilled-52", payload_digest="c" * 64,
+                    fulfillment_manifest_sha256="c" * 64)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "fulfillment_pending")
+            binding = ledger.connection.execute(
+                "SELECT delivery_manifest_sha256 FROM merchant_order_bindings WHERE order_id = ?",
+                ("order-52",)).fetchone()
+            self.assertEqual(binding["delivery_manifest_sha256"], "d" * 64)
+            ledger.close()
+
+    def test_merchant_digital_delivery_accepts_only_matching_approved_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._digital_offer_bound_order(directory)
+            state = ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                event_id="fulfilled-52", payload_digest="d" * 64,
+                fulfillment_manifest_sha256="d" * 64)
+            self.assertEqual(state, CommercialState.FULFILLED)
+            with self.assertRaisesRegex(CommercialGateError, "merchant_delivery_manifest_mismatch"):
+                ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                    event_id="fulfilled-52", payload_digest="d" * 64,
+                    fulfillment_manifest_sha256="c" * 64)
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
