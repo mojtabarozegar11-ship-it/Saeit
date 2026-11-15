@@ -17,6 +17,9 @@ import stat
 from services.mpw_trx_walletless_core import (
     ADDRESS, NETWORK, TX_ID, INVOICE_TTL, InvoiceIntent, PaymentHold, issue_intent,
 )
+from services.mpw_trx_merchant_binding import (
+    MerchantBindingRejected, binding_for_request, validate_persisted_binding,
+)
 from services.mpw_walletless_django_test_bridge import TrustedNodePair
 
 PROVIDER = "mpw_walletless_trx_v1"
@@ -105,9 +108,16 @@ def _key(address: str, amount_sun: int) -> str:
 def _encode(invoice: InvoiceIntent) -> str:
     if not isinstance(invoice, InvoiceIntent) or invoice.network != NETWORK:
         raise PaymentHold("Invalid invoice intent")
-    doc = {"v": 1, "to": invoice.recipient, "sun": invoice.amount_sun,
+    try:
+        domain, merchant_id = validate_persisted_binding(
+            invoice.merchant_domain, invoice.merchant_id
+        )
+    except MerchantBindingRejected as exc:
+        raise PaymentHold("Invoice is not bound to a merchant") from exc
+    doc = {"v": 2, "to": invoice.recipient, "sun": invoice.amount_sun,
            "rate": str(invoice.quote_usd_per_trx),
-           "at": invoice.issued_at.astimezone(timezone.utc).isoformat()}
+           "at": invoice.issued_at.astimezone(timezone.utc).isoformat(),
+           "d": domain, "m": merchant_id}
     encoded = json.dumps(doc, separators=(",", ":"), sort_keys=True)
     if len(encoded) > 200 or _key(invoice.recipient, invoice.amount_sun) == "":
         raise PaymentHold("Existing provider_reference column too short")
@@ -120,10 +130,13 @@ def _decode(intent) -> InvoiceIntent:
         if intent.provider != PROVIDER:
             raise PaymentHold("Wrong gateway provider")
         doc = json.loads(intent.provider_reference)
-        if type(doc) is not dict or set(doc) != {"v", "to", "sun", "rate", "at"}:
+        if type(doc) is not dict or set(doc) != {
+            "v", "to", "sun", "rate", "at", "d", "m"
+        }:
             raise PaymentHold("Unrecognized invoice envelope")
-        if type(doc["v"]) is not int or doc["v"] != 1:
+        if type(doc["v"]) is not int or doc["v"] != 2:
             raise PaymentHold("Unsupported invoice version")
+        domain, merchant_id = validate_persisted_binding(doc["d"], doc["m"])
         at = datetime.fromisoformat(doc["at"])
         rate = Decimal(doc["rate"])
         sun = doc["sun"]
@@ -138,6 +151,7 @@ def _decode(intent) -> InvoiceIntent:
             network=NETWORK, recipient=doc["to"], amount_sun=sun,
             usd_total=Decimal(intent.amount), quote_usd_per_trx=rate,
             issued_at=at, expires_at=at + INVOICE_TTL,
+            merchant_domain=domain, merchant_id=merchant_id,
         )
     except PaymentHold:
         raise
@@ -216,7 +230,7 @@ def _allocation_lock(db):
 
 
 def reserve_commercial_intent(order_id: int, buyer_id: int, *, rate_provider,
-                                  configured_receiver, now=None,
+                                  configured_receiver, merchant_domain=None, now=None,
                                   random_below=secrets.randbelow,
                                   db=None, settings=None):
     """Issue once using existing PaymentIntent uniqueness, never alter schema."""
@@ -241,6 +255,10 @@ def reserve_commercial_intent(order_id: int, buyer_id: int, *, rate_provider,
         raise PaymentHold("Invalid merchant-owned TRON address") from exc
     current = now or django_timezone.now()
     require_active_merchant_wallet(settings, recipient, now=current)
+    try:
+        merchant = binding_for_request(settings, merchant_domain, recipient)
+    except MerchantBindingRejected as exc:
+        raise PaymentHold("Request is not bound to a configured merchant") from exc
 
     # Other payment rails are disabled in this controlled test. This check
     # also avoids ambiguous reuse of CommerceInvoice's signed invoice table.
@@ -282,6 +300,7 @@ def reserve_commercial_intent(order_id: int, buyer_id: int, *, rate_provider,
                 usd_total=total, usd_per_trx=Decimal(str(quote[0])),
                 quote_observed_at=quote[1], now=current,
                 is_amount_reserved=used, random_below=random_below,
+                merchant_domain=merchant.domain, merchant_id=merchant.merchant_id,
             )
             created = PaymentIntent.objects.create(
                 order=order, amount=total, currency="USD", status=WAITING,
@@ -314,6 +333,14 @@ def settle_commercial_intent(intent_id: int, tx_hash: str,
         if intent.status != WAITING:
             raise PaymentHold("Intent is no longer awaiting payment")
         invoice = _decode(intent)
+        try:
+            merchant = binding_for_request(
+                settings, invoice.merchant_domain, invoice.recipient
+            )
+        except MerchantBindingRejected as exc:
+            raise PaymentHold("Persisted invoice merchant is no longer configured") from exc
+        if merchant.merchant_id != invoice.merchant_id:
+            raise PaymentHold("Persisted invoice merchant identity changed")
         order = Order.objects.select_for_update().get(pk=intent.order_id)
         total, item = _ready_order(order, buyer_id=invoice.customer_id)
         if total != invoice.usd_total:
