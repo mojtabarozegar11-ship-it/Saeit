@@ -55,7 +55,7 @@ class AuthorSiteManualReleaseTests(unittest.TestCase):
             "RESTORE_VERIFIED", "ROLLBACK_VERIFIED", "TENANT_ISOLATION_VERIFIED"
         ):
             with self.subTest(key=key):
-                self.assertIn('[[ "
+                self.assertIn('[[ "' + chr(36) + key + '" == "true" ]]', self.deploy)
         self.assertLess(
             self.deploy.index('[[ "$TENANT_ISOLATION_VERIFIED" == "true" ]]'),
             self.deploy.index("- name: Establish pinned SSH relay"),
