@@ -6,6 +6,7 @@ financial copy or the canonical mojtaba.bot.ai service identity.
 from unittest.mock import patch
 
 from django.core.exceptions import DisallowedHost
+from django.http import Http404
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from core.financial_brand_pages import financial_brand_page
@@ -15,7 +16,8 @@ from core.financial_brand_pages import financial_brand_page
     ALLOWED_HOSTS=[
         "mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir",
         "www.zomorodmelal.ir", "attacker-zomorodmelal.ir",
-        "zomorodmelal.ir.attacker.example",
+        "zomorodmelal.ir.attacker.example", "saman.mojplaywin.com",
+        "signals.zomorodmelal.ir",
     ],
     USE_X_FORWARDED_HOST=False,
 )
@@ -45,12 +47,24 @@ class FinancialBrandHostLocaleTests(SimpleTestCase):
     def test_mojplaywin_www_host_is_english(self):
         self.assertEqual(self.rendered("www.mojplaywin.com")["locale"], "en")
 
-    def test_company_name_inside_attacker_prefix_does_not_select_fa(self):
-        self.assertEqual(self.rendered("attacker-zomorodmelal.ir")["locale"], "en")
+    def test_attacker_prefix_cannot_serve_financial_brand(self):
+        with self.assertRaises(Http404):
+            self.rendered("attacker-zomorodmelal.ir")
 
-    def test_company_name_inside_attacker_suffix_does_not_select_fa(self):
+    def test_attacker_suffix_cannot_serve_financial_brand(self):
+        with self.assertRaises(Http404):
+            self.rendered("zomorodmelal.ir.attacker.example")
+
+    def test_owned_saman_subdomain_keeps_english_financial_copy(self):
+        self.assertEqual(self.rendered("saman.mojplaywin.com")["locale"], "en")
+
+    def test_owned_company_subdomain_keeps_persian_financial_copy(self):
         self.assertEqual(
-            self.rendered("zomorodmelal.ir.attacker.example")["locale"], "en")
+            self.rendered("signals.zomorodmelal.ir")["locale"], "fa")
+
+    def test_explicit_arabic_locale_cannot_override_foreign_merchant_host(self):
+        with self.assertRaises(Http404):
+            self.rendered("attacker-zomorodmelal.ir", locale="ar")
 
     def test_forwarded_host_untrusted_header_cannot_override_real_host(self):
         got = self.rendered("mojplaywin.com",
