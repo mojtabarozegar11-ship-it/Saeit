@@ -15,7 +15,7 @@ from core.models import MojPropDeliveryEvidence, MojPropOffer, MojPropRequest
 
 
 ACTION_LABELS = {
-    "urgent_unreviewed": "Review an urgent new request; confirm scope and ability to deliver",
+    "urgent_unreviewed": "Review urgent new requests promptly; confirm scope and ability to deliver",
     "new_over_24h": "Triage unanswered new requests before they age out",
     "reviewing_without_draft": "Prepare a scoped draft after a real manual review",
     "draft_over_24h": "Check draft scope, deliverable rights, exclusions and price",
@@ -63,8 +63,7 @@ def action_queue_snapshot(*, detail_limit=0):
     ).filter(has_issued=False)
     lists = (
         ("urgent_unreviewed", active.filter(
-            status="new", horizon="urgent",
-            created_at__lte=now - timedelta(hours=1)
+            status="new", horizon="urgent"
         ), "request_id"),
         ("new_over_24h", active.filter(
             status="new", created_at__lte=now - timedelta(days=1)
@@ -76,20 +75,20 @@ def action_queue_snapshot(*, detail_limit=0):
         ), "request_id"),
         ("draft_over_24h", MojPropOffer.objects.filter(
             status="draft", created_at__lte=now - timedelta(days=1)
-        ), "lead__request_id"),
+        ).exclude(lead__status__in=("spam", "closed", "delivered")), "lead__request_id"),
         ("approved_not_issued", MojPropOffer.objects.filter(
             status="approved", reviewed_at__isnull=False,
             issued_at__isnull=True,
-        ), "lead__request_id"),
+        ).exclude(lead__status__in=("spam", "closed", "delivered")), "lead__request_id"),
         ("issued_expires_soon", MojPropOffer.objects.filter(
             status="issued", issued_at__isnull=False,
             expires_at__gt=now,
             expires_at__lte=now + timedelta(days=1),
-        ), "lead__request_id"),
+        ).exclude(lead__status__in=("spam", "closed", "delivered")), "lead__request_id"),
         ("issued_already_expired", MojPropOffer.objects.filter(
             status="issued", issued_at__isnull=False,
             expires_at__lte=now,
-        ), "lead__request_id"),
+        ).exclude(lead__status__in=("spam", "closed", "delivered")), "lead__request_id"),
         ("accepted_no_artifact", accepted.annotate(
             has_delivery=Exists(delivery_for_offer)
         ).filter(has_delivery=False), "lead__request_id"),
