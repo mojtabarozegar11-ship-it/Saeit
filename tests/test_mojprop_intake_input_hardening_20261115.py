@@ -169,6 +169,18 @@ class MojPropIntakeSafetyTests(TestCase):
         self.assertEqual(lead.product_id, 72)
         self.assertEqual(lead.route, "digital")
 
+
+    def test_json_digital_product_id_requires_exact_integer_not_string_or_boolean(self):
+        payload = {**self.data, "service": "digital", "product_id": 72}
+        accepted = self.post(payload)
+        self.assertEqual(accepted.status_code, 201, accepted.content[:300])
+        self.assertEqual(MojPropRequest.objects.get().product_id, 72)
+        for raw_id in ("72", 72.0, True, None, -72, 999):
+            with self.subTest(product_id=raw_id):
+                rejected = self.post({**payload, "product_id": raw_id})
+                self.assertEqual(rejected.status_code, 400, rejected.content[:300])
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+
     def test_browser_form_noncanonical_digital_sku_is_rejected(self):
         for sku in ("072", "+72", "72 ", "72.0", "۷۲", "999", ""):
             with self.subTest(sku=sku):
