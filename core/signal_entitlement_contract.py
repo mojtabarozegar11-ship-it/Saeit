@@ -186,3 +186,44 @@ def verify_signal_access(*, lease, buyer_email, requested_sku, mirror_brand,
         return False
     expected = hmac.new(signing_key, _claim_payload(lease), sha256).hexdigest()
     return hmac.compare_digest(expected, lease.hmac_sha256)
+
+
+def authorized_signal_delivery_preflight(
+        *, lease, buyer_email, requested_sku, mirror_brand, now_utc,
+        signing_key, independently_reconciled_invoices, revoked_invoice_ids,
+        signal_record, source_id, source_signature, trusted_source_keys,
+        durable_seen_event_ids, jurisdiction_and_delivery_rights_verified):
+    """Return an authorized *delivery decision* only, never message/charge.
+
+    Both independent buyer entitlement and source provenance must pass.
+    Caller must load ledger, source keys and jurisdiction evidence from its
+    own protected backend; never forward an untrusted request body as proof.
+    A successful decision is for ONE individually authenticated delivery and
+    does not renew an invoice, publish a site or create a profitable trade.
+    """
+    if jurisdiction_and_delivery_rights_verified is not True:
+        return {"eligible_to_deliver": False, "reason": "jurisdiction_or_delivery_rights"}
+    if not verify_signal_access(
+            lease=lease, buyer_email=buyer_email,
+            requested_sku=requested_sku, mirror_brand=mirror_brand,
+            now_utc=now_utc, signing_key=signing_key,
+            independently_reconciled_invoices=independently_reconciled_invoices,
+            revoked_invoice_ids=revoked_invoice_ids):
+        return {"eligible_to_deliver": False, "reason": "unpaid_or_invalid_entitlement"}
+    from .signal_source_evidence import authenticate_signal_source
+    verified = authenticate_signal_source(
+        record=signal_record, brand=mirror_brand, source_id=source_id,
+        signature=source_signature, trusted_source_keys=trusted_source_keys,
+        seen_event_ids=durable_seen_event_ids, now=now_utc)
+    if verified.source_authenticated is not True:
+        return {"eligible_to_deliver": False, "reason": "untrusted_signal_source"}
+    return {
+        "eligible_to_deliver": True,
+        "source_evidence_sha256": verified.audit_digest_sha256,
+        "canonical_bot": CANONICAL_AGENT,
+        "entitlement_sku": lease.sku,
+        "signal_event_id": signal_record["event_id"],
+        "delivery_performed": False,
+        "performance_verified": False,
+        "payment_processed": False,
+    }
