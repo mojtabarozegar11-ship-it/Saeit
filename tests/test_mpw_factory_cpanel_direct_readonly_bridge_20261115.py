@@ -76,7 +76,7 @@ def test_live_observation_is_only_pinned_existing_readonly_allowlist():
 
 def test_reviewed_bridge_and_inventory_outputs_are_immutably_pinned():
     raw = WORKFLOW.read_text(encoding="utf-8")
-    assert _blob_sha(BRIDGE) == "c2b4a7040815369841000b63996e3126a3cd8804"
+    assert _blob_sha(BRIDGE) == "e9614221871614981e4974760217093b58fa0a3f"
     assert _blob_sha(SANITIZER) == "89a3ca61cf3919dd397b5cb2dd36194273f6ee98"
     assert _blob_sha(BRIDGE) in raw
     assert _blob_sha(SANITIZER) in raw
@@ -106,10 +106,52 @@ def test_new_runtime_helper_never_accepts_public_runner_or_unreviewed_script():
     source = ROOT / "scripts/mpw_public_passenger_runtime_readonly_20261102.py"
     assert _blob_sha(source) == "0e4d22460ee62ebf9f89c94a6fecf6f9a14531c2"
     assert "mpw_runtime_readonly)" in bridge
-    assert 'if [[ "$operation" == "mpw_runtime_readonly"' in bridge
+    assert '"$operation" == "mpw_runtime_readonly"' in bridge
+    assert '"$operation" == "mpw_backup_readiness_readonly"' in bridge
     assert 'FACTORY_VPS_RUNNER:-0' in bridge
     assert "MPW_RUNTIME_REQUIRES_LOCAL_FACTORY_VPS" in bridge
     assert 'test "$(git hash-object -- "$script")"' in bridge
     assert 'PYTHONDONTWRITEBYTECODE=1' in bridge
     assert 'python -B - inspect' in bridge
     assert '"release_permitted": False' in source.read_text(encoding="utf-8")
+
+
+def test_backup_capacity_owner_marker_is_bounded_and_no_write():
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    marker = "MPW-FACTORY-BACKUP-READINESS-READONLY-20261115"
+    assert workflow.count("github.event.comment.body == '" + marker + "'") == 2
+    header = workflow.split("\npermissions:", 1)[0]
+    assert "  issue_comment:\n    types: [created]" in header
+    assert "  workflow_dispatch:" in header
+    for forbidden in ("\n  push:", "\n  schedule:", "\n  pull_request:"):
+        assert forbidden not in header
+    step = workflow.split("      - name: Audit scoped cPanel backup prerequisites", 1)[1]
+    assert "github.event_name == 'issue_comment'" in step
+    assert "github.event.comment.body == '" + marker + "'" in step
+    assert 'FACTORY_VPS_RUNNER: "1"' in step
+    assert "bash deploy/cpanel_direct_command.sh mpw_backup_readiness_readonly" in step
+    assert "python3 -B scripts/mojplaywin_isolated_restore_capabilities_readonly.py" in step
+    for forbidden in ("sudo ", "scp ", "rsync ", "tar -xf", "pip install", "docker run",
+                      "mariadb-install-db ", "manage.py migrate", "restart.txt", "curl -X POST",
+                      "send_mail", "chmod ", "chown "):
+        assert forbidden not in step
+
+
+def test_backup_readiness_script_and_vps_capability_are_source_pinned():
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    helper = BRIDGE.read_text(encoding="utf-8")
+    backup = ROOT / "scripts/mojplaywin_backup_restore_readiness_readonly.py"
+    capability = ROOT / "scripts/mojplaywin_isolated_restore_capabilities_readonly.py"
+    assert _blob_sha(backup) == "9fe37626a0d58ae7f2ab8fb4a9206342e997a6be"
+    assert _blob_sha(capability) == "70dcf0fabd4c581a41c6d01438c25faaa75df6bd"
+    assert _blob_sha(backup) in workflow and _blob_sha(backup) in helper
+    assert _blob_sha(capability) in workflow
+    assert _blob_sha(BRIDGE) == "e9614221871614981e4974760217093b58fa0a3f"
+    assert _blob_sha(BRIDGE) in workflow
+    assert "mpw_backup_readiness_readonly)" in helper
+    assert '"$operation" == "mpw_backup_readiness_readonly"' in helper
+    assert 'FACTORY_VPS_RUNNER:-0' in helper
+    assert 'PYTHONDONTWRITEBYTECODE=1' in helper
+    assert 'python -B -' in helper
+    assert '"release_permitted": False' in backup.read_text()
+    assert '"isolated_restore_performed":False' in capability.read_text()

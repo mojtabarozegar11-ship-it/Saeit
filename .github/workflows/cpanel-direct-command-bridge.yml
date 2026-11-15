@@ -43,7 +43,8 @@ jobs:
           github.event.comment.author_association == 'OWNER' &&
           (
             github.event.comment.body == 'MPW-FACTORY-CPANEL-READONLY-20261115' ||
-            github.event.comment.body == 'MPW-FACTORY-CPANEL-RUNTIME-READONLY-20261115'
+            github.event.comment.body == 'MPW-FACTORY-CPANEL-RUNTIME-READONLY-20261115' ||
+            github.event.comment.body == 'MPW-FACTORY-BACKUP-READINESS-READONLY-20261115'
           )
         )
       )
@@ -79,7 +80,7 @@ jobs:
           set -euo pipefail
           test -n "$HOST_KEY"
           # The bridge and output sanitizer are already-reviewed main sources.
-          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "c2b4a7040815369841000b63996e3126a3cd8804"
+          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "e9614221871614981e4974760217093b58fa0a3f"
           test "$(git hash-object -- scripts/mojplaywin_cpanel_readonly_inventory.py)" = "89a3ca61cf3919dd397b5cb2dd36194273f6ee98"
           # Read-only operations run *on* the authorized self-hosted VPS.
           # Never run a GitHub-hosted SSH hop to a possibly filtered VPS port.
@@ -97,6 +98,23 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$HOST_KEY"
-          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "c2b4a7040815369841000b63996e3126a3cd8804"
+          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "e9614221871614981e4974760217093b58fa0a3f"
           test "$(git hash-object -- scripts/mpw_public_passenger_runtime_readonly_20261102.py)" = "0e4d22460ee62ebf9f89c94a6fecf6f9a14531c2"
           timeout 130s bash deploy/cpanel_direct_command.sh mpw_runtime_readonly
+
+      - name: Audit scoped cPanel backup prerequisites and local isolated-restore capabilities
+        if: >-
+          github.event_name == 'issue_comment' &&
+          github.event.comment.body == 'MPW-FACTORY-BACKUP-READINESS-READONLY-20261115'
+        shell: bash
+        env:
+          FACTORY_VPS_RUNNER: "1"
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "e9614221871614981e4974760217093b58fa0a3f"
+          test "$(git hash-object -- scripts/mojplaywin_backup_restore_readiness_readonly.py)" = "9fe37626a0d58ae7f2ab8fb4a9206342e997a6be"
+          test "$(git hash-object -- scripts/mojplaywin_isolated_restore_capabilities_readonly.py)" = "70dcf0fabd4c581a41c6d01438c25faaa75df6bd"
+          timeout 110s bash deploy/cpanel_direct_command.sh mpw_backup_readiness_readonly
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojplaywin_isolated_restore_capabilities_readonly.py
