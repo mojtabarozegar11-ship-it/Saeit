@@ -106,6 +106,11 @@ def review_signal(record: EducationalSignal, *, now: datetime | None = None):
     fingerprint = hashlib.sha256(
         json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+    # Syntactically valid HTTPS URLs are not proof of independently
+    # observed live market data. Never mark content publishable or billed
+    # until a separate audited source adapter and commercial contract pass.
     return {"record": body, "evidence_fingerprint": fingerprint,
-            "publication_allowed": True,
+            "content_policy_passed": True,
+            "independent_source_verified": False,
+            "publication_allowed": False,
             "delivery_confirmed": False, "payment_received": False}
