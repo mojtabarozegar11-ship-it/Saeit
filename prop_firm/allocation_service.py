@@ -102,6 +102,13 @@ def stage_provisional_allocation(*, account_id, as_of=None, period_number=None):
         raise AllocationRejected("Verified funded account required")
     if account.status != PropAccount.Status.ACTIVE or not account.reference:
         raise AllocationRejected("Funded broker account not active")
+    # A single real broker account may never back two separate customer
+    # allocations. The broker reference is financial identity, not a label.
+    if (account.reference != account.reference.strip()
+            or PropAccount.objects.filter(
+                kind=PropAccount.Kind.FUNDED, reference=account.reference,
+            ).exclude(pk=account.pk).exists()):
+        raise AllocationRejected("Broker account reference is not unique")
     if account.policy_version != POLICY.version:
         raise AllocationRejected("Account policy version mismatch")
     if (account.trader.kyc_status != "verified"
