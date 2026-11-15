@@ -110,6 +110,16 @@ def _digest(payload: Mapping[str, object]) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def invoice_commitment(*, order_id: str, invoice_id: str, amount: Decimal, currency: str) -> str:
+    """Bind an issued invoice reference to immutable amount and denomination."""
+    return _digest({
+        "order_id": _slug(order_id, "order_id"),
+        "invoice_id": _slug(invoice_id, "invoice_id"),
+        "amount": str(_amount(amount)),
+        "currency": _currency(currency),
+    })
+
+
 @dataclass(frozen=True)
 class OfferContract:
     offer_id: str
@@ -358,6 +368,12 @@ class SQLiteCommercialLedger:
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS order_events_order_idx ON order_events(order_id);
+            CREATE TABLE IF NOT EXISTS issued_invoices (
+                order_id TEXT PRIMARY KEY REFERENCES orders(order_id),
+                invoice_id TEXT NOT NULL UNIQUE,
+                payload_digest TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS settled_transactions (
                 network TEXT NOT NULL,
                 transaction_id TEXT NOT NULL,
@@ -391,6 +407,45 @@ class SQLiteCommercialLedger:
                 )
         except sqlite3.IntegrityError as exc:
             raise CommercialGateError("order_already_exists") from exc
+
+    def bind_issued_invoice(self, *, order_id: str, invoice_id: str,
+                            payload_digest: str) -> None:
+        """Commit to an invoice that was previously recorded in the order history.
+
+        This is private staging only; it does not send an invoice or confirm
+        independent provider approval. Rebinding or cross-order reuse fails.
+        """
+        order_id = _slug(order_id, "order_id")
+        invoice_id = _slug(invoice_id, "invoice_id")
+        if not isinstance(payload_digest, str) or not _HEX64.fullmatch(payload_digest):
+            raise CommercialGateError("invoice_digest_invalid")
+        with self.connection:
+            order = self.connection.execute(
+                "SELECT state, amount, currency FROM orders WHERE order_id = ?", (order_id,),
+            ).fetchone()
+            if order is None:
+                raise CommercialGateError("order_not_found")
+            if order["state"] not in (CommercialState.INVOICED.value, CommercialState.PAYMENT_PENDING.value):
+                raise CommercialGateError("invoice_bind_state_invalid")
+            expected = invoice_commitment(
+                order_id=order_id, invoice_id=invoice_id,
+                amount=Decimal(order["amount"]), currency=order["currency"],
+            )
+            if expected != payload_digest:
+                raise CommercialGateError("invoice_commitment_mismatch")
+            issued = self.connection.execute(
+                "SELECT payload_digest FROM order_events WHERE order_id = ? AND state = ?",
+                (order_id, CommercialState.INVOICED.value),
+            ).fetchone()
+            if issued is None or issued["payload_digest"] != expected:
+                raise CommercialGateError("invoice_issuance_event_missing")
+            try:
+                self.connection.execute(
+                    "INSERT INTO issued_invoices VALUES (?, ?, ?, ?)",
+                    (order_id, invoice_id, expected, datetime.now(timezone.utc).isoformat()),
+                )
+            except sqlite3.IntegrityError:
+                raise CommercialGateError("invoice_already_registered") from None
 
     def advance(
         self,
@@ -441,6 +496,18 @@ class SQLiteCommercialLedger:
                 )
                 if target is CommercialState.SETTLED and payload_digest != evidence_digest:
                     raise CommercialGateError("settlement_payload_mismatch")
+                issued = self.connection.execute(
+                    "SELECT invoice_id, payload_digest FROM issued_invoices WHERE order_id = ?", (order_id,),
+                ).fetchone()
+                if issued is None:
+                    raise CommercialGateError("registered_invoice_required")
+                if issued["invoice_id"] != payment_evidence.invoice_id or (
+                    issued["payload_digest"] != invoice_commitment(
+                        order_id=order_id, invoice_id=issued["invoice_id"],
+                        amount=Decimal(row["amount"]), currency=row["currency"],
+                    )
+                ):
+                    raise CommercialGateError("settlement_invoice_mismatch")
                 if target is CommercialState.VERIFIED_REVENUE:
                     settled = self.connection.execute(
                         "SELECT transaction_id FROM settled_transactions WHERE network = ? AND order_id = ?",
