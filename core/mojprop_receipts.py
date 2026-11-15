@@ -12,7 +12,7 @@ RECEIPT_AGE_SECONDS = 90 * 24 * 60 * 60
 PUBLIC_STATUSES = {
     "new": "Received for manual review",
     "reviewing": "Being reviewed",
-    "offer_sent": "Written offer prepared or sent",
+    "offer_sent": "Written offer recorded; customer receipt not verified",
     "approved": "Scope accepted; delivery pending",
     "delivered": "Delivery marked complete",
     "closed": "Request closed",
