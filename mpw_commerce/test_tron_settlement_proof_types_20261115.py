@@ -15,7 +15,8 @@ class TronFinalityProofBoundaryTests(TestCase):
         self.sender = "TA9pkx4DFxrEw8JZzUtyDrh2uAat1LDuJL"
         self.invoice = SimpleNamespace(
             asset="TRX", network="tron-mainnet", recipient=self.receiver,
-            total_usd=Decimal("29.00"), sender_challenge_id="challenge-101",
+            total_usd=Decimal("29.00"), quote_usd_per_asset=Decimal("0.2"),
+            sender_challenge_id="challenge-101",
             sender_signature_verified_at=now, issued_at=now,
             expires_at=now + timedelta(minutes=10), order_id=101,
             expected_sender=self.sender, amount_atomic="145000000",
@@ -64,3 +65,36 @@ class TronFinalityProofBoundaryTests(TestCase):
                 with self.subTest(key=key, value=repr(value)), self.assertRaises(SettlementRejected):
                     _verify_evidence(self.invoice, self.tx,
                                      {**self.proof, key: value})
+
+    def test_corrupted_atomic_amount_is_rejected_before_chain_credit(self):
+        for bad in ("", "0", "000145000000", "+145000000",
+                    "145_000_000", "145000000 ", "1e9", 145000000, None):
+            with self.subTest(bad=repr(bad)), self.assertRaises(SettlementRejected):
+                self.invoice.amount_atomic = bad
+                _verify_evidence(self.invoice, self.tx, self.proof)
+        self.invoice.amount_atomic = "145000000"
+        self.assertEqual(len(_verify_evidence(self.invoice, self.tx, self.proof)[0]), 64)
+
+    def test_invalid_legacy_price_or_rate_does_not_settle(self):
+        for field, invalid in (
+            ("total_usd", Decimal("NaN")), ("total_usd", Decimal("Infinity")),
+            ("total_usd", Decimal("-1")), ("total_usd", "29.00"),
+            ("quote_usd_per_asset", Decimal("NaN")),
+            ("quote_usd_per_asset", Decimal("0")),
+            ("quote_usd_per_asset", Decimal("Infinity")),
+            ("quote_usd_per_asset", 0.2),
+        ):
+            with self.subTest(field=field, value=repr(invalid)):
+                original = getattr(self.invoice, field)
+                try:
+                    setattr(self.invoice, field, invalid)
+                    with self.assertRaises(SettlementRejected):
+                        _verify_evidence(self.invoice, self.tx, self.proof)
+                finally:
+                    setattr(self.invoice, field, original)
+
+    def test_untrusted_dictionary_subclass_cannot_inject_evidence(self):
+        class SyntheticProof(dict):
+            pass
+        with self.assertRaises(SettlementRejected):
+            _verify_evidence(self.invoice, self.tx, SyntheticProof(self.proof))
