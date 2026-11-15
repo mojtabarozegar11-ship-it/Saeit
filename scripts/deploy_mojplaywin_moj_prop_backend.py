@@ -47,10 +47,14 @@ FILES = (
     Path("core/migrations/0044_mojprop_acceptance_evidence.py"),
     Path("core/migrations/0045_mojprop_delivery_evidence.py"),
     Path("scripts/mojprop_schema_preflight_c83.py"),
+    Path("scripts/fixtures/mojprop_legacy_request_source_c84.py"),
+    Path("scripts/fixtures/mojprop_legacy_admin_source_c84.py"),
 )
 ALL_FILES = (URLCONF,) + FILES
 REPLACE_FILES = tuple(path for path in FILES if path not in (
     Path("core/models.py"), Path("core/admin.py"),
+    Path("scripts/fixtures/mojprop_legacy_request_source_c84.py"),
+    Path("scripts/fixtures/mojprop_legacy_admin_source_c84.py"),
 ))
 
 
