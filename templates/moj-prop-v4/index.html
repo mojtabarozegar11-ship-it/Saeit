@@ -53,9 +53,10 @@
       };
       // Financial-brand signal pages link here with ?service=signals.
       // Honor only actual service codes; never write a URL string into the form.
-      const selectedRoute=new URLSearchParams(window.location.search).get('service');
-      if(Object.prototype.hasOwnProperty.call(labels,selectedRoute)){
-        document.getElementById('service').value=selectedRoute;
+      const serviceSelect=document.getElementById('service');
+      const requestedService=new URLSearchParams(window.location.search).get('service');
+      if(Object.prototype.hasOwnProperty.call(labels,requestedService)){
+        serviceSelect.value=requestedService;
       }
 
       async function csrf(){
@@ -108,8 +109,15 @@
             headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRFToken':token},
             body:JSON.stringify({name,email,service,horizon,notes,website,consent:document.getElementById('consent').checked})
           });
-          const data=await response.json();
-          if(!response.ok || !data.ok){
+          const data=await response.json().catch(()=>({}));
+          // A successful HTTP 200, or an unrelated HTML proxy response, is
+          // not a persistent commercial lead. The server must issue HTTP 201
+          // and a canonical, auditable request ID before receipt controls open.
+          if(response.status!==201 || data.ok!==true ||
+             typeof data.request_id!=='string' ||
+             !/^MOJPROP-[0-9]{8}-[A-F0-9]{8}$/.test(data.request_id) ||
+             (data.receipt_token!==undefined &&
+              (typeof data.receipt_token!=='string' || data.receipt_token.length>256))){
              const problems=data.fields && typeof data.fields==='object' ? Object.entries(data.fields).map(([field,message])=>field+': '+message).join('; ') : '';
              const retry=response.status===429 ? ' Wait before resubmitting; no new request was recorded.' : '';
              throw new Error((data.detail||'The request could not be received.')+(problems?' '+problems:'')+retry);
@@ -121,10 +129,12 @@
           copy.disabled=false;
           download.disabled=false;
         }catch(error){
-          receipt=draft(name,email,service,horizon,notes,'not submitted; local draft only','');
-          result.textContent=receipt+'\n\nReason: '+error.message;
-          copy.disabled=false;
-          download.disabled=false;
+          // A failed request is NOT a buyer receipt and must never enable
+          // copy/download controls suggesting a customer was registered.
+          receipt='';
+          result.textContent='Request NOT submitted. '+error.message+' No ID or payment was created.';
+          copy.disabled=true;
+          download.disabled=true;
         }finally{
           submit.disabled=false;
           form.removeAttribute('aria-busy');

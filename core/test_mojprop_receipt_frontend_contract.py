@@ -64,19 +64,26 @@ class MojPropReceiptFrontendContract(SimpleTestCase):
         self.assertIn("form.setAttribute('aria-busy','true')", html)
         self.assertIn("form.removeAttribute('aria-busy')", html)
 
-    def test_failed_intake_explains_field_errors_and_supports_offline_draft(self):
+    def test_failed_intake_explains_field_errors_without_creating_fake_receipt(self):
         html = self.html()
         self.assertIn("Object.entries(data.fields)", html)
         self.assertIn("response.status===429", html)
-        self.assertIn("not submitted; local draft only", html)
-        self.assertIn("download.disabled=false;", html)
+        self.assertIn("Request NOT submitted.", html)
+        self.assertNotIn("not submitted; local draft only", html)
+        self.assertIn("receipt='';", html)
+        self.assertIn("copy.disabled=true;", html)
+        self.assertIn("download.disabled=true;", html)
+        # User-triggered local download stays supported for a server-backed
+        # receipt; a failed POST may not unlock it or mint a phantom sale.
+        self.assertIn("download.addEventListener('click'", html)
         self.assertIn("Copy unavailable — use Save private receipt", html)
 
     def test_financial_brand_signal_link_prefills_the_actual_service_code(self):
         html = self.html()
         self.assertIn("new URLSearchParams(window.location.search).get('service')", html)
-        self.assertIn("Object.prototype.hasOwnProperty.call(labels,selectedRoute)", html)
-        self.assertIn("document.getElementById('service').value=selectedRoute", html)
+        self.assertIn("Object.prototype.hasOwnProperty.call(labels,requestedService)", html)
+        self.assertIn("serviceSelect.value=requestedService", html)
+        self.assertNotIn("eval(requestedService)", html)
         self.assertIn("<option value=\"signals\">Educational signals", html)
         self.assertIn("const labels={", html)
 
