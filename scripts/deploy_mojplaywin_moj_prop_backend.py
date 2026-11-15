@@ -23,6 +23,7 @@ FILES = (
     Path("core/admin.py"),
     Path("core/mojprop_views.py"),
     Path("core/migrations/0041_mojprop_request.py"),
+    Path("core/migrations/0042_alter_mojproprequest_source.py"),
 )
 
 
