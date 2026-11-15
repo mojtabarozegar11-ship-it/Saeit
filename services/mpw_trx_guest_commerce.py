@@ -354,10 +354,15 @@ def patch_commercial(namespace):
                     # redirect to a positive-ID local TRX invoice. Validation
                     # errors, 200 pages and unrelated redirects are NOT sales
                     # funnel successes; analytics may never break checkout.
-                    from services.mpw_invoice_funnel_identity import (
-                        created_invoice_product_id,
-                    )
-                    product_id = created_invoice_product_id(response, args, kwargs)
+                    # An optional analytics dependency must never turn a
+                    # successfully-created invoice into a buyer-facing 500.
+                    try:
+                        from services.mpw_invoice_funnel_identity import (
+                            created_invoice_product_id,
+                        )
+                        product_id = created_invoice_product_id(response, args, kwargs)
+                    except Exception:
+                        product_id = None
                     if product_id is not None:
                         try:
                             from core.models import Product
