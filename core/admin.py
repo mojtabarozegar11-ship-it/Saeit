@@ -277,3 +277,15 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
     search_fields = ("name", "organization", "email", "subject", "message")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (("درخواست", {"fields": ("kind", "name", "organization", "email", "phone", "subject", "message")}), ("مدیریت", {"fields": ("status", "internal_note", "created_at", "updated_at")}))
+
+
+from .models import MojPropRequest
+
+
+@admin.register(MojPropRequest)
+class MojPropRequestAdmin(ModelAdmin):
+    list_display = ("request_id", "name", "email", "route", "status", "created_at")
+    list_filter = ("status", "route", "horizon", "created_at")
+    search_fields = ("request_id", "name", "email", "notes")
+    readonly_fields = ("request_id", "created_at", "updated_at", "ip_hash", "user_agent")
+    ordering = ("-created_at",)
