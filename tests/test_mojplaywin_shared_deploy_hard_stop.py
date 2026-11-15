@@ -84,6 +84,23 @@ class ProtectedSubsiteDeployLockTests(unittest.TestCase):
         no_dispatch = header.replace("  workflow_dispatch:", "")
         self.assertFalse(manual_main_deployment_guarded(source, no_dispatch))
 
+    def test_all_release_jobs_are_manual_without_unreviewed_push(self):
+        from scripts.mojplaywin_detect_deploy_triggers import (
+            MANUAL_RELEASE_JOBS, manual_release_job_guarded,
+        )
+        self.assertEqual(len(MANUAL_RELEASE_JOBS), 4)
+        for filename, job in MANUAL_RELEASE_JOBS.items():
+            with self.subTest(filename=filename, job=job):
+                source = (ROOT / ".github/workflows" / filename).read_text("utf-8")
+                header = source.split("\njobs:", 1)[0]
+                self.assertTrue(manual_release_job_guarded(source, header, job))
+                unsafe = source.replace(
+                    "if: github.event_name == 'workflow_dispatch'",
+                    "if: github.event_name == 'push'",
+                    1,
+                )
+                self.assertFalse(manual_release_job_guarded(unsafe, header, job))
+
     def test_only_two_legacy_workflows_are_locked(self):
         self.assertEqual(len(WORKFLOWS), 2)
         self.assertNotIn(MAIN.name, WORKFLOWS)
