@@ -580,6 +580,21 @@ class SQLiteCommercialLedger:
         self.connection = sqlite3.connect(path)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys = ON")
+        # This staged source evolved its merchant binding table. Existing
+        # ledgers with earlier layouts must NOT be silently upgraded or used.
+        # A schema migration needs its own backup, review and approval.
+        merchant_columns = tuple(
+            row["name"] for row in self.connection.execute(
+                "PRAGMA table_info(merchant_order_bindings)"
+            )
+        )
+        required_columns = (
+            "order_id", "tenant_id", "canonical_host", "offer_id", "offer_type",
+            "delivery_manifest_sha256", "release_evidence_sha256", "recorded_at",
+        )
+        if merchant_columns and merchant_columns != required_columns:
+            self.connection.close()
+            raise CommercialGateError("merchant_ledger_schema_migration_required")
         self.connection.executescript(
             """
             CREATE TABLE IF NOT EXISTS orders (
