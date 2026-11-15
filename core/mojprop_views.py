@@ -19,6 +19,7 @@ from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_protect
 
 from .models import MojPropRequest
 from .mojprop_catalog_contract import public_service_catalog
@@ -128,6 +129,7 @@ def _json(data, status=200):
     return response
 
 
+@csrf_protect
 @require_http_methods(["GET", "POST"])
 def mojprop_intake(request):
     """Return a CSRF token or create one manual-review request."""
