@@ -58,6 +58,56 @@ class TronCommerceSurfaceRegistryTests(SimpleTestCase):
         self.assertFalse(summary["live_gateway_connected"])
         self.assertTrue(summary["independent_tenant_registration_required"])
 
+
+    def test_registry_accepts_finite_generator_without_mutation(self):
+        self.assertTrue(assert_safe_surface_registry(
+            item for item in build_surface_registry()
+        ))
+
+    def test_registry_bounds_infinite_generator(self):
+        def infinite():
+            while True:
+                yield build_surface_registry()[0]
+        with self.assertRaises(ValueError):
+            assert_safe_surface_registry(infinite())
+
+    def test_registry_rejects_invalid_collection_types(self):
+        for value in (None, "five", b"five", {"surface_id": "moj_prop"}):
+            with self.subTest(value=type(value).__name__), self.assertRaises(ValueError):
+                assert_safe_surface_registry(value)
+
+    def test_registry_rejects_non_mapping_rows(self):
+        for bad in (None, object(), [], "moj_prop"):
+            with self.subTest(value=type(bad).__name__), self.assertRaises(ValueError):
+                rows = list(build_surface_registry())
+                rows[0] = bad
+                assert_safe_surface_registry(rows)
+
+    def test_registry_rejects_unhashable_id_as_domain_error(self):
+        rows = list(build_surface_registry())
+        rows[0] = {**rows[0], "surface_id": ["moj_prop"]}
+        with self.assertRaises(ValueError):
+            assert_safe_surface_registry(rows)
+
+    def test_registry_rejects_boolean_priority_even_if_equal_to_one(self):
+        rows = list(build_surface_registry())
+        rows[0] = {**rows[0], "priority": True}
+        with self.assertRaises(ValueError):
+            assert_safe_surface_registry(rows)
+
+    def test_registry_rejects_drifted_source_of_scope(self):
+        rows = list(build_surface_registry())
+        rows[0] = {**rows[0], "source_of_scope": "owner_override"}
+        with self.assertRaises(ValueError):
+            assert_safe_surface_registry(rows)
+
+    def test_registry_rejects_malformed_blocker_collection(self):
+        for bad in (None, 0, "merchant_entity_verified", {"a": "b"}):
+            with self.subTest(value=type(bad).__name__), self.assertRaises(ValueError):
+                rows = list(build_surface_registry())
+                rows[0] = {**rows[0], "blockers": bad}
+                assert_safe_surface_registry(rows)
+
     def test_registry_rejects_duplicate_or_missing_surface(self):
         rows = list(build_surface_registry())
         with self.assertRaises(ValueError):

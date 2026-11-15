@@ -7,6 +7,7 @@ ledger, or permission from another host or brand.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from itertools import islice
 
 CANONICAL_BOT = "mojtaba.bot.ai"
 CANONICAL_NETWORK = "TRON"
@@ -98,16 +99,32 @@ def assert_safe_surface_registry(
     registry: Iterable[Mapping[str, object]] | None = None,
 ) -> bool:
     """Reject drift that could silently turn scope documentation into billing."""
-    rows = tuple(build_surface_registry() if registry is None else registry)
+    if registry is None:
+        rows = build_surface_registry()
+    else:
+        # Read at most one element beyond the fixed five-surface limit:
+        # an infinite iterator must not exhaust the release-gate worker.
+        if isinstance(registry, (str, bytes, bytearray, Mapping)):
+            raise ValueError("A bounded iterable of commerce surfaces is required")
+        try:
+            rows = tuple(islice(iter(registry), len(SURFACE_SPECS) + 1))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("A bounded iterable of commerce surfaces is required") from exc
     if len(rows) != len(SURFACE_SPECS):
         raise ValueError("Exactly five explicit commerce surfaces are required")
+    if any(not isinstance(row, Mapping) for row in rows):
+        raise ValueError("Each commerce surface must be a mapping")
     ids = tuple(row.get("surface_id") for row in rows)
-    if ids != EXPECTED_SURFACE_IDS or len(set(ids)) != len(ids):
+    if ids != EXPECTED_SURFACE_IDS:
         raise ValueError("Surface IDs must match the canonical priority order")
     for row, spec in zip(rows, SURFACE_SPECS):
         for key in ("tenant_id", "host", "path", "surface_kind", "priority"):
+            if key == "priority" and type(row.get(key)) is not int:
+                raise ValueError("Surface registry priority must be an integer")
             if row.get(key) != spec[key]:
                 raise ValueError(f"Surface registry drift: {key}")
+        if row.get("source_of_scope") != "owner_requested_commercial_priority":
+            raise ValueError("Source of commerce scope cannot be changed")
         if row.get("canonical_bot") != CANONICAL_BOT:
             raise ValueError("Every route must use the single canonical bot")
         if row.get("network") != CANONICAL_NETWORK or row.get("asset") != CANONICAL_ASSET:
@@ -122,7 +139,8 @@ def assert_safe_surface_registry(
             raise ValueError("Live gateway connection is not proven")
         if row.get("status") != "requested_not_verified":
             raise ValueError("Unverified scope cannot be marked live")
-        if tuple(row.get("blockers", ())) != COMMON_BLOCKERS:
+        blockers = row.get("blockers")
+        if type(blockers) not in (list, tuple) or tuple(blockers) != COMMON_BLOCKERS:
             raise ValueError("Every surface must retain all independent release blockers")
     return True
 
