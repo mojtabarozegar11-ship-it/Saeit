@@ -34,6 +34,11 @@
     (function(){
       const form=document.getElementById('request-form'),result=document.getElementById('result'),copy=document.getElementById('copy'),mail=document.getElementById('email-link');let body='';
       const labels={blueprint:'Prop-program design',signals:'Educational signals and market brief',brief:'Private market brief',audit:'mojtaba.bot.ai commercial-gate audit'};
+      const serviceSelect=document.getElementById('service');
+      const requestedService=new URLSearchParams(window.location.search).get('service');
+      if(Object.prototype.hasOwnProperty.call(labels,requestedService)){
+        serviceSelect.value=requestedService;
+      }
       function id(){return 'MOJPROP-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+Math.random().toString(36).slice(2,8).toUpperCase()}
       form.addEventListener('submit',function(e){e.preventDefault();const name=document.getElementById('name').value.trim(),email=document.getElementById('email').value.trim(),service=document.getElementById('service').value,horizon=document.getElementById('horizon').value,notes=document.getElementById('notes').value.trim();const code=id();body=['Moj Prop / mojtaba.bot.ai request','','ID: '+code,'Name: '+name,'Email: '+email,'Route: '+labels[service],'Time horizon: '+horizon,'Notes: '+notes,'','Status: draft for review; no payment and no profit promise.'].join('\n');result.textContent=body;copy.disabled=false;mail.href='mailto:mojtaba.rozegar11@gmail.com?subject='+encodeURIComponent('Moj Prop request '+code)+'&body='+encodeURIComponent(body);mail.setAttribute('aria-disabled','false');try{localStorage.setItem('mojprop-last-request',JSON.stringify({code,body,createdAt:new Date().toISOString()}))}catch(_){ }result.scrollIntoView({behavior:'smooth',block:'center'});});
       copy.addEventListener('click',async function(){try{await navigator.clipboard.writeText(body);copy.textContent='Copied ✓'}catch(_){copy.textContent='Copy unavailable'}});
