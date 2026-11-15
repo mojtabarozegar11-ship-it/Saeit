@@ -21,6 +21,17 @@ SOURCES = {
     "registration": "core/models.py",
     "render": "services/mpw_checkout_render_contract.py",
 }
+# The buyer-email source may be complete while the actual payment/download
+# backend is absent from this stacked branch. Both source groups are required
+# for staging inspection, independently of all later DB/hosting/recovery gates.
+COMMERCIAL_BACKEND_SOURCES = {
+    "commercial_buyer_routes": "services/mpw_trx_commercial_web.py",
+    "commercial_orders": "mpw_commerce/buyer_orders.py",
+    "commercial_invoice_models": "mpw_commerce/models.py",
+    "commercial_finality": "mpw_commerce/settlement.py",
+    "commercial_file_delivery": "mpw_commerce/downloads.py",
+    "commercial_entitlement": "mpw_commerce/entitlements.py",
+}
 MAX_BYTES = 240_000
 
 
@@ -180,6 +191,12 @@ def _has_raise_string(node, value):
 def inspect(root: Path = ROOT) -> dict:
     """Check exact safety/dependency evidence; never change any system."""
     trees = {name: _load(root, path) for name, path in SOURCES.items()}
+    # Keep independent proof groups: an email-only check is never permission
+    # to route the public catalog into a missing payment backend.
+    backend = {
+        name: _load(root, path) is not None
+        for name, path in COMMERCIAL_BACKEND_SOURCES.items()
+    }
     g, r = trees["guest"], trees["recovery"]
     guest_user, dispatch = _one(g, "_new_user"), _one(g, "_dispatch")
     install_cookie = _one(g, "_install_cookie")
@@ -244,6 +261,9 @@ def inspect(root: Path = ROOT) -> dict:
         "passed": sum(checks.values()),
         "total": len(checks),
         "source_candidate_complete": all(checks.values()),
+        "commercial_backend_source_checks": backend,
+        "commercial_backend_source_complete": all(backend.values()),
+        "full_checkout_source_candidate": all(checks.values()) and all(backend.values()),
         "must_still_verify_applied_migration": True,
         "effective_passenger_root_verified": False,
         "effective_checkout_template_verified": False,
@@ -267,6 +287,19 @@ def require_source(root: Path = ROOT) -> dict:
         # Fixed error, never echo paths, secrets or source/customer details.
         raise RuntimeError("EMAIL_REQUIRED_SOURCE_CONTRACT_NOT_PROVEN")
     return report
+
+
+def require_commercial_source_closure(root: Path = ROOT) -> dict:
+    """Fail staging before any runtime or public rewrite if source dependencies
+    for payment, finality, order ownership and private delivery are missing.
+
+    This gate still cannot prove applied DB migrations, a finalized transfer,
+    a buyer email confirmation or a safe production cutover.
+    """
+    result = require_source(root)
+    if not result["commercial_backend_source_complete"]:
+        raise RuntimeError("COMMERCIAL_BACKEND_STAGING_DEPS_MISSING")
+    return result
 
 
 if __name__ == "__main__":
