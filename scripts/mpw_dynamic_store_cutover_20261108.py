@@ -453,14 +453,20 @@ def check_actual_staging_store() -> None:
     target = APP / "core/mojplaywin_views.py"
     funnel = APP / "core/commerce_funnel.py"
     guest_adapter = APP / "services/mpw_trx_guest_commerce.py"
+    recovery = APP / "services/mpw_trx_email_recovery.py"
     if (APP.is_symlink() or not APP.is_dir() or target.is_symlink() or
             not target.is_file() or funnel.is_symlink() or
             (funnel.exists() and not funnel.is_file()) or
             guest_adapter.is_symlink() or not guest_adapter.is_file()):
         raise RuntimeError("STAGING_SOURCE_DRIFT")
+    if recovery.is_symlink() or not recovery.is_file():
+        raise RuntimeError("STAGING_GUEST_RECOVERY_SOURCE_MISSING")
     verify_guarded_store_source(target.read_bytes())
-    verify_email_free_guest_source(guest_adapter.read_bytes())
-    verify_email_free_invoice_sources(APP)
+    # Owner policy now requires an actual buyer email, persisted on the guest
+    # principal and bound to each order in one transaction. The previous
+    # email-free adapter is no longer eligible for a production release.
+    verify_guest_email_ownership_source(guest_adapter.read_bytes())
+    verify_guest_recovery_checkout_source(recovery.read_bytes())
     os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     sys.dont_write_bytecode = True
@@ -468,6 +474,9 @@ def check_actual_staging_store() -> None:
     sys.path.insert(0, str(APP))
     import django
     django.setup()
+    from django.db import connection
+    from core.models import GuestOrderEmail
+    verify_guest_order_claim_schema(GuestOrderEmail, connection)
     from django.test import RequestFactory
     from django.urls import resolve
     from core import mojplaywin_views
