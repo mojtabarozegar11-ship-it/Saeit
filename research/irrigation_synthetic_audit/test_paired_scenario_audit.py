@@ -63,7 +63,7 @@ class AuditTests(unittest.TestCase):
     def test_duplicate_csv_header_rejected(self):
         with tempfile.TemporaryDirectory() as dirname:
             path = Path(dirname) / "duplicate_header.csv"
-            path.write_text("cohort,cohort,policy\\nC-dry-0,C-dry-0,v2\\n", encoding="utf-8")
+            path.write_text("cohort,cohort,policy\nC-dry-0,C-dry-0,v2\n", encoding="utf-8")
             with self.assertRaisesRegex(AuditError, "Duplicate CSV header"):
                 load_records(path)
 
