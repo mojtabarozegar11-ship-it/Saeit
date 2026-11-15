@@ -375,3 +375,55 @@ class MojPropProvisionalAllocationTests(TestCase):
                 period_number=1,
             )
         self.assertEqual(a1.period_number, 1)
+
+
+    def test_naive_accounting_clock_cannot_stage_profit(self):
+        self.trade_day()
+        with self.assertRaisesRegex(AllocationRejected, "timezone-aware"):
+            stage_provisional_allocation(
+                account_id=self.account.pk, as_of=datetime(2026, 2, 1)
+            )
+        self.assertFalse(PropProfitAllocation.objects.exists())
+
+    def test_malformed_accounting_clock_fails_closed(self):
+        self.trade_day()
+        with self.assertRaisesRegex(AllocationRejected, "timezone-aware"):
+            stage_provisional_allocation(account_id=self.account.pk, as_of=object())
+        self.assertFalse(PropProfitAllocation.objects.exists())
+
+    def test_future_operator_time_cannot_stage_uncompleted_month(self):
+        self.trade_day()
+        with self.assertRaisesRegex(AllocationRejected, "Future accounting"):
+            stage_provisional_allocation(
+                account_id=self.account.pk,
+                as_of=datetime.now(timezone.utc) + timedelta(days=365),
+            )
+        self.assertFalse(PropProfitAllocation.objects.exists())
+
+    def test_preopening_equity_observation_blocks_provisional_profit(self):
+        self.trade_day()
+        PropEquityObservation.objects.filter(
+            account=self.account, is_session_open=True
+        ).update(observed_at=OPENED - timedelta(hours=1))
+        with self.assertRaisesRegex(AllocationRejected, "predates funded account"):
+            self.stage()
+        self.assertFalse(PropProfitAllocation.objects.exists())
+
+    def test_same_upstream_event_in_equity_and_execution_is_rejected(self):
+        self.trade_day()
+        original = PropExecution.objects.get(account=self.account)
+        PropEquityObservation.objects.filter(
+            account=self.account, is_session_open=False
+        ).update(external_event_id=original.external_event_id)
+        with self.assertRaisesRegex(AllocationRejected, "Duplicated"):
+            self.stage()
+        self.assertFalse(PropProfitAllocation.objects.exists())
+
+    def test_empty_broker_event_id_is_not_immutable_evidence(self):
+        self.trade_day()
+        PropEquityObservation.objects.filter(
+            account=self.account, is_session_open=False
+        ).update(external_event_id="")
+        with self.assertRaisesRegex(AllocationRejected, "empty broker evidence"):
+            self.stage()
+        self.assertFalse(PropProfitAllocation.objects.exists())
