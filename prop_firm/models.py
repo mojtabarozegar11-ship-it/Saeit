@@ -1,7 +1,7 @@
 """Persistence for Moj Prop, a MojPlayWin division; no brokerage/payment integrations.
 
 Database rows represent evidence references, NOT authority to move capital.
-No public write endpoints are supplied. All funding, payout and live trading remain off.
+Only the non-financial applicant intake may write a lead row; funding, payout and live trading remain off.
 """
 import uuid
 from decimal import Decimal
@@ -481,3 +481,50 @@ class PropSocialEvidence(models.Model):
 
     def __str__(self):
         return f"social-review:{self.enrollment_id}:{self.platform}"
+
+
+class PropApplicant(models.Model):
+    """Non-financial Moj Prop lead; never authorizes checkout or trading."""
+
+    class Status(models.TextChoices):
+        NEW = "new", "New"
+        CONTACTED = "contacted", "Contacted"
+        WITHDRAWN = "withdrawn", "Withdrawn"
+        BLOCKED = "blocked", "Blocked"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(max_length=254, unique=True)
+    preferred_language = models.CharField(max_length=8, default="fa")
+    jurisdiction = models.CharField(max_length=64)
+    source = models.CharField(max_length=64)
+    consent_version = models.CharField(max_length=32)
+    risk_disclosure_version = models.CharField(max_length=32)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.NEW)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    owner_reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "-created_at"], name="mp_app_status_created"),
+            models.Index(fields=["jurisdiction", "-created_at"], name="mp_app_juris_created"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if isinstance(self.email, str):
+            self.email = self.email.strip().lower()
+        if not self.jurisdiction or not self.jurisdiction.strip():
+            raise ValidationError({"jurisdiction": "Jurisdiction is required"})
+        if not self.source or not self.source.strip():
+            raise ValidationError({"source": "Lead source is required"})
+        if not self.consent_version or not self.risk_disclosure_version:
+            raise ValidationError("Consent and risk disclosure versions are required")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Moj Prop applicant #{self.pk}"

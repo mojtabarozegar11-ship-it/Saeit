@@ -5,10 +5,12 @@ on:
     branches:
       - "feature/prop-firm-policy-v11-20261114"
       - "cycle59-moj-prop-level10-decision-lock-20261115"
+      - "cycle60-moj-prop-public-intake-storage-20261115"
   pull_request:
     branches:
       - "main"
       - "feature/prop-firm-policy-v11-20261114"
+      - "cycle59-moj-prop-level10-decision-lock-20261115"
     paths:
       - "prop_firm/**"
       - "core/commercialization_readiness.py"
@@ -54,6 +56,8 @@ jobs:
           tests.test_moj_prop_release_gate
           tests.test_moj_prop_level10_lock
           tests.test_moj_prop_level10_integration
+          tests.test_moj_prop_public_intake
+          tests.test_moj_prop_public_endpoint
           tests.test_tron_rollout_inventory
           tests.test_moj_prop_independent_attestation
           tests.test_tron_manual_reconciliation

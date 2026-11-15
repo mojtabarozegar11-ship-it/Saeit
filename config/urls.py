@@ -135,3 +135,9 @@ urlpatterns += [
     path("moj-prop/<str:lang>/dashboard/", moj_prop_dashboard, name="moj_prop_language_dashboard"),
     path("moj-prop/<str:lang>/", moj_prop_landing, name="moj_prop_language"),
 ]
+
+
+# Non-financial Moj Prop lead intake. Payment and trading remain disabled.
+urlpatterns += [
+    path("api/moj-prop/", include("prop_firm.public_urls")),
+]
