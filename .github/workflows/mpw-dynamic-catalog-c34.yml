@@ -1,0 +1,36 @@
+name: MojPlayWin dynamic licensed-catalogue validation
+on:
+  push:
+    branches:
+      - fix/mpw-dynamic-approved-catalog-20261115-c34
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-dynamic-catalogue-c34
+  cancel-in-progress: false
+jobs:
+  catalogue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SECRET_KEY: catalog-ci-only-key
+      DEBUG: "False"
+      ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com,zomorodmelal.ir
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install existing project dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile exact changes
+        run: |
+          python -m py_compile core/mojplaywin_dynamic_catalog.py core/mojplaywin_product_detail.py core/mojplaywin_views.py tests/test_mojplaywin_dynamic_catalog.py
+      - name: Check Django configuration
+        run: python manage.py check
+      - name: Check migration drift
+        run: python manage.py makemigrations --check --dry-run
+      - name: Verify new-SKU catalog and existing three product detail pages
+        run: pytest -q tests/test_mojplaywin_dynamic_catalog.py tests/test_mojplaywin_product_detail.py
