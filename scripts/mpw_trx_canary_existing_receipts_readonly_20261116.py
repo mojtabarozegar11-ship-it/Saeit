@@ -52,28 +52,55 @@ def classify_payment_evidence(*, paid_intent_present, stored_receipt_found,
 
 
 def _read_existing_receipt_state():
-    from core.models import PaymentIntent, CommerceFunnelEvent
-    from core.crown_tron_receipts import verified_walletless_credit
+    """Inspect only existing persisted status, even if a verifier is not deployed."""
+    from core.models import PaymentIntent
+
     paid = PaymentIntent.objects.filter(provider=PROVIDER, status="paid")
-    # No customer, amount, wallet or TXID is ever printed.
+    # Boolean presence; no paid count or buyer fields printed to public CI.
     has_paid = paid.exists()
-    total_examined_beyond_cap = paid.count() > MAX_REVIEW
+    has_more_than_review_cap = paid.count() > MAX_REVIEW
+
+    validator = None
+    receipt_validator_available = False
+    receipt_error_type = None
+    try:
+        from core.crown_tron_receipts import verified_walletless_credit
+        validator = verified_walletless_credit
+        receipt_validator_available = callable(validator)
+    except ImportError as exc:
+        receipt_error_type = type(exc).__name__
+
     receipt_found = False
-    for intent in paid.select_related("order").order_by("pk")[:MAX_REVIEW]:
-        try:
-            if verified_walletless_credit(intent.order, intent) is True:
-                receipt_found = True
-        except (ValueError, TypeError, AttributeError, KeyError):
-            continue
-    recorded_delivery = CommerceFunnelEvent.objects.filter(
-        event_name="delivery_success"
-    ).exists()
-    return classify_payment_evidence(
+    if receipt_validator_available:
+        for intent in paid.select_related("order").order_by("pk")[:MAX_REVIEW]:
+            try:
+                if validator(intent.order, intent) is True:
+                    receipt_found = True
+            except (ValueError, TypeError, AttributeError, KeyError):
+                continue
+
+    recorded_delivery = False
+    delivery_event_model_available = False
+    try:
+        from core.models import CommerceFunnelEvent
+        delivery_event_model_available = True
+        recorded_delivery = CommerceFunnelEvent.objects.filter(
+            event_name="delivery_success"
+        ).exists()
+    except ImportError:
+        pass
+
+    record = classify_payment_evidence(
         paid_intent_present=has_paid,
         stored_receipt_found=receipt_found,
         recorded_delivery_present=recorded_delivery,
-        scope_exhaustive=not total_examined_beyond_cap,
+        scope_exhaustive=not has_more_than_review_cap,
     )
+    record["paid_intent_model_available"] = True
+    record["stored_receipt_validator_available"] = receipt_validator_available
+    record["stored_receipt_validator_error_type"] = receipt_error_type
+    record["delivery_event_model_available"] = delivery_event_model_available
+    return record
 
 
 def main():
