@@ -1,13 +1,17 @@
 """Single global Mojtaba.bot.ai entitlement: source-only, no buyer emails stored."""
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+import hmac
 
 from django.test import SimpleTestCase
 
 from core.signal_entitlement_contract import (
     SignalEntitlementError, canonical_buyer_email,
     issue_signal_lease, verify_signal_access,
+    authorized_signal_delivery_preflight,
 )
+from core.signal_source_evidence import canonical_signal_bytes
 
 KEY = b"owner-configured-private-signing-key-32-bytes-minimum-for-tests"
 OTHER = b"other-source-key-material-long-enough-for-hmac-tests"
@@ -108,3 +112,49 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
         self.assertFalse(self.access(lease=replace(x, hmac_sha256="1" * 63)))
         self.assertFalse(self.access(lease=replace(x, issuing_bot="second_bot")))
         self.assertFalse(self.access(lease=replace(x, buyer_digest="not-a-digest")))
+
+    def test_delivery_preflight_needs_independent_paid_lease_and_authenticated_source(self):
+        source_key = b"independent-trusted-broker-source-key-more-than-thirty-two"
+        event = {
+            "event_id": "broker:20261115:777",
+            "symbol": "XAUUSD", "side": "buy",
+            "created_at": NOW - timedelta(minutes=5),
+            "entry": "4000", "stop_loss": "3980", "take_profit": "4040",
+            "verified_source": True,
+        }
+        sig = hmac.new(source_key, canonical_signal_bytes(
+            record=event, brand="saman", source_id="broker_verified_1",
+        ), sha256).hexdigest()
+        args = {
+            "lease": self.lease(), "buyer_email": "buyer@realcompany.net",
+            "requested_sku": "moj-signals-standard", "mirror_brand": "saman",
+            "now_utc": NOW, "signing_key": KEY,
+            "independently_reconciled_invoices": {"mpw:trx:invoice:10001"},
+            "revoked_invoice_ids": set(),
+            "signal_record": event, "source_id": "broker_verified_1",
+            "source_signature": sig,
+            "trusted_source_keys": {("saman", "broker_verified_1"): source_key},
+            "durable_seen_event_ids": set(),
+            "jurisdiction_and_delivery_rights_verified": True,
+        }
+        allowed = authorized_signal_delivery_preflight(**args)
+        self.assertTrue(allowed["eligible_to_deliver"])
+        self.assertEqual(allowed["canonical_bot"], "mojtaba.bot.ai")
+        self.assertFalse(allowed["delivery_performed"])
+        self.assertFalse(allowed["payment_processed"])
+        for changes, reason in (
+            ({"jurisdiction_and_delivery_rights_verified": False},
+             "jurisdiction_or_delivery_rights"),
+            ({"independently_reconciled_invoices": set()},
+             "unpaid_or_invalid_entitlement"),
+            ({"buyer_email": "attacker@realcompany.net"},
+             "unpaid_or_invalid_entitlement"),
+            ({"source_signature": "0" * 64}, "untrusted_signal_source"),
+            ({"durable_seen_event_ids": {event["event_id"]}},
+             "untrusted_signal_source"),
+            ({"source_id": "untrusted"}, "untrusted_signal_source"),
+        ):
+            with self.subTest(change=str(changes)[:30]):
+                outcome = authorized_signal_delivery_preflight(**{**args, **changes})
+                self.assertFalse(outcome["eligible_to_deliver"])
+                self.assertEqual(outcome["reason"], reason)
