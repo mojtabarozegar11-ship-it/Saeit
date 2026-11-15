@@ -86,6 +86,7 @@ jobs:
           python3 scripts/test_mpw_guest_first_order_identity.py
           python3 -m unittest discover -s tests -p 'test_mpw_guest_no_email_release.py' -v
           python3 -m unittest discover -s tests -p 'test_mpw_guest_telemetry_isolation_20261108.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_invoice_funnel_identity_20261115.py' -v
           python3 -m py_compile scripts/mpw_dynamic_store_cutover_20261108.py
           python3 -m unittest discover -s tests -p 'test_mpw_dynamic_store_cutover_20261108.py' -v
           python3 -m py_compile scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
@@ -135,6 +136,7 @@ jobs:
           python3 scripts/test_mpw_guest_first_order_identity.py
           python3 -m unittest discover -s tests -p 'test_mpw_guest_no_email_release.py' -v
           python3 -m unittest discover -s tests -p 'test_mpw_guest_telemetry_isolation_20261108.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_invoice_funnel_identity_20261115.py' -v
           python3 -m py_compile scripts/mpw_dynamic_store_cutover_20261108.py
           python3 -m unittest discover -s tests -p 'test_mpw_dynamic_store_cutover_20261108.py' -v
           python3 -m py_compile scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
