@@ -51,7 +51,7 @@ def staged_root(run_id: str) -> Path:
             raise RuntimeError(f"Missing or unsafe staged file: {relative}")
     index = (root / "index.html").read_text(encoding="utf-8")
     catalog = (root / "catalog/index.html").read_text(encoding="utf-8")
-    for required in ('<title>Moj Prop', 'href="/moj-prop/catalog/"', 'Commercial catalog'):
+    for required in ('<title>Moj Prop', 'href="/moj-prop/catalog/"', 'See service prices', 'mojtaba.bot.ai'):
         if required not in index:
             raise RuntimeError(f"Moj Prop index validation failed: {required}")
     for required in ('<title>Moj Prop Catalog', 'From US$149', 'From US$249'):
@@ -81,7 +81,7 @@ def deploy(run_id: str, commit_sha: str) -> None:
     if catalog.exists() or catalog.is_symlink():
         raise RuntimeError("Moj Prop catalog already exists; refusing to replace it")
     previous = old_index.read_bytes()
-    if '<title>Moj Prop | Risk-first prop trading and market intelligence>' not in previous.decode("utf-8"):
+    if '<title>Moj Prop | Risk-first prop trading and market intelligence</title>' not in previous.decode("utf-8"):
         raise RuntimeError("Existing Moj Prop index identity changed; update refused")
     source = staged_root(run_id)
     new_index = (source / "index.html").read_bytes()
