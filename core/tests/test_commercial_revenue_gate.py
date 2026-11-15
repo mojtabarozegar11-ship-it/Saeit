@@ -2366,6 +2366,57 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_unknown_merchant_order_never_triggers_external_release_checks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            with self.assertRaisesRegex(CommercialGateError, "order_not_found"):
+                ledger.bind_approved_merchant_order(
+                    order_id="missing-52", offer=self._approved_merchant_offer_for_binding(),
+                    tenant_registry={"moj_prop": "mojplaywin.com"},
+                    independent_release_verifier=lambda offer: calls.append("release") or True,
+                    release_evidence_sha256="d" * 64,
+                    independent_release_evidence_verifier=lambda offer, hashval: calls.append("evidence") or True)
+            self.assertEqual(calls, [])
+            ledger.close()
+
+    def test_repriced_merchant_order_never_triggers_external_release_checks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "merchant_order_offer_mismatch"):
+                ledger.bind_approved_merchant_order(
+                    order_id="order-52", offer=self._approved_merchant_offer_for_binding(
+                        price=Decimal("31")),
+                    tenant_registry={"moj_prop": "mojplaywin.com"},
+                    independent_release_verifier=lambda offer: calls.append("release") or True,
+                    release_evidence_sha256="d" * 64,
+                    independent_release_evidence_verifier=lambda offer, hashval: calls.append("evidence") or True)
+            self.assertEqual(calls, [])
+            ledger.close()
+
+    def test_already_bound_order_does_not_repeat_external_release_verification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            kw = dict(order_id="order-52",
+                offer=self._approved_merchant_offer_for_binding(),
+                tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: calls.append("release") or True,
+                release_evidence_sha256="d" * 64,
+                independent_release_evidence_verifier=lambda offer, hashval: calls.append("evidence") or True)
+            ledger.bind_approved_merchant_order(**kw)
+            self.assertEqual(calls, ["release", "evidence"])
+            with self.assertRaisesRegex(CommercialGateError, "merchant_order_already_bound"):
+                ledger.bind_approved_merchant_order(**kw)
+            self.assertEqual(calls, ["release", "evidence"])
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
