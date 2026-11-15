@@ -104,6 +104,43 @@ jobs:
             echo "PUBLIC_BUYER_ROUTE_GATE=DEGRADED"
           fi
           echo "PUBLIC_UNHEALTHY_ROUTE_COUNT=$unhealthy"
+          # Cross-check the public bot hostname against independent HTTPS DNS
+          # resolvers. Never print returned A records or raw DNS JSON; only
+          # the DNS response code and record count are needed for diagnosis.
+          for provider in google cloudflare; do
+            if [[ "$provider" == "google" ]]; then
+              doh_url='https://dns.google/resolve?name=mojtaba.bot.ai&type=A'
+            else
+              doh_url='https://cloudflare-dns.com/dns-query?name=mojtaba.bot.ai&type=A'
+            fi
+            json_path="$check_dir/doh-$provider.json"
+            doh_http="$(curl --proto '=https' --tlsv1.2 --max-redirs 0 \
+              --connect-timeout 5 --max-time 10 --silent --show-error \
+              -H 'Accept: application/dns-json' \
+              -o "$json_path" -w '%{http_code}' "$doh_url" 2>/dev/null || true)"
+            [[ "$doh_http" =~ ^[0-9]{3}$ ]] || doh_http="000"
+            echo "BOT_DOH_${provider}_HTTP=$doh_http"
+            if [[ "$doh_http" == "200" ]]; then
+              python3 - "$provider" "$json_path" <<'PY'
+          import json
+          import sys
+          provider, source = sys.argv[1:]
+          try:
+              with open(source, encoding="utf-8") as handle:
+                  info = json.load(handle)
+              status = info.get("Status")
+              answers = info.get("Answer", [])
+              if type(status) is not int or type(answers) is not list:
+                  raise ValueError("Unexpected DNS response shape")
+              print(f"BOT_DOH_{provider}_DNS_RCODE={status}")
+              print(f"BOT_DOH_{provider}_ANSWER_COUNT={len(answers)}")
+          except (OSError, ValueError, TypeError):
+              print(f"BOT_DOH_{provider}_DNS_RCODE=unavailable")
+          PY
+            else
+              echo "BOT_DOH_${provider}_DNS_RCODE=unavailable"
+            fi
+          done
           # This read-only diagnostic job reports an observation and must not
           # be mistaken for a launch authorization, irrespective of exit code.
           echo "PUBLIC_CHECK_IS_READ_ONLY=true"
