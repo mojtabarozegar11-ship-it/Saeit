@@ -127,15 +127,15 @@ class MojPropIntakeSafetyTests(TestCase):
         needle = b'Content-Disposition: form-data; name="email"'
         self.assertIn(needle, encoded)
         # Duplicate email fields must be rejected rather than trusting the last.
-        duplicate = (b'--' + BOUNDARY.encode() + b'\\r\\n' +
-                     b'Content-Disposition: form-data; name="email"\\r\\n\\r\\n' +
-                     b'attacker@example.org\\r\\n')
+        duplicate = (b'--' + BOUNDARY.encode() + b'\r\n' +
+                     b'Content-Disposition: form-data; name="email"\r\n\r\n' +
+                     b'attacker@example.org\r\n')
         crafted = encoded.replace(
             b'--' + BOUNDARY.encode() + b'--',
             duplicate + b'--' + BOUNDARY.encode() + b'--', 1,
         )
-        response = self.client.post(
-            "/moj-prop-intake/", crafted, content_type=MULTIPART_CONTENT,
+        response = self.client.generic(
+            "POST", "/moj-prop-intake/", crafted, content_type=MULTIPART_CONTENT,
             HTTP_X_CSRFTOKEN=self.token,
         )
         self.assertEqual(response.status_code, 400)
