@@ -11,6 +11,7 @@ import json
 import os
 import random
 import re
+import stat
 import tempfile
 
 CODES = ("AGR-01", "RS-01", "RS-02", "RS-03", "WEB-01", "SEO-01")
@@ -51,6 +52,12 @@ def integer(value, *, maximum=10000000):
 def name(value):
     if not isinstance(value, str) or value != value.strip() or not LINE.fullmatch(value):
         raise InvalidService("nonpersonal short identifier required")
+    # A research ID is a literal identifier, never a Markdown link or invisible
+    # bidirectional control sequence in a customer-facing draft.
+    if any(c in value for c in ("[", "]", "(", ")", "{", "}", "#", "*", "!", "`", chr(92))):
+        raise InvalidService("unsafe markup in identifier")
+    if re.search(r"[\u202a-\u202e\u2066-\u2069\u200e\u200f]", value):
+        raise InvalidService("unsafe directional identifier")
     return value.replace("|", "｜")
 
 
@@ -244,9 +251,19 @@ def main():
     args = p.parse_args()
     try:
         source = Path(args.input_json)
-        if not source.is_file() or source.is_symlink() or source.stat().st_size > 65536:
-            raise InvalidService("unsafe input")
-        raw = source.read_bytes()
+        if not hasattr(os, "O_NOFOLLOW"):
+            raise InvalidService("symlink-safe input unavailable")
+        descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0))
+        try:
+            current = os.fstat(descriptor)
+            if not stat.S_ISREG(current.st_mode) or current.st_size > 65536:
+                raise InvalidService("unsafe input")
+            with os.fdopen(descriptor, "rb") as stream:
+                descriptor = None
+                raw = stream.read(65537)
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
         if len(raw) > 65536:
             raise InvalidService("input size")
         payload = json.loads(raw.decode("utf-8"))
@@ -256,7 +273,17 @@ def main():
         if out.is_symlink():
             raise InvalidService("unsafe output")
         if out.exists():
-            if out.read_text(encoding="utf-8") == document:
+            # Never treat an existing world-readable or non-regular artifact as
+            # a valid private deliverable, even if its bytes happen to match.
+            descriptor = os.open(out, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
+                current = os.fstat(stream.fileno())
+                if (not stat.S_ISREG(current.st_mode)
+                        or (current.st_mode & 0o077)
+                        or current.st_size > 262144):
+                    raise InvalidService("unsafe existing output")
+                existing = stream.read(262145)
+            if existing == document:
                 print("ALREADY_VERIFIED " + out.name)
                 return 0
             raise InvalidService("collision")
@@ -267,7 +294,12 @@ def main():
                 stream.flush()
                 os.fsync(stream.fileno())
             os.chmod(temp_path, 0o600)
-            os.replace(temp_path, out)
+            # Atomic create-if-absent: os.replace would silently destroy an
+            # artifact written between the earlier check and this publish.
+            try:
+                os.link(temp_path, out)
+            except FileExistsError:
+                raise InvalidService("concurrent output collision") from None
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
