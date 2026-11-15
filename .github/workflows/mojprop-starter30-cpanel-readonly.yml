@@ -55,7 +55,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git hash-object -- scripts/mojprop_starter30_live_readonly.py)" = "04e7f7f50fc651e0b923d9b82bad3ff4c0619ffd"
+          test "$(git hash-object -- scripts/mojprop_starter30_live_readonly.py)" = "390f2f45e53c7b8bd59ede2138f6a7e25cfe7054"
           python3 -B -m unittest tests.test_mojprop_starter30_live_readonly -q
       - name: Inspect current exact cPanel Starter30 public asset tree
         shell: bash
