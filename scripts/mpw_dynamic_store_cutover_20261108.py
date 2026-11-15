@@ -454,6 +454,7 @@ def check_actual_staging_store() -> None:
     funnel = APP / "core/commerce_funnel.py"
     guest_adapter = APP / "services/mpw_trx_guest_commerce.py"
     recovery = APP / "services/mpw_trx_email_recovery.py"
+    template = APP / "core/templates/mpw_commerce/product_checkout.html"
     if (APP.is_symlink() or not APP.is_dir() or target.is_symlink() or
             not target.is_file() or funnel.is_symlink() or
             (funnel.exists() and not funnel.is_file()) or
@@ -461,6 +462,9 @@ def check_actual_staging_store() -> None:
         raise RuntimeError("STAGING_SOURCE_DRIFT")
     if recovery.is_symlink() or not recovery.is_file():
         raise RuntimeError("STAGING_GUEST_RECOVERY_SOURCE_MISSING")
+    if (template.is_symlink() or not template.is_file()
+            or not 500 <= template.stat().st_size <= 96_000):
+        raise RuntimeError("STAGING_BUYER_EMAIL_TEMPLATE_MISSING")
     verify_guarded_store_source(target.read_bytes())
     # Owner policy now requires an actual buyer email, persisted on the guest
     # principal and bound to each order in one transaction. The previous
@@ -479,6 +483,25 @@ def check_actual_staging_store() -> None:
     verify_guest_order_claim_schema(GuestOrderEmail, connection)
     from django.test import RequestFactory
     from django.urls import resolve
+    from django.middleware.csrf import get_token
+    from django.template.loader import render_to_string
+    from types import SimpleNamespace
+    from scripts.mpw_email_bound_public_invoice_gate import (
+        has_guarded_guest_email_invoice_form,
+    )
+    checkout_request = RequestFactory().get(
+        "/store/product/72/checkout/", secure=True,
+        HTTP_HOST="mojplaywin.com",
+    )
+    get_token(checkout_request)
+    checkout_html = render_to_string(
+        "mpw_commerce/product_checkout.html",
+        {"product": SimpleNamespace(pk=72,title="Science of Chess Improvement"),
+         "price_usd": "19.90", "mpw_trx_easy_enabled": True},
+        request=checkout_request,
+    )
+    if not has_guarded_guest_email_invoice_form(checkout_html.encode("utf-8"),72):
+        raise RuntimeError("STAGING_EMAIL_BOUND_CHECKOUT_RENDER_INVALID")
     from core import mojplaywin_views
     if Path(mojplaywin_views.__file__).resolve() != target.resolve():
         raise RuntimeError("STAGING_VIEW_IMPORT_ORIGIN_MISMATCH")
