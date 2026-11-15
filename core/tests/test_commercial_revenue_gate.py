@@ -449,6 +449,16 @@ class CommercialGateTests(unittest.TestCase):
                 validate_signal_request(requested_action=action)
 
 
+    def test_active_merchant_requires_validated_tenant_registry_binding(self):
+        offer = self.offer(active=True, owner_approved=True, legal_reviewed=True,
+                           kyc_ready=True, rights_cleared=True)
+        with self.assertRaisesRegex(CommercialGateError, "tenant_registry_required"):
+            validate_offer(offer)
+        with self.assertRaisesRegex(CommercialGateError, "tenant_scope_mismatch"):
+            validate_offer(offer, tenant_registry={"moj_prop": "other.example"})
+        validate_offer(offer, tenant_registry={"moj_prop": "mojplaywin.com"})
+
+
 if __name__ == "__main__":
     unittest.main()
 
