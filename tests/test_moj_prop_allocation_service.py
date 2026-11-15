@@ -46,13 +46,13 @@ class MojPropProvisionalAllocationTests(TestCase):
             reconciliation_status=status, evidence_digest=digest,
         )
         PropEquityObservation.objects.create(
-            account=self.account, external_event_id=f"open-{day}",
+            account=self.account, data_source=source, external_event_id=f"open-{day}",
             observed_at=date + timedelta(hours=8),
             equity_usd=Decimal(initial_equity), is_session_open=True,
             reconciliation_status="verified", evidence_digest="b" * 64,
         )
         PropEquityObservation.objects.create(
-            account=self.account, external_event_id=f"close-{day}",
+            account=self.account, data_source=source, external_event_id=f"close-{day}",
             observed_at=date + timedelta(hours=14),
             equity_usd=Decimal(final_equity), is_session_open=False,
             reconciliation_status="verified", evidence_digest="c" * 64,
@@ -62,6 +62,26 @@ class MojPropProvisionalAllocationTests(TestCase):
         return stage_provisional_allocation(
             account_id=self.account.pk, as_of=OPENED + timedelta(days=day),
         )
+
+    def test_equity_marks_without_allowlisted_source_never_stage_profit(self):
+        for bad_source in ("", "untrusted_broker", "broker_fixture_injected"):
+            with self.subTest(source=bad_source):
+                PropExecution.objects.all().delete()
+                PropEquityObservation.objects.all().delete()
+                self.trade_day()
+                PropEquityObservation.objects.filter(account=self.account).update(
+                    data_source=bad_source,
+                )
+                with self.assertRaises(AllocationRejected):
+                    self.stage()
+
+    def test_equity_mark_from_other_source_blocks_allocation_even_with_valid_digest(self):
+        self.trade_day()
+        PropEquityObservation.objects.filter(
+            account=self.account, is_session_open=False,
+        ).update(data_source="other_registered_source", evidence_digest="a" * 64)
+        with self.assertRaises(AllocationRejected):
+            self.stage()
 
     def test_valid_verified_month_stages_only_provisional_distribution(self):
         self.trade_day()
