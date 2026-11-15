@@ -34,11 +34,17 @@ class ManualOnlyHostReleaseTests(unittest.TestCase):
             with self.subTest(clause=clause):
                 self.assertIn(clause, job)
         self.assertNotIn("github.event_name == 'push'", job)
+        static = (WORKFLOWS / "mojplaywin-moj-prop-deploy.yml").read_text()
+        self.assertIn("if: github.event_name == 'workflow_dispatch' && inputs.owner_approved_static_release == true", static)
+        self.assertNotIn("inputs.owner_approval == 'OWNER_APPROVED'", static)
 
     def test_mojprop_catalog_release_requires_manual_dispatch_and_owner_record(self):
-        source = (WORKFLOWS / "mojplaywin-moj-prop-deploy.yml").read_text()
-        self.assertIn("jobs:\n  deploy:", source)
-        job = source.split("jobs:\n  deploy:", 1)[1]
+        source = (WORKFLOWS / "mojprop-backend-controlled-release-20261115.yml").read_text()
+        self.assertNotIn("\n  push:", source)
+        self.assertNotIn("\n  pull_request:", source)
+        self.assertIn("\n  workflow_dispatch:", source)
+        self.assertIn("\n  deploy:", source)
+        job = source.split("\n  deploy:", 1)[1]
         for clause in (
             "github.event_name == 'workflow_dispatch'",
             "github.ref == 'refs/heads/main'",
