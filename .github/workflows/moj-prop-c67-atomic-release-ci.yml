@@ -1,0 +1,23 @@
+name: Moj Prop C67 atomic release safety
+on:
+  push:
+    branches: ["cycle65-moj-prop-intake-route-smoke-p0-20261115"]
+  pull_request:
+    paths:
+      - "scripts/update_mojplaywin_moj_prop_catalog.py"
+      - "templates/moj-prop-v4/index.html"
+      - "tests/test_moj_prop_c67_atomic_release.py"
+      - ".github/workflows/moj-prop-c67-atomic-release-ci.yml"
+permissions:
+  contents: read
+jobs:
+  isolated-filesystem-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: No cPanel network, no deploy; exercise actual rollback source
+        run: python -m unittest discover -s tests -p "test_moj_prop_c67_atomic_release.py" -v
