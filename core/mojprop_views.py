@@ -61,7 +61,23 @@ def _client_ip(request) -> str:
     try:
         if type(raw) is not str:
             raise ValueError("no network origin")
-        return ipaddress.ip_address(raw.strip()).compressed
+        peer = ipaddress.ip_address(raw.strip()).compressed
+        allowed = getattr(settings, "MOJ_PROP_TRUSTED_PROXY_IPS", [])
+        if type(allowed) not in (list, tuple):
+            raise ValueError("unsafe proxy allowlist type")
+        trusted = set()
+        for origin in allowed:
+            if type(origin) is not str:
+                raise ValueError("non-string proxy address")
+            trusted.add(ipaddress.ip_address(origin.strip()).compressed)
+        if peer in trusted:
+            # Only a PINNED proxy may supply the actual visitor address.
+            # No comma-separated client-supplied X-Forwarded-For chains.
+            forwarded = request.META.get("HTTP_X_REAL_IP")
+            if type(forwarded) is not str:
+                raise ValueError("trusted proxy omitted X-Real-IP")
+            return ipaddress.ip_address(forwarded.strip()).compressed
+        return peer
     except ValueError as exc:
         raise MojPropUntrustedOrigin("client_origin_unavailable") from exc
 
