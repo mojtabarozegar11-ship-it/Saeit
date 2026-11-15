@@ -79,6 +79,17 @@ class ExistingBuyerAuditContractTests(unittest.TestCase):
         self.assertFalse(report["actual_buyer_authenticated_get_performed"])
         self.assertFalse(report["independent_buyer_acknowledged_delivery"])
 
+
+    def test_guest_outbox_missing_is_not_assumed_for_registered_buyer(self):
+        report = _base()
+        self.assertIsNone(report["candidate_account_kind"])
+        self.assertIsNone(report["guest_outbox_missing_for_guest"])
+        s = SCRIPT.read_text("utf-8")
+        self.assertIn("from services.mpw_trx_guest_delivery import _guest_user", s)
+        self.assertIn('"registered_or_other"', s)
+        self.assertIn('result["candidate_account_kind"] == "guest" and outbox is None', s)
+        self.assertNotIn('row.order.customer.email', s)
+
     def test_no_fresh_chain_or_production_write_claim(self):
         report = _base()
         self.assertTrue(report["read_only"])
