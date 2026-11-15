@@ -19,5 +19,39 @@ a{color:inherit}.shell{max-width:1180px;margin:auto;padding:24px 30px}.nav{displ
 <nav class="nav"><a class="brand" href="/">{{ brand_name }} · {{ copy.pill }}</a><a href="{{ shop_url }}">{{ copy.cta }} ↗</a></nav>
 <section class="hero"><div class="copy"><span class="eyebrow">{{ brand_name }} · {% if page_type == "signals" %}{{ copy.pill }}{% elif page_type == "game" %}Game world{% else %}Digital collection{% endif %}</span><h1>{{ page_title }}</h1><p>{{ page_intro }}</p></div></section>
 <section class="cards"><article class="card"><h2>{% if page_type == "signals" %}{{ brand_name }} · Market desk{% elif page_type == "game" %}{{ brand_name }} · Game world{% else %}{{ brand_name }} · Digital collection{% endif %}</h2><p>{{ page_intro }}</p><a class="button" href="{{ shop_url }}">{{ copy.cta }} ↗</a></article><aside class="notice">{{ page_notice }}</aside></section>
+{% if signal_interest_enabled %}
+<section class="card" id="signal-interest" data-mojtaba-bot="mojtaba.bot.ai"
+         aria-label="Mojtaba.bot.ai signal contact request">
+  <h2>{% if locale == "fa" %}درخواست اطلاع‌رسانی سیگنال از mojtaba.bot.ai
+    {% elif locale == "ar" %}طلب معلومات الإشارات من mojtaba.bot.ai
+    {% else %}Request Mojtaba.bot.ai signal information{% endif %}</h2>
+  <p>{% if locale == "fa" %}فقط ثبت علاقه‌مندی است؛ هیچ اشتراک، فاکتور، پرداخت یا تضمین سودی ایجاد نمی‌شود.
+    {% elif locale == "ar" %}طلب معلومات فقط. لا اشتراك أو فاتورة أو دفع أو ضمان للربح.
+    {% else %}Contact request only. No subscription, invoice, payment or guaranteed performance.{% endif %}</p>
+  <form method="post" action="/market-signals/interest/" accept-charset="UTF-8"
+        style="max-width:650px;margin:16px 0">
+    {% csrf_token %}
+    <input type="hidden" name="brand" value="{{ brand_slug }}">
+    <input type="hidden" name="source_language" value="{{ locale }}">
+    <input type="hidden" name="consent_version" value="mojtaba-signals-interest-v1">
+    <label for="signal-contact-email">{% if locale == "fa" %}ایمیل تماس{% elif locale == "ar" %}البريد الإلكتروني{% else %}Contact email{% endif %}</label>
+    <input id="signal-contact-email" name="email" type="email" autocomplete="email" maxlength="254"
+           required style="display:block;width:100%;padding:12px;margin:8px 0 16px">
+    <label for="signal-plan">{% if locale == "fa" %}بسته مورد علاقه (غیرقابل خرید در حال حاضر){% elif locale == "ar" %}الباقة المقترحة (غير متاحة للشراء){% else %}Preferred plan (not for sale yet){% endif %}</label>
+    <select name="plan_code" id="signal-plan" required style="display:block;width:100%;padding:12px;margin:8px 0 16px">
+    {% for plan in signal_interest_plans %}
+      <option value="{{ plan }}">{{ plan }}</option>
+    {% endfor %}
+    </select>
+    <label style="display:block;margin:12px 0">
+      <input type="checkbox" name="contact_consent" value="yes" required>
+      {% if locale == "fa" %}رضایت می‌دهم فقط درباره این درخواست سیگنال با ایمیل من تماس گرفته شود.
+      {% elif locale == "ar" %}أوافق على التواصل معي بالبريد بشأن هذا الطلب فقط.
+      {% else %}I consent to email contact only about this signal information request.{% endif %}
+    </label>
+    <button class="button" type="submit">{% if locale == "fa" %}ثبت درخواست{% elif locale == "ar" %}إرسال الطلب{% else %}Send request{% endif %}</button>
+  </form>
+</section>
+{% endif %}
 <footer class="foot">{{ copy.disclaimer }}<br>© {{ brand_name }} · MojPlayWin / Zomorod Melal</footer>
 </main></body></html>

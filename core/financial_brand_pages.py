@@ -79,10 +79,11 @@ COPY = {
 
 def financial_brand_page(request, brand, locale, page_type):
     match = next((item for item in BRANDS if item[0] == brand), None)
+    # Only Django-validated hosts may decide audience language or public origin.
+    # Raw X-Forwarded-Host is attacker-controlled without a verified reverse proxy.
+    host = request.get_host().split(":")[0].lower()
     if locale == "host":
-        forwarded = request.META.get("HTTP_X_FORWARDED_HOST") or request.META.get("HTTP_HOST") or ""
-        host = forwarded.split(",")[0].split(":")[0].strip().lower().removeprefix("www.")
-        locale = "fa" if "zomorodmelal.ir" in host else "en"
+        locale = "fa" if host in {"zomorodmelal.ir", "www.zomorodmelal.ir"} else "en"
     if locale not in COPY:
         locale = "en"
     if match is None or page_type not in {"signals", "store", "game"}:
@@ -99,9 +100,23 @@ def financial_brand_page(request, brand, locale, page_type):
         title, intro, notice = copy["game_title"], copy["game_intro"], copy["game_notice"]
     palette = PALETTES[next(i for i, item in enumerate(BRANDS) if item[0] == slug)]
     shop_url = "/store/" if locale == "fa" else "/commerce/"
-    return render(request, "core/financial_brand_page.html", {
+    from .signal_interest_policy import SIGNAL_PLAN_CODES
+    from .signal_interest_views import ALLOWED_HOSTS
+    allowed_interest = bool(page_type == "signals" and request.is_secure()
+                            and host in ALLOWED_HOSTS)
+    data = {
         "brand_name": name, "brand_slug": slug, "locale": locale,
         "page_type": page_type, "page_title": title, "page_intro": intro,
         "page_notice": notice, "copy": copy, "shop_url": shop_url,
         "page_palette": palette, "page_direction": "rtl" if locale in {"fa", "ar"} else "ltr",
-    })
+        "signal_interest_enabled": allowed_interest,
+        "signal_interest_plans": SIGNAL_PLAN_CODES if allowed_interest else (),
+    }
+    response = render(request, "core/financial_brand_page.html", data)
+    if allowed_interest:
+        from django.utils.cache import patch_vary_headers
+        patch_vary_headers(response, ("Cookie",))
+        response["Cache-Control"] = "private, no-store, max-age=0"
+        response["Pragma"] = "no-cache"
+        response["Referrer-Policy"] = "same-origin"
+    return response
