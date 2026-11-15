@@ -159,3 +159,8 @@ MOJTABA_SIGNAL_APPROVED_SERVICE_FINGERPRINTS = env.list(
 MOJTABA_SIGNAL_BUYER_HMAC_KEY_HEX = env(
     "MOJTABA_SIGNAL_BUYER_HMAC_KEY_HEX", default="",
 )
+
+# Public handoff from multilingual brand service pages to the ONE Mojtaba bot.
+# Off until operators verify that mojtaba.bot.ai is reachable and approved.
+# This is only a referral link, never a sales/payment/regulated-signal switch.
+MOJTABA_BOT_PUBLIC_VERIFIED = env.bool("MOJTABA_BOT_PUBLIC_VERIFIED", default=False)
