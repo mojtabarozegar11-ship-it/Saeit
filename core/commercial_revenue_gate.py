@@ -306,6 +306,26 @@ def validate_signal_request(*, requested_action: str, financial_authorized: bool
         raise CommercialGateError("financial_signal_disabled")
 
 
+def authorize_nonfinancial_signal_dispatch(
+    *,
+    requested_action: str,
+    bot_identity: str,
+    offer: OfferContract,
+    tenant_registry: Mapping[str, str],
+    independent_release_verifier: Callable[[OfferContract], bool],
+) -> None:
+    """Guard dispatch by the ONE governed bot; no signal is published here."""
+    if bot_identity != "mojtaba-bot-ai":
+        raise CommercialGateError("single_bot_identity_required")
+    if not isinstance(offer, OfferContract) or offer.offer_type is not OfferType.SIGNAL:
+        raise CommercialGateError("nonfinancial_signal_offer_required")
+    if offer.active is not True:
+        raise CommercialGateError("signal_offer_not_authorized_for_dispatch")
+    validate_signal_request(requested_action=requested_action)
+    validate_offer(offer, tenant_registry=tenant_registry,
+                   independent_release_verifier=independent_release_verifier)
+
+
 @dataclass(frozen=True)
 class PaymentEvidence:
     order_id: str
