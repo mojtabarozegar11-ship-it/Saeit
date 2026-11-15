@@ -3,6 +3,7 @@ import sqlite3
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 from core.commercial_revenue_gate import (
     CommercialGateError,
@@ -1049,6 +1050,47 @@ class CommercialGateTests(unittest.TestCase):
                                  event_id="fulfilled-52", payload_digest="d" * 64,
                                  fulfillment_manifest_sha256="d" * 64)
             reopened.close()
+
+
+    def test_private_ledger_creation_does_not_rely_on_post_create_chmod(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.sqlite3"
+            with patch("core.commercial_revenue_gate.os.chmod",
+                       side_effect=AssertionError("unsafe post-create chmod")):
+                ledger = SQLiteCommercialLedger(str(path))
+            self.assertEqual(path.stat().st_mode & 0o077, 0)
+            ledger.close()
+
+    def test_private_ledger_rejects_existing_hardlink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original = Path(directory) / "original.sqlite3"
+            ledger = SQLiteCommercialLedger(str(original))
+            ledger.close()
+            alias = Path(directory) / "hardlinked.sqlite3"
+            alias.hardlink_to(original)
+            with self.assertRaisesRegex(CommercialGateError, "ledger_file_permissions_unsafe"):
+                SQLiteCommercialLedger(str(alias))
+
+    def test_private_ledger_rejects_raced_file_creation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.sqlite3"
+            with patch("core.commercial_revenue_gate.os.open", side_effect=FileExistsError):
+                with self.assertRaisesRegex(CommercialGateError, "ledger_creation_race"):
+                    SQLiteCommercialLedger(str(path))
+            self.assertFalse(path.exists())
+
+    def test_private_ledger_rejects_writable_parent_on_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.sqlite3"
+            ledger = SQLiteCommercialLedger(str(path))
+            ledger.close()
+            parent = path.parent
+            parent.chmod(0o777)
+            try:
+                with self.assertRaisesRegex(CommercialGateError, "ledger_parent_world_writable"):
+                    SQLiteCommercialLedger(str(path))
+            finally:
+                parent.chmod(0o700)
 
 
 if __name__ == "__main__":
