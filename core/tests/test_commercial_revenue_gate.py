@@ -478,6 +478,25 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_native_trx_rejects_overflow_and_underflow_before_decimal_math(self):
+        for amount in (Decimal("1E+999999999"), Decimal("1E-999999999"),
+                       Decimal("9223372036854.775808"), Decimal("0.0000001")):
+            with self.subTest(amount=str(amount)), self.assertRaisesRegex(
+                    CommercialGateError, "trx_native_amount_out_of_range"):
+                validate_offer(self.offer(price=amount))
+        validate_offer(self.offer(price=Decimal("0.000001")))
+        validate_offer(self.offer(price=Decimal("9223372036854.775807")))
+
+    def test_active_offer_rejects_missing_merchant_registry(self):
+        offer = self.offer(active=True, owner_approved=True, legal_reviewed=True,
+                           kyc_ready=True, rights_cleared=True)
+        with self.assertRaisesRegex(CommercialGateError, "tenant_registry_required"):
+            validate_offer(offer)
+        with self.assertRaisesRegex(CommercialGateError, "tenant_scope_mismatch"):
+            validate_offer(offer, tenant_registry={"moj_prop": "other.example"})
+        validate_offer(offer, tenant_registry={"moj_prop": "mojplaywin.com"})
+
+
 if __name__ == "__main__":
     unittest.main()
 
