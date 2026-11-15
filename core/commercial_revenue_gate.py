@@ -198,9 +198,14 @@ def validate_payment_evidence(
     transaction_id = _text(evidence.transaction_id, "transaction_id")
     if not _TX.fullmatch(transaction_id):
         raise CommercialGateError("transaction_id_invalid")
-    if not all((evidence.chain_finalized, evidence.amount_matches,
-                evidence.recipient_matches_private_invoice,
-                evidence.independently_reconciled, evidence.human_reviewed)):
+    flags = (
+        evidence.chain_finalized,
+        evidence.amount_matches,
+        evidence.recipient_matches_private_invoice,
+        evidence.independently_reconciled,
+        evidence.human_reviewed,
+    )
+    if not all(type(flag) is bool and flag for flag in flags):
         raise CommercialGateError("payment_evidence_incomplete")
     return _digest({
         "order_id": evidence.order_id,
@@ -212,6 +217,23 @@ def validate_payment_evidence(
         "currency": currency,
         "transaction_id": transaction_id,
     })
+
+
+def _validated_evidence_digest(
+    evidence: PaymentEvidence,
+    *,
+    expected_order_id: str,
+    expected_amount: Decimal,
+    expected_currency: str,
+) -> str:
+    """Validate evidence against the order facts before any state transition."""
+    return validate_payment_evidence(
+        evidence,
+        expected_order_id=expected_order_id,
+        expected_invoice_id=evidence.invoice_id,
+        expected_amount=expected_amount,
+        expected_currency=expected_currency,
+    )
 
 
 def transition_state(
@@ -229,8 +251,15 @@ def transition_state(
         raise CommercialGateError("invalid_state_transition") from None
     if target is not expected:
         raise CommercialGateError("invalid_state_transition")
-    if target is CommercialState.SETTLED and payment_evidence is None:
-        raise CommercialGateError("settlement_evidence_required")
+    if target in (CommercialState.SETTLED, CommercialState.VERIFIED_REVENUE):
+        if not isinstance(payment_evidence, PaymentEvidence):
+            raise CommercialGateError("settlement_evidence_required")
+        _validated_evidence_digest(
+            payment_evidence,
+            expected_order_id=payment_evidence.order_id,
+            expected_amount=payment_evidence.amount,
+            expected_currency=payment_evidence.currency,
+        )
     if target is CommercialState.FULFILLED:
         if not _HEX64.fullmatch(fulfillment_manifest_sha256):
             raise CommercialGateError("fulfillment_manifest_required")
@@ -321,6 +350,18 @@ class SQLiteCommercialLedger:
                     raise CommercialGateError("event_replay_mismatch")
                 return CommercialState(prior["state"])
             current = CommercialState(row["state"])
+            evidence_digest = None
+            if target in (CommercialState.SETTLED, CommercialState.VERIFIED_REVENUE):
+                if not isinstance(payment_evidence, PaymentEvidence):
+                    raise CommercialGateError("settlement_evidence_required")
+                evidence_digest = _validated_evidence_digest(
+                    payment_evidence,
+                    expected_order_id=order_id,
+                    expected_amount=Decimal(row["amount"]),
+                    expected_currency=row["currency"],
+                )
+                if target is CommercialState.SETTLED and payload_digest != evidence_digest:
+                    raise CommercialGateError("settlement_payload_mismatch")
             next_value = transition_state(
                 current, target, payment_evidence=payment_evidence,
                 fulfillment_manifest_sha256=fulfillment_manifest_sha256,
@@ -342,4 +383,5 @@ class SQLiteCommercialLedger:
         if row is None:
             raise CommercialGateError("order_not_found")
         return dict(row)
+
 
