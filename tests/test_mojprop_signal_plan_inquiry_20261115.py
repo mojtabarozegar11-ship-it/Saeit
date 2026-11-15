@@ -42,7 +42,7 @@ elements["name"].value = "Real Buyer";
 elements["email"].value = "buyer@example.com";
 elements["service"].value = "blueprint";
 elements["horizon"].value = "week";
-elements["notes"].value = process.argv[4] || "A detailed educational research objective for gold.";
+elements["notes"].value = process.argv[4] === "__EMPTY__" ? "" : (process.argv[4] || "A detailed educational research objective for gold.");
 elements["consent"].checked = true;
 elements["request-form"].querySelector = () => makeNode();
 const posted = [];
@@ -71,6 +71,7 @@ const ctx = {
   }
 };
 vm.runInNewContext(applicationScript[1], ctx, {timeout:1000});
+if (process.argv[5] === "edit-before-switch") elements["notes"].value += " CUSTOMER ADDED: keep my own methodology and dates.";
 if (process.argv[3]) {
   elements["service"].value = process.argv[3];
   elements["service"].listeners.change();
@@ -258,6 +259,25 @@ class SignalPlanInquiryTests(unittest.TestCase):
         self.assertEqual(state["posted"], [])
         self.assertFalse(state["downloadEnabled"])
         self.assertIn("Request NOT submitted", state["receipt"])
+
+    def test_customer_edited_starter_prefill_survives_service_change(self):
+        state = self._browser(
+            "?service=blueprint&package=starter-30-trx",
+            service="audit", notes="__EMPTY__", mode="edit-before-switch"
+        )
+        self.assertEqual(state["posted"][0]["body"]["service"], "audit")
+        self.assertIn("CUSTOMER ADDED: keep my own methodology", state["posted"][0]["body"]["notes"])
+        self.assertFalse(state["downloadEnabled"] is None)
+
+    def test_untouched_starter_prefill_switch_to_digital_gets_digital_note(self):
+        state = self._browser(
+            "?service=blueprint&package=starter-30-trx&product=72",
+            service="digital", notes="__EMPTY__"
+        )
+        self.assertEqual(state["posted"][0]["body"]["service"], "digital")
+        self.assertEqual(state["posted"][0]["body"]["product_id"], 72)
+        self.assertIn("Please confirm the product license", state["posted"][0]["body"]["notes"])
+        self.assertNotIn("Starter30", state["posted"][0]["body"]["notes"])
 
     def test_server_explicit_400_keeps_correctable_error(self):
         state = self._browser("?service=blueprint&package=starter-30-trx", mode="bad-email")
