@@ -129,6 +129,52 @@ jobs:
           print("PUBLIC_SIGNAL_DESK_SAFE_UPGRADE=" +
                 ("yes" if outcome in ("original", "free-preview", "double-opt-in") else "unverified"))
           PY
+          # The live file is unrecognized. Classify its *shape* without
+          # exposing HTML, tokens, public personal text, cookies or IPs.
+          python3 - "$check_dir/signal_desk.body" <<'PY'
+          import hashlib,sys
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Shape(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.title_mode=False
+                  self.title=[]
+                  self.forms=0
+                  self.scripts=0
+                  self.links=0
+              def handle_starttag(self,tag,attrs):
+                  if tag=="title": self.title_mode=True
+                  if tag=="form": self.forms+=1
+                  if tag=="script": self.scripts+=1
+                  if tag=="a": self.links+=1
+              def handle_endtag(self,tag):
+                  if tag=="title": self.title_mode=False
+              def handle_data(self,data):
+                  if self.title_mode: self.title.append(data[:100])
+          try:
+              raw=Path(sys.argv[1]).read_bytes()
+              kind="html" if b"<html" in raw[:3000].lower() else "other"
+              parsed=Shape()
+              parsed.feed(raw.decode("utf-8","replace")[:200000])
+              title=" ".join(parsed.title).lower()
+              class_name=("signal-desk" if "signal" in title
+                          else "moj-prop" if "moj prop" in title
+                          else "not-found" if "404" in title or "not found" in title
+                          else "other" if title else "missing")
+              # This is diagnostic evidence, never authorization to overwrite.
+              print("PUBLIC_SIGNAL_LIVE_DOCUMENT_KIND="+kind)
+              print("PUBLIC_SIGNAL_LIVE_TITLE_CLASS="+class_name)
+              print("PUBLIC_SIGNAL_LIVE_BYTE_COUNT="+str(len(raw)))
+              print("PUBLIC_SIGNAL_LIVE_SHA256_PREFIX="+hashlib.sha256(raw).hexdigest()[:12])
+              print("PUBLIC_SIGNAL_LIVE_FORM_COUNT="+str(parsed.forms))
+              print("PUBLIC_SIGNAL_LIVE_LINK_COUNT="+str(parsed.links))
+              print("PUBLIC_SIGNAL_LIVE_SCRIPT_COUNT="+str(parsed.scripts))
+              print("PUBLIC_SIGNAL_LIVE_CONTENT_REVIEW_REQUIRED=true")
+          except (OSError, ValueError, TypeError):
+              print("PUBLIC_SIGNAL_LIVE_DOCUMENT_KIND=unavailable")
+              print("PUBLIC_SIGNAL_LIVE_CONTENT_REVIEW_REQUIRED=true")
+          PY
           # Inspect only public HTML and the public API's contract; do not log
           # emails, CSRF token values, cookies, or subscriber identifiers.
           if [[ -f "$check_dir/signal_desk.body" ]]; then
