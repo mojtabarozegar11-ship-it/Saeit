@@ -254,7 +254,7 @@ class MojtabaSignalContractTests(unittest.TestCase):
 
     def test_zero_width_financial_prompt_is_blocked(self):
         with self.assertRaisesRegex(SignalContractError, "financial_signal_disabled"):
-            validate_request(request_text="b\\u200bu\\u200by gold")
+            validate_request(request_text="b\u200bu\u200by gold")
 
     def test_overlong_request_denied_before_token_scan(self):
         with self.assertRaisesRegex(SignalContractError, "request_text_too_long"):
