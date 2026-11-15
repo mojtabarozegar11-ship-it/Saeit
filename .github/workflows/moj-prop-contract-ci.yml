@@ -1,0 +1,27 @@
+name: Moj Prop contract CI
+
+on:
+  pull_request:
+    paths:
+      - "core/moj_prop_contract.py"
+      - "core/tests/test_moj_prop_contract.py"
+      - ".github/workflows/moj-prop-contract-ci.yml"
+  push:
+    branches:
+      - "cycle-53-moj-prop-contract-20261115"
+
+permissions:
+  contents: read
+
+jobs:
+  pure-prop-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run Moj Prop contract tests
+        env:
+          PYTHONPATH: core
+        run: python -m unittest -v core/tests/test_moj_prop_contract.py
