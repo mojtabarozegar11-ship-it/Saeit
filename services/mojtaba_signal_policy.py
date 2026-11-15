@@ -46,7 +46,10 @@ class EducationalSignal:
 def _meaningful(value, name, *, minimum=15, maximum=1500):
     if (type(value) is not str or not minimum <= len(value.strip()) <= maximum
             or any((ord(ch) < 32 and ch not in "\n\t")
-                   or 0xD800 <= ord(ch) <= 0xDFFF for ch in value)):
+                   or 0xD800 <= ord(ch) <= 0xDFFF
+                   or 0x202A <= ord(ch) <= 0x202E
+                   or 0x2066 <= ord(ch) <= 0x2069
+                   or 0x200B <= ord(ch) <= 0x200F for ch in value)):
         raise SignalRecordError("invalid " + name)
     return value.strip()
 
@@ -63,7 +66,9 @@ def review_signal(record: EducationalSignal, *, now: datetime | None = None):
     Return a stable source-content fingerprint for provenance; not a sale, a
     live market feed, an automatic trade or a guarantee of performance.
     """
-    if type(record) is not EducationalSignal or record.author_agent != "mojtaba.bot.ai":
+    if (type(record) is not EducationalSignal
+            or type(record.author_agent) is not str
+            or record.author_agent != "mojtaba.bot.ai"):
         raise SignalRecordError("single authorized agent identity required")
     if type(record.record_id) is not str or not REVIEWER.fullmatch(record.record_id):
         raise SignalRecordError("invalid record id")
@@ -118,7 +123,7 @@ def review_signal(record: EducationalSignal, *, now: datetime | None = None):
     observed = _aware(record.observed_at, "observed_at")
     reviewed = _aware(record.reviewed_at, "reviewed_at")
     as_of = _aware(record.as_of, "as_of")
-    moment = _aware(now or datetime.now(timezone.utc), "now")
+    moment = _aware(now if now is not None else datetime.now(timezone.utc), "now")
     if not (moment - timedelta(hours=24) <= observed <= reviewed <= as_of <= moment
             and as_of - observed <= timedelta(hours=24)):
         raise SignalRecordError("stale, future or incorrectly ordered source evidence")
