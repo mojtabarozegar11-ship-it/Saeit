@@ -25,6 +25,10 @@ jobs:
             "https://mojplaywin.com/commerce/"
             "https://mojplaywin.com/store/"
             "https://mojplaywin.com/games/mojcoin/"
+            # Bazei is a SEPARATE Passenger application with these real routes.
+            "https://game.mojplaywin.com/health/"
+            "https://game.mojplaywin.com/moj-coin/"
+            "https://game.mojplaywin.com/api/moj-coin/content/"
           )
           for target in "${urls[@]}"; do
             output="$(curl --silent --show-error --connect-timeout 4 --max-time 8               --retry 0 --location --max-redirs 2 --output /dev/null               --write-out 'status=%{http_code} tls=%{ssl_verify_result}' "$target" 2>&1)" || true
