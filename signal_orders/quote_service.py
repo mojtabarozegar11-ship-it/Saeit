@@ -67,6 +67,12 @@ def _merchant_config(route, offer):
     if (type(hex_key) is not str or re.fullmatch(r"[0-9a-fA-F]{64}", hex_key) is None
             or hex_key.lower() == "0" * 64):
         raise DurableSignalQuoteError("protected_quote_hmac_key_missing")
+    # Compromise of one signing purpose must not silently compromise the other.
+    # Buyer identity and invoice authorization use independent cryptographic keys.
+    buyer_hex = getattr(settings, "MOJTABA_SIGNAL_BUYER_HMAC_KEY_HEX", "")
+    if (type(buyer_hex) is str and len(buyer_hex) == 64
+            and hmac.compare_digest(hex_key.lower(), buyer_hex.lower())):
+        raise DurableSignalQuoteError("quote_and_buyer_signing_keys_must_differ")
     return receiver, bytes.fromhex(hex_key)
 
 
