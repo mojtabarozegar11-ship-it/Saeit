@@ -279,7 +279,7 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
     fieldsets = (("درخواست", {"fields": ("kind", "name", "organization", "email", "phone", "subject", "message")}), ("مدیریت", {"fields": ("status", "internal_note", "created_at", "updated_at")}))
 
 
-from .models import MojPropRequest, MojPropOffer
+from .models import MojPropRequest, MojPropOffer, MojPropDeliveryEvidence
 
 
 from django.utils import timezone as mojprop_timezone
@@ -360,5 +360,41 @@ class MojPropOfferAdmin(ModelAdmin):
             obj.created_by = request.user
         # Admin.save_model is also invoked on internal edits: validate
         # every status, price and timeline before persisting.
+        obj.full_clean()
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(MojPropDeliveryEvidence)
+class MojPropDeliveryEvidenceAdmin(ModelAdmin):
+    """Private evidence desk: a recorded handoff is not a verified payment."""
+
+    list_display = (
+        "offer", "artifact_name", "status", "handed_off_at", "acknowledged_at",
+        "created_at",
+    )
+    list_filter = ("status", "created_at", "handed_off_at")
+    search_fields = (
+        "offer__lead__request_id", "offer__lead__email", "artifact_name",
+        "artifact_sha256", "handoff_reference",
+    )
+    autocomplete_fields = ("offer",)
+    readonly_fields = ("created_at", "updated_at")
+    fields = (
+        "offer", "artifact_name", "artifact_sha256", "status",
+        "clearance_reference", "handoff_reference", "handed_off_at",
+        "acknowledgment_reference", "acknowledged_at",
+        "created_at", "updated_at",
+    )
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = super().get_readonly_fields(request, obj)
+        if obj and obj.status in ("sent", "acknowledged"):
+            return tuple(fields) + (
+                "offer", "artifact_sha256", "artifact_name",
+                "clearance_reference", "handoff_reference", "handed_off_at",
+            )
+        return fields
+
+    def save_model(self, request, obj, form, change):
         obj.full_clean()
         super().save_model(request, obj, form, change)
