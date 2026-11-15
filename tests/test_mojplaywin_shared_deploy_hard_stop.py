@@ -88,7 +88,7 @@ class ProtectedSubsiteDeployLockTests(unittest.TestCase):
         from scripts.mojplaywin_detect_deploy_triggers import (
             MANUAL_RELEASE_JOBS, manual_release_job_guarded,
         )
-        self.assertEqual(len(MANUAL_RELEASE_JOBS), 4)
+        self.assertEqual(len(MANUAL_RELEASE_JOBS), 5)
         for filename, job in MANUAL_RELEASE_JOBS.items():
             with self.subTest(filename=filename, job=job):
                 source = (ROOT / ".github/workflows" / filename).read_text("utf-8")

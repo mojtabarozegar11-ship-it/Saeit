@@ -12,6 +12,17 @@ on:
       - "core/financial_brand_pages.py"
       - "core/templates/core/financial_brand_page.html"
       - "templates/saman/**"
+  workflow_dispatch:
+    inputs:
+      owner_approved_live_release:
+        description: 'Explicit approval for a manually reviewed SAMAN release, not a PR merge'
+        type: boolean
+        required: true
+        default: false
+      approved_release_sha:
+        description: 'Exact 40-character reviewed main commit'
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -22,10 +33,30 @@ concurrency:
 
 jobs:
   deploy-saman:
+    # A source merge must never trigger an SSH write or Passenger restart.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+      - name: Require pinned owner-approved SAMAN release before any hosting credentials
+        shell: bash
+        env:
+          OWNER_APPROVED: ${{ inputs.owner_approved_live_release }}
+          REVIEWED_SHA: ${{ inputs.approved_release_sha }}
+          RESTORE_PROVEN: ${{ vars.MPW_SAMAN_BACKUP_RESTORE_VERIFIED }}
+          ROLLBACK_PROVEN: ${{ vars.MPW_SAMAN_ROLLBACK_VERIFIED }}
+          TENANTS_ISOLATED: ${{ vars.MPW_SAMAN_TENANT_ISOLATION_VERIFIED }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$REVIEWED_SHA" == "$GITHUB_SHA" ]]
+          [[ "$OWNER_APPROVED" == "true" ]]
+          [[ "$RESTORE_PROVEN" == "true" ]]
+          [[ "$ROLLBACK_PROVEN" == "true" ]]
+          [[ "$TENANTS_ISOLATED" == "true" ]]
+          echo 'SAMAN_RELEASE=MANUAL_PINNED_AND_ATTESTED'
 
       - name: Validate SAMAN page and installer
         run: |
