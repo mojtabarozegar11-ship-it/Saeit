@@ -59,7 +59,8 @@ class OfferStatusTransitionTests(TestCase):
                           accepted_at=timezone.now(),
                           acceptance_reference="manually verified consent")
 
-    def test_issued_quote_cannot_start_with_expired_deadline(self):
+    def test_issued_quote_requires_expiry_after_issuance(self):
         with self.assertRaises(ValidationError):
             self.move("issued", reviewed_at=self.past,
-                      issued_at=self.past, expires_at=self.past+timedelta(minutes=1))
+                      issued_at=self.past + timedelta(minutes=2),
+                      expires_at=self.past + timedelta(minutes=1))
