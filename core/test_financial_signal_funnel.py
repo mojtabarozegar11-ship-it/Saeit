@@ -42,3 +42,27 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
         html = response.content.decode("utf-8")
         self.assertIn('href="/commerce/"', html)
         self.assertNotIn(SIGNAL_INTAKE_PATH, html)
+
+    def test_each_catalog_offer_prefills_its_own_distinct_service(self):
+        html = self.client.get("/moj-prop/catalog/").content.decode("utf-8")
+        offers = {
+            "blueprint": "Request a blueprint",
+            "brief": "Request a market brief",
+            "signals": "Request a signal note",
+            "audit": "Request an audit",
+        }
+        for code, label in offers.items():
+            with self.subTest(route=code):
+                self.assertIn(
+                    f'href="/moj-prop/?service={code}#request">{label}',
+                    html,
+                )
+        # No named offer silently defaults to the first form option.
+        for label in offers.values():
+            self.assertNotIn(f'href="/moj-prop/#request">{label}', html)
+
+    def test_signal_handoff_contract_is_never_a_checkout_or_auto_trade(self):
+        html = self.client.get("/moj-prop/signals/").content.decode("utf-8")
+        self.assertIn("live feed and automatic subscription are not active", html)
+        self.assertIn("mojtaba.bot.ai", html)
+        self.assertNotIn("guaranteed profit", html.lower())
