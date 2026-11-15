@@ -121,10 +121,50 @@ class MojPropIntakeTests(TestCase):
                   "scripts/deploy_mojplaywin_moj_prop_backend.py").read_text("utf-8")
         self.assertIn("live_core_migration_leaves()", script)
         self.assertIn("MOJ_PROP_MIGRATION_PARENTS=", script)
-        self.assertIn("if target.exists() or target.is_symlink():", script)
+        self.assertIn('if target.exists():', script)
+        self.assertIn("MOJ_PROP_MIGRATION_ALREADY_INSTALLED=PASS", script)
+        self.assertIn("mojprop_migration_operations_signature(current)", script)
         self.assertNotIn('if candidates else "0001_initial"', script)
         self.assertNotIn("install_join_migration", script)
         self.assertIn("def restart_passenger()", script)
+
+    def test_existing_cpanel_0041_is_idempotent_only_when_schema_matches(self):
+        from scripts.deploy_mojplaywin_moj_prop_backend import (
+            mojprop_migration_operations_signature,
+        )
+        text = (Path(settings.BASE_DIR) /
+                "core/migrations/0041_mojprop_request.py").read_text("utf-8")
+        private = text.replace(
+            '"0040_commercefunnelevent"', '"0049_mpw_guest_email_recovery"',
+        )
+        self.assertEqual(
+            mojprop_migration_operations_signature(text),
+            mojprop_migration_operations_signature(private),
+        )
+        changed = private.replace(
+            '("source", models.CharField(default="moj-prop", max_length=80))',
+            '("source", models.CharField(default="tampered", max_length=80))',
+        )
+        self.assertNotEqual(
+            mojprop_migration_operations_signature(text),
+            mojprop_migration_operations_signature(changed),
+        )
+
+    def test_existing_cpanel_migration_invalid_parent_fails_closed(self):
+        from scripts.deploy_mojplaywin_moj_prop_backend import (
+            mojprop_migration_operations_signature,
+        )
+        text = (Path(settings.BASE_DIR) /
+                "core/migrations/0041_mojprop_request.py").read_text("utf-8")
+        malformed = (
+            text.replace('("core", "0040_commercefunnelevent")',
+                         '("different_app", "0040_commercefunnelevent")'),
+            text.replace('("core", "0040_commercefunnelevent")',
+                         '("core", "not_a_valid_migration")'),
+        )
+        for case in malformed:
+            with self.subTest(value=case[:50]), self.assertRaises(RuntimeError):
+                mojprop_migration_operations_signature(case)
 
     def test_public_core_source_field_matches_existing_0041(self):
         migration = (Path(settings.BASE_DIR) /
