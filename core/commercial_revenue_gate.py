@@ -765,6 +765,28 @@ class SQLiteCommercialLedger:
                 row["canonical_host"] != offer.canonical_host or
                 row["offer_id"] != offer.offer_id):
             raise CommercialGateError("merchant_order_binding_mismatch")
+        invoice_id = _slug(invoice_id, "invoice_id")
+        registered = self.connection.execute(
+            "SELECT invoice_id, payload_digest FROM issued_invoices WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()
+        if registered is None or registered["invoice_id"] != invoice_id:
+            raise CommercialGateError("bound_merchant_invoice_required")
+        order = self.connection.execute(
+            "SELECT amount, currency, state FROM orders WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()
+        if order is None or order["state"] not in (
+            CommercialState.PAYMENT_PENDING.value, CommercialState.SETTLED.value,
+            CommercialState.FULFILLMENT_PENDING.value, CommercialState.FULFILLED.value,
+            CommercialState.VERIFIED_REVENUE.value,
+        ):
+            raise CommercialGateError("bound_merchant_order_not_payable")
+        if registered["payload_digest"] != invoice_commitment(
+            order_id=order_id, invoice_id=invoice_id,
+            amount=Decimal(order["amount"]), currency=order["currency"],
+        ):
+            raise CommercialGateError("bound_merchant_invoice_corrupt")
         return validate_merchant_trx_receipt(
             offer=offer, tenant_registry=tenant_registry,
             independent_release_verifier=independent_release_verifier,
