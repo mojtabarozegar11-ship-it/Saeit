@@ -970,6 +970,87 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def _settled_replay_order(self, path):
+        ledger = self._offline_ledger(path)
+        self._prepare_private_invoice(ledger, "order-52")
+        proof = self.payment()
+        digest = validate_payment_evidence(proof, expected_order_id="order-52",
+            expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+        ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                       event_id="settled-52", payload_digest=digest, payment_evidence=proof)
+        return ledger, proof, digest
+
+    def test_settled_replay_requires_represented_payment_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger, proof, digest = self._settled_replay_order(str(Path(directory) / "ledger.sqlite3"))
+            with self.assertRaisesRegex(CommercialGateError, "settlement_evidence_required"):
+                ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                               event_id="settled-52", payload_digest=digest)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "settled")
+            ledger.close()
+
+    def test_settled_replay_rechecks_independent_provider_proof(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "ledger.sqlite3")
+            ledger, proof, digest = self._settled_replay_order(path)
+            ledger.close()
+            reopened = SQLiteCommercialLedger(path, settlement_verifier=lambda _: False)
+            with self.assertRaisesRegex(CommercialGateError, "independent_settlement_unverified"):
+                reopened.advance(order_id="order-52", target=CommercialState.SETTLED,
+                                 event_id="settled-52", payload_digest=digest, payment_evidence=proof)
+            reopened.close()
+
+    def test_settled_replay_rejects_substituted_transfer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger, proof, digest = self._settled_replay_order(str(Path(directory) / "ledger.sqlite3"))
+            with self.assertRaisesRegex(CommercialGateError, "event_replay_mismatch"):
+                ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                               event_id="settled-52", payload_digest=digest,
+                               payment_evidence=self.payment(transaction_id="b" * 64))
+            ledger.close()
+
+    def test_identical_settled_replay_with_valid_external_proof_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger, proof, digest = self._settled_replay_order(str(Path(directory) / "ledger.sqlite3"))
+            state = ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                                   event_id="settled-52", payload_digest=digest, payment_evidence=proof)
+            self.assertEqual(state, CommercialState.SETTLED)
+            self.assertEqual(ledger.connection.execute(
+                "SELECT COUNT(*) FROM order_events WHERE event_id = ?", ("settled-52",)
+            ).fetchone()[0], 1)
+            ledger.close()
+
+    def test_fulfillment_replay_requires_manifest_again(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger, proof, digest = self._settled_replay_order(str(Path(directory) / "ledger.sqlite3"))
+            ledger.advance(order_id="order-52", target=CommercialState.FULFILLMENT_PENDING,
+                           event_id="fulfill-pending-52", payload_digest="b" * 64)
+            ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                           event_id="fulfilled-52", payload_digest="d" * 64,
+                           fulfillment_manifest_sha256="d" * 64)
+            with self.assertRaisesRegex(CommercialGateError, "fulfillment_payload_mismatch"):
+                ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                               event_id="fulfilled-52", payload_digest="d" * 64)
+            ledger.close()
+
+    def test_fulfillment_replay_rechecks_customer_delivery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "ledger.sqlite3")
+            ledger, proof, digest = self._settled_replay_order(path)
+            ledger.advance(order_id="order-52", target=CommercialState.FULFILLMENT_PENDING,
+                           event_id="fulfill-pending-52", payload_digest="b" * 64)
+            ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                           event_id="fulfilled-52", payload_digest="d" * 64,
+                           fulfillment_manifest_sha256="d" * 64)
+            ledger.close()
+            reopened = SQLiteCommercialLedger(path, delivery_verifier=lambda _order, _manifest: False)
+            with self.assertRaisesRegex(CommercialGateError, "independent_delivery_unverified"):
+                reopened.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                                 event_id="fulfilled-52", payload_digest="d" * 64,
+                                 fulfillment_manifest_sha256="d" * 64)
+            reopened.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
