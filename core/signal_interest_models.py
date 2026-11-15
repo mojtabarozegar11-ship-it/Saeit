@@ -1,6 +1,7 @@
 """One canonical non-billing CRM for MOJ PROP and Mojtaba.bot.ai signals."""
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
+from django.utils import timezone
 
 
 class CommercialInterest(models.Model):
@@ -21,6 +22,7 @@ class CommercialInterest(models.Model):
     ))
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    withdrawn_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
         constraints = [
@@ -65,8 +67,39 @@ class CommercialInterest(models.Model):
             raise ValidationError({"email": "Canonical lower-case email required"})
 
     def save(self, *args, **kwargs):
-        self.full_clean()
-        return super().save(*args, **kwargs)
+        """Preserve the original consent and make withdrawal terminal, even in concurrent writes.
+
+        ORM bulk update is intentionally not offered through the operator interface.
+        """
+        provenance = (
+            "email", "offer_family", "brand", "plan_code", "consent_version",
+            "source_language", "source_host",
+        )
+        with transaction.atomic():
+            previous = None
+            if self.pk is not None:
+                previous = type(self).objects.select_for_update().filter(pk=self.pk).first()
+            if previous is not None:
+                for field in provenance:
+                    if getattr(previous, field) != getattr(self, field):
+                        raise ValidationError({field: "Original consent evidence is immutable"})
+                if previous.status == "withdrawn" and self.status != "withdrawn":
+                    raise ValidationError({"status": "Withdrawn contact consent cannot be reactivated"})
+                if previous.withdrawn_at is not None:
+                    self.withdrawn_at = previous.withdrawn_at
+                elif self.status == "withdrawn":
+                    self.withdrawn_at = timezone.now()
+            elif self.status == "withdrawn":
+                self.withdrawn_at = timezone.now()
+            if self.status != "withdrawn" and self.withdrawn_at is not None:
+                raise ValidationError({"withdrawn_at": "Withdrawal timestamp requires withdrawn status"})
+            fields = kwargs.get("update_fields")
+            if fields is not None and previous is not None and self.status != previous.status and "status" not in fields:
+                raise ValidationError({"status": "Status transitions must be saved explicitly"})
+            if fields is not None and self.status == "withdrawn":
+                kwargs["update_fields"] = set(fields) | {"withdrawn_at"}
+            self.full_clean()
+            return super().save(*args, **kwargs)
 
     def __str__(self):
         return f"commercial-interest:{self.offer_family}:{self.pk}"
