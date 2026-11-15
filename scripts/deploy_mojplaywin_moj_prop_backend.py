@@ -21,6 +21,10 @@ import subprocess
 import sys
 import tempfile
 
+# SSH executes this file by absolute path: insert the bundle root explicitly.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.mojprop_schema_preflight_c83 import check_schema_closure, migration_operations_signature
+
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
 DOCROOT = Path("/home/zomorod2/mojplaywin.com")
@@ -31,14 +35,22 @@ FILES = (
     Path("core/admin.py"),
     Path("core/mojprop_views.py"),
     Path("core/mojprop_receipts.py"),
+    Path("core/mojprop_catalog_contract.py"),
+    Path("core/mojprop_workflow.py"),
+    Path("core/mojprop_offer_draft.py"),
+    Path("core/mojprop_quote_contract.py"),
+    Path("core/mojprop_quote_views.py"),
     Path("core/migrations/0041_mojprop_request.py"),
+    Path("core/migrations/0042_mojprop_offer.py"),
+    Path("core/migrations/0043_mojprop_digital_inquiry.py"),
+    Path("core/migrations/0044_mojprop_acceptance_evidence.py"),
+    Path("core/migrations/0045_mojprop_delivery_evidence.py"),
+    Path("scripts/mojprop_schema_preflight_c83.py"),
 )
 ALL_FILES = (URLCONF,) + FILES
-REPLACE_FILES = (
-    Path("core/mojprop_views.py"),
-    Path("core/mojprop_receipts.py"),
-    Path("core/migrations/0041_mojprop_request.py"),
-)
+REPLACE_FILES = tuple(path for path in FILES if path not in (
+    Path("core/models.py"), Path("core/admin.py"),
+))
 
 
 def digest(path: Path) -> str:
@@ -102,6 +114,7 @@ def selftest(repo_root: Path) -> None:
     missing = [marker for marker, text in required if marker not in text]
     if missing:
         raise RuntimeError(f"backend selftest missing markers: {missing}")
+    check_schema_closure(repo_root, repo_root)
     print("MOJ_PROP_BACKEND_SELFTEST=PASS")
 
 
@@ -173,13 +186,29 @@ def atomic_write_text(target: Path, text: str, mode: int) -> None:
 
 def install_migration(source: Path, target: Path) -> None:
     assert_regular(source, "staged migration")
+    if target.is_symlink():
+        raise RuntimeError("unsafe pre-existing Moj Prop migration symlink")
+    if target.exists():
+        assert_regular(target, "live intake migration")
+        if migration_operations_signature(target) != migration_operations_signature(source):
+            raise RuntimeError("refusing to overwrite a different previously applied migration")
+        # A potentially applied migration must not have its dependency
+        # graph silently rewritten on another release attempt.
+        print("MOJ_PROP_INTAKE_MIGRATION_PRESERVED")
+        return
     migration_dir = ROOT / "core/migrations"
     candidates = []
     for item in migration_dir.glob("*.py"):
         if item.is_symlink() or not item.is_file():
             continue
         match = re.match(r"^([0-9]+)_([a-zA-Z0-9_]+)[.]py$", item.name)
-        if not match or item.name == "0041_mojprop_request.py":
+        # The full commercial chain 0041..0045 depends on 0041. Taking
+        # 0045 as 0041's parent would create a cyclic migration graph.
+        if not match:
+            continue
+        if int(match.group(1)) >= 41:
+            # Never make the initial intake migration depend on an existing
+            # later revision, including a concurrent migration above 0045.
             continue
         candidates.append((int(match.group(1)), item.stem))
     parent = max(candidates, key=lambda value: (value[0], value[1]))[1] if candidates else "0001_initial"
@@ -225,10 +254,12 @@ def patch_admin(target: Path, source: Path) -> None:
         print("MOJ_PROP_ADMIN_ALREADY_PATCHED")
         return
     staged = source.read_text(encoding="utf-8")
-    marker = "\nfrom .models import MojPropRequest\n"
+    # Source main includes the complete commercial model import; a strict
+    # equality test for the old one-model import prevented every fresh setup.
+    marker = "\nfrom .models import MojPropRequest, MojPropOffer, MojPropDeliveryEvidence\n"
     start = staged.find(marker)
     if start < 0:
-        raise RuntimeError("staged MojPropRequest admin block is missing")
+        raise RuntimeError("staged Moj Prop admin import contract is missing")
     block = staged[start + 1 :].rstrip() + "\n"
     if "from django.contrib import admin" not in live or "ModelAdmin" not in live:
         raise RuntimeError("live admin file has no safe additive-admin anchors")
@@ -243,7 +274,8 @@ def patch_urlconf(target: Path) -> None:
     source = target.read_text(encoding="utf-8")
     intake_exists = 'path("moj-prop-intake/"' in source
     status_exists = 'path("moj-prop-status/"' in source
-    if intake_exists and status_exists:
+    quote_exists = 'path("moj-prop-quote/<str:token>/"' in source
+    if intake_exists and status_exists and quote_exists:
         print("MOJ_PROP_URLCONF_ALREADY_PATCHED")
         return
     if "from django.urls import" not in source or "urlpatterns" not in source:
@@ -262,11 +294,16 @@ def patch_urlconf(target: Path) -> None:
     if not status_exists:
         missing_imports.append("mojprop_receipt_status")
         routes.append('path("moj-prop-status/", mojprop_receipt_status, name="mojprop_receipt_status")')
-    additions = (
-        "\n\n# Moj Prop public lead intake/status, not a payment system.\n"
-        + "from core.mojprop_views import " + ", ".join(missing_imports) + "\n"
-        + "urlpatterns += [" + ", ".join(routes) + "]\n"
-    )
+    # Quote links are independently disabled by default. Publishing a
+    # guarded URL route does NOT issue a proposal or make it payable.
+    if not quote_exists:
+        routes.append('path("moj-prop-quote/<str:token>/", customer_quote, name="mojprop_quote_public")')
+    additions = "\n\n# Moj Prop intake/status and private, owner-gated quote lookup.\n"
+    if missing_imports:
+        additions += "from core.mojprop_views import " + ", ".join(missing_imports) + "\n"
+    if not quote_exists:
+        additions += "from core.mojprop_quote_views import customer_quote\n"
+    additions += "urlpatterns += [" + ", ".join(routes) + "]\n"
     mode = stat.S_IMODE(target.stat().st_mode)
     atomic_write_text(target, source.rstrip() + additions, mode)
     print("MOJ_PROP_URLCONF_PATCH=PASS")
@@ -456,6 +493,10 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         raise RuntimeError("backend staging root is missing or unsafe")
     for relative in ALL_FILES:
         assert_regular(staged_root / relative, "backend staged file")
+    # Fail before touching live application files or its database schema.
+    closure = check_schema_closure(ROOT, staged_root)
+    print("MOJ_PROP_SCHEMA_CLOSURE=PASS; MIGRATIONS=" + ",".join(closure["source_chain"]))
+    print("MOJ_PROP_DB_RESTORE_EVIDENCE=INDEPENDENTLY_REQUIRED")
 
     backup = BACKUP_ROOT / run_id
     if backup.exists():
@@ -484,7 +525,11 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
 
         python = choose_python()
         run_checked([str(python), "manage.py", "check", "--deploy"], ROOT)
-        run_checked([str(python), "manage.py", "migrate", "--noinput"], ROOT)
+        # Never run an unscoped 'migrate': that could apply other apps'
+        # unreviewed pending DDL on the commercial production database.
+        # Schema closure rejected any unknown core migration >=0041.
+        run_checked([str(python), "manage.py", "migrate",
+                     "core", "0045_mojprop_delivery_evidence", "--noinput"], ROOT)
         run_checked([str(python), "manage.py", "collectstatic", "--noinput"], ROOT)
 
         restart_passenger()
