@@ -18,6 +18,8 @@ from core.mojtaba_signal_tron_invoice_contract import (
     TrxQuoteError, _clock, build_trx_invoice_quote, verify_trx_invoice_quote,
 )
 from .models import PendingSignalOrderRecord, PendingSignalTrxQuote
+from .approved_catalog import approved_offer_fingerprint
+from core.mojtaba_signal_service_contract import SignalTenantRoute, SignalOffer, SignalContractError
 from .service import _ID, _check_row
 
 
@@ -38,7 +40,20 @@ class DurableQuoteReceipt:
     delivered: bool = False
 
 
-def _merchant_config(route):
+def _merchant_config(route, offer):
+    if not isinstance(route, SignalTenantRoute) or not isinstance(offer, SignalOffer):
+        raise DurableSignalQuoteError("protected_service_contract_required")
+    try:
+        fingerprint = approved_offer_fingerprint(route, offer)
+    except (SignalContractError, ValueError, TypeError) as exc:
+        raise DurableSignalQuoteError("approved_service_contract_invalid") from exc
+    allowlist = getattr(settings, "MOJTABA_SIGNAL_APPROVED_SERVICE_FINGERPRINTS", ())
+    if (type(allowlist) not in (list, tuple) or not 1 <= len(allowlist) <= 1024
+            or any(type(value) is not str
+                   or re.fullmatch(r"[0-9a-f]{64}", value) is None
+                   for value in allowlist)
+            or fingerprint not in allowlist):
+        raise DurableSignalQuoteError("service_not_in_protected_approved_catalog")
     if getattr(settings, "MOJTABA_SIGNAL_TRON_QUOTE_ENABLED", False) is not True:
         raise DurableSignalQuoteError("quote_issuance_disabled")
     expected_host = getattr(settings, "MOJTABA_SIGNAL_CANONICAL_HOST", "")
@@ -96,7 +111,7 @@ def issue_pending_trx_quote(*, order_id, tenant_id, invoice_id,
             or type(invoice_id) is not str or not _INVOICE_ID.fullmatch(invoice_id)):
         raise DurableSignalQuoteError("trusted_quote_identity_required")
     now = _clock(now)
-    receiver, key = _merchant_config(trusted_route)
+    receiver, key = _merchant_config(trusted_route, trusted_offer)
     order = PendingSignalOrderRecord.objects.select_for_update().filter(
         order_id=order_id, tenant_id=tenant_id,
     ).first()
@@ -137,7 +152,7 @@ def read_pending_trx_quote(*, order_id, tenant_id, trusted_route,
             or type(tenant_id) is not str or not _ID.fullmatch(tenant_id)):
         raise DurableSignalQuoteError("trusted_quote_identity_required")
     now = _clock(now)
-    receiver, key = _merchant_config(trusted_route)
+    receiver, key = _merchant_config(trusted_route, trusted_offer)
     row = PendingSignalTrxQuote.objects.select_related("order").filter(
         order__order_id=order_id, order__tenant_id=tenant_id,
     ).first()
