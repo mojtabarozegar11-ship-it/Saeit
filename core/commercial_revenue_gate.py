@@ -410,6 +410,31 @@ def validate_payment_evidence(
     })
 
 
+def validate_merchant_trx_receipt(
+    *,
+    offer: OfferContract,
+    tenant_registry: Mapping[str, str],
+    independent_release_verifier: Callable[[OfferContract], bool],
+    evidence: PaymentEvidence,
+    expected_order_id: str,
+    expected_invoice_id: str,
+) -> str:
+    """Private manual merchant-specific TRX evidence gate, NOT a payment API."""
+    if not isinstance(offer, OfferContract) or offer.offer_type is not OfferType.TRX_GATEWAY:
+        raise CommercialGateError("trx_merchant_offer_required")
+    if offer.active is not True:
+        raise CommercialGateError("trx_merchant_not_authorized")
+    validate_offer(
+        offer, tenant_registry=tenant_registry,
+        independent_release_verifier=independent_release_verifier,
+    )
+    return validate_payment_evidence(
+        evidence, expected_order_id=expected_order_id,
+        expected_invoice_id=expected_invoice_id,
+        expected_amount=offer.price, expected_currency=offer.currency,
+    )
+
+
 def _validated_evidence_digest(
     evidence: PaymentEvidence,
     *,
