@@ -27,9 +27,10 @@ class MojPropV4ConversionTests(SimpleTestCase):
         self.assertIn("Object.prototype.hasOwnProperty.call(labels,requestedService)", self.html)
 
     def test_no_phantom_receipt_without_confirmed_server_id(self):
-        self.assertIn("response.status!==201", self.html)
+        self.assertIn("response.status===201 && data.reused!==true", self.html)
+        self.assertIn("response.status===200 && data.reused===true", self.html)
         self.assertIn("typeof data.request_id!=='string'", self.html)
-        self.assertIn("MOJPROP-[0-9]{8}-[A-F0-9]{8}", self.html)
+        self.assertIn("ID-[A-F0-9]{24}", self.html)
         self.assertIn("copy.disabled=true", self.html)
         self.assertNotIn("Math.random().toString(36)", self.html)
 
@@ -72,7 +73,8 @@ class MojPropV4ConversionTests(SimpleTestCase):
         self.assertIn(".get('plan')", self.html)
         self.assertIn("Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)", self.html)
         self.assertIn("A recurring subscription and payment have not been authorized.", self.html)
-        self.assertIn("body:JSON.stringify({name,email,service,horizon,notes:submittedNotes,website,", self.html)
+        self.assertIn("const payload={name,email,service,horizon,notes:submittedNotes,website,", self.html)
+        self.assertIn("body:JSON.stringify({...payload,idempotency_key:pendingSubmission.key})", self.html)
         self.assertIn("Requested educational plan: ", self.html)
         self.assertIn("selected-signal-plan", self.html)
 
