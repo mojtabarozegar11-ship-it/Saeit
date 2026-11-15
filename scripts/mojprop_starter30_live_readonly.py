@@ -48,7 +48,13 @@ def _metadata(root: Path, path: Path, expected_kind: str) -> dict:
 
 def _safe_content(root: Path, path: Path) -> bytes | None:
     """Refuse symlink ancestors, missing files, large files and out-of-root paths."""
-    if not path.is_relative_to(root) or path == root:
+    # Python 3.8 factory runners lack Path.is_relative_to (added in 3.9).
+    # relative_to itself is available and retains the same fail-closed check.
+    try:
+        if path == root:
+            return None
+        path.relative_to(root)
+    except ValueError:
         return None
     cursor = path
     while cursor != root:
