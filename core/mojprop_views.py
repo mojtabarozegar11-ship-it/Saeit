@@ -23,6 +23,7 @@ from django.views.decorators.csrf import csrf_protect
 
 from .models import MojPropRequest
 from .mojprop_catalog_contract import public_service_catalog
+from .mojprop_receipts import make_receipt_token, verify_receipt_token, public_status_text
 
 ROUTES = {choice[0] for choice in MojPropRequest.ROUTE_CHOICES}
 HORIZONS = {choice[0] for choice in MojPropRequest.HORIZON_CHOICES}
@@ -219,9 +220,36 @@ def mojprop_intake(request):
         {
             "ok": True,
             "request_id": request_obj.request_id,
+            "receipt_token": make_receipt_token(request_obj.request_id),
             "status": request_obj.status,
             "next_step": "manual_review",
             "message": "Your request draft was received for manual review. No payment was taken.",
         },
         status=201,
     )
+
+
+@require_http_methods(["GET"])
+def mojprop_receipt_status(request):
+    """Read only the public stage when holding the signed private receipt."""
+    token = str(request.GET.get("receipt_token", ""))
+    request_id = verify_receipt_token(token)
+    if request_id is None:
+        return _json(
+            {"ok": False, "detail": "Receipt invalid or expired. Contact support using your original email."},
+            status=404,
+        )
+    record = (MojPropRequest.objects.filter(request_id=request_id)
+              .values_list("status", flat=True).first())
+    if record is None:
+        return _json({"ok": False, "detail": "Receipt unavailable."}, status=404)
+    response = _json({
+        "ok": True,
+        "request_id": request_id,
+        "status": record,
+        "stage": public_status_text(record),
+        "payment_status": "not_collected_by_this_service",
+    })
+    response["Referrer-Policy"] = "no-referrer"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
