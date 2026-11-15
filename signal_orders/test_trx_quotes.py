@@ -331,3 +331,15 @@ class DurableTronQuoteTests(TestCase):
     def test_missing_offer_object_is_domain_error(self):
         with self.assertRaisesRegex(DurableSignalQuoteError, "protected_service_contract"):
             self.issue(trusted_offer=None)
+
+    def test_reusing_buyer_identity_key_for_quote_signing_denied(self):
+        with override_settings(MOJTABA_SIGNAL_BUYER_HMAC_KEY_HEX=KEY_HEX):
+            with self.assertRaisesRegex(DurableSignalQuoteError, "signing_keys_must_differ"):
+                self.issue()
+        self.assertEqual(PendingSignalTrxQuote.objects.count(), 0)
+
+    def test_hex_case_change_cannot_bypass_key_separation(self):
+        with override_settings(MOJTABA_SIGNAL_BUYER_HMAC_KEY_HEX=KEY_HEX.upper()):
+            with self.assertRaisesRegex(DurableSignalQuoteError, "signing_keys_must_differ"):
+                self.issue()
+        self.assertEqual(PendingSignalTrxQuote.objects.count(), 0)
