@@ -127,6 +127,73 @@ def _quota_result(needed_bytes):
 def _quota_checked(needed_bytes):
     return _quota_result(needed_bytes)[0]
 
+
+def _cpanel_quota_data_adequate(document, needed_bytes):
+    """Use fixed cPanel UAPI fields only; do not trust unlimited/disabled as proof."""
+    from decimal import Decimal, InvalidOperation
+    if (type(document) is not dict
+            or type(document.get("result")) is not dict
+            or document["result"].get("status") != 1
+            or type(document["result"].get("data")) is not dict):
+        return False, "cpanel_uapi_invalid_response"
+    data = document["result"]["data"]
+    if any(type(data.get(k)) is not int or data[k] != 1
+           for k in ("under_quota_overall", "under_megabyte_limit",
+                     "under_inode_limit")):
+        return False, "cpanel_uapi_limit_exceeded_or_unknown"
+    try:
+        def number(field):
+            value = data[field]
+            if type(value) not in (int, float, str):
+                raise ValueError(field)
+            out = Decimal(str(value))
+            if not out.is_finite() or out < 0:
+                raise ValueError(field)
+            return out
+        limit_mb = number("megabyte_limit")
+        remain_mb = number("megabytes_remain")
+        inode_limit = data["inode_limit"]
+        inodes_remain = data["inodes_remain"]
+        if (type(inode_limit) is not int or inode_limit < 0
+                or type(inodes_remain) is not int or inodes_remain < 0):
+            raise ValueError("inode")
+    except (KeyError, ValueError, InvalidOperation, TypeError):
+        return False, "cpanel_uapi_invalid_quantities"
+    if limit_mb == 0:
+        return False, "cpanel_uapi_unlimited_or_disabled_unproven"
+    # One decimal MB is conservatively 1,000,000 bytes, not MiB.
+    if remain_mb * Decimal(1_000_000) < Decimal(needed_bytes + 64 * 1024 * 1024):
+        return False, "cpanel_uapi_quota_bytes_insufficient"
+    if inode_limit and inodes_remain < 32:
+        return False, "cpanel_uapi_quota_inodes_insufficient"
+    return True, "cpanel_uapi_quota_verified"
+
+
+def _cpanel_uapi_quota_result(needed_bytes):
+    """Only the official, account-scoped GET-like read-only Quota UAPI method."""
+    import subprocess
+    binary = "/usr/local/cpanel/bin/uapi"
+    try:
+        proc = subprocess.run(
+            [binary, "--output=json", "--user=" + ACCOUNT,
+             "Quota", "get_quota_info"],
+            check=True, timeout=12, capture_output=True, text=True,
+            env={"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin"},
+        )
+    except FileNotFoundError:
+        return False, "cpanel_uapi_program_unavailable"
+    except subprocess.TimeoutExpired:
+        return False, "cpanel_uapi_timeout"
+    except (OSError, subprocess.SubprocessError):
+        return False, "cpanel_uapi_failed"
+    if len(proc.stdout) > 16384:
+        return False, "cpanel_uapi_response_oversize"
+    try:
+        parsed = json.loads(proc.stdout)
+    except (ValueError, TypeError):
+        return False, "cpanel_uapi_unparseable"
+    return _cpanel_quota_data_adequate(parsed, needed_bytes)
+
 def main():
     out = {
         "schema": "mojprop.full_restore.capacity_readonly.v1",
@@ -159,6 +226,10 @@ def main():
         # Failure to prove the quota is UNKNOWN, not automatically 'no space'.
         quota, reason = (_quota_result(requirement) if requirement else
                          (False, "connected_db_estimate_unavailable"))
+        if (requirement and not quota and reason in (
+                "quota_program_unavailable", "quota_program_failed",
+                "quota_volume_not_reported", "quota_format_unrecognized")):
+            quota, reason = _cpanel_uapi_quota_result(requirement)
         out["quota_probe_available"] = quota is True
         out["quota_outcome"] = reason
         out.update(capacity_flags(free_bytes=free, db_bytes=db_bytes, quota_accepted=quota))
