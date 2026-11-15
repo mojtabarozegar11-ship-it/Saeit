@@ -65,6 +65,18 @@ class PublicReachabilityDiagnosticTests(unittest.TestCase):
         self.assertIn("PUBLIC_BUYER_ROUTE_GATE=DEGRADED", source)
         self.assertIn("PUBLIC_UNHEALTHY_ROUTE_COUNT=", source)
 
+    def test_public_bot_dns_is_cross_checked_by_two_readonly_doh_resolvers(self):
+        source = self.content
+        self.assertIn("https://dns.google/resolve?name=mojtaba.bot.ai&type=A", source)
+        self.assertIn("https://cloudflare-dns.com/dns-query?name=mojtaba.bot.ai&type=A", source)
+        self.assertIn("-H 'Accept: application/dns-json'", source)
+        self.assertIn("BOT_DOH_", source)
+        self.assertIn("_DNS_RCODE=", source)
+        self.assertIn("_ANSWER_COUNT=", source)
+        self.assertIn("len(answers)", source)
+        self.assertNotIn("print(answers)", source)
+        self.assertNotIn("print(info)", source)
+
     def test_probe_does_not_upload_bearer_cookie_or_response_body(self):
         source = self.content
         self.assertIn('$RUNNER_TEMP/mojprop-live-get', source)
