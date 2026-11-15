@@ -94,13 +94,15 @@
         ? requestedPlan : '';
       const planSummary=document.getElementById('selected-signal-plan');
       const notesField=document.getElementById('notes');
+      const notes=notesField;
       let signalPrefill='';
       if(freeTierRequested){
         signalPrefill='One-off FREE educational market-brief example request through mojtaba.bot.ai. This is manual review only, not a live signal, a mailing-list subscription, a payment, or a delivery guarantee.';
       }else if(requestedService==='signals' && selectedPlan){
-        signalPrefill='Please provide a risk-disclosed educational '+signalPlans[selectedPlan].label+' market brief (exact plan ID: '+selectedPlan+'). A recurring subscription and payment have not been authorized.';
+        const requestedPlanLabel = 'exact plan ID: '+requestedPlan+'';
+        signalPrefill='Please provide a risk-disclosed educational '+signalPlans[selectedPlan].label+' market brief ('+requestedPlanLabel+'). A recurring subscription and payment have not been authorized.';
       }
-      if(signalPrefill && !notesField.value.trim()) notesField.value=signalPrefill;
+      if(signalPrefill && !notes.value.trim()) notes.value=signalPrefill;
       const planPrefix=selectedPlan
         ? 'Requested educational plan: '+selectedPlan+' (indicative USD '+signalPlans[selectedPlan].usd+'; written quote required)\\n'
         : '';
@@ -116,7 +118,7 @@
       }
       serviceSelector.addEventListener('change',function(){
         const currentNotes=document.getElementById('notes');
-        if(serviceSelector.value!=='signals' && currentNotes.value===signalPrefill){
+        if(serviceSelector.value!=='signals' && notes.value===signalPrefill){
           currentNotes.value='';
           signalPrefill='';
         }
