@@ -132,3 +132,15 @@ class MojPropOfferDraftTests(TestCase):
     def test_legitimate_reference_remains_traceable(self):
         self.lead.request_id = "MOJPROP-20261115-TRUELEAD"
         self.assertIn("Customer request reference: MOJPROP-20261115-TRUELEAD", build_offer_draft(self.lead))
+
+    def test_bidi_spoofing_and_oversized_contact_fields_are_neutralized(self):
+        self.lead.name = "Buyer\\u202eDIAP :tnemyaP" + "X" * 1000
+        self.lead.email = "customer@domain.test\\u2066FAKE\\u2069"
+        draft = build_offer_draft(self.lead)
+        customer_line = next(line for line in draft.splitlines() if line.startswith("Customer: "))
+        email_line = next(line for line in draft.splitlines() if line.startswith("Contact email"))
+        self.assertLessEqual(len(customer_line), len("Customer: ") + 240)
+        self.assertNotIn("\\u202e", customer_line)
+        self.assertNotIn("\\u2066", email_line)
+        self.assertNotIn("\\u2069", email_line)
+        self.assertIn("Payment: DISABLED", draft)
