@@ -12,6 +12,7 @@ from core.tron_tenant_policy import TenantDecision
 from .economics import funded_capacity
 from .rules import POLICY, LEVELS
 from .plans import DEFAULT_PLAN_CODE, plan_for_code
+from .policy_integrity import policy_drift_defects
 
 REQUIRED = (
     "jurisdiction_authorized",
@@ -67,6 +68,10 @@ def assess_challenge_checkout(*, merchant_tenant, free_treasury_usd,
         if not (plan.number > 1 and key == "minimum_order_size_compatible_with_100_usd")
         and attestations.get(key) is not True
     ]
+    # A separately edited nine-tier / one-stage challenge must never pass
+    # readiness under the official two-phase, fourteen-level policy.
+    if policy_drift_defects():
+        blockers.append("canonical_moj_prop_policy_mismatch")
     # The owner explicitly marked Plans 2..10 temporarily inactive.
     # Even a complete readiness claim may NOT override that commercial hold.
     if plan.temporary_owner_hold:
