@@ -73,7 +73,10 @@ class MojPropBuyerReceiptTests(TestCase):
 
     def test_status_endpoint_will_not_accept_post_or_modify_lead(self):
         result = self.make_lead()
-        response = self.browser.post("/moj-prop-status/", {"receipt_token": result["receipt_token"]})
+        response = self.browser.post(
+            "/moj-prop-status/", {"receipt_token": result["receipt_token"]},
+            HTTP_X_CSRFTOKEN=self.token,
+        )
         self.assertEqual(response.status_code, 405)
         self.assertEqual(MojPropRequest.objects.get(request_id=result["request_id"]).status, "new")
 
