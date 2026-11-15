@@ -117,7 +117,7 @@ def action_queue_snapshot(*, detail_limit=0):
         }
         if detail_limit:
             entry["request_refs"] = list(
-                query.order_by("pk").values_list(ref_field, flat=True)
+                query.order_by(ref_field).values_list(ref_field, flat=True)
                 .distinct()[:detail_limit]
             )
         categories.append(entry)
