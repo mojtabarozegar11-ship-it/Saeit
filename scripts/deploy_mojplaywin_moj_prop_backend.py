@@ -350,7 +350,9 @@ def restart_passenger() -> None:
         return
     selector = shutil.which("cloudlinux-selector")
     if selector:
-        app_root = "mojplaywin.com"
+        # CloudLinux registers the shared WSGI application under this root;
+        # MojPlayWin's Apache vhost points its passenger_wsgi.py at the same tree.
+        app_root = "Saeit-staging"
         attempts = (
             [selector, "restart", "--json", "--interpreter", "python", "--user", "zomorod2", "--app-root", app_root],
             [selector, "restart", "--json", "--interpreter", "python", "--app-root", app_root],
