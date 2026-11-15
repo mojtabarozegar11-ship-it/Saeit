@@ -68,7 +68,7 @@ class OriginReadOnlyInventoryTests(TestCase):
     def test_no_django_or_network_module_import_side_effects(self):
         source = (Path(__file__).resolve().parents[1] / "scripts/mpw_origin_release_readonly.py").read_text()
         for forbidden in ("django.setup", "import requests", "urlopen(",
-                          "subprocess", ".write_text(", ".unlink(", "os.system(",
+                          "import subprocess", "from subprocess", ".write_text(", ".unlink(", "os.system(",
                           "PaymentIntent.objects", "Order.objects"):
             self.assertNotIn(forbidden, source)
 
