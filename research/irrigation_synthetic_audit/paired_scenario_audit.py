@@ -129,8 +129,14 @@ def analyze_family(records: list[dict], family: str) -> dict:
         policy_values[policy].append(row)
     require(len(matched) == 540, f"{family}: expected 540 unique matched keys")
     require(len(paths) == 12, f"{family}: expected 12 distinct climate paths")
+    expected_grid = {(b, e, forecast) for b in (-.02, -.01, 0., .01, .02)
+                     for e in (.85, 1., 1.15)
+                     for forecast in ("perfect", "missing", "falsePositive")}
     for path, keys in paths.items():
         require(len(keys) == 45, f"{family}: path {path} has {len(keys)} settings; expected 45")
+        observed_grid = {(key[3], key[4], key[5]) for key in keys}
+        require(observed_grid == expected_grid,
+                f"{family}: path {path} has missing or unexpected factorial settings")
     for key, vals in matched.items():
         require(set(vals) == policies, f"{family}: incomplete policy match for {key}")
 
