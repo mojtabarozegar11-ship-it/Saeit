@@ -9,14 +9,24 @@ import re
 from .mojprop_catalog_contract import public_service_catalog
 
 
+def _normalise_line_breaks(value: object) -> str:
+    """Treat literal and actual line breaks consistently before rendering user text."""
+    return str(value).replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n")
+
+
 def _one_line(value: object) -> str:
     """Keep user-supplied contact fields from injecting forged proposal headers."""
-    return re.sub(r"[\x00-\x1f\x7f\u2028\u2029]+", " ", str(value)).strip()
+    text = _normalise_line_breaks(value)
+    return re.sub(r"[\x00-\x1f\x7f\u2028\u2029]+", " ", text).strip()
 
 
 def _quoted_scope(text: str) -> str:
     """Show the customer's exact scope as quoted content, not operator instructions."""
-    return "\n".join("> " + line for line in text.splitlines())
+    normalised = _normalise_line_breaks(text)
+    normalised = re.sub(r"[\x00-\x08\x0b-\x1f\x7f\u2028\u2029]", " ", normalised)
+    return "\n".join(
+        "> " + line.strip() for line in normalised.splitlines() if line.strip()
+    )
 
 
 def build_offer_draft(lead) -> str:
