@@ -321,6 +321,11 @@ class MojPropRequestAdmin(ModelAdmin):
         # Customer lead existence must be backed by a consented public intake.
         return False
 
+    def has_delete_permission(self, request, obj=None):
+        # Preserve written proposal, consent, delivery and dispute evidence.
+        # Use "closed" or "spam" status, not destructive admin deletion.
+        return False
+
     def save_model(self, request, obj, form, change):
         old = (MojPropRequest.objects.filter(pk=obj.pk)
                .values_list("status", flat=True).first()) if change else None
