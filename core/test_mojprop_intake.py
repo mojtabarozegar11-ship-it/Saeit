@@ -114,7 +114,8 @@ class MojPropIntakeTests(TestCase):
         from scripts.deploy_mojplaywin_moj_prop_backend import format_core_migration_dependencies
         for leaves in ((), ("bad",),
                        ("0049_mpw_guest_email_recovery", "0049_mpw_guest_email_recovery"),
-                       ("0041_mojprop_request",), ("0042_alter_mojproprequest_source",)):
+                       ("0041_mojprop_request",), ("0042_merge_commercefunnel_mojprop",),
+                       ("0043_alter_mojproprequest_source",)):
             with self.subTest(leaves=leaves), self.assertRaises(RuntimeError):
                 format_core_migration_dependencies(leaves)
 
