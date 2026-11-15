@@ -744,6 +744,35 @@ class SQLiteCommercialLedger:
             except sqlite3.IntegrityError:
                 raise CommercialGateError("merchant_order_already_bound") from None
 
+    def verify_bound_merchant_receipt(
+        self, *, order_id: str, offer: OfferContract,
+        evidence: PaymentEvidence, invoice_id: str,
+        tenant_registry: Mapping[str, str],
+        independent_release_verifier: Callable[[OfferContract], bool],
+        independent_domain_delegation_verifier: Optional[Callable[[str], bool]] = None,
+    ) -> str:
+        """Review a manual TRX receipt against its *durable* merchant binding."""
+        order_id = _slug(order_id, "order_id")
+        if not isinstance(offer, OfferContract):
+            raise CommercialGateError("trx_merchant_offer_required")
+        row = self.connection.execute(
+            "SELECT tenant_id, canonical_host, offer_id FROM merchant_order_bindings WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()
+        if row is None:
+            raise CommercialGateError("merchant_order_binding_required")
+        if (row["tenant_id"] != offer.tenant_id or
+                row["canonical_host"] != offer.canonical_host or
+                row["offer_id"] != offer.offer_id):
+            raise CommercialGateError("merchant_order_binding_mismatch")
+        return validate_merchant_trx_receipt(
+            offer=offer, tenant_registry=tenant_registry,
+            independent_release_verifier=independent_release_verifier,
+            independent_domain_delegation_verifier=independent_domain_delegation_verifier,
+            evidence=evidence, expected_order_id=order_id,
+            expected_invoice_id=invoice_id,
+        )
+
     def bind_issued_invoice(self, *, order_id: str, invoice_id: str,
                             payload_digest: str) -> None:
         """Commit to an invoice that was previously recorded in the order history.
