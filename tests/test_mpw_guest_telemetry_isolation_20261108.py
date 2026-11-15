@@ -85,5 +85,74 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertEqual(dispatch.call_count, 2)
 
 
+    def _invoice_event_count_for_response(self, status, location):
+        response = types.SimpleNamespace(
+            status_code=status,
+            get=lambda name, default="": location if name == "Location" else default,
+        )
+        request = object()
+        product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
+            filter=Mock(return_value=types.SimpleNamespace(first=lambda: object()))))
+        record = Mock()
+        modules = stub_modules(record, product_model)
+        with patch.dict(sys.modules, modules):
+            helper = source_function("_record_funnel_event_best_effort")
+            installer = source_function("patch_commercial", {
+                "_dispatch": Mock(return_value=response),
+                "_record_funnel_event_best_effort": helper,
+            })
+            namespace = {"_" + name: (lambda *args, **kwargs: None) for name in (
+                "start_order", "show_invoice", "invoice_status",
+                "reconcile_invoice", "download_paid",
+            )}
+            installer(namespace)
+            self.assertIs(namespace["start_order"](request, product_id=72), response)
+        return record.call_count
+
+    def test_committed_invoice_302_records_one_funnel_event(self):
+        self.assertEqual(self._invoice_event_count_for_response(
+            302, "/commerce/trx-easy/invoice/72/",
+        ), 1)
+
+    def test_committed_invoice_303_records_one_funnel_event(self):
+        self.assertEqual(self._invoice_event_count_for_response(
+            303, "/commerce/trx-easy/invoice/72/",
+        ), 1)
+
+    def test_invalid_email_422_cannot_emit_invoice_created_event(self):
+        self.assertEqual(self._invoice_event_count_for_response(
+            422, "/commerce/trx-easy/invoice/72/",
+        ), 0)
+
+    def test_successful_200_html_cannot_emit_invoice_created_event(self):
+        self.assertEqual(self._invoice_event_count_for_response(
+            200, "/commerce/trx-easy/invoice/72/",
+        ), 0)
+
+    def test_login_redirect_cannot_emit_invoice_created_event(self):
+        self.assertEqual(self._invoice_event_count_for_response(
+            302, "/accounts/login/",
+        ), 0)
+
+    def test_external_payment_redirect_cannot_emit_invoice_created_event(self):
+        self.assertEqual(self._invoice_event_count_for_response(
+            302, "https://evil.example/commerce/trx-easy/invoice/72/",
+        ), 0)
+
+    def test_zero_or_traversal_invoice_identifier_rejected(self):
+        for path in ("/commerce/trx-easy/invoice/0/",
+                     "/commerce/trx-easy/invoice/../",
+                     "/commerce/trx-easy/invoice/01/"):
+            with self.subTest(path=path):
+                self.assertEqual(self._invoice_event_count_for_response(
+                    302, path,
+                ), 0)
+
+    def test_payment_status_page_never_counts_as_invoice_created(self):
+        self.assertEqual(self._invoice_event_count_for_response(
+            302, "/commerce/trx-easy/status/72/",
+        ), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
