@@ -126,7 +126,11 @@ def _rate_limited(email: str, ip_hash: str) -> bool:
 
 def _json(data, status=200):
     response = JsonResponse(data, status=status)
+    # Tokens and buyer receipt state must never be kept in intermediary caches
+    # or leaked in browser referrer data, including on error responses.
     response["Cache-Control"] = "no-store"
+    response["Referrer-Policy"] = "no-referrer"
+    response["X-Content-Type-Options"] = "nosniff"
     return response
 
 
