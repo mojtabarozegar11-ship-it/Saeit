@@ -43,6 +43,21 @@
       if(Object.prototype.hasOwnProperty.call(labels,requestedService)){
         serviceSelect.value=requestedService;
       }
+      // Carry a trusted fixed plan identifier from the published Signal Desk
+      // into the actual CRM request. A query string is never a paid invoice.
+      const allowedPlans={
+        'education-weekly':'weekly',
+        'education-monthly':'monthly',
+        'education-quarterly':'quarterly'
+      };
+      const requestedPlan=new URLSearchParams(window.location.search).get('plan');
+      if(requestedService==='signals' &&
+         Object.prototype.hasOwnProperty.call(allowedPlans,requestedPlan)){
+        document.getElementById('notes').value=
+          'Please provide a written, risk-disclosed manual proposal for the '+
+          allowedPlans[requestedPlan]+' educational market-brief plan ('+
+          requestedPlan+'). No recurring subscription or payment is authorized yet.';
+      }
       let csrfToken='', receipt='';
       async function csrf(){
         if(csrfToken) return csrfToken;
