@@ -65,7 +65,7 @@ def verified_existing_walletless_item_access(user, item_id, *, asset_is_releasab
 
     try:
         intent = order.payment_intent
-    except (AttributeError, Exception):
+    except Exception:
         return False
     if (intent.provider != PROVIDER or intent.status != "paid"
             or intent.order_id != order.pk
