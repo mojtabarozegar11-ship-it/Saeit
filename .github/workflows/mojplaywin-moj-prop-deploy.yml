@@ -12,7 +12,6 @@ on:
       - "core/models.py"
       - "core/mojprop_views.py"
       - "core/migrations/0041_mojprop_request.py"
-      - "core/migrations/0042_alter_mojproprequest_source.py"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
   push:
     branches: [main]
@@ -26,7 +25,6 @@ on:
       - "core/models.py"
       - "core/mojprop_views.py"
       - "core/migrations/0041_mojprop_request.py"
-      - "core/migrations/0042_alter_mojproprequest_source.py"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
   workflow_dispatch:
 
@@ -120,7 +118,7 @@ jobs:
             'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -d /home/zomorod2/Saeit-staging && test ! -L /home/zomorod2/Saeit-staging && grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/Saeit-staging/config/urls.py'
           timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
       - name: Package only Moj Prop installer and page
-        run: tar -cf "$RUNNER_TEMP/moj-prop-catalog.tar" scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py templates/moj-prop-v4 config/urls.py core/models.py core/admin.py core/mojprop_views.py core/migrations/0041_mojprop_request.py core/migrations/0042_alter_mojproprequest_source.py
+        run: tar -cf "$RUNNER_TEMP/moj-prop-catalog.tar" scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py templates/moj-prop-v4 config/urls.py core/models.py core/admin.py core/mojprop_views.py core/migrations/0041_mojprop_request.py
       - name: Upload isolated Moj Prop package
         shell: bash
         run: |
@@ -186,7 +184,7 @@ jobs:
           [[ "$catalog_status" == "200" ]]
           intake_status="000"
           for intake_attempt in {1..10}; do
-            intake_status="$(curl -L --max-redirs 3 -sS -H 'Cache-Control: no-cache' -o "$RUNNER_TEMP/moj-prop-intake.json" -w '%{http_code}' "https://mojplaywin.com/moj-prop-intake/?_moj_prop_backend_deploy=$GITHUB_RUN_ID" || true)"
+            intake_status="$(curl -L --max-redirs 3 -sS -H 'Cache-Control: no-cache, no-store' -H 'Pragma: no-cache' -o "$RUNNER_TEMP/moj-prop-intake.json" -w '%{http_code}' "https://mojplaywin.com/moj-prop-intake/?_moj_prop_backend_deploy=$GITHUB_RUN_ID&attempt=$intake_attempt&ts=$(date +%s%N)" || true)"
             [[ "$intake_status" == "200" ]] && break
             echo "Moj Prop intake not ready (HTTP $intake_status, attempt $intake_attempt)."
             sleep 3
