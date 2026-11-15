@@ -15,6 +15,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import unicodedata
 from typing import Mapping, Optional
 
 
@@ -165,10 +166,24 @@ def validate_offer(
         raise CommercialGateError("offer_identity_invalid")
 
 
+_BLOCKED_FINANCIAL_PHRASES = (
+    "سیگنال خرید", "سیگنال فروش", "ورود به معامله", "خروج از معامله",
+    "حد ضرر", "حد سود", "توصیه سرمایه گذاری", "توصیه سرمایه‌گذاری",
+    "إشارة شراء", "اشارة شراء", "إشارة بيع", "اشارة بيع",
+    "توصية تداول", "توصیه معامله",
+)
+
+
 def validate_signal_request(*, requested_action: str, financial_authorized: bool = False) -> None:
-    """Block investment calls while allowing research/operational services."""
-    action = _text(requested_action, "requested_action").lower()
-    if set(re.findall(r"[a-z]+", action)) & _BLOCKED_SIGNAL_WORDS or financial_authorized:
+    """Deny investment calls in EN/FA/AR; allow market education and research."""
+    action = unicodedata.normalize("NFKC", _text(requested_action, "requested_action")).lower()
+    # Zero-width characters may be inserted between a prohibited trading
+    # instruction's letters. They do not change its economic meaning.
+    for mark in ("\u200b", "\u200c", "\u200d", "\ufeff", "\u2060"):
+        action = action.replace(mark, "")
+    if (set(re.findall(r"[a-z]+", action)) & _BLOCKED_SIGNAL_WORDS
+            or any(phrase.replace("\u200c", "") in action for phrase in _BLOCKED_FINANCIAL_PHRASES)
+            or financial_authorized):
         raise CommercialGateError("financial_signal_disabled")
 
 
