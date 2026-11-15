@@ -18,6 +18,7 @@ from django.core.validators import validate_email
 from django.db import IntegrityError, DatabaseError, transaction
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
+from django.views.decorators.csrf import csrf_protect
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -106,6 +107,7 @@ def _json(data, status=200):
 
 
 @require_http_methods(["GET", "POST"])
+@csrf_protect
 def mojprop_intake(request):
     """Return a CSRF token or create one manual-review request."""
     if request.method == "GET":
