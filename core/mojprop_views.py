@@ -40,6 +40,16 @@ ALLOWED_FIELDS = frozenset((
 ))
 
 
+def _unique_pairs(pairs):
+    """Reject ambiguous duplicate JSON fields, including email and consent."""
+    values = {}
+    for key, value in pairs:
+        if key in values:
+            raise ValueError("duplicate customer intake key")
+        values[key] = value
+    return values
+
+
 def _payload(request):
     """Allow bounded JSON or a single-valued HTML form; reject hidden extras."""
     content_type = str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].strip().lower()
@@ -56,8 +66,8 @@ def _payload(request):
         if len(body) > MAX_BODY_BYTES:
             return None
         try:
-            value = json.loads(body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+            value = json.loads(body.decode("utf-8"), object_pairs_hook=_unique_pairs)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
             return None
         if type(value) is not dict or set(value) - ALLOWED_FIELDS:
             return None
