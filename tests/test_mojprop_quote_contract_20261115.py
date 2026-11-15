@@ -95,5 +95,24 @@ class QuoteSnapshotTests(unittest.TestCase):
         self.assertNotIn("wallet", result)
         self.assertNotIn("payment_url", result)
 
+
+    def test_quote_version_must_be_canonical_and_bounded(self):
+        for version in (0, -1, 1000, "1", True, None, 1.0):
+            with self.subTest(version=repr(version)), self.assertRaises(QuoteContractError):
+                make_quote_snapshot(self.make(version=version), now=self.now)
+
+    def test_unpaired_unicode_surrogate_in_quote_cannot_reach_buyer(self):
+        for field in ("title", "scope", "exclusions"):
+            for surrogate in (chr(0xD800), chr(0xDFFF)):
+                with self.subTest(field=field, surrogate=repr(surrogate)):
+                    value = self.base[field] + surrogate
+                    with self.assertRaises(QuoteContractError):
+                        make_quote_snapshot(self.make(**{field: value}), now=self.now)
+
+    def test_wrong_clock_type_is_rejected_as_domain_error(self):
+        for bad in (0, "", [], {}, datetime(2026, 11, 15, 12, 0)):
+            with self.subTest(clock=repr(bad)), self.assertRaises(QuoteContractError):
+                make_quote_snapshot(self.make(), now=bad)
+
 if __name__ == "__main__":
     unittest.main()
