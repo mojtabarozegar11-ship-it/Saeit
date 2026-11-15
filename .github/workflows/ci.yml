@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "completion/**"]
+    branches: [main, "completion/**", "cycle54-moj-prop-level10-lock-20261115"]
   pull_request:
     branches: [main]
 
