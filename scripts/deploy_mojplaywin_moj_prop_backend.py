@@ -179,8 +179,12 @@ def install_migration(source: Path, target: Path) -> None:
         candidates.append((int(match.group(1)), item.stem))
     parent = max(candidates, key=lambda value: (value[0], value[1]))[1] if candidates else "0001_initial"
     text = source.read_text(encoding="utf-8")
-    marker = '("core", "0039_educationassessment_educationattempt_and_more")'
-    if marker not in text:
+    baseline_markers = (
+        '("core", "0040_commercefunnelevent")',
+        '("core", "0039_educationassessment_educationattempt_and_more")',
+    )
+    marker = next((candidate for candidate in baseline_markers if candidate in text), None)
+    if marker is None:
         raise RuntimeError("staged Moj Prop migration baseline marker is missing")
     text = text.replace(marker, f'("core", "{parent}")', 1)
     mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o640
