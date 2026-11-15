@@ -77,6 +77,7 @@ def load_records(path: Path) -> list[dict]:
         require(set(FIELDS).issubset(reader.fieldnames),
                 f"Missing columns in {path}: {sorted(set(FIELDS)-set(reader.fieldnames))}")
         for line, raw in enumerate(reader, start=2):
+            require(None not in raw, f"Unexpected extra CSV fields at {path}:{line}")
             require(raw.get("cohort") and raw.get("policy"),
                     f"Missing scenario/policy at {path}:{line}")
             try:
@@ -151,15 +152,17 @@ def analyze_family(records: list[dict], family: str) -> dict:
     } for p, rows in sorted(policy_values.items())}
     counts = dict(q_lower=0, q_tied=0, q_higher=0, higher_water=0,
                   v3_dominates=0, v2_dominates=0, both_tied=0,
-                  q_better_water_worse=0)
+                  q_better_water_worse=0, water_better_q_worse=0)
     crossed = []
     all_deltas = []
+    path_deltas: dict[tuple, list[tuple[float, int]]] = defaultdict(list)
     by_class: dict[str, dict[str, int]] = defaultdict(lambda: dict(v3=0, v2=0, tied=0))
     weights = {w: dict(v3=0, v2=0, tied=0) for w in WEIGHTS}
     for key, values in matched.items():
         v2, v3 = values["v2"], values["v3"]
         dv, dq = v3["water"] - v2["water"], v3["q"] - v2["q"]
         all_deltas.append((dv, dq))
+        path_deltas[key[:3]].append((dv, dq))
         counts["q_lower" if dq < 0 else "q_higher" if dq > 0 else "q_tied"] += 1
         counts["higher_water"] += dv > TOL
         counts["v3_dominates"] += dv <= TOL and dq <= 0 and (dv < -TOL or dq < 0)
@@ -168,17 +171,30 @@ def analyze_family(records: list[dict], family: str) -> dict:
         if dq < 0 and dv > TOL:
             counts["q_better_water_worse"] += 1
             crossed.append(dv / -dq)
+        if dq > 0 and dv < -TOL:
+            counts["water_better_q_worse"] += 1
         for w in WEIGHTS:
             loss_diff = dv + w * dq
             label = "v3" if loss_diff < -TOL else "v2" if loss_diff > TOL else "tied"
             weights[w][label] += 1
             if w == 10:
                 by_class[key[2]][label] += 1
+    pareto_categories = ("v3_dominates", "v2_dominates", "both_tied",
+                         "q_better_water_worse", "water_better_q_worse")
+    require(sum(counts[name] for name in pareto_categories) == len(matched),
+            f"{family}: incomplete Pareto outcome partition")
+    climate_path_effects = [{
+        "cohort": path[0], "seed": path[1], "climate_class": path[2],
+        "matched_keys": len(deltas),
+        "mean_delta_water_m3": statistics.fmean(x[0] for x in deltas),
+        "mean_delta_q100": statistics.fmean(x[1] for x in deltas),
+    } for path, deltas in sorted(path_deltas.items())]
     mean_dv = statistics.fmean(x[0] for x in all_deltas)
     mean_dq = statistics.fmean(x[1] for x in all_deltas)
     return {
         "family": family, "record_count": len(records), "matched_keys": len(matched),
-        "climate_paths": len(paths), "means": means, "comparisons": counts,
+        "climate_paths": len(paths), "climate_path_effects": climate_path_effects,
+        "means": means, "comparisons": counts,
         "mean_delta_water_m3": mean_dv, "mean_delta_q100": mean_dq,
         "mean_loss_crossing_lambda": mean_dv / -mean_dq if mean_dq < 0 else None,
         "case_crossing_lambda_median": statistics.median(crossed) if crossed else None,
