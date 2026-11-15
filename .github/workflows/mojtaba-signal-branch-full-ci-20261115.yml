@@ -1,0 +1,67 @@
+name: Mojtaba.bot Signal Full Branch CI (no release)
+
+on:
+  push:
+    branches: [fix/mojtaba-signal-funnel-prefill-c69-20261115]
+    paths:
+      - "services/mojtaba_signal_*.py"
+      - "templates/moj-prop/signals/**"
+      - "tests/test_mojtaba_signal_*.py"
+      - "config/urls.py"
+      - ".github/workflows/mojtaba-signal-branch-full-ci-20261115.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtaba-signal-no-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-branch-tests:
+    name: Full Django signals integration/pytest on source HEAD
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DEBUG: "false"
+      SECRET_KEY: "signal-ci-only-not-production"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install declared test dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements.txt
+          parser="$RUNNER_TEMP/mpw-pdf-parser"
+          install -d -m 700 "$parser"
+          python -m pip install --no-deps --require-hashes --target "$parser" -r .github/requirements/mpw-pdf-parser-ci.txt
+          echo "PYTHONPATH=$parser" >> "$GITHUB_ENV"
+      - name: Check signal modules and Django schema
+        run: |
+          set -euo pipefail
+          python -m compileall -q services/mojtaba_signal_policy.py services/mojtaba_signal_entitlement.py services/mojtaba_signal_catalog.py
+          python manage.py check --deploy
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput
+      - name: Run complete source branch test suite
+        run: |
+          set -euo pipefail
+          python -m pytest -q
+      - name: Confirm this workflow cannot access production
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          s=Path(".github/workflows/mojtaba-signal-branch-full-ci-20261115.yml").read_text()
+          assert "permissions:" in s and "contents: read" in s
+          assert "runs-on: ubuntu-latest" in s and "self-hosted" not in s
+          assert "HOST_SSH_PRIVATE_KEY" not in s
+          print("FULL_SIGNAL_TEST_ONLY=true; RELEASE=false")
+          PY
