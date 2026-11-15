@@ -21,7 +21,7 @@ def job(name, job_name):
     anchor = "\n  " + job_name + ":\n"
     if source.count(anchor) != 1:
         raise AssertionError("missing or ambiguous deployment job: " + name)
-    return source.split(anchor, 1)[1].split("\n  ", 1)[0]
+    # Release jobs are terminal in these two pinned workflows. A broad\n    # substring split on two spaces would incorrectly stop at four-space YAML.\n    return source.split(anchor, 1)[1]
 
 
 class SafeMergeWorkflowContract(unittest.TestCase):
