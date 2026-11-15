@@ -14,6 +14,7 @@ from core.commercial_revenue_gate import (
     validate_offer,
     validate_payment_evidence,
     validate_signal_request,
+    invoice_commitment,
 )
 
 
@@ -403,10 +404,21 @@ class CommercialGateTests(unittest.TestCase):
                 (CommercialState.INVOICED, "invoice-52"),
                 (CommercialState.PAYMENT_PENDING, "pending-52"),
             ):
+                digest_for_step = invoice_commitment(
+                    order_id="order-52", invoice_id="invoice-52",
+                    amount=Decimal("30"), currency="TRX",
+                ) if target is CommercialState.INVOICED else "a" * 64
                 ledger.advance(
                     order_id="order-52", target=target,
-                    event_id=event, payload_digest=("a" * 64),
+                    event_id=event, payload_digest=digest_for_step,
                 )
+            ledger.bind_issued_invoice(
+                order_id="order-52", invoice_id="invoice-52",
+                payload_digest=invoice_commitment(
+                    order_id="order-52", invoice_id="invoice-52",
+                    amount=Decimal("30"), currency="TRX",
+                ),
+            )
             evidence = self.payment()
             # Use the same package-qualified import as the test module.
             digest = validate_payment_evidence(
@@ -459,8 +471,19 @@ class CommercialGateTests(unittest.TestCase):
                 for state, prefix in ((CommercialState.QUOTED, "quote"),
                                       (CommercialState.INVOICED, "invoice"),
                                       (CommercialState.PAYMENT_PENDING, "pending")):
+                    step_digest = invoice_commitment(
+                        order_id=order_id, invoice_id="invoice-" + order_id.split("-")[1],
+                        amount=Decimal("30"), currency="TRX",
+                    ) if state is CommercialState.INVOICED else "a" * 64
                     ledger.advance(order_id=order_id, target=state,
-                                   event_id=f"{prefix}-{order_id}", payload_digest="a" * 64)
+                                   event_id=f"{prefix}-{order_id}", payload_digest=step_digest)
+                ledger.bind_issued_invoice(
+                    order_id=order_id, invoice_id="invoice-" + order_id.split("-")[1],
+                    payload_digest=invoice_commitment(
+                        order_id=order_id, invoice_id="invoice-" + order_id.split("-")[1],
+                        amount=Decimal("30"), currency="TRX",
+                    ),
+                )
             first = self.payment()
             digest1 = validate_payment_evidence(first, expected_order_id="order-52",
                 expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
@@ -483,8 +506,19 @@ class CommercialGateTests(unittest.TestCase):
             for state, event in ((CommercialState.QUOTED, "quote-52"),
                                  (CommercialState.INVOICED, "invoice-52"),
                                  (CommercialState.PAYMENT_PENDING, "pending-52")):
+                step_digest = invoice_commitment(
+                    order_id="order-52", invoice_id="invoice-52",
+                    amount=Decimal("30"), currency="TRX",
+                ) if state is CommercialState.INVOICED else "a" * 64
                 ledger.advance(order_id="order-52", target=state,
-                               event_id=event, payload_digest="a" * 64)
+                               event_id=event, payload_digest=step_digest)
+            ledger.bind_issued_invoice(
+                order_id="order-52", invoice_id="invoice-52",
+                payload_digest=invoice_commitment(
+                    order_id="order-52", invoice_id="invoice-52",
+                    amount=Decimal("30"), currency="TRX",
+                ),
+            )
             evidence = self.payment()
             digest = validate_payment_evidence(evidence, expected_order_id="order-52",
                 expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
@@ -599,7 +633,18 @@ class CommercialGateTests(unittest.TestCase):
             for target, key in ((CommercialState.QUOTED, "quote-52"),
                                 (CommercialState.INVOICED, "invoice-52"),
                                 (CommercialState.PAYMENT_PENDING, "pending-52")):
-                ledger.advance(order_id="order-52", target=target, event_id=key, payload_digest="a" * 64)
+                step_digest = invoice_commitment(
+                    order_id="order-52", invoice_id="invoice-52",
+                    amount=Decimal("30"), currency="TRX",
+                ) if target is CommercialState.INVOICED else "a" * 64
+                ledger.advance(order_id="order-52", target=target, event_id=key, payload_digest=step_digest)
+            ledger.bind_issued_invoice(
+                order_id="order-52", invoice_id="invoice-52",
+                payload_digest=invoice_commitment(
+                    order_id="order-52", invoice_id="invoice-52",
+                    amount=Decimal("30"), currency="TRX",
+                ),
+            )
             ev = self.payment()
             digest = validate_payment_evidence(ev, expected_order_id="order-52",
                 expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
@@ -613,6 +658,45 @@ class CommercialGateTests(unittest.TestCase):
                                fulfillment_manifest_sha256="d" * 64)
             self.assertEqual(ledger.snapshot("order-52")["state"], "fulfillment_pending")
             ledger.close()
+
+
+    def test_invoice_registry_cannot_bind_without_proven_issue_event(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
+            ref = invoice_commitment(order_id="order-52", invoice_id="invoice-52",
+                                     amount=Decimal("30"), currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "invoice_bind_state_invalid"):
+                ledger.bind_issued_invoice(order_id="order-52", invoice_id="invoice-52", payload_digest=ref)
+            ledger.close()
+
+    def test_settlement_requires_registered_invoice_even_with_matching_amount(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
+            for state, key in ((CommercialState.QUOTED, "quote-52"),
+                               (CommercialState.INVOICED, "invoice-52"),
+                               (CommercialState.PAYMENT_PENDING, "pending-52")):
+                digest = invoice_commitment(order_id="order-52", invoice_id="invoice-52",
+                    amount=Decimal("30"), currency="TRX") if state is CommercialState.INVOICED else "a" * 64
+                ledger.advance(order_id="order-52", target=state, event_id=key, payload_digest=digest)
+            proof = self.payment()
+            payload = validate_payment_evidence(proof, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "registered_invoice_required"):
+                ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                               event_id="settle-52", payload_digest=payload, payment_evidence=proof)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "payment_pending")
+            ledger.close()
+
+    def test_invoice_binds_order_price_and_reference(self):
+        digest = invoice_commitment(order_id="order-52", invoice_id="invoice-52",
+                                    amount=Decimal("30"), currency="TRX")
+        self.assertNotEqual(digest, invoice_commitment(
+            order_id="order-52", invoice_id="invoice-53", amount=Decimal("30"), currency="TRX"))
+        self.assertNotEqual(digest, invoice_commitment(
+            order_id="order-52", invoice_id="invoice-52", amount=Decimal("31"), currency="TRX"))
+
 
 
 if __name__ == "__main__":
