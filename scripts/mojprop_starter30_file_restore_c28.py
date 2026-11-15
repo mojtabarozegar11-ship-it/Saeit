@@ -80,18 +80,23 @@ def _read(fd: int, name: str, uid: int, *, minimum=64) -> bytes:
         os.close(handle)
 
 
-def _write(fd: int, name: str, body: bytes) -> None:
+def _write(fd: int, name: str, body: bytes) -> tuple[int, int]:
     handle = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | NOFOLLOW, 0o600, dir_fd=fd)
+    created = os.fstat(handle)
     try:
         with os.fdopen(handle, "wb") as dest:
             dest.write(body)
             dest.flush()
             os.fsync(dest.fileno())
+        return created.st_dev, created.st_ino
     except BaseException:
-        # A partially written file belongs to THIS exclusive create, not to
-        # the webroot; reclaim its quota blocks via the pinned directory fd.
+        # O_EXCL succeeded, so only remove OUR newly created inode. Never
+        # delete an unrelated file substituted at the same private path.
         try:
-            os.unlink(name, dir_fd=fd)
+            current = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            if stat.S_ISREG(current.st_mode) and (
+                    current.st_dev, current.st_ino) == (created.st_dev, created.st_ino):
+                os.unlink(name, dir_fd=fd)
         except FileNotFoundError:
             pass
         raise
@@ -204,13 +209,16 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
                             bfd = _mkdir(runfd, "backup", uid, unique=True)
                             restorefd = _mkdir(runfd, "isolated-restore", uid, unique=True)
                             checksums = {}
+                            created_entries = []
                             for i, body in enumerate(originals):
                                 name = "file-" + str(i) + ".bin"
-                                _write(bfd, name, body)
+                                identity = _write(bfd, name, body)
+                                created_entries.append((bfd, name, identity))
                                 persisted = _read(bfd, name, uid)
                                 if persisted != body:
                                     raise RuntimeError("source backup mismatch")
-                                _write(restorefd, name, persisted)
+                                identity = _write(restorefd, name, persisted)
+                                created_entries.append((restorefd, name, identity))
                                 restored = _read(restorefd, name, uid)
                                 digest = hashlib.sha256(body).hexdigest()
                                 if hashlib.sha256(restored).hexdigest() != digest:
@@ -229,24 +237,25 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
                                         "tenant_isolation_proven": False,
                                         "release_permitted": False,
                                         "payment_permitted": False}
-                            _write(runfd, "manifest.json", json.dumps(manifest, sort_keys=True).encode())
+                            identity = _write(runfd, "manifest.json", json.dumps(manifest, sort_keys=True).encode())
+                            created_entries.append((runfd, "manifest.json", identity))
                             completed = True
                         finally:
                             if not completed and runfd is not None:
-                                # Delete ONLY entries exclusively created inside
-                                # this new run directory. Never delete pre-existing
-                                # files, live content or the consumed owner marker.
-                                for child_fd in (bfd, restorefd):
-                                    if child_fd is not None:
-                                        for i in range(len(PUBLIC_FILES)):
-                                            try:
-                                                os.unlink("file-" + str(i) + ".bin", dir_fd=child_fd)
-                                            except FileNotFoundError:
-                                                pass
-                                try:
-                                    os.unlink("manifest.json", dir_fd=runfd)
-                                except FileNotFoundError:
-                                    pass
+                                # Reclaim ONLY files whose exclusive creation
+                                # returned a particular inode identity. A file
+                                # injected after directory creation but before
+                                # our O_EXCL is never eligible for deletion.
+                                for child_fd, filename, identity in reversed(locals().get("created_entries", [])):
+                                    try:
+                                        current = os.stat(filename, dir_fd=child_fd, follow_symlinks=False)
+                                    except FileNotFoundError:
+                                        continue
+                                    if stat.S_ISREG(current.st_mode) and (
+                                            current.st_dev, current.st_ino) == identity:
+                                        os.unlink(filename, dir_fd=child_fd)
+                                    else:
+                                        raise RuntimeError("private partial file replaced; cannot clean safely")
                             if restorefd is not None:
                                 os.close(restorefd)
                             if bfd is not None:
