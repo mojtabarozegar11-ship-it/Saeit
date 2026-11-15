@@ -10,8 +10,14 @@ on:
     branches:
       - "cycle-53-moj-prop-contract-20261115"
 
+workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: moj-prop-contract-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   pure-prop-contract:
