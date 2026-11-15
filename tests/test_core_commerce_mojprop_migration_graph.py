@@ -8,7 +8,7 @@ class CoreRevenueMigrationGraphTests(SimpleTestCase):
         loader = MigrationLoader(None)
         core_leaves = [node for node in loader.graph.leaf_nodes() if node[0] == "core"]
         self.assertEqual(
-            core_leaves, [("core", "0043_alter_mojproprequest_source")]
+            core_leaves, [("core", "0042_merge_commercefunnel_mojprop")]
         )
 
     def test_merge_preserves_both_independent_schema_ancestries(self):
@@ -20,18 +20,14 @@ class CoreRevenueMigrationGraphTests(SimpleTestCase):
         self.assertLess(plan.index(("core", "0040_commercefunnelevent")), plan.index(merge))
         self.assertLess(plan.index(("core", "0041_mojprop_request")), plan.index(merge))
 
-    def test_source_schema_alignment_follows_non_destructive_merge(self):
+    def test_model_source_matches_published_migration_without_blank(self):
+        from core.models import MojPropRequest
+        self.assertFalse(MojPropRequest._meta.get_field("source").blank)
         loader = MigrationLoader(None)
-        adjustment = loader.disk_migrations[
-            ("core", "0043_alter_mojproprequest_source")
-        ]
-        self.assertEqual(
-            adjustment.dependencies, [("core", "0042_merge_commercefunnel_mojprop")]
-        )
-        self.assertEqual(len(adjustment.operations), 1)
-        self.assertEqual(adjustment.operations[0].model_name, "mojproprequest")
-        self.assertEqual(adjustment.operations[0].name, "source")
-        self.assertTrue(adjustment.operations[0].field.blank)
+        state = loader.project_state(("core", "0042_merge_commercefunnel_mojprop"))
+        field = state.apps.get_model("core", "MojPropRequest")._meta.get_field("source")
+        self.assertFalse(field.blank)
+        self.assertEqual(field.default, "moj-prop")
 
     def test_merge_does_not_rewrite_or_drop_production_tables(self):
         loader = MigrationLoader(None)
