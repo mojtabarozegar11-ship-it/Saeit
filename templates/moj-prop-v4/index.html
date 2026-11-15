@@ -53,9 +53,10 @@
       };
       // Financial-brand signal pages link here with ?service=signals.
       // Honor only actual service codes; never write a URL string into the form.
-      const selectedRoute=new URLSearchParams(window.location.search).get('service');
-      if(Object.prototype.hasOwnProperty.call(labels,selectedRoute)){
-        document.getElementById('service').value=selectedRoute;
+      const serviceSelect=document.getElementById('service');
+      const requestedService=new URLSearchParams(window.location.search).get('service');
+      if(Object.prototype.hasOwnProperty.call(labels,requestedService)){
+        serviceSelect.value=requestedService;
       }
 
       async function csrf(){
@@ -128,10 +129,12 @@
           copy.disabled=false;
           download.disabled=false;
         }catch(error){
-          receipt=draft(name,email,service,horizon,notes,'not submitted; local draft only','');
-          result.textContent=receipt+'\n\nReason: '+error.message;
-          copy.disabled=false;
-          download.disabled=false;
+          // A failed request is NOT a buyer receipt and must never enable
+          // copy/download controls suggesting a customer was registered.
+          receipt='';
+          result.textContent='Request NOT submitted. '+error.message+' No ID or payment was created.';
+          copy.disabled=true;
+          download.disabled=true;
         }finally{
           submit.disabled=false;
           form.removeAttribute('aria-busy');
