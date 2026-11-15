@@ -1,0 +1,43 @@
+name: TRON Commerce Source Integrity (read-only)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/tron-commerce-source-integrity.yml"
+      - "mpw_commerce/**"
+      - "services/mpw_trx_*"
+      - "scripts/mpw_commerce_dependency_preflight_20261115.py"
+      - "tests/test_mpw_commerce_dependency_preflight_20261115.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tron-commerce-source-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-integrity:
+    name: No-network dependency and symlink gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Reject missing and symlinked commercial source dependencies
+        run: |
+          set -euo pipefail
+          python scripts/mpw_commerce_dependency_preflight_20261115.py
+      - name: Run read-only commerce source regressions
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_mpw_commerce_dependency_preflight_20261115.py' -v
+      - name: Compile commerce settlement/invoice modules
+        run: |
+          set -euo pipefail
+          python -m compileall -q mpw_commerce scripts/mpw_commerce_dependency_preflight_20261115.py

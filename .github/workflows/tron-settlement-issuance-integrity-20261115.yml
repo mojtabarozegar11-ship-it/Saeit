@@ -1,0 +1,70 @@
+name: TRON Invoice Source & Settlement Evidence Gate (no release)
+
+on:
+  push:
+    branches: [cycle73-mpw-commerce-dependencies-20261115]
+    paths:
+      - "mpw_commerce/invoicing.py"
+      - "mpw_commerce/settlement.py"
+      - "mpw_commerce/test_tron_settlement_proof_types_20261115.py"
+      - "mpw_commerce/test_exact_quote_policy_20261115.py"
+      - ".github/workflows/tron-settlement-issuance-integrity-20261115.yml"
+  pull_request:
+    paths:
+      - "mpw_commerce/invoicing.py"
+      - "mpw_commerce/settlement.py"
+      - "mpw_commerce/test_tron_settlement_proof_types_20261115.py"
+      - "mpw_commerce/test_exact_quote_policy_20261115.py"
+      - ".github/workflows/tron-settlement-issuance-integrity-20261115.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tron-settlement-no-release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  invoice-evidence:
+    name: Run Django proof-boundary and exact-quote tests with no chain or wallet
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEBUG: "false"
+      SECRET_KEY: "tron-settlement-ci-only"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install only declared Python dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements.txt
+      - name: Compile payment code and source-backed regressions
+        run: |
+          set -euo pipefail
+          python -m py_compile mpw_commerce/invoicing.py mpw_commerce/settlement.py mpw_commerce/test_tron_settlement_proof_types_20261115.py
+      - name: Verify typed chain proof and original issuance invariants
+        run: |
+          set -euo pipefail
+          python -m pytest -q mpw_commerce/test_tron_settlement_proof_types_20261115.py
+      - name: Verify database-reserved invoice quote integrity
+        run: |
+          set -euo pipefail
+          python -m pytest -q mpw_commerce/test_exact_quote_policy_20261115.py
+      - name: Keep real payments and deployments out of this contract
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          src=Path(".github/workflows/tron-settlement-issuance-integrity-20261115.yml").read_text()
+          assert "permissions:" in src and "contents: read" in src
+          assert ("self-"+"hosted") not in src
+          assert ("HOST_SSH_"+"PRIVATE_KEY") not in src
+          assert ("wallet."+"private") not in src
+          print("TRON_TESTS_ONLY=TRUE; LIVE_TRANSFER=FALSE")
+          PY

@@ -32,6 +32,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "core",
+    # Register commerce schema without enabling public payment routes.
+    "mpw_commerce.apps.MpwCommerceConfig",
     "farnaz.apps.FarnazConfig",
     "command_center",
 ]
@@ -128,3 +130,6 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+# Default-deny registry; owner-managed records are required before any payable invoice.
+MPW_TRX_MERCHANT_BINDINGS = {}
