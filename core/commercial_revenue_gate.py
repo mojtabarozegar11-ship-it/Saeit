@@ -94,6 +94,14 @@ def _currency(value: object) -> str:
     return value
 
 
+def _validate_trx_sun_precision(value: Decimal, currency: str) -> None:
+    """TRON native TRX settles in integer SUN, never fractional SUN."""
+    if currency == "TRX":
+        sun = value * Decimal("1000000")
+        if sun != sun.to_integral_value():
+            raise CommercialGateError("trx_fractional_sun_forbidden")
+
+
 def _digest(payload: Mapping[str, object]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -143,6 +151,7 @@ def validate_offer(
         raise CommercialGateError("canonical_host_invalid")
     _currency(offer.currency)
     _amount(offer.price, "price")
+    _validate_trx_sun_precision(offer.price, offer.currency)
     if not isinstance(offer.offer_type, OfferType):
         raise CommercialGateError("offer_type_invalid")
     if tenant_registry is not None and tenant_registry.get(tenant_id) != host:
@@ -214,6 +223,8 @@ def validate_payment_evidence(
     currency = _currency(evidence.currency)
     if currency != _currency(expected_currency):
         raise CommercialGateError("payment_currency_mismatch")
+    _validate_trx_sun_precision(amount, currency)
+    _validate_trx_sun_precision(expected_amount, currency)
     transaction_id = _text(evidence.transaction_id, "transaction_id")
     if not _TX.fullmatch(transaction_id):
         raise CommercialGateError("transaction_id_invalid")
@@ -331,6 +342,7 @@ class SQLiteCommercialLedger:
         offer_id = _slug(offer_id, "offer_id")
         amount = _amount(amount)
         currency = _currency(currency)
+        _validate_trx_sun_precision(amount, currency)
         now = datetime.now(timezone.utc).isoformat()
         digest = _digest({"order_id": order_id, "offer_id": offer_id, "amount": str(amount), "currency": currency})
         try:
