@@ -148,6 +148,10 @@ class _CheckoutParser(HTMLParser):
                         self.errors.add("buyer_email_length_limit")
                 except (TypeError, ValueError):
                     self.errors.add("buyer_email_length_limit")
+            # A cached/prefilled address can expose a previous buyer's identity
+            # or silently attach an invoice to the wrong customer.
+            if "value" in attrs and attrs.get("value"):
+                self.errors.add("prefilled_buyer_email")
             if "pattern" in attrs:
                 # Custom HTML patterns can reject otherwise valid buyer emails.
                 # Keep the browser's native email validation as the only gate.
