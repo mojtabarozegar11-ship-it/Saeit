@@ -1,0 +1,29 @@
+name: MojProp operating-liquidity risk gate C36
+on:
+  push:
+    branches:
+      - fix/moj-prop-operating-capital-c36-20261115
+permissions:
+  contents: read
+jobs:
+  prop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SECRET_KEY: ci-only-prop-operating-buffer
+      DEBUG: "False"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Existing Python dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile and system checks
+        run: |
+          python -m py_compile prop_firm/challenge_commerce.py tests/test_moj_prop_challenge_commerce.py
+          python manage.py check
+      - name: Policy, economic capacity and challenge tests
+        run: pytest -q tests/test_moj_prop_challenge_commerce.py tests/test_moj_prop_economics.py tests/test_moj_prop_ten_plan_commerce.py
