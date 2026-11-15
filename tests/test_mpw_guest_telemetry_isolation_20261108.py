@@ -51,8 +51,68 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             helper = source_function("_record_funnel_event_best_effort")
             self.assertFalse(helper(object(), "begin_checkout", object()))
 
+    def test_http_200_without_invoice_redirect_never_counts_as_invoice(self):
+        response = types.SimpleNamespace(status_code=200, get=lambda *_: "")
+        record = Mock()
+        product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
+            filter=Mock(return_value=types.SimpleNamespace(first=lambda: object()))))
+        with patch.dict(sys.modules, stub_modules(record, product_model)):
+            installer = source_function("patch_commercial", {
+                "_dispatch": Mock(return_value=response),
+                "_record_funnel_event_best_effort": source_function(
+                    "_record_funnel_event_best_effort",
+                ),
+            })
+            namespace = {"_" + name: (lambda *args, **kwargs: response) for name in (
+                "start_order", "show_invoice", "invoice_status",
+                "reconcile_invoice", "download_paid",
+            )}
+            installer(namespace)
+            self.assertIs(namespace["start_order"](object(), product_id=72), response)
+        record.assert_not_called()
+        product_model.objects.filter.assert_not_called()
+
+    def test_non_invoice_redirect_never_counts_as_paid_business(self):
+        record = Mock()
+        product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
+            filter=Mock(return_value=types.SimpleNamespace(first=lambda: object()))))
+        for status, location in (
+            (302, "/external/"), (303, "/commerce/trx-easy/invoice/0/"),
+            (302, "/commerce/trx-easy/invoice/00123/"),
+            (200, "/commerce/trx-easy/invoice/123/"),
+            (307, "/commerce/trx-easy/invoice/123/"),
+            (302, "https://other.example/commerce/trx-easy/invoice/123/"),
+        ):
+            response = types.SimpleNamespace(
+                status_code=status, get=lambda key, default="": location,
+            )
+            with self.subTest(status=status, location=location):
+                with patch.dict(sys.modules, stub_modules(record, product_model)):
+                    installer = source_function("patch_commercial", {
+                        "_dispatch": Mock(return_value=response),
+                        "_record_funnel_event_best_effort": source_function(
+                            "_record_funnel_event_best_effort",
+                        ),
+                    })
+                    namespace = {"_" + name: (lambda *args, **kwargs: response)
+                                 for name in (
+                                     "start_order", "show_invoice", "invoice_status",
+                                     "reconcile_invoice", "download_paid",
+                                 )}
+                    installer(namespace)
+                    self.assertIs(namespace["start_order"](
+                        object(), product_id=72,
+                    ), response)
+        record.assert_not_called()
+        product_model.objects.filter.assert_not_called()
+
     def test_invoice_response_preserved_when_telemetry_or_lookup_fails(self):
-        response = object()
+        response = types.SimpleNamespace(
+            status_code=303,
+            get=lambda name, default="": (
+                "/commerce/trx-easy/invoice/123/" if name == "Location" else default
+            ),
+        )
         request = object()
         product = object()
         product_model = types.SimpleNamespace(objects=types.SimpleNamespace(

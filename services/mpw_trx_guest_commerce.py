@@ -281,19 +281,35 @@ def patch_commercial(namespace):
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
                 response = _dispatch(request, view, args, kwargs, create=make_claim)
-                if view_name == "start_order" and 200 <= getattr(response, "status_code", 0) < 300:
-                    # Order creation and its response are authoritative. The
-                    # separate analytics lookup may be absent or unavailable.
+                if view_name == "start_order":
+                    # A 200 HTML/JSON response or arbitrary redirect is NOT a
+                    # committed invoice. Trust only a server-issued redirect to
+                    # the exact private integer invoice route, before telemetry.
                     try:
-                        from core.models import Product
-                        product = Product.objects.filter(
-                            pk=kwargs.get("product_id"), active=True,
-                        ).first()
-                        if product is not None:
-                            _record_funnel_event_best_effort(
-                                request, "invoice_created", product,
-                            )
+                        import re
+                        location = (response.get("Location", "")
+                                    if callable(getattr(response, "get", None))
+                                    else "")
+                        product_id = kwargs.get("product_id")
+                        if product_id is None and args:
+                            product_id = args[0]
+                        if (getattr(response, "status_code", None) in (302, 303)
+                                and type(location) is str
+                                and re.fullmatch(
+                                    r"/commerce/trx-easy/invoice/[1-9][0-9]{0,18}/",
+                                    location,
+                                ) is not None
+                                and type(product_id) is int and product_id > 0):
+                            from core.models import Product
+                            product = Product.objects.filter(
+                                pk=product_id, active=True,
+                            ).first()
+                            if product is not None:
+                                _record_funnel_event_best_effort(
+                                    request, "invoice_created", product,
+                                )
                     except Exception:
+                        # Optional metrics never break a committed order.
                         pass
                 return response
             wrapped.__name__ = view_name
