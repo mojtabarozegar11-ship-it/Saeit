@@ -131,6 +131,10 @@ def main() -> None:
         from django.db import connection
         if connection.vendor != "mysql":
             raise ValueError("unexpected database vendor")
+        # Django first initializes the MySQL session using SET statements.
+        # Open the connection before applying the *business-query* SELECT-only
+        # wrapper; this does not run ORM business commands or mutate rows.
+        connection.ensure_connection()
         # Enforce SELECT-only on the connection during ORM execution, even if
         # the current main source or a helper were to regress unexpectedly.
         def select_only(execute, sql, params, many, context):
