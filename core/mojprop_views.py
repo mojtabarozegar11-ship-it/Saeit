@@ -139,6 +139,15 @@ def mojprop_intake(request):
     if payload is None:
         return _json({"ok": False, "detail": "Request body must be valid JSON."}, status=400)
 
+    # Type-check JSON values; Python stringification must not turn arrays,
+    # objects or integers into fabricated buyer names/addresses.
+    for field in ("name", "email", "service", "horizon", "notes", "website"):
+        if field in payload and not isinstance(payload[field], str):
+            return _json({"ok": False, "detail": "Invalid field types."}, status=400)
+    consent_value = payload.get("consent")
+    if isinstance(payload, dict) and type(consent_value) is not bool:
+        return _json({"ok": False, "detail": "Consent must be an explicit choice."}, status=400)
+
     # Honeypot field: real forms never display or populate this value.
     if _text(payload, "website", 120):
         return _json({"ok": False, "detail": "Request rejected."}, status=400)
@@ -148,8 +157,7 @@ def mojprop_intake(request):
     route = _text(payload, "service", 30)
     horizon = _text(payload, "horizon", 20)
     notes = _text(payload, "notes", 5000)
-    consent_value = payload.get("consent")
-    consent = consent_value is True or str(consent_value).lower() in {"1", "true", "on", "yes"}
+    consent = consent_value is True or (not isinstance(payload, dict) and str(consent_value).lower() in {"1", "true", "on"})
 
     errors = {}
     if len(name) < 2:
