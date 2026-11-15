@@ -16,6 +16,7 @@ class Migration(migrations.Migration):
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
+                ("version", models.PositiveSmallIntegerField(default=1)),
                 ("title", models.CharField(max_length=180)),
                 ("scope", models.TextField()),
                 ("exclusions", models.TextField(default="No live funded account, live trading, guaranteed returns or subscriptions.")),
@@ -40,13 +41,26 @@ class Migration(migrations.Migration):
                     null=True, blank=True,
                     on_delete=django.db.models.deletion.PROTECT,
                 )),
-                ("lead", models.OneToOneField(
+                ("lead", models.ForeignKey(
                     to="core.mojproprequest",
-                    related_name="commercial_offer",
+                    related_name="commercial_offers",
                     on_delete=django.db.models.deletion.PROTECT,
                 )),
             ],
             options={"ordering": ("-created_at",)},
+        ),
+        migrations.AddConstraint(
+            model_name="mojpropoffer",
+            constraint=models.UniqueConstraint(
+                fields=("lead", "version"), name="mojprop_one_offer_per_version",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="mojpropoffer",
+            constraint=models.CheckConstraint(
+                condition=models.Q(version__gte=1) & models.Q(version__lte=999),
+                name="mojprop_valid_offer_version",
+            ),
         ),
         migrations.AddConstraint(
             model_name="mojpropoffer",
