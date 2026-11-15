@@ -88,7 +88,7 @@ def selftest(repo_root: Path) -> None:
     required = (
         ("mojprop_intake", view),
         ("MojPropRequest", model),
-        ('path("moj-prop/intake/"', urls),
+        ('path("moj-prop-intake/"', urls),
         ("get_token", view),
         ("_ip_hash", view),
     )
@@ -229,7 +229,9 @@ def patch_admin(target: Path, source: Path) -> None:
 def patch_urlconf(target: Path) -> None:
     assert_regular(target, "live URL configuration")
     source = target.read_text(encoding="utf-8")
-    if 'path("moj-prop/intake/"' in source:
+    # Apache serves /moj-prop/ as a static directory. The public intake API
+    # therefore needs a root-level WSGI path in addition to the legacy alias.
+    if 'path("moj-prop-intake/"' in source:
         print("MOJ_PROP_URLCONF_ALREADY_PATCHED")
         return
     if "from django.urls import" not in source or "urlpatterns" not in source:
@@ -240,13 +242,14 @@ def patch_urlconf(target: Path) -> None:
     )
     if "path" not in import_line:
         raise RuntimeError("live URL configuration does not import path")
-    block = (
-        "\n\n# Moj Prop public request intake; payment remains a separate system.\n"
-        "from core.mojprop_views import mojprop_intake\n"
-        'urlpatterns += [path("moj-prop/intake/", mojprop_intake, name="mojprop_intake")]\n'
-    )
+    if "from core.mojprop_views import mojprop_intake" not in source:
+        source = source.rstrip() + (
+            "\n\n# Moj Prop public request intake; payment remains a separate system.\n"
+            "from core.mojprop_views import mojprop_intake\n"
+        )
+    route = 'urlpatterns += [path("moj-prop-intake/", mojprop_intake, name="mojprop_intake")]\n'
     mode = stat.S_IMODE(target.stat().st_mode)
-    atomic_write_text(target, source.rstrip() + block, mode)
+    atomic_write_text(target, source.rstrip() + "\n" + route, mode)
     print("MOJ_PROP_URLCONF_PATCH=PASS")
 
 
