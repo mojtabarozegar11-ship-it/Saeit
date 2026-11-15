@@ -51,6 +51,15 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(result["weights"]["0"]["v2"], 540)
         self.assertEqual(result["weights"]["10"]["v3"], 540)
 
+    def test_drainage_depth_unit_preserved(self):
+        def set_depth(rows):
+            for row in rows:
+                row["drainage_sum_mm"] = 12.5
+        result = analyze_family(self.make_records("C", set_depth), "C")
+        for policy in ("integrated", "v2", "v3"):
+            self.assertEqual(result["means"][policy]["drainage_sum_mm"], 12.5)
+            self.assertNotIn("drainage_m3_equivalent", result["means"][policy])
+
     def test_four_policy_regime(self):
         result = analyze_family(self.make_records("R1"), "R1")
         self.assertEqual((result["record_count"], result["matched_keys"]), (2160, 540))
