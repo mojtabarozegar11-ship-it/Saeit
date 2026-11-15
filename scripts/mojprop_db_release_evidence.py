@@ -30,6 +30,18 @@ class MissingDatabaseRestoreEvidence(RuntimeError):
     """A live schema migration is denied until independently proven reversible."""
 
 
+def _private_directory(path: Path) -> None:
+    # A private file is not safe if another user can replace it by renaming
+    # entries inside a group/world-writable parent directory. Also reject
+    # symlink ancestors to prevent implicit redirection of the backup root.
+    if path.is_symlink() or not path.is_dir():
+        raise MissingDatabaseRestoreEvidence("unsafe database backup directory")
+    if stat.S_IMODE(path.stat().st_mode) & 0o077:
+        raise MissingDatabaseRestoreEvidence("database backup directory is not private")
+    if any(parent.is_symlink() for parent in path.parents):
+        raise MissingDatabaseRestoreEvidence("database backup has symlink ancestor")
+
+
 def _private_regular(path: Path) -> None:
     if path.is_symlink() or not path.is_file():
         raise MissingDatabaseRestoreEvidence("private database backup/receipt not found")
@@ -67,11 +79,11 @@ def verify_database_restore_evidence(
             and database_identity_sha256 != "0" * 64
             and type(verifier_key) is bytes and len(verifier_key) >= 32):
         raise MissingDatabaseRestoreEvidence("missing pinned release and reviewer identity")
-    if not isinstance(root, Path) or root.is_symlink() or not root.is_dir():
+    if not isinstance(root, Path):
         raise MissingDatabaseRestoreEvidence("unsafe database backup directory")
+    _private_directory(root)
     case = root / run_id
-    if case.is_symlink() or not case.is_dir():
-        raise MissingDatabaseRestoreEvidence("private run-specific database backup missing")
+    _private_directory(case)
     sql = case / "full-database.sql.gz"
     proof = case / "isolated-restore-evidence.json"
     _private_regular(sql)
