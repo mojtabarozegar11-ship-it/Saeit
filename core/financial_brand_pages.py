@@ -85,9 +85,13 @@ COPY = {
 def financial_brand_page(request, brand, locale, page_type):
     match = next((item for item in BRANDS if item[0] == brand), None)
     if locale == "host":
-        forwarded = request.META.get("HTTP_X_FORWARDED_HOST") or request.META.get("HTTP_HOST") or ""
-        host = forwarded.split(",")[0].split(":")[0].strip().lower().removeprefix("www.")
-        locale = "fa" if "zomorodmelal.ir" in host else "en"
+        # Django validates get_host() against ALLOWED_HOSTS and honors forwarded
+        # hosts only when USE_X_FORWARDED_HOST was explicitly configured.
+        # Avoid client-supplied X-Forwarded-Host locale spoofing/cache confusion.
+        host = request.get_host().split(":", 1)[0].lower().removeprefix("www.")
+        locale = "fa" if (
+            host == "zomorodmelal.ir" or host.endswith(".zomorodmelal.ir")
+        ) else "en"
     if locale not in COPY:
         locale = "en"
     if match is None or page_type not in {"signals", "store", "game"}:
