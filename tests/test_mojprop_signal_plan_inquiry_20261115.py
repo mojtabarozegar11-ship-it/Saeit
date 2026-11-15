@@ -26,7 +26,7 @@ if (!applicationScript) throw Error("Application form script was not found");
 const ids = ["request-form", "result", "copy", "download", "receipt-token",
   "status-check", "status-result", "selected-signal-plan", "notes",
   "service", "name", "email", "horizon", "website", "consent",
-  "digital-product", "digital-product-field"];
+  "digital-product", "digital-product-field", "status-form", "status-token"];
 function makeNode() {
   return {
     value: "", hidden: true, checked: false, disabled: false, textContent: "",
