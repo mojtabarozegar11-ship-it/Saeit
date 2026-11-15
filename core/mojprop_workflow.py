@@ -36,7 +36,7 @@ def validate_status_change(
         raise ValidationError("Internal evidence must be text")
     history = previous_note.strip()
     proposed = note.strip()
-    if history and proposed != history and not proposed.startswith(history + "\\n"):
+    if history and proposed != history and not proposed.startswith(history + "\n"):
         raise ValidationError("Prior customer offer/delivery evidence must be preserved")
     if history and proposed == history and following in EVIDENCE_PREFIX and following != previous:
         raise ValidationError("A new state requires new documentary evidence")
