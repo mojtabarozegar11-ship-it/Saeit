@@ -74,6 +74,7 @@ def public_buyer_body(route, title, action):
     return (body +
             f'<form method="post" action="/commerce/trx-easy/start/{product_id}/">'.encode() +
             b'<input type="hidden" name="csrfmiddlewaretoken" value="synthetic-token">' +
+            b'<input type="email" name="email" autocomplete="email" required>' +
             b'</form>')
 
 
