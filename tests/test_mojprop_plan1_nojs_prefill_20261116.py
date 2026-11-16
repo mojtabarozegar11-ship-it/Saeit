@@ -23,7 +23,7 @@ class MojPropPlanOneNoJsPrelaunchTests(SimpleTestCase):
 
     def test_02_prelaunch_does_not_imply_paid_order(self):
         _, notes = _safe_service_prefill(self._request())
-        for term in ("NOT payable", "no payment", "no return is promised"):
+        for term in ("NOT payable", "no payment", "no payment, account or return is promised"):
             self.assertIn(term, notes)
 
     def test_03_no_capital_guarantee(self):
