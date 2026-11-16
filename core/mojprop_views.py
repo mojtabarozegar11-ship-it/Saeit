@@ -15,7 +15,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
@@ -204,6 +204,22 @@ def _json(data, status=200):
     response["Cache-Control"] = "no-store"
     response["Referrer-Policy"] = "no-referrer"
     response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+def _crm_storage_unavailable():
+    """Fail closed without exposing buyer PII or claiming a lead was saved.
+
+    A write might have committed before the connection failed. The browser's
+    unchanged UUIDv4 idempotency key is the only safe retry/reconciliation key.
+    """
+    response = _json({
+        "ok": False,
+        "detail": "Request status unavailable. Keep your original request key and retry later.",
+        "storage_confirmed": False,
+        "payment_status": "not_collected_by_this_service",
+    }, status=503)
+    response["Retry-After"] = "60"
     return response
 
 
