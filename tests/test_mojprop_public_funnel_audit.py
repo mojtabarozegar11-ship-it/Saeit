@@ -8,8 +8,8 @@ from scripts.mojprop_public_funnel_audit import (
 
 
 class PublicPlan1ObserverTests(unittest.TestCase):
-    def test_expected_three_exact_targets(self):
-        self.assertEqual(len(TARGETS), 3)
+    def test_expected_five_exact_targets(self):
+        self.assertEqual(len(TARGETS), 5)
 
     def test_exact_primary_plan_one_path(self):
         self.assertEqual(TARGETS["plan1"], "https://mojplaywin.com/moj-prop/")
@@ -112,6 +112,34 @@ class PublicPlan1ObserverTests(unittest.TestCase):
         self.assertFalse(a["resolves"])
         self.assertEqual(a["error_type"],"OSError")
 
+    def test_html_prefill_exact_query_is_allowlisted(self):
+        self.assertIsNone(verify_target(TARGETS["accessible_plan1"]))
+
+    def test_nojs_plain_html_query_is_allowlisted(self):
+        self.assertIsNone(verify_target(TARGETS["accessible_intake"]))
+
+    def test_html_csrf_marker_detected_without_logging_token(self):
+        a=safe_result(200,"text/html",
+            b'<form method="post"><input name="csrfmiddlewaretoken" value="SECRET"></form>',
+            TARGETS["accessible_intake"])
+        self.assertTrue(a["csrf_field_visible"])
+        self.assertNotIn("SECRET",repr(a))
+
+    def test_nojs_intake_cannot_be_claimed_from_get_only(self):
+        with patch("scripts.mojprop_public_funnel_audit.dns",
+                   return_value={"resolves":True,"address_count":1}),\
+             patch("scripts.mojprop_public_funnel_audit.public_get",
+                   return_value={"reachable":True,"http_status":200,
+                                 "sku_moj_prop_01":True,"simulated_visible":True,
+                                 "html":False}):
+            a=audit()
+        self.assertFalse(a["nojs_plan1_form_visible"])
+        self.assertFalse(a["customer_submission_proven"])
+
+    def test_not_allowed_to_add_tracking_query(self):
+        with self.assertRaises(ValueError):
+            verify_target("https://mojplaywin.com/moj-prop-intake/?format=html&email=someone")
+
     def test_no_network_called_for_bad_external_url(self):
         with patch("scripts.mojprop_public_funnel_audit.urlopen") as op:
             with self.assertRaises(ValueError):
@@ -141,10 +169,23 @@ class PublicPlan1ObserverTests(unittest.TestCase):
         with patch("scripts.mojprop_public_funnel_audit.dns",
                    return_value={"resolves":True,"address_count":1}),\
              patch("scripts.mojprop_public_funnel_audit.public_get",
-                   side_effect=[good,{"reachable":True,"http_status":405},good]):
+                   side_effect=[good,{"reachable":True,"http_status":405},
+                                {"reachable":True,"http_status":200,
+                                 "html":True,"public_post_form_count":1,
+                                 "csrf_field_visible":True,
+                                 "consent_word_visible":True,
+                                 "sku_moj_prop_01":True,
+                                 "simulated_visible":True},
+                                {"reachable":True,"http_status":200,
+                                 "html":True,"public_post_form_count":1,
+                                 "csrf_field_visible":True,
+                                 "consent_word_visible":True,
+                                 "sku_moj_prop_01":True,
+                                 "simulated_visible":True},good]):
             a=audit()
         self.assertTrue(a["canonical_plan1_disclosure_visible"])
         self.assertTrue(a["intake_route_present"])
+        self.assertTrue(a["nojs_plan1_form_visible"])
         self.assertFalse(a["real_sale_or_revenue_proven"])
 
     def test_never_includes_full_public_html_in_result(self):
