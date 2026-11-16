@@ -43,6 +43,42 @@ class MojPropSalesQueueContractTests(unittest.TestCase):
             with self.subTest(attribute=attribute):
                 self.assertFalse(offer_draft_eligible(lead))
 
+    def test_malformed_contact_never_enters_offer_draft_queue(self):
+        invalid = (
+            ("name", None),
+            ("name", 123),
+            ("name", "A"),
+            ("name", "A" * 201),
+            ("name", "Buyer\\nBcc: intruder@example.com"),
+            ("email", None),
+            ("email", 123),
+            ("email", "not-an-email"),
+            ("email", "buyer@example.com\\r\\nBcc: intruder@example.com"),
+            ("email", " buyer@example.com"),
+            ("email", "buyer@example.invalid"),
+            ("email", "buyer@localhost"),
+        )
+        for attribute, value in invalid:
+            with self.subTest(attribute=attribute, value=repr(value)):
+                lead = Lead()
+                setattr(lead, attribute, value)
+                self.assertFalse(offer_draft_eligible(lead))
+                self.assertEqual(summarise_queue([lead])["offer_draft_eligible"], 0)
+
+    def test_invalid_or_unbounded_customer_scope_never_qualifies(self):
+        for notes in (None, 123, "short", "X" * 5001):
+            with self.subTest(notes=repr(notes)[:30]):
+                lead = Lead()
+                lead.notes = notes
+                self.assertFalse(offer_draft_eligible(lead))
+
+    def test_original_valid_lead_stays_eligible_at_allowed_boundaries(self):
+        lead = Lead()
+        lead.name = "AB"
+        lead.notes = "a" * 5000
+        lead.email = "buyer@example.com"
+        self.assertTrue(offer_draft_eligible(lead))
+
     def test_queue_has_explicit_no_side_effect_contract(self):
         payload = summarise_queue([])
         self.assertEqual(payload["total"], 0)
