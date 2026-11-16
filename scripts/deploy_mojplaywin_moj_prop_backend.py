@@ -535,6 +535,10 @@ def verify_backup_manifest(backup: Path) -> dict:
     manifest_path = backup / "manifest.json"
     if not manifest_path.is_file() or manifest_path.is_symlink():
         raise RuntimeError("backend backup manifest is missing")
+    # The fixed small source inventory never requires a large JSON manifest.
+    # Refuse a malformed oversized file before allocating and parsing it.
+    if not 2 <= manifest_path.stat().st_size <= 1024 * 1024:
+        raise RuntimeError("backend backup manifest size is unsafe")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if type(manifest) is not dict:
         raise RuntimeError("backend backup manifest format is invalid")
