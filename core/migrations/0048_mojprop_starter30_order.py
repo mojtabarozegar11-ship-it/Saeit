@@ -91,6 +91,25 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="mojpropstarter30order",
             constraint=models.CheckConstraint(
+                condition=models.Q(expires_at__gt=models.F("issued_at")),
+                name="mojprop30_positive_window",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="mojpropstarter30order",
+            constraint=models.CheckConstraint(
+                condition=(
+                    ~models.Q(order_ref="")
+                    & ~models.Q(recipient="")
+                    & ~models.Q(payer_hex41="")
+                    & ~models.Q(buyer_terms_acceptance="")
+                ),
+                name="mojprop30_required_fields",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="mojpropstarter30order",
+            constraint=models.CheckConstraint(
                 # Source-only hold: cannot be falsely marked paid or delivered.
                 condition=models.Q(status="draft"),
                 name="mojprop30_draft_only",
