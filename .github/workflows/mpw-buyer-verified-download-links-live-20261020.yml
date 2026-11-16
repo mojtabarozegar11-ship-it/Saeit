@@ -1,16 +1,51 @@
 name: MojPlayWin verified paid downloads isolated source patch
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/mpw-buyer-verified-download-links-live-20261020.yml"
+      - "tests/test_mpw_verified_download_manual_guard_c109.py"
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: [".github/workflows/mpw-buyer-verified-download-links-live-20261020.yml"]
+    inputs:
+      release_sha:
+        description: 'Exact reviewed 40-character main commit; not a branch'
+        required: true
+        type: string
+      owner_approval:
+        description: 'Manual buyer-download repair only after independently verified restoration'
+        required: true
+        type: choice
+        options: ['NO', 'OWNER_APPROVED']
+        default: 'NO'
 permissions: {contents: read}
 concurrency:
   group: mpw-single-checkout-verified-download-contract
   cancel-in-progress: false
 jobs:
+  guard:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Enforce no-push and exact-SHA owner release contract
+        run: python3 -B -m unittest tests.test_mpw_verified_download_manual_guard_c109 -v
+
   release:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    # Merges, branch pushes, PRs and schedules can never publish buyer code.
+    # Repository variable declarations alone do NOT prove a real DB/media restore.
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.owner_approval == 'OWNER_APPROVED' &&
+      vars.MPW_BACKUP_RESTORE_VERIFIED == 'true' &&
+      vars.MPW_ROLLBACK_VERIFIED == 'true' &&
+      vars.MPW_TENANT_ISOLATION_VERIFIED == 'true' &&
+      vars.MPW_DELIVERY_RIGHTS_RESTORE_VERIFIED == 'true' &&
+      vars.MPW_APPROVED_MAIN_SHA == github.sha
     runs-on: ubuntu-latest
     timeout-minutes: 14
     steps:
@@ -22,6 +57,15 @@ jobs:
           python3 -m py_compile scripts/mpw_live_checkout_status_download_contract_20261020.py
           python3 scripts/mpw_live_checkout_status_download_contract_20261020.py selftest
           python3 -m py_compile tests/test_mpw_live_checkout_status_download_contract_20261020.py
+      - name: Verify explicit immutable main release SHA before any SSH secrets
+        shell: bash
+        env:
+          REQUESTED_RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$REQUESTED_RELEASE_SHA" == "$GITHUB_SHA" ]]
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
