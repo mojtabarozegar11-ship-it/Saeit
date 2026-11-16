@@ -5,6 +5,7 @@ on:
       - ".github/workflows/mojprop-cpanel-quota-gap-inventory-readonly-c113.yml"
       - "scripts/mojprop_quota_gap_inventory_readonly_c113.py"
       - "tests/test_mojprop_quota_gap_inventory_c113.py"
+      - "tests/test_mojprop_db_table_profile_c115.py"
 
 permissions:
   contents: read
@@ -31,9 +32,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B -m py_compile scripts/mojprop_quota_gap_inventory_readonly_c113.py
-          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_quota_gap_inventory_c113 -q
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_quota_gap_inventory_c113 tests.test_mojprop_db_table_profile_c115 -q
           test ! -L scripts/mojprop_quota_gap_inventory_readonly_c113.py
-          test "$(git hash-object -- scripts/mojprop_quota_gap_inventory_readonly_c113.py)" = "e462b4e500923c493706b675923ba24ec97c5343"
+          test "$(git hash-object -- scripts/mojprop_quota_gap_inventory_readonly_c113.py)" = "1b1b7505ac41c00a8cf73b7a3cb0b529108076dc"
 
       - name: Connect existing VPS to pinned owner cPanel SSH
         shell: bash
