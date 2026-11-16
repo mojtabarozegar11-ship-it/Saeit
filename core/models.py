@@ -798,6 +798,37 @@ class MojPropDeliveryEvidence(T):
 from .signal_free_models import MojSignalFreeSubscription  # noqa: E402,F401
 
 
+class MojPropStarter30ImmutableQuerySet(models.QuerySet):
+    """Source-only fail-closed ORM mutations for order/TXID records.
+
+    Raw SQL, privileged connections and Django's internal low-level SQL APIs
+    still bypass this layer. A restricted DB account and independent immutable
+    settlement audit are mandatory before a real payment workflow.
+    """
+
+    def update(self, **kwargs):
+        raise ValidationError("Starter30 order and transaction claim updates are blocked.")
+
+    def delete(self):
+        raise ValidationError("Starter30 order and transaction claim deletion is blocked.")
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise ValidationError("Starter30 bulk updates bypass immutable identity guards.")
+
+    def bulk_create(self, objs, *args, **kwargs):
+        # bulk_create bypasses Model.save(), full_clean(), consent checks and
+        # owner-recipient validation. Never permit backdoor order/txid insertion.
+        raise ValidationError("Starter30 bulk inserts bypass contract validation.")
+
+    def _raw_delete(self, using):
+        raise ValidationError("Starter30 raw queryset delete is blocked.")
+
+
+MojPropStarter30ImmutableManager = models.Manager.from_queryset(
+    MojPropStarter30ImmutableQuerySet
+)
+
+
 class MojPropStarter30Order(T):
     """Dedicated native-TRX educational order, separate from USD/IRR offers.
 
@@ -827,6 +858,8 @@ class MojPropStarter30Order(T):
     issued_at = models.DateTimeField()
     expires_at = models.DateTimeField()
     status = models.CharField(max_length=12, choices=STATES, default="draft")
+
+    objects = MojPropStarter30ImmutableManager()
 
     class Meta:
         default_permissions = ()
@@ -944,6 +977,8 @@ class MojPropStarter30TxClaim(T):
     txid = models.CharField(max_length=64, unique=True)
     network = models.CharField(max_length=20, default="tron-mainnet")
     state = models.CharField(max_length=12, default="unverified")
+
+    objects = MojPropStarter30ImmutableManager()
 
     class Meta:
         default_permissions = ()
