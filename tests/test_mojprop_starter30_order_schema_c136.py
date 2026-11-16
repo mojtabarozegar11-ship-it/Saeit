@@ -60,6 +60,15 @@ class NativeStarter30OrderSchemaTests(unittest.TestCase):
         self.assertIn("models.OneToOneField", order)
         self.assertIn("default_permissions = ()", order)
 
+    def test_draft_only_db_constraint_cannot_forge_paid_order(self):
+        source = MODEL.read_text(encoding="utf-8")
+        migration = MIGRATION.read_text(encoding="utf-8")
+        for text in (source, migration):
+            self.assertIn('name="mojprop30_draft_only"', text)
+            self.assertIn('condition=models.Q(status="draft")', text)
+            self.assertNotIn('condition=models.Q(status__in=("draft", "issued"', text)
+        self.assertIn('errors["status"] = "This source-only order cannot issue', source)
+
     def test_source_only_no_payment_activation_or_wallet_transfer(self):
         source = MODEL.read_text(encoding="utf-8").split("class MojPropStarter30Order", 1)[-1]
         self.assertNotIn("broadcast_transaction", source)
