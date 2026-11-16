@@ -34,8 +34,9 @@ SETTINGSCONF = Path("config/settings.py")
 FILES = (
     Path("core/models.py"),
     Path("core/admin.py"),
-    Path("core/mojprop_views.py"),
+    # Dependency is installed before the view that imports it.
     Path("core/mojprop_accessible_intake.py"),
+    Path("core/mojprop_views.py"),
     Path("core/mojprop_receipts.py"),
     Path("core/mojprop_catalog_contract.py"),
     Path("core/mojprop_workflow.py"),
