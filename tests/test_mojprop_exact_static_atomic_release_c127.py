@@ -158,6 +158,37 @@ class StaticAtomicC127(unittest.TestCase):
                             hashlib.sha256(EXPECTED).hexdigest())
         self.assertEqual(len(m.PAIRS), 4)
 
+    def test_16_world_readable_release_lock_refuses_patch(self):
+        lock = self.backup.parent / m.LOCK.name
+        lock.write_bytes(b"")
+        lock.chmod(0o644)
+        with self.assertRaises(m.SafetyGate):
+            self.call("apply")
+        self.assertEqual(self.path.read_bytes(), ORIGINAL)
+        self.assertFalse(self.backup.exists())
+
+    def test_17_existing_safe_lock_allows_release(self):
+        lock = self.backup.parent / m.LOCK.name
+        lock.write_bytes(b"")
+        lock.chmod(0o600)
+        result = self.call("apply")
+        self.assertEqual(result["status"], "candidate_installed")
+        self.assertEqual(self.path.read_bytes(), EXPECTED)
+
+    def test_18_world_writable_live_file_refused(self):
+        self.path.chmod(0o666)
+        with self.assertRaises(m.SafetyGate):
+            self.call("apply")
+        self.assertEqual(self.path.read_bytes(), ORIGINAL)
+        self.assertFalse(self.backup.exists())
+
+    def test_19_private_backup_read_permission_enforced(self):
+        self.backup.write_bytes(ORIGINAL)
+        self.backup.chmod(0o644)
+        with self.assertRaises(m.SafetyGate):
+            self.call("apply")
+        self.assertEqual(self.path.read_bytes(), ORIGINAL)
+
 
 if __name__ == "__main__":
     unittest.main()
