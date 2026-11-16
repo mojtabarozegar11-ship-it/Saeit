@@ -35,6 +35,7 @@ class BackendBackupIntegrityTest(unittest.TestCase):
             "run_id": "123",
             "commit": "a" * 40,
             "files": [str(rel) for rel in self.relatives],
+            "schema_migration_attempted": False,
         }
         for rel in self.relatives:
             self.manifest[str(rel)] = {
@@ -66,6 +67,25 @@ class BackendBackupIntegrityTest(unittest.TestCase):
         for rel in self.relatives:
             self.assertEqual((self.live / rel).read_bytes(), b"ORIGINAL")
         self.restart_mock.assert_called_once()
+
+    def test_started_migration_phase_blocks_explicit_rollback_before_file_writes(self):
+        installer.mark_schema_migration_started(self.backup)
+        self.assertIs(
+            installer.verify_backup_manifest(self.backup)["schema_migration_attempted"],
+            True,
+        )
+        with self.assertRaisesRegex(RuntimeError, "source-only rollback DENIED"):
+            installer.restore(self.backup)
+        for rel in self.relatives:
+            self.assertEqual((self.live / rel).read_bytes(), b"CURRENT")
+        self.restart_mock.assert_not_called()
+
+    def test_legacy_backup_missing_schema_phase_fails_closed(self):
+        del self.manifest["schema_migration_attempted"]
+        self.save_manifest()
+        with self.assertRaisesRegex(RuntimeError, "source-only rollback DENIED"):
+            installer.restore(self.backup)
+        self.restart_mock.assert_not_called()
 
     def test_corrupt_second_backup_cannot_partially_restore_first(self):
         (self.backup / self.relatives[1]).write_bytes(b"TAMPERED")
