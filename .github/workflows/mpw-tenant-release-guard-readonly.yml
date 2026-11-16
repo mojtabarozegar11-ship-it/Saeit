@@ -1,0 +1,48 @@
+name: MojPlayWin Tenant Release Safety Gate (read only)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mojplaywin-zahra-deploy.yml"
+      - ".github/workflows/mojplaywin-studio-raha-deploy.yml"
+      - ".github/workflows/mojplaywin-farnaz-deploy.yml"
+      - ".github/workflows/mpw-tenant-release-guard-readonly.yml"
+      - "tests/test_mpw_tenant_manual_release_only_20261115.py"
+  push:
+    branches: [security/mpw-tenant-deploy-dispatch-only-20261115]
+    paths:
+      - ".github/workflows/mojplaywin-zahra-deploy.yml"
+      - ".github/workflows/mojplaywin-studio-raha-deploy.yml"
+      - ".github/workflows/mpw-tenant-release-guard-readonly.yml"
+      - "tests/test_mpw_tenant_manual_release_only_20261115.py"
+
+permissions:
+  contents: read
+
+jobs:
+  prove-no-automatic-release:
+    name: Verify owner-pinned dispatch and strict tenant rollback gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check static workflow release contracts without production secrets
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_mpw_tenant_manual_release_only_20261115.py' -v
+      - name: Assert this CI job cannot deploy any subsite
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          src=Path(".github/workflows/mpw-tenant-release-guard-readonly.yml").read_text()
+          assert "runs-on: ubuntu-latest" in src
+          assert ("sec"+"rets.") not in src
+          assert ("self-"+"hosted") not in src
+          print("RELEASE_GATE_ONLY=true; NO_DEPLOY=true")
+          PY
