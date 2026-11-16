@@ -191,6 +191,70 @@ class ReadOnlyCpanelAstAuditTests(unittest.TestCase):
         after = {path: (self.root / path).read_bytes() for path in DATA}
         self.assertEqual(before, after)
 
+    def evidence(self, override=None):
+        doc = self.run_audit() if override is None else override
+        return (audit.PREFIX + json.dumps(doc)).encode("utf-8")
+
+    def test_safe_report_valid_staging_fixture_only_booleans(self):
+        result = audit.sanitize(self.evidence())
+        self.assertEqual(result["schema"],
+                         "mpw.cpanel.buyer-source-ast.sanitized.v1")
+        self.assertEqual(set(result["modules"]), set(audit.FILES))
+        self.assertTrue(all(type(v) is bool
+                            for v in result["source_signals"].values()))
+
+    def test_safe_report_never_repeats_untrusted_external_values(self):
+        data = self.run_audit()
+        data["arbitrary"] = "SENSITIVE_CREDENTIAL_NOT_FOR_LOGS"
+        data["module_states"][next(iter(audit.FILES))]["arbitrary"] = (
+            "SENSITIVE_CREDENTIAL_NOT_FOR_LOGS")
+        result = json.dumps(audit.sanitize(self.evidence(data)))
+        self.assertNotIn("SENSITIVE_CREDENTIAL_NOT_FOR_LOGS", result)
+
+    def test_safe_report_rejects_extra_unknown_source_path(self):
+        data = self.run_audit()
+        data["module_states"]["/etc/shadow"] = {"present": True}
+        with self.assertRaises(ValueError):
+            audit.sanitize(self.evidence(data))
+
+    def test_safe_report_rejects_untrusted_release_flag(self):
+        data = self.run_audit()
+        data["release_permitted"] = True
+        with self.assertRaises(ValueError):
+            audit.sanitize(self.evidence(data))
+
+    def test_safe_report_rejects_nonboolean_payment_state(self):
+        data = self.run_audit()
+        data["payment_proven"] = 0
+        with self.assertRaises(ValueError):
+            audit.sanitize(self.evidence(data))
+
+    def test_safe_report_rejects_unknown_signal(self):
+        data = self.run_audit()
+        data["source_signals"]["future_safety_override"] = True
+        with self.assertRaises(ValueError):
+            audit.sanitize(self.evidence(data))
+
+    def test_safe_report_rejects_oversize_or_nonreport_bytes(self):
+        for blob in (b"", b"x" * (audit.MAX_REPORT_BYTES + 1),
+                     b"evil", b"\xff"):
+            with self.subTest(bytes=len(blob)), self.assertRaises(
+                    (ValueError, UnicodeError)):
+                audit.sanitize(blob)
+
+    def test_cli_sanitizer_pipeline_executes_without_privileged_context(self):
+        p = subprocess.run(
+            [sys.executable, "-B", "-m",
+             "scripts.mpw_cpanel_buyer_source_contract_readonly_c108",
+             "--sanitize"],
+            input=self.evidence(), capture_output=True, timeout=8,
+            cwd=Path(__file__).resolve().parents[1], check=False,
+        )
+        self.assertEqual(p.returncode, 0, p.stderr.decode(errors="replace"))
+        self.assertTrue(p.stdout.decode().startswith(audit.SAFE_PREFIX))
+        self.assertNotIn("SENSITIVE_CREDENTIAL_NOT_FOR_LOGS",
+                         p.stdout.decode())
+
     def test_cli_with_nonowner_fixture_environment_never_claims_release(self):
         proc = subprocess.run(
             [sys.executable, "-B", "-m",
