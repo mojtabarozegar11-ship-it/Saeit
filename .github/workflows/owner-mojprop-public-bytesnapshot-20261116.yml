@@ -1,0 +1,45 @@
+name: Moj Prop one-time public exact-byte snapshot — GET only
+on:
+  push:
+    branches: [audit/mojprop-public-exact-byte-snapshot-20261116]
+    paths: [".github/workflows/owner-mojprop-public-bytesnapshot-20261116.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: owner-mojprop-byte-snapshot-20261116
+  cancel-in-progress: false
+jobs:
+  byte-snapshot:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/audit/mojprop-public-exact-byte-snapshot-20261116' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Download only the public static Moj Prop HTML, without credentials or writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$RUNNER_TEMP"
+          outfile="$RUNNER_TEMP/mojprop-public-verified-20261116.html"
+          code="$(curl --proto '=https' --tlsv1.2 --retry 0 --max-redirs 0 --silent --show-error --connect-timeout 7 --max-time 18 -o "$outfile" -w '%{http_code}' 'https://mojplaywin.com/moj-prop/')"
+          test "$code" = 200
+          test -f "$outfile" && test ! -L "$outfile"
+          byte_count="$(wc -c < "$outfile")"
+          test "$byte_count" -gt 1000 && test "$byte_count" -le 512000
+          expected="b2e9381b2ac70a92b62de150277b9089bb28ca56c7a98948dd42673435bfc3ff"
+          observed="$(sha256sum "$outfile" | awk '{print $1}')"
+          test "$observed" = "$expected"
+          echo "PUBLIC_HTML_GET_HTTP=200"
+          echo "PUBLIC_HTML_SHA256_MATCHES_PREVIOUS_CPANEL_PARITY=TRUE"
+          echo "PUBLIC_HTML_BYTES=$byte_count"
+          echo "PUBLIC_HTML_REMOTE_WRITE=FALSE"
+          echo "SSH_DNS_FIREWALL_CRON_CHANGES=FALSE"
+          cp -- "$outfile" "./mojprop-public-verified-20261116.html"
+      - name: Retain original public bytes only temporarily as downloadable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojprop-public-html-original-sha-b2e9381b
+          path: mojprop-public-verified-20261116.html
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
