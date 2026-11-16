@@ -8,6 +8,7 @@ are therefore patched additively; they are never replaced wholesale.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -277,14 +278,42 @@ def install_migration(source: Path, target: Path) -> None:
         raise RuntimeError("ambiguous core migration parent, refusing automatic selection")
     parent = heads[0]
     text = source.read_text(encoding="utf-8")
-    baseline_markers = (
-        '("core", "0040_commercefunnelevent")',
-        '("core", "0039_educationassessment_educationattempt_and_more")',
+    baseline_names = (
+        "0040_commercefunnelevent",
+        "0039_educationassessment_educationattempt_and_more",
     )
-    marker = next((candidate for candidate in baseline_markers if candidate in text), None)
-    if marker is None:
-        raise RuntimeError("staged Moj Prop migration baseline marker is missing")
+    # Only rewrite the actual AST dependency, not text inside a comment,
+    # module docstring or an unrelated migration expression.
+    def actual_core_parent(content: str) -> str:
+        tree = ast.parse(content)
+        classes = [node for node in tree.body
+                   if isinstance(node, ast.ClassDef) and node.name == "Migration"]
+        if len(classes) != 1:
+            raise RuntimeError("staged Moj Prop migration class is ambiguous")
+        assignments = [node.value for node in classes[0].body
+                       if isinstance(node, ast.Assign)
+                       and any(isinstance(t, ast.Name) and t.id == "dependencies"
+                               for t in node.targets)]
+        if len(assignments) != 1:
+            raise RuntimeError("staged Moj Prop dependencies are ambiguous")
+        parents = [node for node in ast.walk(assignments[0])
+                   if isinstance(node, ast.Tuple) and len(node.elts) == 2
+                   and isinstance(node.elts[0], ast.Constant)
+                   and node.elts[0].value == "core"
+                   and isinstance(node.elts[1], ast.Constant)
+                   and isinstance(node.elts[1].value, str)]
+        if len(parents) != 1:
+            raise RuntimeError("staged Moj Prop core dependency is ambiguous")
+        return parents[0].elts[1].value
+    original_parent = actual_core_parent(text)
+    if original_parent not in baseline_names:
+        raise RuntimeError("staged Moj Prop migration baseline parent is unreviewed")
+    marker = f'("core", "{original_parent}")'
+    if text.count(marker) != 1:
+        raise RuntimeError("staged Moj Prop migration parent cannot be replaced uniquely")
     text = text.replace(marker, f'("core", "{parent}")', 1)
+    if actual_core_parent(text) != parent:
+        raise RuntimeError("staged Moj Prop migration parent rewrite failed")
     mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o640
     atomic_write_text(target, text, mode)
     print("MOJ_PROP_MIGRATION_PARENT=" + parent)
