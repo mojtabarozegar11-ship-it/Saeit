@@ -166,3 +166,75 @@ class PurchasedPlanBindingTests(TestCase):
         )
         funded.full_clean()
         self.assertEqual(funded.policy_version, enrollment.terms_version)
+
+
+    def _c147_funded(self, enrollment):
+        return PropAccount.objects.create(
+            trader=self.profile, kind=PropAccount.Kind.FUNDED,
+            tier_index=0, starting_capital_usd=Decimal("100.00"),
+            reference="CI-only-unfunded-broker-placeholder",
+            challenge_enrollment=enrollment,
+        )
+
+    def test_c147_funded_rejects_missing_kyc(self):
+        enrollment=self.purchase(plan_code=DEFAULT_PLAN_CODE)
+        PropTrader.objects.filter(pk=self.profile.pk).update(kyc_status="not_started")
+        self.profile.refresh_from_db()
+        with self.assertRaisesRegex(ValidationError, "Verified eligible active trader"):
+            self._c147_funded(enrollment)
+
+    def test_c147_funded_rejects_pending_kyc(self):
+        enrollment=self.purchase(plan_code=DEFAULT_PLAN_CODE)
+        PropTrader.objects.filter(pk=self.profile.pk).update(kyc_status="pending")
+        self.profile.refresh_from_db()
+        with self.assertRaisesRegex(ValidationError, "Verified eligible active trader"):
+            self._c147_funded(enrollment)
+
+    def test_c147_funded_rejects_rejected_kyc(self):
+        enrollment=self.purchase(plan_code=DEFAULT_PLAN_CODE)
+        PropTrader.objects.filter(pk=self.profile.pk).update(kyc_status="rejected")
+        self.profile.refresh_from_db()
+        with self.assertRaisesRegex(ValidationError, "Verified eligible active trader"):
+            self._c147_funded(enrollment)
+
+    def test_c147_funded_rejects_not_reviewed_eligibility(self):
+        enrollment=self.purchase(plan_code=DEFAULT_PLAN_CODE)
+        PropTrader.objects.filter(pk=self.profile.pk).update(eligibility_status="not_reviewed")
+        self.profile.refresh_from_db()
+        with self.assertRaisesRegex(ValidationError, "Verified eligible active trader"):
+            self._c147_funded(enrollment)
+
+    def test_c147_funded_rejects_blocked_eligibility(self):
+        enrollment=self.purchase(plan_code=DEFAULT_PLAN_CODE)
+        PropTrader.objects.filter(pk=self.profile.pk).update(eligibility_status="blocked")
+        self.profile.refresh_from_db()
+        with self.assertRaisesRegex(ValidationError, "Verified eligible active trader"):
+            self._c147_funded(enrollment)
+
+    def test_c147_funded_rejects_inactive_user(self):
+        enrollment=self.purchase(plan_code=DEFAULT_PLAN_CODE)
+        get_user_model().objects.filter(pk=self.user.pk).update(is_active=False)
+        self.profile.refresh_from_db()
+        with self.assertRaisesRegex(ValidationError, "Verified eligible active trader"):
+            self._c147_funded(enrollment)
+
+    def test_c147_funded_all_synthetic_flags_still_require_real_world_proofs(self):
+        enrollment=self.purchase(plan_code=DEFAULT_PLAN_CODE)
+        funded=self._c147_funded(enrollment)
+        self.assertEqual(funded.policy_version, enrollment.terms_version)
+        self.assertEqual(self.profile.kyc_status,"verified")
+        # Fixture approval does NOT enable live trading or payments.
+        from prop_firm.rules import POLICY
+        self.assertFalse(POLICY.real_orders_enabled)
+        self.assertFalse(POLICY.trx_checkout_enabled)
+
+    def test_c147_legacy_simulation_does_not_require_funded_kyc(self):
+        PropTrader.objects.filter(pk=self.profile.pk).update(
+            kyc_status="not_started", eligibility_status="not_reviewed",
+        )
+        self.profile.refresh_from_db()
+        account=PropAccount.objects.create(
+            trader=self.profile, kind=PropAccount.Kind.PHASE_ONE,
+            starting_capital_usd=Decimal("100.00"),
+        )
+        self.assertEqual(account.kind, PropAccount.Kind.PHASE_ONE)
