@@ -123,5 +123,41 @@ class MojPropUapiCauseReadOnlyTests(unittest.TestCase):
         result = self.run_case(json.dumps(error), code=1)
         self.assertNotIn("buyer@example.org", json.dumps(result))
 
+    def test_17_alt_binary_candidates_are_exact_restricted_locations(self):
+        self.assertEqual(dict(probe.BINARY_CANDIDATES), {
+            "cpanel_standard": Path("/usr/local/cpanel/bin/uapi"),
+            "usr_local_bin": Path("/usr/local/bin/uapi"),
+            "usr_bin": Path("/usr/bin/uapi"),
+            "bin": Path("/bin/uapi"),
+        })
+        self.assertFalse(any("sudo" in str(path) for _, path in probe.BINARY_CANDIDATES))
+
+    def test_18_symlinked_alternative_is_not_executed(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "safe-uapi"
+            origin.write_text("only local test fixture")
+            origin.chmod(0o700)
+            target = Path(root) / "symlink-uapi"
+            target.symlink_to(origin)
+            self.assertEqual(probe._trusted_candidate(target), (False, False))
+
+    def test_19_regular_nonexecutable_file_is_not_considered_an_api(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as root:
+            target = Path(root) / "uapi"
+            target.write_text("only local test fixture")
+            target.chmod(0o600)
+            self.assertEqual(probe._trusted_candidate(target), (True, False))
+
+    def test_20_outcome_has_no_host_or_payment_authorization(self):
+        source = (ROOT / "scripts/mojprop_cpanel_uapi_cause_readonly_c111.py").read_text()
+        self.assertIn('"selected_binary_id"', source)
+        self.assertIn('"available_binary_ids"', source)
+        self.assertIn('"capacity_confirmed": False', source)
+        self.assertIn('"production_deploy_authorized": False', source)
+        self.assertIn('"db_restore_executed": False', source)
+
+
 if __name__ == "__main__":
     unittest.main()
