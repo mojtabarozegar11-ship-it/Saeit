@@ -7,6 +7,10 @@ on:
       - "tests/test_mojprop_live_intake_source_drift_readonly_c95.py"
       - "scripts/mojprop_passenger_source_readonly_c118.py"
       - "tests/test_mojprop_passenger_source_readonly_c118.py"
+      - "scripts/mojprop_owner_backup_catalog_readonly_c120.py"
+      - "tests/test_mojprop_owner_backup_catalog_readonly_c120.py"
+      - "scripts/mojprop_owner_local_archive_readonly_c120.py"
+      - "tests/test_mojprop_owner_local_archive_readonly_c120.py"
 
 permissions:
   contents: read
@@ -34,6 +38,14 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_live_intake_source_drift_readonly_c95 -q
           python3 -B -m py_compile scripts/mojprop_passenger_source_readonly_c118.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_passenger_source_readonly_c118 -q
+          python3 -B -m py_compile scripts/mojprop_owner_backup_catalog_readonly_c120.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_owner_backup_catalog_readonly_c120 -q
+          python3 -B -m py_compile scripts/mojprop_owner_local_archive_readonly_c120.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_owner_local_archive_readonly_c120 -q
+          test ! -L scripts/mojprop_owner_local_archive_readonly_c120.py
+          test "$(git hash-object -- scripts/mojprop_owner_local_archive_readonly_c120.py)" = "09e41e3ba3d0fc6412a6f448b5ee7a4e414603b0"
+          test ! -L scripts/mojprop_owner_backup_catalog_readonly_c120.py
+          test "$(git hash-object -- scripts/mojprop_owner_backup_catalog_readonly_c120.py)" = "a48c1160dc2c2ec54249101d601c8a82c7579ddc"
           test ! -L scripts/mojprop_passenger_source_readonly_c118.py
           test "$(git hash-object -- scripts/mojprop_passenger_source_readonly_c118.py)" = "f6507179c762bdea1e1bb28ea17d5e420e2b4dcb"
           test ! -L scripts/mojprop_live_intake_source_drift_readonly_c95.py
@@ -77,6 +89,26 @@ jobs:
             < scripts/mojprop_passenger_source_readonly_c118.py \
             | python3 -c 'import json,sys; raw=sys.stdin.read(7000); prefix="MOJPROP_C118_PASSENGER_SOURCE_READONLY="; lines=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_C118"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.passenger.source_identity.readonly.c118.v1" and d["read_only"] is True and d["crm_lead_created"] is False and d["payment_created"] is False and d["email_sent"] is False and d["deploy_authorized"] is False and d["runtime_worker_identity_proven"] is False and d["full_db_app_media_restore_proven"] is False; assert set(d["staging_sources"])=={"core/mojprop_views.py","core/mojprop_receipts.py","core/mojprop_accessible_intake.py","config/urls.py","core/management/commands/mojprop_sales_action_queue.py"}; assert all(v in ("present","missing","unsafe","unavailable") for v in d["staging_sources"].values()); print(lines[0])'
           echo 'C118_OWNER_PASSENGER_AST_READONLY=COMPLETE_NOT_DEPLOY_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: Inventory only existing account backup metadata via documented UAPI — no restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 40s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_owner_backup_catalog_readonly_c120.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C120_BACKUP_CATALOG_READONLY="; rows=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(rows)==1,"MISSING_SANITIZED_BACKUP_RESULT"; d=json.loads(rows[0][len(prefix):]); assert d["schema"]=="mojprop.owner_backup_catalog.readonly.c120.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert all(d[k] is False for k in ("backup_files_opened_or_downloaded","customer_records_accessed","database_accessed","provider_offhost_backup_verified","independent_encrypted_full_restore_proven","production_release_authorized","cost_incurred")); assert type(d["backup_entries_reported"]) is int and 0 <= d["backup_entries_reported"] <= 100; assert type(d["possible_local_account_archive_present"]) is bool; assert not set(d).intersection({"file","path","token","email","username","database_name","customer_id"}); print(rows[0])'
+          echo 'MOJPROP_C120_EXISTING_BACKUP_METADATA_READONLY=COMPLETE_NO_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: Check fixed owner home backup tarball metadata only — zero content reads
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 40s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_owner_local_archive_readonly_c120.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C120_LOCAL_ARCHIVE_METADATA_READONLY="; lines=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_LOCAL_ARCHIVE"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.owner_local_archive_metadata.readonly.c120.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert type(d["home_metadata_scan_completed"]) is bool; assert type(d["local_archive_candidates_count"]) is int and 0<=d["local_archive_candidates_count"]<=2048; assert all(d[k] is False for k in ("local_archive_content_read","archive_downloaded","app_or_db_accessed","customer_data_accessed","independent_encrypted_full_restore_proven","provider_offhost_backup_verified","production_deployment_authorized","new_cost_incurred")); assert not set(d).intersection({"file","path","email","secret","filename","archive_name"}); print(lines[0])'
+          echo 'MOJPROP_C120_LOCAL_ARCHIVE_METADATA_READONLY=COMPLETE_NO_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
