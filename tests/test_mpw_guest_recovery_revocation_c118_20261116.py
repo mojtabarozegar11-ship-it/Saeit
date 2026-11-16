@@ -11,6 +11,7 @@ from django.test import RequestFactory, SimpleTestCase, override_settings
 from services import mpw_trx_email_recovery as recovery
 
 
+@override_settings(ALLOWED_HOSTS=["mojplaywin.com", "unregistered.example"])
 class GuestRecoveryOwnerRevocationTests(SimpleTestCase):
     def setUp(self):
         self.factory = RequestFactory()
