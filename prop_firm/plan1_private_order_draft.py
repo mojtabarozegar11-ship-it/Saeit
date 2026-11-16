@@ -16,6 +16,7 @@ import re
 from .buyer_interest_form import UnverifiedInquiry
 from .buyer_order_review import Plan1OrderGateClosed
 from .buyer_precontract_chain import bind_private_inquiry_to_signed_review
+from .plan1_intake_provenance import verify_server_issued_private_inquiry
 from .order_readiness import SKU, TERMS_VERSION
 
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -67,6 +68,7 @@ class Plan1PrivateOrderReviewDraft:
 def build_plan1_private_review_draft(
     *, inquiry: UnverifiedInquiry, reviewed_packet: dict,
     reviewer_tag_hex: str, trusted_reviewer_key: bytes,
+    intake_tag_hex: str, trusted_intake_key: bytes,
     expected_request_ref: str, expected_buyer_ref: str,
     expected_seller_ref: str, server_now_sec: int,
     trusted_contract_pdf_sha256: str,
@@ -84,6 +86,18 @@ def build_plan1_private_review_draft(
     or the packet itself would not prove legal validity of the documents.
     This function cannot guarantee durable uniqueness or revoke a quote.
     """
+    # The original inquiry must be authenticated by a DIFFERENT trusted
+    # intake key before its HMAC-reviewed legal packet can be considered.
+    if (type(trusted_intake_key) is not bytes
+            or type(trusted_reviewer_key) is not bytes
+            or trusted_intake_key == trusted_reviewer_key):
+        raise Plan1OrderGateClosed("independent intake and reviewer roles required")
+    verify_server_issued_private_inquiry(
+        inquiry=inquiry, signed_intake_hmac_hex=intake_tag_hex,
+        trusted_intake_key=trusted_intake_key,
+        expected_request_ref=expected_request_ref,
+        expected_inquiry_digest=inquiry.anonymous_intent_sha256,
+    )
     handoff = bind_private_inquiry_to_signed_review(
         inquiry=inquiry, reviewed_packet=reviewed_packet,
         reviewer_tag_hex=reviewer_tag_hex,
