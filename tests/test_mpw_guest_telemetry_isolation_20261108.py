@@ -14,14 +14,20 @@ def source_function(name, namespace=None):
     source = ast.parse(SOURCE.read_text(encoding="utf8"))
     node = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == name)
     scope = dict(namespace or {})
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(SOURCE), "exec"), scope)
+    helpers = ([next(n for n in source.body if isinstance(n, ast.FunctionDef)
+                     and n.name == "_new_trx_merchant_canary_is_true")]
+               if name == "patch_commercial" else [])
+    if name == "patch_commercial":
+        scope["Http404"] = LookupError
+    exec(compile(ast.Module(body=helpers + [node], type_ignores=[]), str(SOURCE), "exec"), scope)
     return scope[name]
 
 
 def stub_modules(record, product):
     names = (
         "django", "django.views", "django.views.decorators", "django.views.decorators.cache",
-        "django.views.decorators.csrf", "django.views.decorators.http", "core", "core.models",
+        "django.views.decorators.csrf", "django.views.decorators.http", "django.conf",
+        "core", "core.models",
         "core.commerce_funnel",
     )
     result = {name: types.ModuleType(name) for name in names}
@@ -30,6 +36,10 @@ def stub_modules(record, product):
     result["django.views.decorators.csrf"].csrf_protect = identity
     result["django.views.decorators.http"].require_GET = identity
     result["django.views.decorators.http"].require_POST = identity
+    # The isolated event-telemetry contract uses a verified merchant fixture.
+    # Unknown/false merchant status remains denied by the C119 guard tests.
+    result["django.conf"].settings = types.SimpleNamespace(
+        MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED=True)
     result["core.models"].Product = product
     result["core.commerce_funnel"].record_funnel_event = record
     return result
