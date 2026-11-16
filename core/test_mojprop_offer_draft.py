@@ -134,11 +134,11 @@ class MojPropOfferDraftTests(TestCase):
     def test_offer_builder_rejects_malformed_customer_contacts_even_when_reviewed(self):
         for field, value in (
             ("name", None),
-            ("name", "Buyer\\nPAYMENT CONFIRMED"),
+            ("name", "Buyer\nPAYMENT CONFIRMED"),
             ("email", None),
             ("email", "fake-address-without-at"),
             ("email", "buyer@example.invalid"),
-            ("email", "buyer@example.com\\r\\nBcc: attacker@example.com"),
+            ("email", "buyer@example.com\r\nBcc: attacker@example.com"),
             ("notes", None),
             ("notes", "x" * 5001),
         ):
