@@ -146,7 +146,7 @@ class OwnerBackupCatalogOnlyC120Tests(unittest.TestCase):
 
     def test_14_two_failed_modes_report_unknown_not_zero_backups(self):
         from scripts import mojprop_owner_backup_catalog_readonly_c120 as mod
-        failed = SimpleNamespace(returncode=1, stdout=b"", stderr=b"customer")
+        failed = SimpleNamespace(returncode=1, stdout=b"", stderr=b"private-example-backup-archive-name")
         with patch.object(mod.pwd, "getpwuid",
                           return_value=SimpleNamespace(pw_name="zomorod2")), \
              patch.object(mod.os, "geteuid", return_value=1000), \
@@ -161,7 +161,7 @@ class OwnerBackupCatalogOnlyC120Tests(unittest.TestCase):
         self.assertFalse(result["catalog_schema_recognized"])
         self.assertEqual(result["uapi_outcome"],
                          "cli_nonzero_or_feature_unavailable")
-        self.assertNotIn("customer", str(result))
+        self.assertNotIn("private-example-backup-archive-name", str(result))
         self.assertFalse(result["production_release_authorized"])
 
     def test_12_local_archive_path_data_is_never_exposed_in_report(self):
