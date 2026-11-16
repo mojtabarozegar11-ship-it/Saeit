@@ -99,7 +99,7 @@ def _validate_compressed_payload(path: Path, *, kind: str) -> None:
                 _check(count <= MAX_TAR_MEMBERS)
                 name = entry.name
                 _check(type(name) is str and 1 <= len(name) <= 4096)
-                _check("\\x00" not in name and "\\\\" not in name)
+                _check(chr(0) not in name and chr(92) not in name)
                 parts = PurePosixPath(name)
                 _check(not parts.is_absolute() and ".." not in parts.parts)
                 canonical = str(parts)
