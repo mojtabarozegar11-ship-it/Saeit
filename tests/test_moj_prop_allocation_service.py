@@ -192,6 +192,28 @@ class MojPropProvisionalAllocationTests(TestCase):
         with self.assertRaises(AllocationRejected):
             self.stage()
 
+    def test_c147_inactive_customer_never_stages_provisional_profit(self):
+        self.trade_day()
+        get_user_model().objects.filter(pk=self.trader.user_id).update(is_active=False)
+        with self.assertRaisesRegex(AllocationRejected, "Inactive trader"):
+            self.stage()
+        self.assertFalse(PropProfitAllocation.objects.exists())
+        self.assertFalse(PropProfitJournalLine.objects.exists())
+
+    def test_c147_inactive_customer_fails_even_when_trade_evidence_signed(self):
+        self.trade_day(day=10, pnl="3.00", digest="a" * 64)
+        get_user_model().objects.filter(pk=self.trader.user_id).update(is_active=False)
+        with self.assertRaisesRegex(AllocationRejected, "Inactive trader"):
+            self.stage(60)
+        self.assertEqual(PropProfitAllocation.objects.count(), 0)
+
+    def test_c147_valid_active_synthetic_kyc_preserves_provisional_only(self):
+        self.trade_day()
+        a=self.stage()
+        self.assertEqual(a.status, "provisional")
+        self.assertEqual(a.trader_profit_usd, Decimal("2.10"))
+        self.assertTrue(self.trader.user.is_active)
+
     def test_unqualified_country_blocks_allocation(self):
         self.trade_day()
         self.trader.eligibility_status = "blocked"
