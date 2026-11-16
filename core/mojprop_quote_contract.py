@@ -124,7 +124,9 @@ def make_quote_snapshot(offer, *, now=None):
         "title": title,
         "scope": scope,
         "exclusions": exclusions,
-        "amount": format(amount, "f"),
+        # Normalize valid whole/tenth Decimal values to the exact two-decimal
+        # public price contract, preventing a valid quote from returning 404.
+        "amount": format(amount.quantize(Decimal("0.01")), "f"),
         "currency": currency,
         "delivery_days": delivery_days,
         "status": status,
