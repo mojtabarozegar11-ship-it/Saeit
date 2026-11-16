@@ -41,6 +41,10 @@ class GuestRecoveryOwnerRevocationTests(SimpleTestCase):
             "https://mojplaywin.com" + recovery.ROOT + "verify/"
         )
         request.META["HTTP_X_CSRFTOKEN"] = get_token(request)
+        # Django's HTTPS CSRF verifier requires a browser cookie AND token.
+        # get_token() populates META; RequestFactory does not copy that value
+        # to the incoming Cookie header automatically.
+        request.COOKIES["csrftoken"] = request.META["CSRF_COOKIE"]
         with patch.object(recovery, "_consume") as consume:
             with patch.object(recovery, "_allowed") as throttle:
                 with self.assertRaises(Http404):
