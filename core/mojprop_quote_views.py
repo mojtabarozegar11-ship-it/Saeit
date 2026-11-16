@@ -52,7 +52,11 @@ def quote_read_token(offer):
     # The same audited quote contract must protect token issue and buyer reads,
     # even if a Django model row was modified without full_clean().
     try:
-        make_quote_snapshot(offer)
+        render_public_quote(
+            make_quote_snapshot(offer),
+            service_route=offer.lead.route,
+            product_id=offer.lead.product_id,
+        )
     except QuoteContractError as exc:
         raise ValueError("quote contract is not valid for public delivery") from exc
     if MojPropOffer.objects.filter(
