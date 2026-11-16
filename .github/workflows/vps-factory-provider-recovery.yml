@@ -8,6 +8,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   recover:
+    # HARD SAFETY HOLD 2026-11-16: no unverified off-host restore;
+    # legacy manual/automated factory edits could alter cron, PID or SQLite.
+    # Keep production connections and running jobs untouched. This job
+    # must not run until independent recovery and release approval exist.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
