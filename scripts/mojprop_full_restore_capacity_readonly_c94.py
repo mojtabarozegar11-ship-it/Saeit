@@ -271,11 +271,17 @@ def main():
         # Failure to prove the quota is UNKNOWN, not automatically 'no space'.
         quota, reason = (_quota_result(requirement) if requirement else
                          (False, "connected_db_estimate_unavailable"))
+        # Bounded fixed reason identifiers only; never log the quota stdout,
+        # shell command, account paths, database name or actual customer data.
+        out["quota_cli_outcome"] = reason
+        out["quota_fallback_used"] = False
         if (requirement and not quota and reason in (
                 "quota_program_unavailable", "quota_program_failed",
                 "quota_volume_not_reported", "quota_format_unrecognized",
                 "quota_unbounded_not_verified")):
+            out["quota_fallback_used"] = True
             quota, reason = _cpanel_uapi_quota_result(requirement)
+            out["quota_uapi_outcome"] = reason
         out["quota_probe_available"] = quota is True
         out["quota_outcome"] = reason
         out.update(capacity_flags(free_bytes=free, db_bytes=db_bytes, quota_accepted=quota))
