@@ -14,6 +14,7 @@ from prop_firm.plan1_private_order_draft import (
 from test_prop_buyer_precontract_chain import (
     NOW, REF, BUYER, SELLER, KEY, new_inquiry, new_packet, sign,
 )
+from test_prop_plan1_intake_provenance import INTAKE_KEY, intake_tag
 
 
 def inputs(inquiry=None, packet=None):
@@ -28,6 +29,8 @@ def inputs(inquiry=None, packet=None):
         "reviewed_packet": packet,
         "reviewer_tag_hex": sign(packet),
         "trusted_reviewer_key": KEY,
+        "intake_tag_hex": intake_tag(inquiry),
+        "trusted_intake_key": INTAKE_KEY,
         "expected_request_ref": REF,
         "expected_buyer_ref": BUYER,
         "expected_seller_ref": SELLER,
@@ -154,6 +157,26 @@ class NonPayablePlanOneReviewTests(unittest.TestCase):
             args[trusted_name]="0"*64
             with self.subTest(proof=trusted_name), self.assertRaises(Plan1OrderGateClosed):
                 build_plan1_private_review_draft(**args)
+
+    def test_separate_intake_provenance_key_must_be_present(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            review(trusted_intake_key=b"")
+
+    def test_intake_provenance_tag_must_match_server_issued_form(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            review(intake_tag_hex="f"*64)
+
+    def test_intake_and_reviewer_cannot_share_same_key(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            review(trusted_intake_key=KEY)
+
+    def test_source_inquiry_change_requires_new_intake_signature(self):
+        args=inputs()
+        args["inquiry"]=__import__("dataclasses").replace(
+            args["inquiry"], declared_country="FR",
+        )
+        with self.assertRaises(Plan1OrderGateClosed):
+            build_plan1_private_review_draft(**args)
 
     def test_stale_signed_review_is_not_resurrected(self):
         with self.assertRaises(Plan1OrderGateClosed):
