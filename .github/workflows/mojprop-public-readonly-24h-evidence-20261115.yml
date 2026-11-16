@@ -8,6 +8,8 @@ on:
       - "tests/test_mojprop_public_horizon_codes_readonly_c124.py"
       - "scripts/mojprop_cpanel_horizon_parity_readonly_c125.py"
       - "tests/test_mojprop_cpanel_horizon_parity_readonly_c125.py"
+      - "scripts/mojprop_surgical_horizon_patch_plan_c126.py"
+      - "tests/test_mojprop_surgical_horizon_patch_plan_c126.py"
   workflow_dispatch:
 
 permissions:
@@ -299,7 +301,7 @@ jobs:
       - name: Run owner-file source-only unit safety suite
         run: |
           set -euo pipefail
-          python3 -B -m unittest tests.test_mojprop_cpanel_horizon_parity_readonly_c125 -q
+          python3 -B -m unittest tests.test_mojprop_cpanel_horizon_parity_readonly_c125 tests.test_mojprop_surgical_horizon_patch_plan_c126 -q
           python3 -B -m py_compile scripts/mojprop_cpanel_horizon_parity_readonly_c125.py
       - name: Compare exact public GET with owner file using pinned cPanel key
         shell: bash
