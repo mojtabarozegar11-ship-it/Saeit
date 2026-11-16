@@ -100,6 +100,55 @@ def moj_prop_dashboard(request, lang="en"):
     return response
 
 
+
+@never_cache
+@csrf_protect
+def moj_prop_interest_form(request):
+    """Browser-native, nonpayable Plan 1 opt-in form on the root WSGI path.
+
+    This GET/HEAD route is deliberately different from the existing POST-only
+    /moj-prop-interest/ endpoint; it neither persists a customer nor produces
+    an invoice. The form action remains the existing consent and CSRF-gated
+    endpoint, not the Apache static /moj-prop/ mount.
+    """
+    from django.http import HttpResponse, HttpResponseNotAllowed
+    from django.utils.cache import patch_vary_headers
+
+    try:
+        host = request.get_host().split(":")[0].lower()
+    except Exception:
+        raise Http404
+    if host not in ("mojplaywin.com", "www.mojplaywin.com") or not request.is_secure():
+        raise Http404("Moj Prop root form requires authorized HTTPS host")
+    if request.method not in ("GET", "HEAD"):
+        return HttpResponseNotAllowed(["GET", "HEAD"])
+    # Reject query-string identity and unexpected parameters: never mirror an
+    # email, purchase code or untrusted HTML into a supposedly public form.
+    if len(request.GET) > 1 or any(key != "lang" for key in request.GET):
+        return HttpResponse("Unsupported form query", status=400)
+    if "lang" in request.GET and len(request.GET.getlist("lang")) != 1:
+        return HttpResponse("Unsupported language", status=400)
+    lang = request.GET.get("lang", "en")
+    if lang not in INTEREST_COPY:
+        return HttpResponse("Unsupported language", status=400)
+    response = render(request, "mojplaywin/moj_prop_interest_form_d.html", {
+        "form_language": lang,
+        "form_direction": "rtl" if lang in ("fa", "ar") else "ltr",
+        "interest_copy": INTEREST_COPY[lang],
+    })
+    response["Cache-Control"] = "private, no-store, max-age=0"
+    response["Pragma"] = "no-cache"
+    response["Referrer-Policy"] = "same-origin"
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["X-Frame-Options"] = "DENY"
+    response["Content-Security-Policy"] = (
+        "default-src 'none'; form-action 'self'; base-uri 'none'; "
+        "frame-ancestors 'none'; style-src 'self'"
+    )
+    patch_vary_headers(response, ("Cookie",))
+    return response
+
 @never_cache
 @csrf_protect
 @require_POST
