@@ -14,6 +14,7 @@ from django.views.decorators.http import require_GET
 from core.models import MojPropOffer
 from core.mojprop_quote_contract import (
     QuoteContractError, validate_acceptance_reference, make_quote_snapshot,
+    render_public_quote,
 )
 
 SALT = "mojprop.quote.read.v1"
@@ -105,13 +106,14 @@ def customer_quote(request, token):
             raise Http404
         # Signed links must not bypass the independently validated commercial
         # terms, currency, acceptance evidence or current quote validity.
-        make_quote_snapshot(offer)
+        snapshot = make_quote_snapshot(offer)
+        rendered = render_public_quote(snapshot)
     except (signing.BadSignature, signing.SignatureExpired, QuoteContractError,
             TypeError, ValueError):
         raise Http404 from None
     # This intentionally excludes name, email, internal notes and IP metadata.
     response = HttpResponse(
-        offer.manual_quote_text,
+        rendered,
         content_type="text/plain; charset=utf-8",
     )
     response["Cache-Control"] = "private, no-store, max-age=0"
