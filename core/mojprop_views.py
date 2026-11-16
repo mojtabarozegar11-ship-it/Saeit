@@ -25,7 +25,7 @@ from django.views.decorators.csrf import csrf_protect
 from .models import MojPropRequest
 from .mojprop_catalog_contract import public_service_catalog
 from .mojprop_receipts import make_receipt_token, verify_receipt_token, public_status_text
-from .mojprop_accessible_intake import request_form, created_receipt
+from .mojprop_accessible_intake import request_form, created_receipt, status_form, status_result
 
 ROUTES = {choice[0] for choice in MojPropRequest.ROUTE_CHOICES}
 HORIZONS = {choice[0] for choice in MojPropRequest.HORIZON_CHOICES}
@@ -403,6 +403,35 @@ def _mojprop_intake_api(request):
 @require_http_methods(["GET", "POST"])
 def mojprop_receipt_status(request):
     """Read only the public stage when holding the signed private receipt."""
+    formats = request.GET.getlist("format")
+    if formats and formats != ["html"]:
+        return _json({"ok": False, "detail": "Unsupported status format."}, status=400)
+    if formats == ["html"]:
+        # Status secrets are accepted only in a CSRF-protected POST body. Do
+        # not copy bearer tokens into URL/query, HTML cache or external links.
+        if request.method == "GET":
+            if request.GET.getlist("receipt_token"):
+                return status_form(request, error="Use the private POST status form.", status=400)
+            return status_form(request)
+        kind = str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].lower()
+        if kind != "application/x-www-form-urlencoded":
+            return status_form(request, error="Use the private status form.", status=400)
+        form = request.POST
+        if (set(form.keys()) - {"csrfmiddlewaretoken", "receipt_token"}
+                or any(len(form.getlist(key)) != 1 for key in form)
+                or len(form.getlist("receipt_token")) != 1):
+            return status_form(request, error="Invalid receipt submission.", status=400)
+        token = form.get("receipt_token", "")
+        if type(token) is not str or not 1 <= len(token) <= 256:
+            return status_form(request, error="Receipt invalid or expired.", status=404)
+        request_id = verify_receipt_token(token)
+        if request_id is None:
+            return status_form(request, error="Receipt invalid or expired.", status=404)
+        stage = (MojPropRequest.objects.filter(request_id=request_id)
+                 .values_list("status", flat=True).first())
+        if stage is None:
+            return status_form(request, error="Receipt unavailable.", status=404)
+        return status_result(request_id, public_status_text(stage))
     # A bearer receipt must be unambiguous: reject duplicate query parameters.
     # QueryDict.get() silently selects the last value otherwise.
     if request.method == "POST":
