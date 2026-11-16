@@ -73,6 +73,19 @@ jobs:
           else:
               raise AssertionError('Educational SKU must not activate funded challenge')
           PY
+      - name: Ensure first prospect POST bypasses Apache static /moj-prop/ directory
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          urlconf=Path('config/urls.py').read_text(encoding='utf-8')
+          landing=Path('core/templates/mojplaywin/moj_prop.html').read_text(encoding='utf-8')
+          tests=Path('tests/test_moj_prop_interest_intake.py').read_text(encoding='utf-8')
+          assert 'path("moj-prop-interest/", moj_prop_interest' in urlconf
+          assert 'action="/moj-prop-interest/"' in landing
+          assert 'PATH = "/moj-prop-interest/"' in tests
+          assert 'path("moj-prop/interest/", moj_prop_interest' not in urlconf
+          print('MOJ_PROP_ROOT_WSGI_INTEREST_INTAKE=PASS')
+          PY
       - name: Schema and isolated migrations
         run: |
           python manage.py makemigrations --check --dry-run prop_firm
