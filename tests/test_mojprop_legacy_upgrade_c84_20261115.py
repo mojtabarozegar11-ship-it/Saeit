@@ -96,6 +96,36 @@ class MojPropLegacyUpgradeTests(unittest.TestCase):
                 installer.patch_admin(self.root / "core/admin.py", SOURCE / "core/admin.py")
         self.assertEqual(after, [(self.root / name).read_bytes() for name in PREFIXES])
 
+    def test_installer_does_not_rewrite_0040_marker_hidden_in_comment(self):
+        migrations = self.root / "core/migrations"
+        (migrations / "0040_known.py").write_text("class Migration: pass\n")
+        unsafe = self.root / "comment-marker-migration.py"
+        unsafe.write_text(
+            '# ("core", "0040_commercefunnelevent")\n'
+            'class Migration:\n'
+            '    dependencies = [("core", "0038_unreviewed")]\n'
+            '    operations = []\n'
+        )
+        target = migrations / "0041_mojprop_request.py"
+        with patch.object(installer, "ROOT", self.root):
+            with self.assertRaisesRegex(RuntimeError, "baseline parent is unreviewed"):
+                installer.install_migration(unsafe, target)
+        self.assertFalse(target.exists())
+
+    def test_installer_rejects_duplicate_parent_marker_in_comment(self):
+        migrations = self.root / "core/migrations"
+        (migrations / "0040_known.py").write_text("class Migration: pass\n")
+        source = SOURCE / "core/migrations/0041_mojprop_request.py"
+        unsafe = self.root / "duplicated-baseline-marker.py"
+        unsafe.write_text(source.read_text("utf-8") +
+                          '\n# ("core", "0040_commercefunnelevent")\n')
+        with patch.object(installer, "ROOT", self.root):
+            with self.assertRaisesRegex(RuntimeError, "cannot be replaced uniquely"):
+                installer.install_migration(
+                    unsafe, migrations / "0041_mojprop_request.py"
+                )
+        self.assertFalse((migrations / "0041_mojprop_request.py").exists())
+
     def test_install_migration_rejects_two_competing_core_0040_heads(self):
         migrations = self.root / "core/migrations"
         for name in ("0040_branch_a.py", "0040_branch_b.py"):
