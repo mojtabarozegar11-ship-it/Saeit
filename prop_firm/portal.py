@@ -359,8 +359,13 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
         "plan_code": selected_plan.code if selected_plan else None,
         "promotion_period": promotion_period,
         "promotion_statistics": promotion_stats,
-        "verified": fully_verified,
-        "evidence_state": "reconciled" if fully_verified else "pending",
+        # A reconciled trade stream does not authenticate its purchase.
+        # Expose a verified/reconciled challenge only if the paid enrollment,
+        # tier, chronology and 28-day evidence window ALSO pass review.
+        "verified": bool(fully_verified and purchase_window_valid),
+        "evidence_state": (
+            "reconciled" if fully_verified and purchase_window_valid else "pending"
+        ),
         "last_equity": equity.equity_usd if equity else None,
         "last_observed_at": equity.observed_at if equity else None,
         "executions": executions[:30],
