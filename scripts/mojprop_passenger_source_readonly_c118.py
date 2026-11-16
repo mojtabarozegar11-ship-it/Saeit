@@ -71,19 +71,33 @@ def source_code_signals(blob: bytes) -> dict:
     }
 
 
+def _owned_safe_directory(path: Path) -> bool:
+    """Never follow a directory symlink or trust an attacker-writable parent."""
+    try:
+        info = path.lstat()
+    except OSError:
+        return False
+    return (stat.S_ISDIR(info.st_mode)
+            and info.st_uid == os.geteuid()
+            and not (info.st_mode & 0o022))
+
+
 def _owned_safe_file(path: Path, *, root: Path) -> str:
-    """Inspect fixed names only; reject symlinks, foreign owner and mutable dirs."""
-    if not root.is_dir() or root.is_symlink():
+    """Inspect fixed names only; deny symlinks and mutable ancestor dirs."""
+    if path == root or root not in path.parents:
         return "unsafe"
-    cursor = path
+    cursor = path.parent
     while cursor != root:
-        if cursor == cursor.parent or cursor.is_symlink() or root not in cursor.parents:
+        if (cursor == cursor.parent or root not in cursor.parents
+                or not _owned_safe_directory(cursor)):
             return "unsafe"
         cursor = cursor.parent
+    if not _owned_safe_directory(root):
+        return "unsafe"
     try:
         info = path.lstat()
         if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
-                or info.st_mode & 0o022):
+                or info.st_mode & 0o022 or info.st_nlink != 1):
             return "unsafe"
         return "present"
     except FileNotFoundError:
@@ -116,8 +130,7 @@ def report() -> dict:
         if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
             return out
         out["owner_identity_verified"] = True
-        if (not ROOT.is_dir() or ROOT.is_symlink()
-                or not WEBROOT.is_dir() or WEBROOT.is_symlink()):
+        if not (_owned_safe_directory(ROOT) and _owned_safe_directory(WEBROOT)):
             return out
         out["staging_root_safe"] = True
         out["webroot_safe"] = True
