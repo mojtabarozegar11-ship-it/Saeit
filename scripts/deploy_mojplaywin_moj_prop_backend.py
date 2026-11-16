@@ -113,10 +113,19 @@ def compile_python(path: Path) -> None:
     compile(path.read_text(encoding="utf-8"), str(path), "exec")
 
 
-def selftest(repo_root: Path) -> None:
+def assert_staged_inventory(repo_root: Path) -> None:
+    if repo_root.is_symlink() or not repo_root.is_dir():
+        raise RuntimeError("backend staging root is missing or unsafe")
     for relative in ALL_FILES:
         source = repo_root / relative
-        assert_regular(source, "source")
+        assert_safe_parent(source, repo_root)
+        assert_regular(source, "backend staged file")
+
+
+def selftest(repo_root: Path) -> None:
+    assert_staged_inventory(repo_root)
+    for relative in ALL_FILES:
+        source = repo_root / relative
         if source.suffix == ".py":
             compile_python(source)
     view = (repo_root / "core/mojprop_views.py").read_text(encoding="utf-8")
@@ -659,10 +668,7 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         encoding="utf-8", errors="replace"
     ):
         raise RuntimeError("Passenger routing file no longer points to Saeit-staging")
-    if staged_root.is_symlink() or not staged_root.is_dir():
-        raise RuntimeError("backend staging root is missing or unsafe")
-    for relative in ALL_FILES:
-        assert_regular(staged_root / relative, "backend staged file")
+    assert_staged_inventory(staged_root)
     # Fail before touching live application files or its database schema.
     closure = check_schema_closure(ROOT, staged_root)
     print("MOJ_PROP_SCHEMA_CLOSURE=PASS; MIGRATIONS=" + ",".join(closure["source_chain"]))
