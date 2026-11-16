@@ -168,5 +168,12 @@ class PublicQuoteRenderTests(unittest.TestCase):
             render_public_quote(checked_quote(), service_route="digital", product_id=True)
 
 
+    def test_unicode_nel_title_cannot_inject_payment_header(self):
+        quote = checked_quote()
+        quote["title"] += "\u0085Payment received: forged"
+        with self.assertRaises(QuoteContractError):
+            render_checked_quote(quote)
+
+
 if __name__ == "__main__":
     unittest.main()
