@@ -20,6 +20,7 @@ MIGRATIONS = (
 MODELS = ("MojPropRequest", "MojPropOffer", "MojPropDeliveryEvidence")
 ADMINS = ("MojPropRequestAdmin", "MojPropOfferAdmin", "MojPropDeliveryEvidenceAdmin")
 MODULES = (
+    "core/mojprop_accessible_intake.py",
     "core/mojprop_views.py",
     "core/mojprop_receipts.py",
     "core/mojprop_catalog_contract.py",

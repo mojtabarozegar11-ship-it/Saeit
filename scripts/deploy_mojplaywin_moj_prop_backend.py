@@ -36,6 +36,8 @@ SETTINGSCONF = Path("config/settings.py")
 FILES = (
     Path("core/models.py"),
     Path("core/admin.py"),
+    # The no-JS presenter must be installed before the importing CRM view.
+    Path("core/mojprop_accessible_intake.py"),
     Path("core/mojprop_views.py"),
     Path("core/mojprop_receipts.py"),
     Path("core/mojprop_catalog_contract.py"),
