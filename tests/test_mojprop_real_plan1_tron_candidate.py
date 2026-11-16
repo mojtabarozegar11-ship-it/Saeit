@@ -52,7 +52,8 @@ class RealPlan1TRXContractTests(unittest.TestCase):
             body_endpoint="/walletsolidity/gettransactionbyid",
             receipt_endpoint="/walletsolidity/gettransactioninfobyid",
             trusted_node_network="tron-mainnet",
-            already_assigned_txids=frozenset())
+            already_assigned_txids=frozenset(),
+            expected_precontract_sha256="a" * 64)
         data.update(kwargs)
         return assess_solidified_native_transfer(self.invoice, **data)
 
@@ -62,6 +63,32 @@ class RealPlan1TRXContractTests(unittest.TestCase):
         self.assertFalse(result["buyer_entitlement_granted"])
         self.assertFalse(result["revenue_booked"])
         self.assertTrue(result["requires_atomic_unique_ledger_assignment"])
+
+    def test_valid_order_requires_trusted_contract_fingerprint(self):
+        validate_persisted_order(
+            self.invoice, expected_precontract_sha256="a" * 64)
+
+    def test_invoice_digest_alone_is_not_trusted_terms(self):
+        with self.assertRaises(NativeTRXMatchRejected):
+            validate_persisted_order(self.invoice)
+
+    def test_valid_solidified_proofs_without_expected_buyer_terms_rejected(self):
+        with self.assertRaises(NativeTRXMatchRejected):
+            self.match(expected_precontract_sha256=None)
+
+    def test_wrong_trusted_bilingual_copy_digest_rejected(self):
+        with self.assertRaises(NativeTRXMatchRejected):
+            self.match(expected_precontract_sha256="b" * 64)
+
+    def test_customer_claimed_fingerprint_cannot_replace_authority(self):
+        self.invoice = replace(self.invoice, precontract_sha256="b" * 64)
+        with self.assertRaises(NativeTRXMatchRejected):
+            self.match(expected_precontract_sha256="a" * 64)
+
+    def test_match_never_attests_signed_contract_or_global_ledger(self):
+        result = self.match()
+        self.assertTrue(result["global_cross_product_txid_uniqueness_not_proven_by_this_module"])
+        self.assertFalse(result["trusted_signed_buyer_terms_verified_by_this_module"])
 
     def test_real_funded_sku_not_educational_product(self):
         self.assertEqual(PRODUCT, "MOJ-PROP-01")
