@@ -135,6 +135,24 @@ class MojPropChallengeCliC120Tests(unittest.TestCase):
         with self.assertRaisesRegex(ChallengeInputError, "phase2_requires_phase1"):
             run(doc)
 
+    def test_15_zero_or_negative_ledger_mark_is_a_loss_not_hidden_parser_failure(self):
+        for amount in ("0.00", "-10.00"):
+            doc = valid()
+            doc["phase1"][0]["equity"] = amount
+            with self.subTest(amount=amount):
+                result = run(doc)
+                self.assertEqual(result["phase1"]["status"],
+                                 "observed_simulation_rule_breach")
+                self.assertEqual(result["phase1"]["latest_observed_equity"],
+                                 "11000.00")
+                self.assertFalse(result["funded_account_provisioning_allowed"])
+
+    def test_16_negative_initial_capital_is_not_an_allowed_challenge(self):
+        doc = valid()
+        doc["policy"]["starting_equity"] = "-10000.00"
+        with self.assertRaises(ChallengeInputError):
+            run(doc)
+
     def test_14_filled_training_template_cannot_be_mislabelled_as_two_phase_json(self):
         doc = valid()
         doc["schema"] = "mojprop.starter30.journal.v1"
