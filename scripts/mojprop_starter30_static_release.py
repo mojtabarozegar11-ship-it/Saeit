@@ -24,7 +24,7 @@ FILES = ("index.html", "journal-template.csv", "journal-guide.txt")
 # The owner must explicitly review/re-pin any revision; do not trust staged
 # tarballs or a caller-supplied commit string as proof of identical bytes.
 REVIEWED_GIT_BLOBS = {
-    "index.html": "443581774a7b56f8b4bbaaf3fd8c7531da2ffbc7",
+    "index.html": "c4185051020aa66405da8a9d8aaae3b22b90f7f6",
     "journal-template.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
     "journal-guide.txt": "7a8978ca6f3db31064552a41b2bdfb6c7de56036",
 }
