@@ -1,0 +1,76 @@
+name: Mojtaba.bot.ai cPanel-only site agent audit (no VPS)
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/mojtaba_site_legacy_cpanel_inventory.py"
+      - "tests/test_mojtaba_site_legacy_cpanel_inventory.py"
+      - ".github/workflows/mojtaba-site-cpanel-inventory-readonly.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-site-cpanel-no-vps
+  cancel-in-progress: false
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate read-only inventory with fixtures
+        run: |
+          python3 -m py_compile scripts/mojtaba_site_legacy_cpanel_inventory.py
+          python3 -m unittest discover -s tests -p test_mojtaba_site_legacy_cpanel_inventory.py -v
+  live-cpanel:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      CPANEL_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Probe direct cPanel with pinned host key, no VPS relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$CPANEL_KEY" || { echo "CPANEL_KEY_UNAVAILABLE"; exit 2; }
+          d="$RUNNER_TEMP/mojtaba-cpanel-direct"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$CPANEL_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          timeout 12s ssh-keyscan -T 8 -p 1396 -t ed25519 178.239.147.125 > "$d/known_hosts" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known_hosts" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" || { echo "CPANEL_HOST_PIN_MISMATCH"; exit 3; }
+          timeout 60s ssh -T \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/known_hosts" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o ForwardAgent=no \
+            -o ConnectTimeout=9 \
+            -i "$d/key" -p 1396 \
+            zomorod2@178.239.147.125 'exec python3 -' \
+            < scripts/mojtaba_site_legacy_cpanel_inventory.py \
+            > "$d/output.json" 2>"$d/stderr"
+          python3 - "$d/output.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          path = Path(sys.argv[1])
+          if not path.is_file() or not 0 < path.stat().st_size < 16000:
+              raise SystemExit("SITE_PRIVATE_AUDIT_UNAVAILABLE")
+          x = json.loads(path.read_text(encoding="utf-8"))
+          assert x["schema"] == "mojtaba.bot.ai.cpanel-site-legacy-inventory.v1"
+          assert x["canonical_bot"] == "mojtaba.bot.ai"
+          assert x["site_files_modified"] is False
+          assert x["crontab_modified"] is False
+          assert x["safe_to_delete"] is False
+          print(json.dumps(x, ensure_ascii=False, sort_keys=True))
+          PY
