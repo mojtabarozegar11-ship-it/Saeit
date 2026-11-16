@@ -20,6 +20,15 @@ ROOT = HOME / "mojplaywin.com"
 TARGET = ROOT / "moj-prop/starter-30-trx"
 BACKUP = HOME / ".mojprop-starter30-backups"
 FILES = ("index.html", "journal-template.csv", "journal-guide.txt")
+# Exact Git blob identities read from the current reviewed main source.
+# The owner must explicitly review/re-pin any revision; do not trust staged
+# tarballs or a caller-supplied commit string as proof of identical bytes.
+REVIEWED_GIT_BLOBS = {
+    "index.html": "443581774a7b56f8b4bbaaf3fd8c7531da2ffbc7",
+    "journal-template.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
+    "journal-guide.txt": "7a8978ca6f3db31064552a41b2bdfb6c7de56036",
+}
+MAX_STAGE_FILE_BYTES = 90_000
 RUN_ID_RE = re.compile(r"[1-9][0-9]{0,18}\Z")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 
