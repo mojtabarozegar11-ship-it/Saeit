@@ -273,6 +273,9 @@ def evaluate_two_phase_simulation(
         phase2_note = "not_started_phase1_rules_unmet"
     else:
         second = evaluate_simulated_phase(policy, phase2_snapshots, phase=2)
+        if (phase1_snapshots and phase2_snapshots
+                and phase2_snapshots[0].observed_at <= phase1_snapshots[-1].observed_at):
+            raise ChallengeInputError("phase2_observations_overlap_phase1")
         phase2_note = (
             "simulation_target_met_but_no_authoritative_evidence"
             if second["status"] == "simulation_target_met_review_required"
