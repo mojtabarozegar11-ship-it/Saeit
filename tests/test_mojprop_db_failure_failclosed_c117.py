@@ -171,4 +171,5 @@ class MojPropCrmOutageC117Tests(TestCase):
         self.assertIn(b"temporarily unavailable", result.content)
         self.assertNotIn(token.encode(), result.content)
         self.assertIn("no-store", result.get("Cache-Control", ""))
+        self.assertEqual(result.get("Retry-After"), "60")
         self.assertEqual(MojPropRequest.objects.count(), 1)
