@@ -90,3 +90,55 @@ class PurchasedPlanQualificationTests(TestCase):
         data=account_projection(self.account)
         self.assertFalse(data["purchase_window_valid"])
         self.assertFalse(data["assessment"].passed)
+
+    def test_c143_equity_before_paid_purchase_cannot_qualify(self):
+        self.six_days_at_plan6()
+        PropEquityObservation.objects.filter(
+            account=self.account, external_event_id="open-0"
+        ).update(observed_at=START-timedelta(seconds=1))
+        data=account_projection(self.account)
+        self.assertFalse(data["purchase_window_valid"])
+        self.assertFalse(data["assessment"].passed)
+        self.assertIn("reconciled_evidence_required", data["assessment"].reasons)
+
+    def test_c143_equity_exactly_at_paid_start_is_in_window(self):
+        self.six_days_at_plan6()
+        PropEquityObservation.objects.filter(
+            account=self.account, external_event_id="open-0"
+        ).update(observed_at=START)
+        data=account_projection(self.account)
+        self.assertTrue(data["purchase_window_valid"])
+        self.assertTrue(data["assessment"].passed)
+
+    def test_c143_equity_exactly_at_28_day_deadline_is_excluded(self):
+        self.six_days_at_plan6()
+        PropEquityObservation.objects.filter(
+            account=self.account, external_event_id="close-5"
+        ).update(observed_at=START+timedelta(days=28))
+        data=account_projection(self.account)
+        self.assertFalse(data["purchase_window_valid"])
+        self.assertFalse(data["assessment"].passed)
+
+    def test_c143_equity_one_second_before_deadline_is_within_window(self):
+        self.six_days_at_plan6()
+        PropEquityObservation.objects.filter(
+            account=self.account, external_event_id="close-5"
+        ).update(observed_at=START+timedelta(days=28)-timedelta(seconds=1))
+        data=account_projection(self.account)
+        self.assertTrue(data["purchase_window_valid"])
+
+    def test_c143_historical_cutoff_excludes_post_cutoff_equity(self):
+        self.six_days_at_plan6()
+        PropEquityObservation.objects.create(
+            account=self.account, external_event_id="late-mark",
+            observed_at=START+timedelta(days=29),
+            is_session_open=False, equity_usd=Decimal("3288"),
+            reconciliation_status="verified",
+        )
+        # The current projection must reject the full stream.
+        self.assertFalse(account_projection(self.account)["purchase_window_valid"])
+        # An earlier historical projection must not inspect future events.
+        data=account_projection(
+            self.account, evidence_cutoff=START+timedelta(days=7)
+        )
+        self.assertTrue(data["purchase_window_valid"])
