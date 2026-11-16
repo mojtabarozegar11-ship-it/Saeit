@@ -31,7 +31,7 @@ jobs:
           python3 -B -m py_compile scripts/mojprop_live_intake_source_drift_readonly_c95.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_live_intake_source_drift_readonly_c95 -q
           test ! -L scripts/mojprop_live_intake_source_drift_readonly_c95.py
-          test "$(git hash-object -- scripts/mojprop_live_intake_source_drift_readonly_c95.py)" = "f0d23919fcf419f2805e7ef8c8b446f0ee720bb4"
+          test "$(git hash-object -- scripts/mojprop_live_intake_source_drift_readonly_c95.py)" = "4d10083666213f555ef38889218bb63ed838cca8"
       - name: Connect only through pinned factory runner to the existing cPanel
         shell: bash
         env:
