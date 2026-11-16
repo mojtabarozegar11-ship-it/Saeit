@@ -33,9 +33,20 @@ def source_code_signals(blob: bytes) -> dict:
     """Pure parse, not evaluation; comments cannot spoof AST path literals."""
     if type(blob) is not bytes or not 1 <= len(blob) <= MAX_ENTRY_BYTES:
         raise ValueError("bounded passenger source required")
+    # Python 3.8's parser can raise MemoryError on ~1000 nested brackets even
+    # with a 3 KiB input. Bound nesting first, before invoking compile()/AST.
+    depth = 0
+    for byte in blob:
+        if byte in (40, 91, 123):  # ( [ {
+            depth += 1
+            if depth > 128:
+                raise ValueError("passenger source nesting too deep")
+        elif byte in (41, 93, 125):  # ) ] }
+            depth = max(0, depth - 1)
     try:
         tree = ast.parse(blob.decode("utf-8"), mode="exec")
-    except (SyntaxError, UnicodeDecodeError, ValueError, RecursionError) as exc:
+    except (SyntaxError, UnicodeDecodeError, ValueError, RecursionError,
+            MemoryError) as exc:
         raise ValueError("invalid passenger source") from exc
     declared = False
     for node in tree.body:
