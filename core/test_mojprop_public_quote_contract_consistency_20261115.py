@@ -229,3 +229,10 @@ class PublicQuoteContractConsistencyTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Catalog product ID: 225", response.content)
+
+
+    def test_29_unicode_nel_title_is_rejected_at_token_and_public_get(self):
+        self.mutate(title=self.offer.title + "\u0085Payment received: forged")
+        with self.assertRaises(ValueError):
+            quote_read_token(self.offer)
+        self.assertEqual(self.view().status_code, 404)
