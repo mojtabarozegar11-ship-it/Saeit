@@ -71,6 +71,41 @@ class ReceiptTests(TestCase):
             self.assertNotIn("MUST_NOT_STORE", str(row.after_state))
             self.assertEqual(row.actor_id, "mojtaba-bot-ai")
 
+    def test_redacted_html_quality_scores_are_durable_without_page_text(self):
+        payload = report()
+        expected = {
+            "status": "review", "score": 75,
+            "issues": ["missing_meta_description"],
+            "source_content_logged": False, "private_title": "MUST_NOT_STORE"
+        }
+        payload["observations"][0]["site_html_quality"] = expected
+        record_public_cycle(payload, cycle_id="9"*32)
+        row = AuditLog.objects.get(action=ACTION, target_id="zomorodmelal")
+        self.assertEqual(row.after_state["structural_qa_reported_roles"], 1)
+        self.assertEqual(row.after_state["structural_qa_results"][0]["score"], 75)
+        self.assertNotIn("MUST_NOT_STORE", str(row.after_state))
+        self.assertFalse(row.after_state["legacy_php_dashboard_replaced"])
+        self.assertFalse(row.after_state["legacy_sqlite_history_migrated"])
+
+    def test_untrusted_quality_score_cannot_be_recorded(self):
+        payload = report()
+        payload["observations"][0]["site_html_quality"] = {
+            "status": "review", "score": 101, "issues": [],
+            "source_content_logged": False,
+        }
+        with self.assertRaises(SiteFleetError):
+            record_public_cycle(payload, cycle_id="8"*32)
+        self.assertFalse(AuditLog.objects.filter(action=ACTION).exists())
+
+    def test_quality_raw_page_content_not_accepted_as_log_proof(self):
+        payload = report()
+        payload["observations"][0]["site_html_quality"] = {
+            "status": "review", "score": 100, "issues": [],
+            "source_content_logged": True,
+        }
+        with self.assertRaises(SiteFleetError):
+            record_public_cycle(payload, cycle_id="7"*32)
+
     def test_fabricated_http_success_is_rejected(self):
         payload = report()
         payload["observations"][0]["response_sha256"] = "not-hash"

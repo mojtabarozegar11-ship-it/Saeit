@@ -17,6 +17,12 @@ from .mojtaba_site_fleet import CANONICAL_BOT, ROUTES, SiteFleetError
 
 ACTION = "mojtaba_site_public_monitor"
 ACTOR = "mojtaba-bot-ai"
+QUALITY_ISSUES = frozenset({
+    "missing_title", "title_over_100_chars", "h1_count_not_one",
+    "missing_meta_description", "no_anchor_links",
+    "invalid_or_short_html", "invalid_html_encoding",
+})
+
 SHA = re.compile(r"^[0-9a-f]{64}$")
 CYCLE_ID = re.compile(r"^[0-9a-f]{32}$")
 
@@ -51,11 +57,26 @@ def summarize_public_cycle(report):
             raise SiteFleetError("INVALID_PUBLIC_HTTP_EVIDENCE")
         if digest is not None and (not isinstance(digest, str) or not SHA.fullmatch(digest)):
             raise SiteFleetError("INVALID_RESPONSE_DIGEST")
-        details[key[0]].append({
+        public_row = {
             "role": key[1],
             "state": state,
             "html_digest": digest if state == "http_probe_ok" else None,
-        })
+        }
+        qa = item.get("site_html_quality")
+        if qa is not None:
+            if (state != "http_probe_ok" or not isinstance(qa, dict)
+                    or qa.get("source_content_logged") is not False
+                    or qa.get("status") not in ("review", "blocked")
+                    or type(qa.get("score")) is not int
+                    or not 0 <= qa["score"] <= 100
+                    or not isinstance(qa.get("issues"), list)
+                    or any(x not in QUALITY_ISSUES for x in qa["issues"])):
+                raise SiteFleetError("UNTRUSTED_STRUCTURAL_QA")
+            public_row["structural_qa"] = {
+                "status": qa["status"], "score": qa["score"],
+                "issues": sorted(set(qa["issues"])),
+            }
+        details[key[0]].append(public_row)
     if seen != expected:
         raise SiteFleetError("INCOMPLETE_PUBLIC_SITE_ROLES")
     result = {}
@@ -67,6 +88,15 @@ def summarize_public_cycle(report):
             "http_ok_count": sum(line["state"] == "http_probe_ok" for line in lines),
             "all_public_routes_ok": all(line["state"] == "http_probe_ok" for line in lines),
             "sha256_public_observations": sha256(canonical).hexdigest(),
+            "structural_qa_reported_roles": sum(
+                "structural_qa" in line for line in lines
+            ),
+            "structural_qa_results": [
+                {"role": line["role"], **line["structural_qa"]}
+                for line in lines if "structural_qa" in line
+            ],
+            "legacy_sqlite_history_migrated": False,
+            "legacy_php_dashboard_replaced": False,
             "private_worker_execution_verified": False,
             "products_generated_verified": False,
             "payment_verified": False,
@@ -165,6 +195,8 @@ def inspect_public_monitor_continuity(*, now=None):
             "two_distinct_spaced_cycles": bool(pair_ready),
             "public_monitor_continuity_observed": bool(pair_ready),
             "private_site_worker_replacement_verified": False,
+            "legacy_php_dashboard_replaced": False,
+            "legacy_sqlite_history_migrated": False,
             "legacy_host_cleanup_authorized": False,
         }
     return {
