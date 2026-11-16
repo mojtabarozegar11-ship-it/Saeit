@@ -226,7 +226,7 @@ class PropInterestIntakeTests(TestCase):
             with self.subTest(path=path):
                 response=self.client.get(path,HTTP_HOST="mojplaywin.com",secure=True)
                 self.assertEqual(response.status_code,200)
-                self.assertContains(response,'action="/moj-prop/interest/"')
+                self.assertContains(response,'action="/moj-prop-interest/"')
                 self.assertContains(response,'name="contact_consent"')
                 self.assertContains(response,'name="source_language"')
                 self.assertContains(response,'href="#plan-one-interest"')
