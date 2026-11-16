@@ -24,6 +24,7 @@ EVENT = re.compile(r"(?m)^  ([A-Za-z_][\w-]*):[ \t]*(.*)$")
 REVIEWED_BLOBS = {
     "ci.yml": "255ab9a306cd5c94baf75ff23e97f89c368ac3d8",
     "django-ci.yml": "48a480daecd43e88ca8ccba4e4fd07a184fd9e72",
+    "zomorod-business-synthetic-qa.yml": "3874a409e09d9cfd14d0b654c21cca3f8c269ff3",
     "zomorod-app-pages-deploy.yml": "69d23980f04762a0ad0f771ef955894418da834d",
 }
 
@@ -149,6 +150,21 @@ def workflow_run_upstreams(source: str) -> tuple[list[str] | None, bool]:
 
 
 def verified_static_no_host_guard(filename: str, source: str) -> bool:
+    if filename == "zomorod-business-synthetic-qa.yml":
+        # This pinned workflow performs only PHP source lint, isolated
+        # synthetic home/accounting tests and no remote/production actions.
+        # Any change to its Git blob invalidates the exemption above.
+        if any(term in source.lower() for term in (
+            "ssh ", "scp ", "rsync ", "secrets.", "self-hosted",
+            "workflow_dispatch:", "curl ", "wget ", "docker ",
+        )):
+            return False
+        return (
+            "permissions:\n  contents: read" in source
+            and "jobs:\n  smoke:\n    runs-on: ubuntu-latest" in source
+            and "php -l content/zomorod-business/app.php" in source
+            and "scripts/zomorod_business_synthetic_qa.py" in source
+        )
     if filename in ("ci.yml", "django-ci.yml"):
         return "ssh " not in source.lower() and "scp " not in source.lower() \
             and "secrets." not in source.lower()
