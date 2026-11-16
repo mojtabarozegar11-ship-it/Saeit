@@ -124,6 +124,13 @@ class MojPropBackupIntegrityTests(unittest.TestCase):
             self.assertEqual((self.live / rel).read_bytes(), b"new-live-bytes")
         self.restart.assert_not_called()
 
+    def test_parent_guard_rejects_lexical_escape_outside_reviewed_tenant(self):
+        escaped = self.live / ".." / "other-tenant" / "source.py"
+        with self.assertRaisesRegex(RuntimeError, "traversal refused"):
+            backend.assert_safe_parent(escaped, self.live)
+        with self.assertRaisesRegex(RuntimeError, "escapes reviewed root"):
+            backend.assert_safe_parent(self.base / "outside.py", self.live)
+
     def test_atomic_text_write_rejects_new_symlink_before_migration_write(self):
         source = self.base / "owner-source.py"
         source.write_text("# owner-owned, must remain\n", encoding="utf-8")
