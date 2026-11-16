@@ -42,6 +42,8 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
             "https://mojplaywin.com:8443/saman/",
             "https://mojplaywin.com@evil.example/saman/",
             "https://mojplaywin.com/admin/",
+            guard.ORIGIN + "/picm/login/",
+            guard.ORIGIN + "/picm/",
             "https://mojplaywin.com/commerce/trx-easy/purchases/",
             "https://mojplaywin.com/%61dmin/",
             "https://mojplaywin.com/saman/#fragment",
@@ -56,7 +58,6 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
     def test_login_redirect_and_known_child_are_allowed(self):
         for url in (
             guard.ORIGIN + "/accounts/login/?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F",
-            guard.ORIGIN + "/picm/login/",
             guard.ORIGIN + "/studio.Roham/",
             guard.ORIGIN + "/zahra$$/",
         ):
@@ -110,6 +111,80 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "return path"):
                         guard.check_authentication_gate(pk)
 
+    def _guest_html(self, pk, *, email=True, csrf=True, action=None,
+                    method="post", marker=True):
+        action = action or f"/commerce/trx-easy/start/{pk}/"
+        email_part = (
+            '<input type="email" name="email" maxlength="254" required>'
+            if email else '<input type="text" name="email">'
+        )
+        csrf_part = (
+            '<input type="hidden" name="csrfmiddlewaretoken" value="test-only">'
+            if csrf else ''
+        )
+        gateway = 'data-gateway="trx-public-v1"' if marker else ''
+        return (
+            '<!doctype html><html><head><title>Checkout</title></head>'
+            '<body><main><section ' + gateway + '><h1>Secure TRX</h1>'
+            '<form method="' + method + '" action="' + action + '">'
+            + email_part + csrf_part + '<button type="submit">Invoice</button>'
+            '</form></section></main>' + (' ' * 600) + '</body></html>'
+        ).encode("utf-8")
+
+    def test_exact_legacy_mobile_guest_form_is_accepted_without_login(self):
+        for pk in guard.PROTECTED_PRODUCT_IDS:
+            path = f"/store/product/{pk}/checkout/"
+            check = guard.Check(guard.ORIGIN + path, guard.ORIGIN + path,
+                                200, 0.01)
+            with self.subTest(pk=pk), patch.object(
+                guard, "get", return_value=(check, self._guest_html(pk)),
+            ):
+                self.assertEqual(guard.check_authentication_gate(pk), check)
+
+    def test_guest_checkout_never_passes_without_email_and_csrf(self):
+        for variation in (
+            {"email": False},
+            {"csrf": False},
+            {"method": "get"},
+            {"marker": False},
+            {"action": "/commerce/trx-easy/start/999/"},
+            {"action": "https://evil.example/commerce/trx-easy/start/72/"},
+        ):
+            with self.subTest(variation=variation):
+                check = guard.Check(
+                    guard.ORIGIN + "/store/product/72/checkout/",
+                    guard.ORIGIN + "/store/product/72/checkout/",
+                    200, 0.01)
+                with patch.object(
+                    guard, "get", return_value=(check, self._guest_html(72, **variation)),
+                ):
+                    with self.assertRaisesRegex(RuntimeError,
+                                                "lacks exact email, CSRF"):
+                        guard.check_authentication_gate(72)
+
+    def test_guest_wrong_location_or_query_is_denied(self):
+        path = "/store/product/72/checkout/"
+        for effective in (
+            guard.ORIGIN + "/store/",
+            guard.ORIGIN + path + "?token=unsafe",
+            "https://evil.example" + path,
+        ):
+            with self.subTest(effective=effective):
+                check = guard.Check(guard.ORIGIN + path, effective, 200, 0.01)
+                with patch.object(guard, "get", return_value=(check, self._guest_html(72))):
+                    with self.assertRaises(RuntimeError):
+                        guard.check_authentication_gate(72)
+
+    def test_guest_only_http200_or_empty_html_is_never_auth_or_sale_proof(self):
+        path = "/store/product/72/checkout/"
+        check = guard.Check(guard.ORIGIN + path, guard.ORIGIN + path, 200, 0.01)
+        for body in (b"", b"<html><body>OK</body></html>", b"x" * 650):
+            with self.subTest(length=len(body)), patch.object(
+                guard, "get", return_value=(check, body),
+            ):
+                with self.assertRaises(RuntimeError):
+                    guard.check_authentication_gate(72)
+
     def test_redirect_hops_are_bounded(self):
         handler = guard.ScopedRedirect()
         for _ in range(3):
@@ -132,6 +207,9 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
         ))
         self.assertEqual(len(guard.REQUIRED_PATHS), len(set(guard.REQUIRED_PATHS)))
         self.assertEqual(len(guard.PERSONAL_PATHS), 11)
+        self.assertEqual(len(guard.PROTECTED_CHILDREN), 5)
+        self.assertNotIn("/picm/", guard.REQUIRED_PATHS)
+        self.assertNotIn("/picm/login/", guard.REDIRECT_PATHS)
 
     def test_get_uses_scoped_opener_and_anonymous_get(self):
         calls = []

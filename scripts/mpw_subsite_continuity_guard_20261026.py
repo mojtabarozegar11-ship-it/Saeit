@@ -2,8 +2,8 @@
 """Read-only HTTP continuity check for MojPlayWin and its protected child sites.
 
 The real sub-sites are URL prefixes beneath mojplaywin.com, not unverified
-hostnames such as taniya.mojplaywin.com. Only GET is used: /farnaz/ and
-/picm/ intentionally do not support HEAD.
+hostnames such as taniya.mojplaywin.com. Only scoped anonymous GET is
+used. PICM is owner-retired and is intentionally NOT an active monitored site.
 """
 
 from __future__ import annotations
@@ -18,6 +18,16 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
+
+# This audit is used both as python -m scripts.* and as a direct cron script.
+if __package__:
+    from .mpw_retired_subsite_policy import (
+        assert_no_retired_routes, assert_retired_picm_manifest,
+    )
+else:
+    from mpw_retired_subsite_policy import (
+        assert_no_retired_routes, assert_retired_picm_manifest,
+    )
 from html.parser import HTMLParser
 
 
@@ -53,9 +63,8 @@ REQUIRED_PATHS = (
     "/taniya/",
     "/studio.Roham/",
     "/zahra$$/",
-    "/picm/",
 ) + PERSONAL_PATHS
-PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$$/", "/picm/")
+PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$$/")
 SITEMAP_URLS = (
     "/knowledge/",
     "/research/",
@@ -69,7 +78,7 @@ CHECKOUT_PATHS = frozenset(f"/store/product/{pk}/checkout/" for pk in PROTECTED_
 # fetched through a redirect. Never follow a redirect to an unknown app,
 # a different host, or an HTTP URL during a read-only audit.
 REDIRECT_PATHS = frozenset(REQUIRED_PATHS) | frozenset({
-    "/sitemap.xml", "/picm/login/", "/accounts/login/",
+    "/sitemap.xml", "/accounts/login/",
     *CHECKOUT_PATHS,
 })
 
@@ -200,7 +209,7 @@ def get(url: str, *, max_bytes: int = 950000, attempts: int = 3) -> tuple[Check,
 
 def check_site_page(path: str) -> Check:
     check, data = get(ORIGIN + path)
-    expected_final = ORIGIN + ("/picm/login/" if path == "/picm/" else path)
+    expected_final = ORIGIN + path
     parsed_final = urllib.parse.urlsplit(check.effective)
     # Optional query params added by the application are allowed. A route that
     # silently resolves to / or to an unrelated app is not considered healthy.
@@ -264,17 +273,88 @@ def check_sitemap() -> tuple[Check, int]:
     return check, len(urls)
 
 
+class GuestCheckoutForm(HTMLParser):
+    """Only inspect tags/attributes; NEVER record or output live CSRF values."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.forms = []
+        self.current = None
+        self.gateway_marker = False
+        self.saw_html = False
+        self.saw_body = False
+
+    def handle_starttag(self, tag, attrs):
+        raw = dict(attrs)
+        if tag == "html":
+            self.saw_html = True
+        elif tag == "body":
+            self.saw_body = True
+        elif tag == "section" and raw.get("data-gateway") == "trx-public-v1":
+            self.gateway_marker = True
+        elif tag == "form":
+            if self.current is not None:
+                return
+            self.current = {
+                "method": raw.get("method", "get").lower(),
+                "action": raw.get("action"),
+                "email": False,
+                "csrf": False,
+            }
+        elif tag == "input" and self.current is not None:
+            if (raw.get("name") == "email"
+                    and raw.get("type", "").lower() == "email"
+                    and "required" in raw
+                    and raw.get("maxlength") == "254"):
+                self.current["email"] = True
+            if (raw.get("name") == "csrfmiddlewaretoken"
+                    and raw.get("type", "").lower() == "hidden"
+                    and bool(raw.get("value"))):
+                self.current["csrf"] = True
+
+    def handle_endtag(self, tag):
+        if tag == "form" and self.current is not None:
+            self.forms.append(self.current)
+            self.current = None
+
+
 def check_authentication_gate(product_id: int) -> Check:
+    """Either exact login redirect OR real email+CSRF guarded guest checkout.
+
+    Anonymous 200 alone is NEVER proof of sale or payment readiness.
+    """
     path = f"/store/product/{product_id}/checkout/"
-    check, _ = get(ORIGIN + path)
+    check, body = get(ORIGIN + path)
     landing = urllib.parse.urlsplit(check.effective)
-    if check.status != 200 or landing.scheme != "https" or landing.netloc != "mojplaywin.com":
-        raise RuntimeError(f"Checkout {product_id} resolved outside store: {check.effective}")
-    if landing.path != "/accounts/login/":
-        raise RuntimeError(f"Checkout {product_id} bypassed login: {check.effective}")
-    params = urllib.parse.parse_qs(landing.query, keep_blank_values=True)
-    if params != {"next": [path]}:
-        raise RuntimeError(f"Checkout {product_id} lost its exact post-login return path")
+    if (check.status != 200 or landing.scheme != "https"
+            or landing.netloc != "mojplaywin.com" or landing.fragment):
+        raise RuntimeError("Checkout resolved outside the exact HTTPS store")
+    if landing.path == "/accounts/login/":
+        params = urllib.parse.parse_qs(landing.query, keep_blank_values=True)
+        if params != {"next": [path]}:
+            raise RuntimeError("Checkout lost its exact post-login return path")
+        return check
+
+    # The owner-approved walletless TRX route can intentionally sell to a
+    # guest with email and CSRF; do not classify that as an auth bypass.
+    if landing.path != path or landing.query:
+        raise RuntimeError("Checkout points to an unknown public route")
+    if len(body) < 600 or len(body) > 950000:
+        raise RuntimeError("Incomplete guest checkout HTML")
+    parsed = GuestCheckoutForm()
+    parsed.feed(body.decode("utf-8", "replace"))
+    expected_action = f"/commerce/trx-easy/start/{product_id}/"
+    validated = (
+        parsed.saw_html and parsed.saw_body and parsed.gateway_marker
+        and len(parsed.forms) == 1
+        and parsed.forms[0]["method"] == "post"
+        and parsed.forms[0]["action"] == expected_action
+        and parsed.forms[0]["email"] is True
+        and parsed.forms[0]["csrf"] is True
+    )
+    if not validated:
+        raise RuntimeError(
+            "Anonymous checkout lacks exact email, CSRF or server-owned TRX form"
+        )
     return check
 
 
@@ -282,13 +362,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
+    assert_retired_picm_manifest()
+    assert_no_retired_routes(REQUIRED_PATHS + PROTECTED_CHILDREN + tuple(REDIRECT_PATHS))
     if args.selftest:
-        assert len(PROTECTED_CHILDREN) == 6
+        assert len(PROTECTED_CHILDREN) == 5
         assert set(PROTECTED_CHILDREN).issubset(REQUIRED_PATHS)
         assert {"/studio.Roham/", "/zahra$$/"}.issubset(REQUIRED_PATHS)
         assert len(PERSONAL_PATHS) == 11
         assert PERSONAL_PATHS[0] in REQUIRED_PATHS
-        assert "/picm/" in REQUIRED_PATHS
+        assert "/picm/" not in REQUIRED_PATHS
         assert len(set(REQUIRED_PATHS)) == len(REQUIRED_PATHS)
         assert all(path.startswith("/") for path in REQUIRED_PATHS)
         print("READ_ONLY_CONTINUITY_SELFTEST_OK")
@@ -302,6 +384,7 @@ def main() -> int:
         "sitemap": {**asdict(sitemap), "unique_urls": sitemap_count},
         "anonymous_checkout_gates": [asdict(check) for check in auth_checks],
         "protected_children": list(PROTECTED_CHILDREN),
+        "retired_picm_excluded_from_owner_active_queue": True,
         "protected_personal_site": list(PERSONAL_PATHS),
         "read_only": True,
     }
@@ -312,6 +395,7 @@ def main() -> int:
             summary.write("## MojPlayWin protected subsite continuity\n\n")
             summary.write(f"- Main and child GET pages: {len(checks)} passed\n")
             summary.write(f"- Protected child apps: {', '.join(PROTECTED_CHILDREN)}\n")
+            summary.write("- Owner-retired PICM excluded by verified E7 policy; not a working-site claim\n")
             summary.write(f"- Owner's personal website: {len(PERSONAL_PATHS)} pages unchanged and accessible\n")
             summary.write(f"- Unique sitemap entries: {sitemap_count}\n")
             summary.write("- Anonymous product checkout guards: 3 passed\n")
