@@ -80,6 +80,22 @@ class TwoPhaseAccessIsNeverFundedC120(unittest.TestCase):
                 with self.assertRaisesRegex(ChallengeInputError, "invalid_phase2_collection"):
                     evaluate_two_phase_simulation(POLICY, rows(1), invalid)
 
+
+    def test_09_phase_two_cannot_be_backdated_before_phase_one_finishes(self):
+        with self.assertRaisesRegex(ChallengeInputError, "phase2_observations_overlap"):
+            evaluate_two_phase_simulation(
+                POLICY, rows(1), rows(2, amount="10500.00", offset=-32)
+            )
+
+    def test_10_a_same_instant_cross_phase_snapshot_is_denied(self):
+        phase1 = rows(1)
+        final = phase1[-1].observed_at
+        phase2 = rows(2, amount="10500.00")
+        phase2[0] = replace(phase2[0], observed_at=final)
+        # Keep the remaining phase2 observations after the first one.
+        with self.assertRaisesRegex(ChallengeInputError, "phase2_observations_overlap"):
+            evaluate_two_phase_simulation(POLICY, phase1, phase2)
+
     def test_08_phase_two_uses_own_target_and_fresh_initial_equity(self):
         program = evaluate_two_phase_simulation(
             POLICY, rows(1, amount="11000.00"), rows(2, amount="10499.99")
