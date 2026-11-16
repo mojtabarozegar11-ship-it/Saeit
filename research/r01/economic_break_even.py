@@ -51,15 +51,25 @@ def calculate(record):
         + v["delta_drainage_mm"] * v["drainage_cost_per_mm"]
         + v["annualized_capital_delta"] + v["energy_cost_delta"]
     )
+    if not math.isfinite(incremental_cost):
+        raise ValueError("incremental cost overflow: revise input scale")
     price = v["crop_price_per_kg"]
     # Yield increase needed for nonnegative incremental margin.
     # With zero crop price, no finite break-even yield is identifiable
     # when incremental cost is positive.
     required_yield_kg = max(0.0, incremental_cost / price) if price > 0 else None
+    if required_yield_kg is not None and not math.isfinite(required_yield_kg):
+        raise ValueError("break-even yield overflow: revise input scale")
+    # At zero crop price, nonpositive incremental cost needs no extra yield;
+    # positive incremental cost cannot be recovered through crop sales.
+    if price == 0 and incremental_cost <= 0:
+        required_yield_kg = 0.0
     return {
         "incremental_cost_currency_per_period": incremental_cost,
         "break_even_additional_yield_kg_per_period": required_yield_kg,
-        "break_even_identifiable": price > 0,
+        "break_even_identifiable": price > 0 or incremental_cost <= 0,
+        "break_even_unreachable_at_zero_crop_price": price == 0 and incremental_cost > 0,
+        "incremental_margin_at_zero_yield_currency_per_period": -incremental_cost,
         "input_status": "user_supplied_unverified",
         "evidence_class": "conditional_algebra_not_empirical",
     }
