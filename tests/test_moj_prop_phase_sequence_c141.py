@@ -84,6 +84,11 @@ class CompletedPhaseOneChronologyTests(TestCase):
     def accepted(self):
         return completed_paid_phase_one_before_stage_two(self.phase2)
 
+    def proved(self):
+        return completed_paid_phase_one_before_stage_two(
+            self.phase2, require_verified_assessment=True
+        )
+
     def mutate(self, model, **changes):
         type(model).objects.filter(pk=model.pk).update(**changes)
         model.refresh_from_db()
@@ -242,25 +247,26 @@ class CompletedPhaseOneChronologyTests(TestCase):
 
     def test_30_passed_flag_without_reconciled_trades_is_not_prior_pass(self):
         PropExecution.objects.filter(account=self.phase1).delete()
-        self.assertFalse(self.accepted())
+        self.assertTrue(self.accepted())  # Chronology alone is still valid.
+        self.assertFalse(self.proved())  # Evidence qualification is not.
 
     def test_31_six_day_goal_shortfall_denies_prior_even_when_flag_passed(self):
         PropExecution.objects.filter(account=self.phase1).update(
             gross_realized_usd=Decimal("1.50")
         )
-        self.assertFalse(self.accepted())
+        self.assertFalse(self.proved())
 
     def test_32_missing_day_open_equity_denies_prior_verified_pass(self):
         PropEquityObservation.objects.filter(
             account=self.phase1, external_event_id="c141-open-3"
         ).delete()
-        self.assertFalse(self.accepted())
+        self.assertFalse(self.proved())
 
     def test_33_pending_trade_cannot_complete_six_day_prior_assessment(self):
         PropExecution.objects.filter(
             account=self.phase1, external_event_id="c141-trade-5"
         ).update(reconciliation_status="pending")
-        self.assertFalse(self.accepted())
+        self.assertFalse(self.proved())
 
     def test_34_single_profitable_day_over_32_percent_denies_prior(self):
         # 6.00 + 5*(0.72) == 9.60 but day one represents 62.5% of profit.
@@ -270,7 +276,7 @@ class CompletedPhaseOneChronologyTests(TestCase):
         PropExecution.objects.filter(account=self.phase1).exclude(
             external_event_id="c141-trade-0"
         ).update(gross_realized_usd=Decimal("0.72"))
-        self.assertFalse(self.accepted())
+        self.assertFalse(self.proved())
 
     def _stage_two_projection(self):
         from prop_firm.portal import account_projection
