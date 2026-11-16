@@ -112,10 +112,22 @@ class PrivatePlan1PrecontractChainTests(unittest.TestCase):
             o.enrollment_created=True
 
     def test_forged_or_missing_inquiry_rejected(self):
+        # Build the packet from a known-good inquiry BEFORE passing the
+        # malformed inquiry to the production gate. The test helper must not
+        # dereference fake inputs or silently replace explicit None.
+        valid_packet=new_packet(new_inquiry())
         for item in (object(),[],{},"buyer approved",None):
             with self.subTest(kind=type(item).__name__):
                 with self.assertRaises(Plan1OrderGateClosed):
-                    evaluate(inquiry=item)
+                    bind_private_inquiry_to_signed_review(
+                        inquiry=item, reviewed_packet=valid_packet,
+                        reviewer_tag_hex=sign(valid_packet),
+                        trusted_reviewer_key=KEY,
+                        expected_request_ref=REF,
+                        expected_buyer_ref=BUYER,
+                        expected_seller_ref=SELLER,
+                        server_now_sec=NOW,
+                    )
 
     def test_foreign_request_rejected(self):
         with self.assertRaises(Plan1OrderGateClosed):
