@@ -152,7 +152,7 @@ class MojPropCrmOutageC117Tests(TestCase):
             )
         self.assertEqual(response.status_code, 503)
         self.assertIn("no-store", response.get("Cache-Control", ""))
-        self.assertIn(b"temporarily", response.content.lower() if b"temporarily" in response.content.lower() else b"Request status unavailable")
+        self.assertIn(b"Request status unavailable", response.content)
         self.assertNotIn(b"buyer@example.com", response.content)
         self.assertEqual(MojPropRequest.objects.count(), 0)
 
