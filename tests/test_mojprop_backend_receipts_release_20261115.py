@@ -68,7 +68,9 @@ class MojPropReceiptBackendReleaseTests(unittest.TestCase):
         self.assertIn("from core.mojprop_views import mojprop_receipt_status", result)
         self.assertEqual(result, self.patch(url))
 
-    def test_prior_complete_install_remains_byte_for_byte_unchanged(self):
+    def test_prior_unreviewed_routes_are_rejected_without_changes(self):
+        # A route with a familiar URL but an unknown view symbol must not be
+        # accepted as an installed Moj Prop commercial endpoint.
         original = (
             "from django.urls import path\nurlpatterns = []\n"
             'urlpatterns += [path("moj-prop-intake/", intake)]\n'
@@ -76,7 +78,9 @@ class MojPropReceiptBackendReleaseTests(unittest.TestCase):
             'urlpatterns += [path("moj-prop-quote/<str:token>/", quote)]\n'
         )
         url = self.make_urlconf(original)
-        self.assertEqual(self.patch(url), original)
+        with self.assertRaisesRegex(RuntimeError, "unreviewed view"):
+            self.patch(url)
+        self.assertEqual(url.read_text(encoding="utf-8"), original)
 
     def test_invalid_urlconf_never_gets_partially_modified(self):
         for content in ("urlpatterns = []\n", "from django.urls import include\nurlpatterns=[]\n"):
