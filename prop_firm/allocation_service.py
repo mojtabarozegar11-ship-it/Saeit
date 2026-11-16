@@ -137,6 +137,10 @@ def stage_provisional_allocation(*, account_id, as_of=None, period_number=None):
     if (account.trader.kyc_status != "verified"
             or account.trader.eligibility_status != "eligible"):
         raise AllocationRejected("KYC/eligibility incomplete")
+    # KYC may have been valid at enrollment but user access revoked later.
+    # Never stage even provisional trader/company profit in a disabled account.
+    if account.trader.user.is_active is not True:
+        raise AllocationRejected("Inactive trader cannot stage provisional allocation")
     if not account.reconciled_by_operator:
         raise AllocationRejected("Independent operator reconciliation missing")
     latest_completed = most_recent_completed_period(
