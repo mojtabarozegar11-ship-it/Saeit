@@ -107,7 +107,10 @@ def customer_quote(request, token):
         # Signed links must not bypass the independently validated commercial
         # terms, currency, acceptance evidence or current quote validity.
         snapshot = make_quote_snapshot(offer)
-        rendered = render_public_quote(snapshot)
+        rendered = render_public_quote(
+            snapshot, service_route=offer.lead.route,
+            product_id=offer.lead.product_id,
+        )
     except (signing.BadSignature, signing.SignatureExpired, QuoteContractError,
             TypeError, ValueError):
         raise Http404 from None
