@@ -467,22 +467,30 @@ def mojprop_receipt_status(request):
         if stage is None:
             return status_form(request, error="Receipt unavailable.", status=404)
         return status_result(request_id, public_status_text(stage))
-    # A bearer receipt must be unambiguous: reject duplicate query parameters.
-    # QueryDict.get() silently selects the last value otherwise.
-    if request.method == "POST":
-        if str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].lower() != "application/json":
-            return _json({"ok": False, "detail": "JSON receipt proof required."}, status=400)
-        try:
-            if len(request.body) > 1024:
-                return _json({"ok": False, "detail": "Receipt proof is too long."}, status=413)
-            body = json.loads(request.body.decode("utf-8"), object_pairs_hook=_unique_pairs)
-        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError):
-            return _json({"ok": False, "detail": "Invalid receipt proof."}, status=400)
-        token = body.get("receipt_token") if type(body) is dict and set(body) == {"receipt_token"} else ""
-    else:
-        # Support old signed tokens in read-only GET for previously issued receipts.
-        tokens = request.GET.getlist("receipt_token")
-        token = tokens[0] if len(tokens) == 1 else ""
+    # A legacy GET query exposed a bearer secret to URL history, proxies and
+    # access logs. Tokens issued by that version are still valid: users may
+    # submit the SAME signed token through the existing POST/HTML form.
+    # Never perform a private CRM lookup from GET, even when a valid token is
+    # present or multiple query parameters try to spoof a final value.
+    if request.method == "GET":
+        return _json({
+            "ok": False,
+            "detail": "Check a private receipt using the secure POST status form.",
+        }, status=404)
+    # A POST body is not privacy-preserving when the request URL itself also
+    # carries a bearer receipt. Deny rather than silently ignoring this leak.
+    if request.GET.getlist("receipt_token"):
+        return _json({"ok": False, "detail": "Receipt tokens must be sent in the POST body."},
+                     status=400)
+    if str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].lower() != "application/json":
+        return _json({"ok": False, "detail": "JSON receipt proof required."}, status=400)
+    try:
+        if len(request.body) > 1024:
+            return _json({"ok": False, "detail": "Receipt proof is too long."}, status=413)
+        body = json.loads(request.body.decode("utf-8"), object_pairs_hook=_unique_pairs)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError):
+        return _json({"ok": False, "detail": "Invalid receipt proof."}, status=400)
+    token = body.get("receipt_token") if type(body) is dict and set(body) == {"receipt_token"} else ""
     request_id = verify_receipt_token(token)
     if request_id is None:
         return _json(
