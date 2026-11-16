@@ -126,5 +126,20 @@ class MergeImpactTests(unittest.TestCase):
             "zomorod-app-pages-deploy.yml", invalid))
 
 
+    def test_zomorod_synthetic_qa_pinned_nonremote_guard(self):
+        filename = "zomorod-business-synthetic-qa.yml"
+        source = (Path(__file__).resolve().parents[1] / ".github" / "workflows" / filename)
+        contents = source.read_text(encoding="utf-8")
+        self.assertEqual(
+            module.git_blob_sha(contents.encode("utf-8")),
+            module.REVIEWED_BLOBS[filename],
+        )
+        self.assertTrue(module.verified_static_no_host_guard(filename, contents))
+        self.assertFalse(module.verified_static_no_host_guard(
+            filename, contents + "\n      - run: ssh operator@production\n"))
+        self.assertFalse(module.verified_static_no_host_guard(
+            filename, contents.replace("runs-on: ubuntu-latest", "runs-on: self-hosted")))
+
+
 if __name__ == "__main__":
     unittest.main()
