@@ -22,7 +22,7 @@ class LegacyBuyerCheckoutManualOnlyTests(unittest.TestCase):
     def setUpClass(cls):
         cls.files = {name: (ROOT / name).read_text(encoding="utf-8") for name in FILENAMES}
 
-    def test_01_all_five_original_legacy_workflows_are_covered(self):
+    def test_01_all_six_original_legacy_workflows_are_covered(self):
         self.assertEqual(len(self.files), 6)
         self.assertEqual(len(set(FILENAMES)), 6)
 
@@ -100,7 +100,7 @@ class LegacyBuyerCheckoutManualOnlyTests(unittest.TestCase):
 
     def test_11_guest_checkout_never_starts_from_legacy_issue_comment(self):
         source = self.files["mpw-guest-checkout-live-release.yml"]
-        self.assertNotIn("issue_comment:", source.split("\\njobs:\\n", 1)[0])
+        self.assertNotIn("issue_comment:", source.split("\njobs:\n", 1)[0])
         self.assertNotIn("MPW-PURCHASES-404-ONEFILE-RELEASE-20261102", source)
 
     def test_12_guest_recovery_source_is_immutable_and_independently_approved(self):
