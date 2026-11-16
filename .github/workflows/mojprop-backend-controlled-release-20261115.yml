@@ -58,8 +58,12 @@ jobs:
     # evidence of full DB/media backup+restore, rollback and child-site isolation.
     if: >-
       github.event_name == 'workflow_dispatch' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.triggering_actor == 'mojtabarozegar11-ship-it' &&
+      github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
       inputs.owner_approval == 'OWNER_APPROVED' &&
+      vars.MOJPROP_APPROVED_MAIN_SHA == github.sha &&
       vars.MOJPROP_BACKUP_RESTORE_VERIFIED == 'true' &&
       vars.MOJPROP_ROLLBACK_VERIFIED == 'true' &&
       vars.MOJPROP_TENANT_ISOLATION_VERIFIED == 'true'
