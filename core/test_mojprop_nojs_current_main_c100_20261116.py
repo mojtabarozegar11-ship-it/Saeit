@@ -66,6 +66,26 @@ class AccessibleCurrentMainLeadTests(TestCase):
         self.assertEqual(UUID(self.idempotency_key).version, 4)
         self.assertEqual(str(UUID(self.idempotency_key)), self.idempotency_key)
 
+    def test_04b_browser_receives_exactly_one_idempotency_key(self):
+        # Previous source rendered TWO different hidden keys. The HTML
+        # POST rejected both, although hand-built unit-test payloads passed.
+        html = self.first.content.decode("utf-8")
+        hidden_keys = re.findall(
+            r'<input[^>]*type="hidden"[^>]*name="idempotency_key"'
+            r'[^>]*value="([^"]+)"', html,
+        )
+        self.assertEqual(len(hidden_keys), 1)
+        self.assertEqual(hidden_keys[0], self.idempotency_key)
+        self.assertEqual(UUID(hidden_keys[0]).version, 4)
+
+    def test_04c_duplicate_browser_idempotency_keys_fail_closed(self):
+        values = dict(self.data, idempotency_key=[
+            self.idempotency_key, str(UUID("c71bfce2-1f2a-4cf8-81d7-8b9445194f2e")),
+        ])
+        response = self.post(values)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
     def test_05_sensitive_response_headers(self):
         self.assertIn("no-store", self.first["Cache-Control"])
         self.assertEqual(self.first["Referrer-Policy"], "no-referrer")
