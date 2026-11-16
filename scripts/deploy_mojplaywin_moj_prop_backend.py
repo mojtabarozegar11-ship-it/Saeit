@@ -24,7 +24,10 @@ import tempfile
 
 # SSH executes this file by absolute path: insert the bundle root explicitly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scripts.mojprop_schema_preflight_c83 import check_schema_closure, migration_operations_signature
+from scripts.mojprop_schema_preflight_c83 import (
+    LEGACY_BASELINES, check_schema_closure, has_reviewed_legacy_suffix,
+    migration_operations_signature,
+)
 from scripts.mojprop_db_release_evidence import verify_database_restore_evidence
 
 
@@ -62,6 +65,8 @@ FILES = (
     Path("core/migrations/0045_mojprop_delivery_evidence.py"),
     Path("core/migrations/0046_signal_free_subscription.py"),
     Path("core/migrations/0047_mpw_guest_email_recovery.py"),
+    Path("scripts/fixtures/mojprop_legacy_request_source_c84.py"),
+    Path("scripts/fixtures/mojprop_legacy_admin_source_c84.py"),
     Path("scripts/mojprop_schema_preflight_c83.py"),
     Path("scripts/mojprop_db_release_evidence.py"),
     Path("scripts/mojprop_live_database_identity_c85.py"),
@@ -69,6 +74,8 @@ FILES = (
 ALL_FILES = (URLCONF, SETTINGSCONF) + FILES
 REPLACE_FILES = tuple(path for path in FILES if path not in (
     Path("core/models.py"), Path("core/admin.py"),
+    Path("scripts/fixtures/mojprop_legacy_request_source_c84.py"),
+    Path("scripts/fixtures/mojprop_legacy_admin_source_c84.py"),
     # Private evidence must be verified from the staged bundle, not installed
     # into the production application source tree.
     Path("scripts/mojprop_db_release_evidence.py"),
@@ -267,10 +274,20 @@ def patch_models(target: Path, source: Path) -> None:
     assert_regular(target, "live models")
     assert_regular(source, "staged models")
     live = target.read_text(encoding="utf-8")
-    if "class MojPropRequest(" in live:
+    staged = source.read_text(encoding="utf-8")
+    legacy = "class MojPropRequest(" in live and "class MojPropOffer(" not in live
+    if "class MojPropRequest(" in live and not legacy:
         print("MOJ_PROP_MODEL_ALREADY_PATCHED")
         return
-    staged = source.read_text(encoding="utf-8")
+    if legacy:
+        root = source.parents[1]
+        if not has_reviewed_legacy_suffix(ROOT, root, "core/models.py"):
+            raise RuntimeError("unreviewed partial live Moj Prop model; abort")
+        snapshot = (root / LEGACY_BASELINES["core/models.py"]).read_text(
+            encoding="utf-8"
+        ).rstrip()
+        live = live.rstrip()[:-len(snapshot)]
+        print("MOJ_PROP_REVIEWED_LEGACY_MODEL_UPGRADE=TRUE")
     marker = "\nclass MojPropRequest("
     start = staged.find(marker)
     if start < 0:
@@ -287,10 +304,21 @@ def patch_admin(target: Path, source: Path) -> None:
     assert_regular(target, "live admin")
     assert_regular(source, "staged admin")
     live = target.read_text(encoding="utf-8")
-    if "class MojPropRequestAdmin(" in live:
+    staged = source.read_text(encoding="utf-8")
+    legacy = ("class MojPropRequestAdmin(" in live
+              and "class MojPropOfferAdmin(" not in live)
+    if "class MojPropRequestAdmin(" in live and not legacy:
         print("MOJ_PROP_ADMIN_ALREADY_PATCHED")
         return
-    staged = source.read_text(encoding="utf-8")
+    if legacy:
+        root = source.parents[1]
+        if not has_reviewed_legacy_suffix(ROOT, root, "core/admin.py"):
+            raise RuntimeError("unreviewed partial live Moj Prop admin; abort")
+        snapshot = (root / LEGACY_BASELINES["core/admin.py"]).read_text(
+            encoding="utf-8"
+        ).rstrip()
+        live = live.rstrip()[:-len(snapshot)]
+        print("MOJ_PROP_REVIEWED_LEGACY_ADMIN_UPGRADE=TRUE")
     # Source main includes the complete commercial model import; a strict
     # equality test for the old one-model import prevented every fresh setup.
     marker = "\nfrom .models import MojPropRequest, MojPropOffer, MojPropDeliveryEvidence\n"
@@ -303,7 +331,6 @@ def patch_admin(target: Path, source: Path) -> None:
     mode = stat.S_IMODE(target.stat().st_mode)
     atomic_write_text(target, live.rstrip() + "\n\n" + block, mode)
     print("MOJ_PROP_ADMIN_PATCH=PASS")
-
 
 def _declared_url_routes(source: str) -> dict[str, str]:
     """Bind actual urlpatterns routes to view names, not misleading text."""

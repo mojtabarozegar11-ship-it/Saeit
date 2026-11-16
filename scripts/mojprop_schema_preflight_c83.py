@@ -19,6 +19,11 @@ MIGRATIONS = (
 )
 MODELS = ("MojPropRequest", "MojPropOffer", "MojPropDeliveryEvidence")
 ADMINS = ("MojPropRequestAdmin", "MojPropOfferAdmin", "MojPropDeliveryEvidenceAdmin")
+LEGACY_BASELINES = {
+    "core/models.py": "scripts/fixtures/mojprop_legacy_request_source_c84.py",
+    "core/admin.py": "scripts/fixtures/mojprop_legacy_admin_source_c84.py",
+}
+
 MODULES = (
     "core/mojprop_accessible_intake.py",
     "core/mojprop_views.py",
@@ -51,6 +56,22 @@ def _class_signatures(path):
 def _classes(path):
     return set(_class_signatures(path))
 
+
+def has_reviewed_legacy_suffix(live_root, staged_root, relative):
+    """Only recognize a byte-identical previously reviewed 0041-era suffix.
+
+    Never infer that owner-edited or unrelated classes can be overwritten.
+    """
+    fixture = LEGACY_BASELINES.get(relative)
+    if not fixture:
+        raise RuntimeError("unrecognized legacy upgrade target")
+    saved = Path(staged_root) / fixture
+    live = Path(live_root) / relative
+    if saved.is_symlink() or not saved.is_file() or live.is_symlink() or not live.is_file():
+        return False
+    baseline = saved.read_text(encoding="utf-8").rstrip()
+    content = live.read_text(encoding="utf-8").rstrip()
+    return bool(baseline) and content.endswith(baseline)
 
 def migration_operations_signature(path):
     """Fingerprint the WHOLE migration, ignoring only its approved DB parent.
@@ -117,6 +138,7 @@ def check_schema_closure(live_root, staged_root):
     live_root, staged_root = Path(live_root), Path(staged_root)
     for path in (
         "core/models.py", "core/admin.py", "config/urls.py", "config/settings.py", *MODULES,
+        *LEGACY_BASELINES.values(),
         *(f"core/migrations/{name}.py" for name in MIGRATIONS),
     ):
         src = staged_root / path
@@ -146,14 +168,20 @@ def check_schema_closure(live_root, staged_root):
 
     live_models = _classes(live_root / "core/models.py")
     live_admin = _classes(live_root / "core/admin.py")
-    # A partially installed model/admin tree cannot be upgraded by appending
-    # all staged classes or by relying on the old intake-only early return.
-    for selected, required, label in (
-        (live_models.intersection(MODELS), MODELS, "model"),
-        (live_admin.intersection(ADMINS), ADMINS, "admin"),
+    # Only exact, previously reviewed intake-only file suffixes can upgrade.
+    # Unknown partial installs remain blocked before any file or DB write.
+    for selected, required, label, relative, known_legacy in (
+        (live_models.intersection(MODELS), MODELS, "model",
+         "core/models.py", {"MojPropRequest"}),
+        (live_admin.intersection(ADMINS), ADMINS, "admin",
+         "core/admin.py", {"MojPropRequestAdmin"}),
     ):
         if selected and selected != set(required):
-            raise RuntimeError("partial Moj Prop " + label + " tree needs reviewed upgrade")
+            if selected != known_legacy or not has_reviewed_legacy_suffix(
+                live_root, staged_root, relative
+            ):
+                raise RuntimeError("partial Moj Prop " + label +
+                                   " tree needs reviewed upgrade")
 
     for relative, required, label in (
         ("core/models.py", MODELS, "model"),
