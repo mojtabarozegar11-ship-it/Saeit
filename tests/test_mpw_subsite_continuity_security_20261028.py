@@ -185,6 +185,35 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     guard.check_authentication_gate(72)
 
+    def test_rejected_redirect_names_only_approved_source_route(self):
+        # Live guard had only a generic failure, so operators could not tell
+        # which protected site redirected. Never reveal redirect Location.
+        source = guard.ORIGIN + guard.PROTECTED_CHILDREN[-1]
+        seen = []
+
+        class _Refused:
+            def open(self, request, timeout):
+                seen.append(request.full_url)
+                raise guard.UnsafeRedirect(
+                    "untrusted Location: https://outside.example/token=PRIVATE"
+                )
+
+        with patch.object(guard.urllib.request, "build_opener",
+                          return_value=_Refused()):
+            with self.assertRaises(guard.UnsafeRedirect) as failure:
+                guard.get(source, attempts=3)
+        text = str(failure.exception)
+        self.assertIn(guard.PROTECTED_CHILDREN[-1], text)
+        self.assertNotIn("outside.example", text)
+        self.assertNotIn("PRIVATE", text)
+        self.assertEqual(seen, [source])
+
+    def test_denied_unknown_initial_url_is_never_sent_or_logged(self):
+        with patch.object(guard.urllib.request, "build_opener") as opener:
+            with self.assertRaises(guard.UnsafeRedirect):
+                guard.get("https://outside.example/secret", attempts=1)
+            opener.assert_not_called()
+
     def test_redirect_hops_are_bounded(self):
         handler = guard.ScopedRedirect()
         for _ in range(3):
