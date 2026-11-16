@@ -176,7 +176,8 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
     def test_cpanel_uapi_fixed_read_only_method(self):
         text = (ROOT / "scripts/mojprop_full_restore_capacity_readonly_c94.py").read_text()
         self.assertIn('"Quota", "get_quota_info"', text)
-        self.assertIn('"/usr/local/cpanel/bin/uapi"', text)
+        self.assertIn('"/usr/bin/uapi"', text)
+        self.assertNotIn('binary = "/usr/local/cpanel/bin/uapi"', text)
         self.assertIn('check=True, timeout=12', text)
         self.assertNotIn('"set_quota"', text)
         self.assertNotIn('"create"', text)
@@ -207,6 +208,10 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
                              ["--user=" + ACCOUNT, "Quota", "get_quota_info"])
             self.assertEqual(run.call_args_list[1].args[0][-2:],
                              ["Quota", "get_quota_info"])
+            self.assertEqual(
+                [call.args[0][0] for call in run.call_args_list],
+                ["/usr/bin/uapi", "/usr/bin/uapi"],
+            )
 
 
     def test_cpanel_uapi_owner_cli_receives_minimal_exact_owner_environment(self):
