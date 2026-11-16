@@ -129,5 +129,22 @@ class MojPropQuotaGapInventoryTests(unittest.TestCase):
         self.assertEqual(probe.HEADROOM, 256 * 1024**2)
 
 
+    def test_15_cpanel_json_float_megabytes_match_c94_contract(self):
+        doc = {"result":{"status":1,"data":{
+            "under_quota_overall":"1","under_megabyte_limit":"1",
+            "under_inode_limit":"1","megabyte_limit":700.0,
+            "megabytes_remain":500.0}}}
+        with patch.object(probe.subprocess, "run", return_value=SimpleNamespace(
+                stdout=json.dumps(doc))):
+            self.assertEqual(probe._quota_bytes(), 500_000_000)
+
+    def test_16_staged_probe_identifies_db_vs_quota_without_raw_values(self):
+        source = (ROOT / "scripts/mojprop_quota_gap_inventory_readonly_c113.py").read_text()
+        self.assertIn('result["probe_stage"] = "db_metadata"', source)
+        self.assertIn('result["probe_stage"] = "uapi_quota"', source)
+        self.assertIn('result["probe_stage"] = "completed"', source)
+        self.assertIn('"production_deploy_authorized": False', source)
+
+
 if __name__ == "__main__":
     unittest.main()
