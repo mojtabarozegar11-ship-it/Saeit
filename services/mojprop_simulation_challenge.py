@@ -224,6 +224,8 @@ def evaluate_simulated_phase(
 
         return {
             "schema": "mojprop.simulated.phase_evaluation.v1",
+            "rules_sha256": reviewed_rule_fingerprint(policy),
+            "rules_provenance": "illustrative_not_verified_customer_contract",
             "phase": phase,
             "status": status,
             "first_observed_breach": first_breach,
