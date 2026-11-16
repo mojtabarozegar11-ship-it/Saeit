@@ -54,6 +54,7 @@ def classify(public_html: bytes, sources: dict[str, bytes]) -> dict:
         "schema": "mojprop.public.horizon_contract.readonly.c124.v1",
         "read_only": True,
         "body_available": valid,
+        "public_sha256": None,
         "source_class": "unknown",
         "exact_horizon_choices": False,
         "backend_intake_link_present": False,
@@ -66,6 +67,7 @@ def classify(public_html: bytes, sources: dict[str, bytes]) -> dict:
     if not valid:
         return data
     digest = hashlib.sha256(public_html).digest()
+    data["public_sha256"] = digest.hex()
     data["source_class"] = next(
         (name for name, value in sources.items()
          if type(value) is bytes and hashlib.sha256(value).digest() == digest),
