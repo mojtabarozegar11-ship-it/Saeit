@@ -305,6 +305,7 @@ jobs:
               eligible=bool(_eligible(product))
               is_sellable=(eligible and rights and file_ready
                   and getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is True
+                  and getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False) is True
                   and release_authorized)
               record={"id":sku,"exists":True,"active":product.active is True,
                  "eligible":eligible,"stored_rights":stored_rights,"runtime_rights_gate_present":rights_cleared_for_sale is not None,"explicit_rights":rights,"private_file_ready":file_ready,
