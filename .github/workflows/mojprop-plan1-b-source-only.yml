@@ -98,6 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
+      PYTHONPATH: ".:tests"
       DEBUG: "False"
       SECRET_KEY: "ephemeral-source-only-b-regression-never-live"
       ALLOWED_HOSTS: "localhost,127.0.0.1,mojplaywin.com"
