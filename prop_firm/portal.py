@@ -193,6 +193,13 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
         and not reasons and not historical_breach
         and not future_verified_evidence
         and account.status not in {PropAccount.Status.BREACHED, PropAccount.Status.CLOSED}
+        # Suspended/KYC-ineligible FUNDED users must never be displayed as
+        # independently reconciled, regardless of past verified broker P&L.
+        and (account.kind != PropAccount.Kind.FUNDED or (
+            account.trader.kyc_status == "verified"
+            and account.trader.eligibility_status == "eligible"
+            and account.trader.user.is_active is True
+        ))
         and account.policy_version in (LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION)
         and bool(executions)
     )
