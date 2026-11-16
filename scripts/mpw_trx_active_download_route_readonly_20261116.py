@@ -20,14 +20,17 @@ PARAM = re.compile(r"<(?:int|str|slug):[a-zA-Z_][a-zA-Z_0-9]*>")
 
 
 def expand_literal_route(route):
-    """Read-only resolution candidate. Unknown route format cannot pass."""
-    if (type(route) is not str or not route.startswith(BASE)
-            or len(route) > 160 or any(ch in route for ch in ("\\", "?", "#"))):
+    """Read-only Django URL resolution candidate; no user-controlled paths."""
+    if type(route) is not str or len(route) > 160:
         return None
-    substituted = PARAM.sub("1", route)
-    if "<" in substituted or ">" in substituted or "//" in substituted:
+    # Django path() registers relative patterns without an HTTP leading slash.
+    canonical = "/" + route.lstrip("/")
+    if (not canonical.startswith(BASE)
+            or any(ch in canonical for ch in (chr(92), "?", "#"))):
         return None
-    if not substituted.endswith("/"):
+    substituted = PARAM.sub("1", canonical)
+    if ("<" in substituted or ">" in substituted or "//" in substituted
+            or ".." in substituted or not substituted.endswith("/")):
         return None
     return substituted
 
