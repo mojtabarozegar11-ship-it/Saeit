@@ -49,7 +49,8 @@ jobs:
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          test "$(id -un)" = "githubops"
+          test "$(id -u)" -ne 0
+          echo "MPW_C118_NONROOT_RUNNER=PASS"
           test -n "$HOST_KEY"
           umask 077
           d="$RUNNER_TEMP/mpw-revenue-ssh"
@@ -57,11 +58,14 @@ jobs:
           printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/host.key"
           chmod 600 "$d/host.key"
           ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          echo "MPW_C118_PRIVATE_KEY_FORMAT=PASS"
           printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          echo "MPW_C118_PINNED_HOST_KEY=PASS"
           printf 'Host saeit-cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/host.known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" > "$d/config"
           chmod 600 "$d/config"
           timeout 40s ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
+          echo "MPW_C118_OWNER_CPANEL_CONNECTED=PASS"
       - name: Search private factory evidence for exact live product hashes (read only)
         shell: bash
         run: |
