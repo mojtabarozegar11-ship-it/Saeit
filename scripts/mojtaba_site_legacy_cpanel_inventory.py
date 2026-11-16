@@ -42,27 +42,38 @@ def classify_file(home: Path, relative: str) -> dict:
         if current.is_symlink() or not current.is_dir():
             return {"path_id": relative, "state": "unavailable_or_unsafe_parent",
                     "bytes": None, "sha256": None}
+    def result(state, size=None, digest=None):
+        return {"path_id": relative, "state": state, "bytes": size,
+                "sha256": digest}
+
     try:
-        mode = os.lstat(target).st_mode
+        first = os.lstat(target)
     except FileNotFoundError:
-        return {"path_id": relative, "state": "absent_not_proof_of_retirement",
-                "bytes": None, "sha256": None}
+        return result("absent_not_proof_of_retirement")
     except OSError:
-        return {"path_id": relative, "state": "unreadable",
-                "bytes": None, "sha256": None}
-    if not stat.S_ISREG(mode):
-        return {"path_id": relative, "state": "symlink_or_not_regular",
-                "bytes": None, "sha256": None}
-    size = target.stat().st_size
-    if not 0 < size <= MAX_FILE_BYTES:
-        return {"path_id": relative, "state": "unverified_size",
-                "bytes": None, "sha256": None}
-    digest = sha256()
-    with target.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(65536), b""):
-            digest.update(chunk)
-    return {"path_id": relative, "state": "candidate_file_observed_not_redundant",
-            "bytes": size, "sha256": digest.hexdigest()}
+        return result("unreadable")
+    if not stat.S_ISREG(first.st_mode):
+        return result("symlink_or_not_regular")
+    if not 0 < first.st_size <= MAX_FILE_BYTES:
+        return result("unverified_size")
+    # Do not follow a swapped symlink between lstat and open. Reject changed
+    # inode/device, unexpected type, or size; never return private file bytes.
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(target, flags)
+        with os.fdopen(fd, "rb") as stream:
+            current = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(current.st_mode)
+                    or (current.st_dev, current.st_ino) != (first.st_dev, first.st_ino)
+                    or current.st_size != first.st_size):
+                return result("changed_during_scan")
+            digest = sha256()
+            for chunk in iter(lambda: stream.read(65536), b""):
+                digest.update(chunk)
+    except OSError:
+        return result("unreadable_or_changed")
+    return result("candidate_file_observed_not_redundant", first.st_size,
+                  digest.hexdigest())
 
 
 def scan(home: Path, *, cron_text: str | None) -> dict:
