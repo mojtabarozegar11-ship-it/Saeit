@@ -648,6 +648,23 @@ def restore(backup: Path) -> None:
     print("MOJ_PROP_BACKEND_ROLLBACK=PASS")
 
 
+def recover_failed_deploy(backup: Path, *, schema_migration_attempted: bool) -> None:
+    """Deny file-only rollback after attempting database schema changes.
+
+    A failing migrate command may already have committed DDL. An independent
+    DBA must reconcile database and application before source is rolled back.
+    """
+    if type(schema_migration_attempted) is not bool:
+        raise RuntimeError("migration attempt state is unverified")
+    if schema_migration_attempted:
+        raise RuntimeError(
+            "database migration attempted; automatic source-only rollback DENIED: "
+            "hold release and independently reconcile or restore the database "
+            "before changing application files"
+        )
+    restore(backup)
+
+
 def run_checked(command: list[str], cwd: Path) -> None:
     print("RUNNING=" + " ".join(command[:3]))
     subprocess.run(command, cwd=str(cwd), check=True, timeout=300)
@@ -746,6 +763,7 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
     )
     verify_backup_manifest(backup)
 
+    schema_migration_attempted = False
     try:
         for relative in REPLACE_FILES:
             target = ROOT / relative
@@ -770,6 +788,9 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         # Never run an unscoped 'migrate': that could apply other apps'
         # unreviewed pending DDL on the commercial production database.
         # Schema closure rejected any unknown core migration >=0041.
+        # Set BEFORE launching migrations: DDL may be committed even if the
+        # command errors or times out; never assume a clean schema rollback.
+        schema_migration_attempted = True
         run_checked([str(python), "manage.py", "migrate",
                      "core", migration_target, "--noinput"], ROOT)
         run_checked([str(python), "manage.py", "collectstatic", "--noinput"], ROOT)
@@ -778,8 +799,17 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         print("MOJ_PROP_BACKEND_DEPLOY=PASS")
         print("MOJ_PROP_BACKEND_COMMIT=" + commit)
         print("MOJ_PROP_BACKUP=" + str(backup))
-    except Exception:
-        restore(backup)
+    except Exception as original_error:
+        try:
+            recover_failed_deploy(
+                backup, schema_migration_attempted=schema_migration_attempted
+            )
+        except RuntimeError as hold_error:
+            raise RuntimeError(
+                "Moj Prop release failed after database migration was attempted; "
+                "manual DB+application recovery required. Original failure: "
+                + type(original_error).__name__
+            ) from hold_error
         raise
 
 
