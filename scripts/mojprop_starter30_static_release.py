@@ -20,6 +20,15 @@ ROOT = HOME / "mojplaywin.com"
 TARGET = ROOT / "moj-prop/starter-30-trx"
 BACKUP = HOME / ".mojprop-starter30-backups"
 FILES = ("index.html", "journal-template.csv", "journal-guide.txt")
+# Exact Git blob identities read from the current reviewed main source.
+# The owner must explicitly review/re-pin any revision; do not trust staged
+# tarballs or a caller-supplied commit string as proof of identical bytes.
+REVIEWED_GIT_BLOBS = {
+    "index.html": "c4185051020aa66405da8a9d8aaae3b22b90f7f6",
+    "journal-template.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
+    "journal-guide.txt": "7a8978ca6f3db31064552a41b2bdfb6c7de56036",
+}
+MAX_STAGE_FILE_BYTES = 90_000
 RUN_ID_RE = re.compile(r"[1-9][0-9]{0,18}\Z")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 
@@ -114,18 +123,49 @@ def _stage(run_id: str) -> Path:
     return HOME / (".mojprop-starter30-stage-" + run_id) / "templates/moj-prop-v4/starter-30-trx"
 
 
+def exact_git_blob(data: bytes) -> str:
+    """Git's source-byte framing; source identity only, not a signature."""
+    if type(data) is not bytes or len(data) > MAX_STAGE_FILE_BYTES:
+        raise RuntimeError("staged source outside reviewed byte limit")
+    return hashlib.sha1(
+        b"blob " + str(len(data)).encode("ascii") + bytes([0]) + data
+    ).hexdigest()
+
+
+def _read_reviewed_stage_file(stage: Path, name: str) -> bytes:
+    if name not in FILES or set(REVIEWED_GIT_BLOBS) != set(FILES):
+        raise RuntimeError("unreviewed static SKU source list")
+    target = stage / name
+    _check_ancestors(HOME, target)
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    try:
+        fd = os.open(target, flags)
+    except OSError as exc:
+        raise RuntimeError("staged reviewed SKU asset unavailable") from exc
+    with os.fdopen(fd, "rb") as stream:
+        meta = os.fstat(stream.fileno())
+        if (not stat.S_ISREG(meta.st_mode)
+                or meta.st_uid != os.geteuid()
+                or meta.st_nlink != 1
+                or meta.st_mode & 0o022
+                or not 10 <= meta.st_size <= MAX_STAGE_FILE_BYTES):
+            raise RuntimeError("unsafe staged reviewed SKU asset")
+        data = stream.read(MAX_STAGE_FILE_BYTES + 1)
+        if len(data) != meta.st_size:
+            raise RuntimeError("staged SKU file changed during preflight")
+    if exact_git_blob(data) != REVIEWED_GIT_BLOBS[name]:
+        raise RuntimeError("staged SKU bytes do not match reviewed Git source")
+    return data
+
+
 def _stage_bytes(run_id: str) -> dict[str, bytes]:
     stage = _stage(run_id)
-    if stage.is_symlink() or not stage.is_dir():
+    _check_ancestors(HOME, stage)
+    if not stage.is_dir() or stage.is_symlink():
         raise RuntimeError("missing staged product")
     out: dict[str, bytes] = {}
     for item in FILES:
-        p = stage / item
-        if p.is_symlink() or not p.is_file():
-            raise RuntimeError("missing staged deliverable: " + item)
-        if p.stat().st_size < 10 or p.stat().st_size > 90_000:
-            raise RuntimeError("invalid staged asset size")
-        out[item] = p.read_bytes()
+        out[item] = _read_reviewed_stage_file(stage, item)
     page = out["index.html"].decode("utf-8")
     if ('MOJPROP-STARTER30' not in page or 'Payment not enabled' not in page
             or 'noindex,follow' not in page or 'Do not send TRX' not in page
@@ -138,6 +178,9 @@ def _manifest(run_id: str, commit: str, source: dict[str, bytes]) -> dict:
     _safe_id(run_id, commit)
     return {"schema": "mojprop.starter30.static.v1", "run_id": run_id,
             "commit": commit, "files": {name: sha(data) for name, data in source.items()},
+            "reviewed_source_blobs": {
+                name: REVIEWED_GIT_BLOBS[name] for name in FILES
+            },
             "scope": "static-no-payment-no-backend"}
 
 
