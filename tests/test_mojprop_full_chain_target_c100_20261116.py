@@ -90,6 +90,7 @@ class PrewriteMigrationMismatchTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "schema target is stale"):
                 installer.deploy("123456", "a" * 40, self.staged)
         self.assertFalse(self.backups.exists())
+        self.verify_reviewed_passenger_entrypoint_mock.assert_called_once_with(self.doc)
         self.backup_target_mock.assert_not_called()
         self.run_checked_mock.assert_not_called()
         self.atomic_replace_mock.assert_not_called()
