@@ -176,11 +176,14 @@ class MojPropBackupIntegrityTests(unittest.TestCase):
         actual.mkdir(mode=0o700)
         actual.chmod(0o700)
         alias.symlink_to(actual, target_is_directory=True)
-        run = actual / RUN
+        inner = actual / "inner"
+        inner.mkdir(mode=0o700)
+        inner.chmod(0o700)
+        run = inner / RUN
         run.mkdir(mode=0o700)
         run.chmod(0o700)
         with self.assertRaisesRegex(RuntimeError, "symlink ancestor"):
-            backend.verify_backup_manifest(alias / RUN)
+            backend.verify_backup_manifest(alias / "inner" / RUN)
 
     def test_backup_refuses_dangling_live_symlink_before_manifest_creation(self):
         rel = FILES[0]
