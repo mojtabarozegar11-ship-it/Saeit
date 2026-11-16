@@ -21,10 +21,24 @@ class CanonicalSiteFleetCommandTests(SimpleTestCase):
         output = io.StringIO()
         sample = {"canonical_bot": "mojtaba.bot.ai",
                   "public_checks_count": 14, "payments_collected": 0}
-        with patch("core.management.commands.mojtaba_site_fleet_cycle.run_one_bot_public_cycle", return_value=sample) as live:
+        with patch("core.management.commands.mojtaba_site_fleet_cycle.Agent.objects.filter") as rows, \
+             patch("core.management.commands.mojtaba_site_fleet_cycle.run_one_bot_public_cycle", return_value=sample) as live:
+            rows.return_value.count.return_value = 1
             call_command("mojtaba_site_fleet_cycle", observe_public=True, stdout=output)
+            rows.assert_called_once_with(code="mojtaba-bot-ai", active=True)
             live.assert_called_once_with()
         self.assertEqual(json.loads(output.getvalue()), sample)
+
+    def test_missing_canonical_agent_blocks_execution(self):
+        from django.core.management.base import CommandError
+        output = io.StringIO()
+        with patch("core.management.commands.mojtaba_site_fleet_cycle.Agent.objects.filter") as rows, \
+             patch("core.management.commands.mojtaba_site_fleet_cycle.run_one_bot_public_cycle") as live:
+            rows.return_value.count.return_value = 0
+            with self.assertRaises(CommandError):
+                call_command("mojtaba_site_fleet_cycle", observe_public=True, stdout=output)
+            live.assert_not_called()
+        self.assertEqual(output.getvalue(), "")
 
     def test_wrong_bot_identity_refuses_output(self):
         from django.core.management.base import CommandError
