@@ -116,6 +116,7 @@ class MergeImpactTests(unittest.TestCase):
 
     def test_manual_release_job_requires_dispatch_guard_on_single_job(self):
         valid = ("jobs:\n  publish:\n"
+                 "    # Keep production only on manual dispatch.\n"
                  "    if: github.event_name == 'workflow_dispatch'\n"
                  "    runs-on: ubuntu-latest\n")
         invalid = "jobs:\n  publish:\n    runs-on: ubuntu-latest\n"
