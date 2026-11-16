@@ -31,8 +31,12 @@ class NonJSPlanOneFormTests(TestCase):
 
     def post(self, data=None, *, host="mojplaywin.com", secure=True, client=None):
         return (client or self.client).post(
-            self.POST, data=self.DATA if data is None else data,
+            self.POST,
+            data=urlencode(self.DATA if data is None else data),
             secure=secure, HTTP_HOST=host,
+            HTTP_REFERER=("https://" if secure else "http://") +
+                         host + self.GET,
+            content_type="application/x-www-form-urlencoded",
         )
 
     def test_01_https_plan1_form_is_rendered(self):
