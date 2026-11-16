@@ -55,7 +55,32 @@ def _safe_fixed_parents(path: Path, base: Path) -> bool:
 
 def inventory_one(path: Path, *, expected_blob: str) -> str:
     """Fixed public filenames only; descriptor-bound, bounded direct read."""
+    # Missing public directory is different from a suspicious redirect:
+    # distinguish not-yet-published from symlink/unsafe ownership without
+    # ever following a link or reading unrelated directory contents.
+    cursor = path.parent
+    while cursor != HOME:
+        if HOME not in cursor.parents:
+            return "unsafe"
+        try:
+            meta = cursor.lstat()
+        except FileNotFoundError:
+            return "missing"
+        except OSError:
+            return "unavailable"
+        if (not stat.S_ISDIR(meta.st_mode) or meta.st_uid != os.geteuid()
+                or meta.st_mode & 0o022):
+            return "unsafe"
+        cursor = cursor.parent
     if not _safe_fixed_parents(path, base=HOME):
+        return "unsafe"
+    try:
+        initial = path.lstat()
+    except FileNotFoundError:
+        return "missing"
+    except OSError:
+        return "unavailable"
+    if stat.S_ISLNK(initial.st_mode):
         return "unsafe"
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
