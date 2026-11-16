@@ -29,6 +29,14 @@ class MojPropBuyerReceiptTests(TestCase):
         self.assertEqual(response.status_code, 201, response.content)
         return response.json()
 
+    def check_status(self, token):
+        return self.browser.post(
+            "/moj-prop-status/",
+            data=json.dumps({"receipt_token": token}),
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=self.token,
+        )
+
     def test_success_receipt_contains_unpredictable_signed_token_no_buyer_pii(self):
         result = self.make_lead()
         self.assertEqual(verify_receipt_token(result["receipt_token"]), result["request_id"])
@@ -38,9 +46,7 @@ class MojPropBuyerReceiptTests(TestCase):
     def test_signed_receipt_tracks_real_manual_review_status_without_pii(self):
         result = self.make_lead()
         MojPropRequest.objects.filter(request_id=result["request_id"]).update(status="reviewing")
-        response = self.browser.get(
-            reverse("mojprop_receipt_status"), {"receipt_token": result["receipt_token"]}
-        )
+        response = self.check_status(result["receipt_token"])
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "reviewing")
         self.assertIn("Being reviewed", response.json()["stage"])
@@ -54,7 +60,7 @@ class MojPropBuyerReceiptTests(TestCase):
         result = self.make_lead()
         for token in ("", "guessed", result["receipt_token"] + "broken", "x" * 1000):
             with self.subTest(token=token[:24]):
-                response = self.browser.get("/moj-prop-status/", {"receipt_token": token})
+                response = self.check_status(token)
                 self.assertEqual(response.status_code, 404)
                 self.assertNotIn("status", response.json())
 
@@ -69,7 +75,7 @@ class MojPropBuyerReceiptTests(TestCase):
         self.assertEqual(response["Cache-Control"], "no-store")
 
     def test_invalid_token_has_same_no_cache_and_no_referrer_headers(self):
-        response = self.browser.get("/moj-prop-status/", {"receipt_token": "invalid"})
+        response = self.check_status("invalid")
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response["Cache-Control"], "no-store")
         self.assertEqual(response["Referrer-Policy"], "no-referrer")
@@ -78,9 +84,43 @@ class MojPropBuyerReceiptTests(TestCase):
     def test_expired_receipt_requires_private_manual_recovery(self):
         result = self.make_lead()
         with patch.object(signing.TimestampSigner, "unsign", side_effect=signing.SignatureExpired("old")):
-            response = self.browser.get("/moj-prop-status/", {"receipt_token": result["receipt_token"]})
+            response = self.check_status(result["receipt_token"])
         self.assertEqual(response.status_code, 404)
         self.assertNotIn("email", response.json())
+
+    def test_valid_legacy_get_token_is_never_accepted_or_looked_up(self):
+        result = self.make_lead()
+        with patch.object(MojPropRequest.objects, "filter",
+                          side_effect=AssertionError("GET must not query customer CRM")):
+            response = self.browser.get(
+                "/moj-prop-status/", {"receipt_token": result["receipt_token"]}
+            )
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn("request_id", response.json())
+        self.assertNotIn(result["receipt_token"], response.content.decode())
+        self.assertEqual(response["Cache-Control"], "no-store")
+        # The historical token is not revoked: its owner still uses secure POST.
+        self.assertEqual(self.check_status(result["receipt_token"]).status_code, 200)
+
+    def test_valid_json_post_with_bearer_query_is_rejected_before_crm_read(self):
+        result = self.make_lead()
+        with patch.object(MojPropRequest.objects, "filter",
+                          side_effect=AssertionError("query leak must not reach CRM")):
+            response = self.browser.post(
+                "/moj-prop-status/?receipt_token=" + result["receipt_token"],
+                data=json.dumps({"receipt_token": result["receipt_token"]}),
+                content_type="application/json", HTTP_X_CSRFTOKEN=self.token,
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn(result["receipt_token"], response.content.decode())
+        self.assertEqual(response["Cache-Control"], "no-store")
+
+    def test_get_without_token_never_performs_customer_lookup(self):
+        with patch.object(MojPropRequest.objects, "filter",
+                          side_effect=AssertionError("unauthenticated GET queried CRM")):
+            response = self.browser.get("/moj-prop-status/")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response["Referrer-Policy"], "no-referrer")
 
     def test_private_post_receipt_is_read_only_and_requires_json(self):
         result = self.make_lead()
@@ -108,10 +148,10 @@ class MojPropBuyerReceiptTests(TestCase):
         result = self.make_lead()
         forged = make_receipt_token("MOJPROP-20000101-00000000")
         self.assertEqual(
-            self.browser.get("/moj-prop-status/", {"receipt_token": forged}).status_code, 404
+            self.check_status(forged).status_code, 404
         )
         self.assertEqual(
-            self.browser.get("/moj-prop-status/", {"receipt_token": result["receipt_token"]}).status_code,
+            self.check_status(result["receipt_token"]).status_code,
             200,
         )
 

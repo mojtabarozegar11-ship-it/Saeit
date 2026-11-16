@@ -104,7 +104,10 @@ class DigitalBuyerRequestTests(TestCase):
         self.assertEqual(response.status_code, 201)
         token = response.json().get("receipt_token")
         self.assertTrue(token)
-        status = self.client.get("/moj-prop-status/", {"receipt_token": token})
+        status = self.client.post(
+            "/moj-prop-status/", json.dumps({"receipt_token": token}),
+            content_type="application/json", HTTP_X_CSRFTOKEN=self.token,
+        )
         self.assertEqual(status.status_code, 200)
         body = status.json()
         self.assertEqual(body["request_id"], response.json()["request_id"])
@@ -121,7 +124,10 @@ class DigitalBuyerRequestTests(TestCase):
         token = response.json()["receipt_token"]
         for secret in ("", response.json()["request_id"], token + "x"):
             with self.subTest(secret_present=bool(secret)):
-                lookup = self.client.get("/moj-prop-status/", {"receipt_token": secret})
+                lookup = self.client.post(
+                    "/moj-prop-status/", json.dumps({"receipt_token": secret}),
+                    content_type="application/json", HTTP_X_CSRFTOKEN=self.token,
+                )
                 self.assertEqual(lookup.status_code, 404)
                 # Generic manual recovery instructions may legitimately
                 # mention "email"; only the actual buyer contact/notes are secret.
@@ -140,6 +146,19 @@ class DigitalBuyerRequestTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 404)
                 self.assertEqual(response.headers["Cache-Control"], "no-store")
+
+    def test_valid_digital_token_in_query_does_not_authorize_lookup(self):
+        created = self.submit(product_id=879)
+        token = created.json()["receipt_token"]
+        leak = self.client.get("/moj-prop-status/", {"receipt_token": token})
+        self.assertEqual(leak.status_code, 404)
+        self.assertNotIn(token, leak.content.decode("utf-8"))
+        secure = self.client.post(
+            "/moj-prop-status/", json.dumps({"receipt_token": token}),
+            content_type="application/json", HTTP_X_CSRFTOKEN=self.token,
+        )
+        self.assertEqual(secure.status_code, 200)
+        self.assertEqual(secure.json()["request_id"], created.json()["request_id"])
 
     def test_private_receipt_lookup_via_post_does_not_put_token_in_url(self):
         created = self.submit(product_id=72)
