@@ -66,67 +66,42 @@ jobs:
           chmod 600 "$d/config"
           timeout 40s ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
           echo "MPW_C118_OWNER_CPANEL_CONNECTED=PASS"
-      - name: Search private factory evidence for exact live product hashes (read only)
+      - name: Inspect private rights evidence access without privileges or disclosure
         shell: bash
         run: |
           set -euo pipefail
-          hashes="$(timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
-          import hashlib,os,sys
+          PYTHONDONTWRITEBYTECODE=1 timeout 15s python3 - <<'PY'
+          import json, os
           from pathlib import Path
-          from types import SimpleNamespace
-          root=Path("/home/zomorod2/Saeit-staging")
-          os.chdir(root);sys.path.insert(0,str(root))
-          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
-          import django
-          django.setup()
-          from core.models import Product
-          from mpw_commerce.downloads import _private_file
-          values=[]
-          for sku in (72,225,879):
-            product=Product.objects.get(pk=sku)
-            asset=_private_file(SimpleNamespace(product=product))
-            if asset.is_symlink() or not asset.is_file():raise RuntimeError("UNSAFE_PRODUCT_FILE")
-            digest=hashlib.sha256()
-            with asset.open("rb") as stream:
-              for chunk in iter(lambda:stream.read(1048576),b""):digest.update(chunk)
-            values.append(digest.hexdigest())
-          print(" ".join(values))
-          PY
-          )"
-          read -r sha72 sha225 sha879 <<< "$hashes"
-          for value in "$sha72" "$sha225" "$sha879"; do
-            [[ "$value" =~ ^[0-9a-f]{64}$ ]] || exit 8
-          done
-          timeout 95s python3 - "$sha72" "$sha225" "$sha879" <<'PY'
-          import json,os,sys
-          from pathlib import Path
-          sha={72:sys.argv[1],225:sys.argv[2],879:sys.argv[3]}
-          base=Path("/home/githubops/factory-runtime/private/autonomous-product-cycle")
-          roots=[base/"quality-reviewer-console",base/"product-lifecycle",
-                 base/"production-warehouse"]
-          counts={sku:0 for sku in sha}
-          eligible_files=0
+          roots = [
+              Path("/home/githubops/factory-runtime/private/autonomous-product-cycle") / "quality-reviewer-console",
+              Path("/home/githubops/factory-runtime/private/autonomous-product-cycle") / "product-lifecycle",
+              Path("/home/githubops/factory-runtime/private/autonomous-product-cycle") / "production-warehouse",
+          ]
+          statuses = []
           for root in roots:
-            if not root.is_dir() or root.is_symlink():continue
-            for directory,dirs,files in os.walk(str(root),followlinks=False):
-              dirs[:]=[name for name in dirs if not (Path(directory)/name).is_symlink()]
-              for name in files:
-                path=Path(directory)/name
-                if path.suffix.lower() not in (".json",".md",".txt"):continue
-                try:
-                  if path.is_symlink() or not path.is_file() or path.stat().st_size>2000000:continue
-                  with path.open("rb") as stream:contents=stream.read(2000001).lower()
-                except (OSError,PermissionError):continue
-                eligible_files+=1
-                for sku,digest in sha.items():
-                  if digest.encode("ascii") in contents:counts[sku]+=1
-                if eligible_files>12000:raise RuntimeError("PRIVATE_EVIDENCE_SCAN_LIMIT")
-          print("MPW_PRIVATE_RIGHTS_PROVENANCE_SCAN="+json.dumps({
-            "read_only":True,"scanned_eligible_documents":eligible_files,
-            "exact_artifact_hash_reference_counts":counts,
-            "matches_are_not_independent_legal_clearance":True
-          },sort_keys=True))
+              try:
+                  if root.is_symlink() or not root.is_dir():
+                      statuses.append("unavailable")
+                      continue
+                  with os.scandir(root) as contents:
+                      next(contents, None)
+                  statuses.append("accessible_unscanned")
+              except (OSError, PermissionError):
+                  statuses.append("unavailable")
+          state = "unverified_restricted" if any(v == "unavailable" for v in statuses) else "unverified_not_scanned"
+          print("MPW_PRIVATE_RIGHTS_PROVENANCE_SCAN=" + json.dumps({
+              "status": state,
+              "scoped_root_states": statuses,
+              "read_only": True,
+              "backup_or_source_modified": False,
+              "customer_records_read": False,
+              "private_artifact_contents_read": False,
+              "rights_cleared": False,
+              "unverified_rights_must_not_authorize_sale": True,
+          }, sort_keys=True))
           PY
+          echo "PRIVATE_RIGHTS_SCAN=UNVERIFIED" > "$RUNNER_TEMP/mpw-private-rights-audit-state"
       - name: Identify exact installed expiry handler source fragment without sensitive values
         shell: bash
         run: |
@@ -358,6 +333,16 @@ jobs:
           )"
           printf '%s\n' "$report"
           printf '%s\n' "$report" | PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mpw_three_sku_preflight_20261029.py
+      - name: Enforce private rights provenance hold without skipping other diagnostics
+        if: always()
+        shell: bash
+        run: |
+          if ! test -f "$RUNNER_TEMP/mpw-private-rights-audit-state"; then
+            echo "::error::Provenance inventory was not executed; no commercial rights verified"
+            exit 1
+          fi
+          echo "::error::Private rights provenance unverified; no paid SKU may be released"
+          exit 1
       - name: Delete runner-only SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
