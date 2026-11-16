@@ -24,6 +24,10 @@ class CapacityEvidence:
     owner_authorized: bool
     measured_at_epoch: int
     now_epoch: int
+    tenant_quota_free_bytes: int | None = None
+    tenant_quota_total_bytes: int | None = None
+    destination_free_inodes: int | None = None
+    required_restore_inodes: int | None = None
 
 
 def require_restore_capacity(evidence: CapacityEvidence) -> int:
@@ -39,6 +43,8 @@ def require_restore_capacity(evidence: CapacityEvidence) -> int:
         evidence.source_media_bytes, evidence.destination_free_bytes,
         evidence.destination_total_bytes, evidence.measured_at_epoch,
         evidence.now_epoch,
+        evidence.tenant_quota_free_bytes, evidence.tenant_quota_total_bytes,
+        evidence.destination_free_inodes, evidence.required_restore_inodes,
     )
     if any(type(value) is not int or value < 0 for value in values):
         raise CapacityAdmissionDenied("invalid or unknown capacity evidence")
@@ -54,12 +60,16 @@ def require_restore_capacity(evidence: CapacityEvidence) -> int:
         raise CapacityAdmissionDenied("independent authorized encrypted destination required")
     if not 0 <= evidence.now_epoch - evidence.measured_at_epoch <= 3600:
         raise CapacityAdmissionDenied("destination measurement is stale or future")
+    if evidence.tenant_quota_free_bytes > evidence.tenant_quota_total_bytes:
+        raise CapacityAdmissionDenied("tenant quota free exceeds quota total")
+    if evidence.destination_free_inodes < evidence.required_restore_inodes or evidence.required_restore_inodes == 0:
+        raise CapacityAdmissionDenied("insufficient independently measured restore inodes")
     if evidence.destination_free_bytes > evidence.destination_total_bytes:
         raise CapacityAdmissionDenied("free bytes exceed destination size")
     source = sum(values[:3])
     if source <= 0 or evidence.source_database_bytes <= 0:
         raise CapacityAdmissionDenied("complete source inventory required")
     required = (source * 9 + 3) // 4  # 2 copies + 25% source headroom
-    if evidence.destination_free_bytes < required:
+    if min(evidence.destination_free_bytes, evidence.tenant_quota_free_bytes) < required:
         raise CapacityAdmissionDenied("insufficient verified independent restore capacity")
     return required
