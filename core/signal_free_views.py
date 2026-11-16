@@ -115,6 +115,8 @@ def _validated_token(token, purpose):
         subscriber = MojSignalFreeSubscription.objects.get(pk=payload["id"])
     except MojSignalFreeSubscription.DoesNotExist:
         return None
+    except DatabaseError as exc:
+        raise SignalConsentStorageUnavailable("consent storage unavailable") from exc
     return subscriber if constant_time_compare(subscriber.nonce, payload["nonce"]) else None
 
 
