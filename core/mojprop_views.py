@@ -413,10 +413,15 @@ def _mojprop_intake_api(request):
             if keyed_id:
                 # Unique DB index serializes competing first POSTs. Never
                 # generate a second CRM lead for a conflicting keyed retry.
-                prior = MojPropRequest.objects.filter(request_id=keyed_id).first()
+                try:
+                    prior = MojPropRequest.objects.filter(request_id=keyed_id).first()
+                except DatabaseError:
+                    return _crm_storage_unavailable()
                 if prior is not None:
                     return existing_keyed_response(prior)
-                return _json({"ok": False, "detail": "Request state unavailable."}, status=503)
+                return _crm_storage_unavailable()
+        except DatabaseError:
+            return _crm_storage_unavailable()
     if request_obj is None:
         return _json({"ok": False, "detail": "Could not allocate a request ID. Please retry."}, status=503)
 
