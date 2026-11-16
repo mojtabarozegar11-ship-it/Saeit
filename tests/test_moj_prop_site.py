@@ -186,7 +186,13 @@ try:
 except ImportError:
     TestCase = None
 else:
-    @override_settings(ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir"])
+    @override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir"],
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        },
+    )
     class MojPropDjangoViews(TestCase):
         def test_english_route_and_noindex(self):
             result = self.client.get("/moj-prop/", HTTP_HOST="mojplaywin.com")
