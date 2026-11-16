@@ -198,7 +198,7 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
         with patch("subprocess.run", side_effect=[
                 subprocess.CalledProcessError(1, "uapi"),
                 SimpleNamespace(stdout=json.dumps(doc)),
-        ]) as run:
+        ]) as run, patch("scripts.mojprop_full_restore_capacity_readonly_c94._trusted_owner_uapi_binary", return_value="/usr/bin/uapi"):
             allowed, reason = _cpanel_uapi_quota_result(200_000_000)
             self.assertTrue(allowed)
             self.assertEqual(reason, "cpanel_uapi_quota_verified")
@@ -227,7 +227,7 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
             with patch("subprocess.run", side_effect=[
                 subprocess.CalledProcessError(1, "uapi"),
                 SimpleNamespace(stdout=json.dumps(good)),
-            ]) as run:
+            ]) as run, patch.object(mod, "_trusted_owner_uapi_binary", return_value="/usr/bin/uapi"):
                 valid, reason = mod._cpanel_uapi_quota_result(200_000_000)
         self.assertTrue(valid)
         self.assertEqual(reason, "cpanel_uapi_quota_verified")
@@ -249,11 +249,50 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
         from unittest.mock import patch
         from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
         with patch("subprocess.run", side_effect=subprocess.CalledProcessError(
-                1, "uapi")) as run:
+                1, "uapi")) as run, patch.object(mod, "_trusted_owner_uapi_binary", return_value="/usr/bin/uapi"):
             valid, reason = mod._cpanel_uapi_quota_result(100_000_000)
         self.assertFalse(valid)
         self.assertEqual(reason, "cpanel_uapi_both_owner_modes_failed")
         self.assertEqual(run.call_count, 2)
+
+    def test_c113_selects_real_owner_uapi_binary_with_no_path_search(self):
+        import stat
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+
+        def path_mode(path):
+            if str(path) == "/usr/local/cpanel/bin/uapi":
+                raise FileNotFoundError
+            if str(path) == "/usr/bin/uapi":
+                return SimpleNamespace(st_mode=stat.S_IFREG | 0o755)
+            raise AssertionError("unexpected executable path")
+        with patch.object(mod.Path, "lstat", autospec=True, side_effect=path_mode), \
+             patch.object(mod.os, "access", return_value=True) as access:
+            self.assertEqual(mod._trusted_owner_uapi_binary(), "/usr/bin/uapi")
+        access.assert_called_once()
+
+    def test_c113_symlink_or_world_writable_uapi_not_executed(self):
+        import stat
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+        statuses = iter((stat.S_IFLNK | 0o777,
+                         stat.S_IFREG | 0o777,
+                         stat.S_IFREG | 0o666))
+        with patch.object(mod.Path, "lstat", autospec=True, side_effect=lambda _p: SimpleNamespace(st_mode=next(statuses))), \
+             patch.object(mod.os, "access", return_value=True):
+            self.assertIsNone(mod._trusted_owner_uapi_binary())
+
+    def test_c113_missing_trusted_binary_cannot_fake_quota_pass(self):
+        from unittest.mock import patch
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+        with patch.object(mod, "_trusted_owner_uapi_binary", return_value=None), \
+             patch("subprocess.run") as run:
+            valid, reason = mod._cpanel_uapi_quota_result(250_000_000)
+        self.assertFalse(valid)
+        self.assertEqual(reason, "cpanel_uapi_program_unavailable")
+        run.assert_not_called()
 
     def test_quota_cli_decimal_and_binary_units_are_handled_conservatively(self):
         from scripts.mojprop_full_restore_capacity_readonly_c94 import _parse_quota_bytes
