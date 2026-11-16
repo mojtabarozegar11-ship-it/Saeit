@@ -5,6 +5,7 @@ call this BEFORE backing up/writing model, migration, URL or admin source.
 A successful source audit does NOT prove an independently restorable database.
 """
 import ast
+import hashlib
 from pathlib import Path
 
 
@@ -130,12 +131,35 @@ def _dependency(path, name):
     return False
 
 
-def check_schema_closure(live_root, staged_root):
+_SOURCE_ONLY_UNRELEASED = {
+    # Exact reviewed Git blob object for the not-yet-deployable Starter30
+    # 0048 migration. This exception is ONLY for repository selftest and
+    # cannot authorize staging or a production database change.
+    "0048_mojprop_starter30_order": "de0ab0f49c9eaaf0c26fcf12d63bba3ffbb068cc",
+}
+
+
+def _source_only_git_blob_matches(path, expected):
+    content = path.read_bytes()
+    header = ("blob " + str(len(content)) + "\0").encode("ascii")
+    return hashlib.sha1(header + content).hexdigest() == expected
+
+
+def check_schema_closure(live_root, staged_root, *, source_only_selftest=False):
     """Fail closed if source package and live schema migration tree conflict.
 
-    Returns a source-only inventory; never claims a DB dump/restore is verified.
+    The unreleased 0048 file is admitted ONLY for exact-byte source selftest;
+    the installer calls the default mode and still refuses live 0048.
+    Successful source selftest does not prove DB backup or restore.
     """
     live_root, staged_root = Path(live_root), Path(staged_root)
+    if type(source_only_selftest) is not bool:
+        raise RuntimeError("invalid source-only gate")
+    if source_only_selftest and (
+        live_root.resolve(strict=True) != staged_root.resolve(strict=True)
+        or live_root.is_symlink() or staged_root.is_symlink()
+    ):
+        raise RuntimeError("source-only migration gate requires one identical repository")
     for path in (
         "core/models.py", "core/admin.py", "config/urls.py", "config/settings.py", *MODULES,
         *LEGACY_BASELINES.values(),
@@ -204,7 +228,13 @@ def check_schema_closure(live_root, staged_root):
             raise RuntimeError("unsafe live core migration symlink")
         head = path.stem.split("_", 1)[0]
         if head.isdigit() and int(head) >= 41 and path.stem not in known:
-            raise RuntimeError("unreviewed later or conflicting core migration: " + path.stem)
+            if not (
+                source_only_selftest
+                and path.stem in _SOURCE_ONLY_UNRELEASED
+                and path.is_file()
+                and _source_only_git_blob_matches(path, _SOURCE_ONLY_UNRELEASED[path.stem])
+            ):
+                raise RuntimeError("unreviewed later or conflicting core migration: " + path.stem)
 
     # Owner-preserved signal modules cannot be silently replaced with an
     # incompatible file merely because the filename matches.
