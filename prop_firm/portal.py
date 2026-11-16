@@ -303,6 +303,14 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
             cohort_executions = PropExecution.objects.filter(
                 account__challenge_enrollment=purchase,
                 account__kind__in=(PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO),
+                # A raw SQL rebind of another user's stage to this enrollment
+                # must never donate a fiftieth position, regardless of its
+                # "verified" status. A valid cohort has identical buyer,
+                # disclosed policy, capital tier and opening balance.
+                account__trader_id=account.trader_id,
+                account__policy_version=NEW_CONTRACT_VERSION,
+                account__tier_index=account.tier_index,
+                account__starting_capital_usd=account.starting_capital_usd,
             )
             # The cohort-wide count must use the SAME temporal ceiling as
             # P&L/risk. Otherwise the other phase can supply a future 50th
