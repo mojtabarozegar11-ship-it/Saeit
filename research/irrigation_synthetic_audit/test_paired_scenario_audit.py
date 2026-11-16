@@ -774,35 +774,35 @@ class AuditTests(unittest.TestCase):
             path = Path(dirname) / "frozen.csv"
             path.write_bytes(b"abc")
             path.write_bytes(b'abd')
-                        with self.assertRaisesRegex(AuditError, 'mismatch'): verify_frozen_sha256(path, hashlib.sha256(b'abc').hexdigest(), 'C')
+            with self.assertRaisesRegex(AuditError, 'mismatch'): verify_frozen_sha256(path, hashlib.sha256(b'abc').hexdigest(), 'C')
 
     def test_frozen_hash_rejects_appended_bytes(self):
         with tempfile.TemporaryDirectory() as dirname:
             path = Path(dirname) / "frozen.csv"
             path.write_bytes(b"abc")
             path.write_bytes(b'abc\n')
-                        with self.assertRaisesRegex(AuditError, 'mismatch'): verify_frozen_sha256(path, hashlib.sha256(b'abc').hexdigest(), 'C')
+            with self.assertRaisesRegex(AuditError, 'mismatch'): verify_frozen_sha256(path, hashlib.sha256(b'abc').hexdigest(), 'C')
 
     def test_frozen_hash_rejects_removed_bytes(self):
         with tempfile.TemporaryDirectory() as dirname:
             path = Path(dirname) / "frozen.csv"
             path.write_bytes(b"abc")
             path.write_bytes(b'ab')
-                        with self.assertRaisesRegex(AuditError, 'mismatch'): verify_frozen_sha256(path, hashlib.sha256(b'abc').hexdigest(), 'C')
+            with self.assertRaisesRegex(AuditError, 'mismatch'): verify_frozen_sha256(path, hashlib.sha256(b'abc').hexdigest(), 'C')
 
     def test_frozen_hash_rejects_utf8_bom_change(self):
         with tempfile.TemporaryDirectory() as dirname:
             path = Path(dirname) / "frozen.csv"
             path.write_bytes(b"abc")
             path.write_bytes(b'\xef\xbb\xbfabc')
-                        with self.assertRaisesRegex(AuditError, 'mismatch'): verify_frozen_sha256(path, hashlib.sha256(b'abc').hexdigest(), 'C')
+            with self.assertRaisesRegex(AuditError, 'mismatch'): verify_frozen_sha256(path, hashlib.sha256(b'abc').hexdigest(), 'C')
 
     def test_frozen_hash_rejects_case_changed_data(self):
         with tempfile.TemporaryDirectory() as dirname:
             path = Path(dirname) / "frozen.csv"
             path.write_bytes(b"abc")
             path.write_bytes(b'ABC')
-                        with self.assertRaisesRegex(AuditError, 'mismatch'): verify_frozen_sha256(path, hashlib.sha256(b'abc').hexdigest(), 'C')
+            with self.assertRaisesRegex(AuditError, 'mismatch'): verify_frozen_sha256(path, hashlib.sha256(b'abc').hexdigest(), 'C')
 
     def test_frozen_hash_reports_family_label(self):
         with tempfile.TemporaryDirectory() as dirname:
@@ -815,7 +815,7 @@ class AuditTests(unittest.TestCase):
             path = Path(dirname) / "frozen.csv"
             path.write_bytes(b"abc")
             path.unlink()
-                        with self.assertRaises(FileNotFoundError): verify_frozen_sha256(path, hashlib.sha256(b'abc').hexdigest(), 'C')
+            with self.assertRaises(FileNotFoundError): verify_frozen_sha256(path, hashlib.sha256(b'abc').hexdigest(), 'C')
 
     def test_frozen_hash_digest_is_exact_bytes(self):
         with tempfile.TemporaryDirectory() as dirname:
