@@ -29,55 +29,39 @@ jobs:
         run: PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_mpw_three_sku_preflight_20261029.py' -v
   rights-and-deliverability-audit:
     needs: offline-preflight-regression
-    if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
-    runs-on: ubuntu-latest
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       (github.actor == 'mojtabarozegar11-ship-it' &&
+        github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+        github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-        with: {persist-credentials: false}
-      - name: Establish pinned VPS relay to cPanel
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Establish owner-only direct pinned factory runner to cPanel
+        shell: bash
         env:
-          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
+          test "$(id -un)" = "githubops"
+          test -n "$HOST_KEY"
           umask 077
           d="$RUNNER_TEMP/mpw-revenue-ssh"
           install -d -m 700 "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
-          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
-          chmod 600 "$d/"*
-          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
-          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
-          cat > "$d/config" <<EOF
-          Host saeit-vps
-            HostName 178.239.147.150
-            User githubops
-            Port 22
-            IdentityFile $d/vps.key
-            UserKnownHostsFile $d/vps.known
-          Host saeit-cpanel
-            HostName zohal.pws-dns.net
-            User zomorod2
-            Port 1396
-            IdentityFile $d/host.key
-            UserKnownHostsFile $d/host.known
-            ProxyJump saeit-vps
-          Host *
-            StrictHostKeyChecking yes
-            IdentitiesOnly yes
-            BatchMode yes
-            ConnectTimeout 10
-            ConnectionAttempts 1
-            ForwardAgent no
-            RequestTTY no
-          EOF
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/host.key"
+          chmod 600 "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host saeit-cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/host.known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" > "$d/config"
           chmod 600 "$d/config"
-          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          mv "$d/host.candidate" "$d/host.known"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
       - name: Search private factory evidence for exact live product hashes (read only)
         shell: bash
         run: |
@@ -109,7 +93,7 @@ jobs:
           for value in "$sha72" "$sha225" "$sha879"; do
             [[ "$value" =~ ^[0-9a-f]{64}$ ]] || exit 8
           done
-          timeout 95s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-vps python3 - "$sha72" "$sha225" "$sha879" <<'PY'
+          timeout 95s python3 - "$sha72" "$sha225" "$sha879" <<'PY'
           import json,os,sys
           from pathlib import Path
           sha={72:sys.argv[1],225:sys.argv[2],879:sys.argv[3]}
