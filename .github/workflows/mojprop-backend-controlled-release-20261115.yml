@@ -59,6 +59,8 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.actor == 'mojtabarozegar11-ship-it' &&
+      github.triggering_actor == 'mojtabarozegar11-ship-it' &&
+      github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
       inputs.owner_approval == 'OWNER_APPROVED' &&
       vars.MOJPROP_APPROVED_MAIN_SHA == github.sha &&
