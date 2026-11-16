@@ -1,0 +1,47 @@
+name: Owner remaining single-product cron health (strict read-only)
+on:
+  push:
+    branches: [ops/verified-disk-reclaim-20261116]
+    paths: [".github/workflows/owner-single-product-cron-readonly-20261116.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/ops/verified-disk-reclaim-20261116' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate pinned no-write script
+        shell: bash
+        run: |
+          set -euo pipefail
+          f=scripts/owner_single_product_cron_readonly_20261116.py
+          test ! -L "$f"
+          test "$(git hash-object -- "$f")" = "6e9c945ef8f6629f7fbab78763167c2f8bca0ce0"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("scripts/owner_single_product_cron_readonly_20261116.py").read_text())'
+          echo SINGLE_PRODUCT_SOURCE_PINNED=PASS
+      - name: Verify existing cron and tail of execution log without restarting jobs
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${VPS_KEY:?}"
+          umask 077
+          w="$RUNNER_TEMP/owner-single-product-cron-20261116"
+          install -d -m 700 "$w"
+          trap 'rm -rf -- "$w"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$w/key"
+          chmod 600 "$w/key"
+          ssh-keygen -y -P '' -f "$w/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$w/known" 2>/dev/null
+          test -s "$w/known"
+          test "$(ssh-keygen -lf "$w/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo SINGLE_PRODUCT_PINNED_VPS_SSH=PASS
+          timeout 90s ssh -T -i "$w/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$w/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ForwardAgent=no -o RequestTTY=no githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < scripts/owner_single_product_cron_readonly_20261116.py |
+            PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import json,sys; s=sys.stdin.read(5000); p="SINGLE_PRODUCT_CRON_METADATA="; q=[x for x in s.splitlines() if x.startswith(p)]; assert len(q)==1; d=json.loads(q[0][len(p):]); assert d["schema"]=="owner.factory.single_product_cron.readonly.v1" and d["worker_invoked_by_audit"] is False and d["scheduler_changed"] is False and d["logs_changed"] is False and d["backups_touched"] is False; print(q[0])'
+          echo SINGLE_PRODUCT_CRON_AUDIT=PASS_READ_ONLY
