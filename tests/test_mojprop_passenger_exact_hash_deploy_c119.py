@@ -74,6 +74,25 @@ class ExactPassengerPreflightC119Tests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "unavailable"):
             installer.verify_reviewed_passenger_entrypoint(self.docroot)
 
+
+    def test_09_preflight_occurs_before_any_backup_or_sql_migration(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  "scripts/deploy_mojplaywin_moj_prop_backend.py").read_text()
+        start = source.index("def deploy(")
+        check = source.index("verify_reviewed_passenger_entrypoint(DOCROOT)", start)
+        restore = source.index("require_independent_db_restore(", start)
+        backup = source.index("backup.mkdir(", start)
+        ddl = source.index("mark_schema_migration_started(backup)", start)
+        self.assertLess(check, restore)
+        self.assertLess(restore, backup)
+        self.assertLess(backup, ddl)
+
+    def test_10_a_known_staging_path_in_comment_cannot_bypass_exact_hash(self):
+        comment = "# /home/zomorod2/Saeit-staging\n"
+        self.launcher.write_text(comment + "application=None\n")
+        with self.assertRaisesRegex(RuntimeError, "SHA differs"):
+            installer.verify_reviewed_passenger_entrypoint(self.docroot)
+
     def test_04_symlink_launcher_denied_before_content_read(self):
         backup = self.docroot / "inside-real-launcher"
         self.launcher.rename(backup)
