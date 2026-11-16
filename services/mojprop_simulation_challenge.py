@@ -228,3 +228,45 @@ def evaluate_simulated_phase(
             "payout_allowed": False,
             "payment_collected": False,
         }
+
+
+def evaluate_two_phase_simulation(
+    policy: ChallengePolicy,
+    phase1_snapshots: Sequence[EquitySnapshot],
+    phase2_snapshots: Sequence[EquitySnapshot] = (),
+) -> dict:
+    """Review both *simulated* phases without automatically unlocking capital.
+
+    Phase 2 is only interpreted as an educational independent journal after
+    phase 1 meets the observed target. It is never an authorized live phase-2
+    account. Neither two green self-reported journals nor any report here
+    confers a funded account, actual broker challenge pass or payout rights.
+    """
+    first = evaluate_simulated_phase(policy, phase1_snapshots, phase=1)
+    if type(phase2_snapshots) not in (list, tuple):
+        raise ChallengeInputError("invalid_phase2_collection")
+    if first["status"] != "simulation_target_met_review_required":
+        if phase2_snapshots:
+            raise ChallengeInputError("phase2_requires_phase1_simulation_target")
+        second = None
+        phase2_note = "not_started_phase1_rules_unmet"
+    else:
+        second = evaluate_simulated_phase(policy, phase2_snapshots, phase=2)
+        phase2_note = (
+            "simulation_target_met_but_no_authoritative_evidence"
+            if second["status"] == "simulation_target_met_review_required"
+            else "simulation_incomplete_or_breached"
+        )
+    return {
+        "schema": "mojprop.simulated.two_phase_program.v1",
+        "phase1": first,
+        "phase2": second,
+        "phase2_note": phase2_note,
+        "phase2_uses_fresh_initial_equity": True,
+        "independent_human_and_broker_review_required": True,
+        "verified_contract_and_provider_required": True,
+        "official_program_passed": False,
+        "funded_account_provisioning_allowed": False,
+        "payment_collected": False,
+        "payout_allowed": False,
+    }
