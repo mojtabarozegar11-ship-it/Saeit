@@ -67,8 +67,8 @@ class TestR01ClusterSensitivity(unittest.TestCase):
     def test_r1_family_accepted_without_r1_prefix(self):
         self.assertEqual(summarize_family(fixture("R1"))["family"], "R1")
 
-    def test_twelve_independent_path_blocks_not_540_farms(self):
-        self.assertEqual(summarize_family(fixture())["independent_climate_path_blocks"], 12)
+    def test_twelve_path_blocks_not_540_farms(self):
+        self.assertEqual(summarize_family(fixture())["climate_path_blocks"], 12)
 
     def test_each_path_has_45_factorial_settings(self):
         self.assertEqual(summarize_family(fixture())["factorial_settings_per_path"], 45)
