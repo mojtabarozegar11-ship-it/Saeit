@@ -21,6 +21,13 @@ To return True, it requires ALL of these actual database and client-session fact
 
 *Neither* a user's submitted TXID, PDF URL, screenshot, commerce receipt from another order, arbitrary product ID nor a paid checkbox grants access. A live owner blockchain payment is only supporting evidence; the specific buyer, order and asset must match.
 
+## Additional source hardening: explicitly digital only
+The owner-run live read-only case [43775970242](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43775970242) established that the existing registered-or-other buyer's old paid item is an **explicit digital** Product and the private file is accessible. It also proved the **walletless native entitlement's own `commercial_buyer_status(...).can_download` is already True**, even though the unrelated CommerceInvoice-based legacy entitlement is False.
+
+Therefore DO NOT manufacture a new CommerceInvoice or claim walletless download is blocked merely from the legacy gate. The fallback remains disabled and is redundant unless an independently reviewed private handler proves the primary route cannot actually deliver a paid file.
+
+The historical entitlement decision now accepts **only** precise `product_type in {"digital", "digital_book"}`. A physical good, trading-signal subscription, unknown type or game cosmetic cannot become a file download solely because it has a paid ledger and a READY fulfillment. The trusted private-file callback cannot override this type check. Twelve additional regressions cover this.
+
 ## Integration still not performed
 The current `mpw_commerce.entitlements` and download view are in the private production package, not in this public Saeit repository. This new module is **not wired into the buyer-facing download handler** and MUST NOT be advertised as live automatic delivery.
 

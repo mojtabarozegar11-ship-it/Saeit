@@ -159,6 +159,57 @@ class HistoricalWalletlessPaidDigitalAccessTests(SimpleTestCase):
         })
         self.assertFalse(self.allowed())
 
+    def test_explicit_digital_product_is_eligible(self):
+        self.item.product.product_type = "digital"
+        self.assertTrue(self.allowed())
+
+    def test_explicit_digital_book_product_is_eligible(self):
+        self.item.product.product_type = "digital_book"
+        self.assertTrue(self.allowed())
+
+    def test_physical_goods_cannot_be_unlocked_as_pdf(self):
+        self.item.product.product_type = "physical"
+        self.assertFalse(self.allowed())
+
+    def test_undefined_product_type_denied(self):
+        self.item.product.product_type = None
+        self.assertFalse(self.allowed())
+
+    def test_unrecognized_product_type_denied(self):
+        self.item.product.product_type = "bundle"
+        self.assertFalse(self.allowed())
+
+    def test_service_subscription_not_digital_download(self):
+        self.item.product.product_type = "signals"
+        self.assertFalse(self.allowed())
+
+    def test_digital_type_is_case_sensitive(self):
+        self.item.product.product_type = "Digital"
+        self.assertFalse(self.allowed())
+
+    def test_blank_product_type_denied(self):
+        self.item.product.product_type = ""
+        self.assertFalse(self.allowed())
+
+    def test_numeric_product_type_denied(self):
+        self.item.product.product_type = 1
+        self.assertFalse(self.allowed())
+
+    def test_truthy_list_product_type_denied(self):
+        self.item.product.product_type = ["digital"]
+        self.assertFalse(self.allowed())
+
+    def test_digital_content_past_refund_stays_revoked(self):
+        self.item.product.product_type = "digital"
+        self.ledger_rows.exists.return_value = True
+        self.assertFalse(self.allowed())
+
+    def test_unknown_kind_denied_before_asset_resolver(self):
+        self.item.product.product_type = "unclassified"
+        resolver = Mock(return_value=True)
+        self.assertFalse(self.allowed(check=resolver))
+        resolver.assert_not_called()
+
     def test_game_cosmetic_not_a_download(self):
         self.item.product.product_type = "game_cosmetic"
         self.assertFalse(self.allowed())

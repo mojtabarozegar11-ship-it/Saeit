@@ -13,6 +13,8 @@ on:
       - "tests/test_mpw_tron_one_existing_payment_solidity_readonly_20261116.py"
       - "scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py"
       - "tests/test_mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py"
+      - "scripts/mpw_trx_active_download_route_readonly_20261116.py"
+      - "tests/test_mpw_trx_active_download_route_readonly_20261116.py"
       - "scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py"
       - "tests/test_mpw_existing_paid_buyer_entitlement_readonly_20261116.py"
 
@@ -42,6 +44,11 @@ jobs:
           python3 -B -m unittest tests.test_mpw_tron_one_existing_payment_solidity_readonly_20261116 -q
           python3 -B -m py_compile scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py
           python3 -B -m unittest tests.test_mpw_trx_existing_buyer_entitlement_link_readonly_20261116 -q
+          python3 -B -m py_compile scripts/mpw_trx_active_download_route_readonly_20261116.py
+          python3 -B -m unittest tests.test_mpw_trx_active_download_route_readonly_20261116 -q
+          test -f scripts/mpw_trx_active_download_route_readonly_20261116.py
+          test ! -L scripts/mpw_trx_active_download_route_readonly_20261116.py
+          test "$(git hash-object -- scripts/mpw_trx_active_download_route_readonly_20261116.py)" = "a4a928688dff01121f8242cb2d3d157a2a836c62"
           python3 -B -m py_compile scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py
           python3 -B -m unittest tests.test_mpw_existing_paid_buyer_entitlement_readonly_20261116 -q
           test -f scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py
@@ -148,6 +155,17 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(8192); lines=[l for l in raw.splitlines() if l.startswith("MPW_TRX_EXISTING_BUYER_LINK_READONLY=")]; assert len(lines)==1,"missing or duplicated proof"; data=json.loads(lines[0].split("=",1)[1]); assert data["schema"]=="mpw.trx.walletless.paid.commerce.invoice_link.v1" and data["read_only"] is True and data["new_payment_or_financial_write"] is False; print(lines[0])'
           echo 'TRON_LEGACY_BUYER_INVOICE_LINK=READ_ONLY'
           echo 'A READY grant and existing paid transfer do not establish actual customer download.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Prove effective walletless paid download GET routing — NO buyer request
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/mpw-trx-gates-ssh"
+          test -s "$d/config"
+          timeout 90s ssh -T -F "$d/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mpw_trx_active_download_route_readonly_20261116.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8192); lines=[l for l in raw.splitlines() if l.startswith("MPW_TRX_ACTUAL_DOWNLOAD_ROUTE_READONLY=")]; assert len(lines)==1,"missing or duplicated report"; d=json.loads(lines[0].split("=",1)[1]); assert d["schema"]=="mpw.trx.walletless.active.download.route.readonly.v1" and d["read_only"] is True and d["production_files_changed"] is False and d["download_request_executed"] is False and d["private_file_opened"] is False; print(lines[0])'
+          echo 'TRON_EFFECTIVE_DOWNLOAD_URL_SCAN=READ_ONLY'
       - name: Remove relay material
         if: always()
         run: |

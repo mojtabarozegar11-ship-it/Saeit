@@ -21,6 +21,9 @@ from services.mojtaba_tron_owner_receiver import APPROVED_NATIVE_TRX_RECIPIENT
 from core.crown_tron_receipts import PROVIDER, verified_walletless_credit
 
 _ALLOWED_READY = ("ready", "complete")
+# Live cPanel classified current paid item only as explicit digital, not
+# "anything other than game_cosmetic". Do not grant physical or unknown goods.
+_ALLOWED_DIGITAL_PRODUCT_TYPES = frozenset(("digital", "digital_book"))
 
 
 def verified_existing_walletless_item_access(user, item_id, *, asset_is_releasable):
@@ -57,7 +60,8 @@ def verified_existing_walletless_item_access(user, item_id, *, asset_is_releasab
             or order.status != "paid" or order.currency != "USD"
             or order.total <= Decimal("0")
             or product.active is not True
-            or product.product_type == "game_cosmetic"
+            or type(product.product_type) is not str
+            or product.product_type not in _ALLOWED_DIGITAL_PRODUCT_TYPES
             or item.currency != "USD"
             or type(item.quantity) is not int or item.quantity < 1
             or item.unit_price <= Decimal("0")):
