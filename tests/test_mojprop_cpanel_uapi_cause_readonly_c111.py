@@ -50,7 +50,8 @@ class MojPropUapiCauseReadOnlyTests(unittest.TestCase):
         self.assertEqual(r["outcome"], "uapi_data_present")
         self.assertTrue(r["uapi_status_ok"])
         self.assertTrue(r["data_object_present"])
-        self.assertNotIn("megabytes_remain", str(r))
+        self.assertEqual(r["quota_shape"]["quantities"]["megabytes_remain"], "positive")
+        self.assertNotIn("900", json.dumps(r))
 
     def test_04_status_zero_permission_error_is_sanitized(self):
         r = self.run_case('{"result":{"status":0,"errors":["Permission denied: secret-test-xyz"]}}')
