@@ -917,6 +917,11 @@ class MojPropStarter30Order(T):
         except (NativeTRXMatchRejected, ValueError, TypeError, OverflowError) as exc:
             raise ValidationError({"order_ref": "Invalid Starter30 invoice contract."}) from exc
 
+    def delete(self, *args, **kwargs):
+        # Deleting an order can erase the binding needed to detect repeat
+        # payment claims. Do not remove it through Model.delete().
+        raise ValidationError({"order_ref": "Starter30 orders are not deletable via ORM."})
+
     def save(self, *args, **kwargs):
         # Only first insertion is allowed in the source-only order table.
         # Allowing ORM edits after a TXID is claimed could rewrite the buyer,
@@ -962,6 +967,11 @@ class MojPropStarter30TxClaim(T):
             raise ValidationError({"order": "A persisted Starter30 invoice is required."})
         if self.network != "tron-mainnet" or self.state != "unverified":
             raise ValidationError({"state": "This source-only claim cannot prove settlement."})
+
+    def delete(self, *args, **kwargs):
+        # A deleted claim would free its txID for replay and reassignment.
+        # QuerySet.delete()/raw SQL still require separately enforced DB grants.
+        raise ValidationError({"txid": "Starter30 transaction claims are not deletable via ORM."})
 
     def save(self, *args, **kwargs):
         # Never permit reassignment of an existing txID via Model.save():
