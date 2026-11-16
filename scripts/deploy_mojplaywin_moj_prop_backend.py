@@ -799,17 +799,12 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         print("MOJ_PROP_BACKEND_DEPLOY=PASS")
         print("MOJ_PROP_BACKEND_COMMIT=" + commit)
         print("MOJ_PROP_BACKUP=" + str(backup))
-    except Exception as original_error:
-        try:
-            recover_failed_deploy(
-                backup, schema_migration_attempted=schema_migration_attempted
-            )
-        except RuntimeError as hold_error:
-            raise RuntimeError(
-                "Moj Prop release failed after database migration was attempted; "
-                "manual DB+application recovery required. Original failure: "
-                + type(original_error).__name__
-            ) from hold_error
+    except Exception:
+        # Preserve the original exception for pre-migration failures after
+        # restoring files. A post-migration failure is held, not "rolled back".
+        recover_failed_deploy(
+            backup, schema_migration_attempted=schema_migration_attempted
+        )
         raise
 
 
