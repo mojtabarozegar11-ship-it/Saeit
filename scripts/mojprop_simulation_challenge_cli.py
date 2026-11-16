@@ -21,6 +21,7 @@ from services.mojprop_simulation_challenge import (
 
 MAX_STDIN_BYTES = 65536
 _MONEY = re.compile(r"(?:0|[1-9][0-9]{0,11})\.[0-9]{2}\Z")
+_ACCOUNT_MARK = re.compile(r"-?(?:0|[1-9][0-9]{0,11})\.[0-9]{2}\Z")
 _POLICY_FIELDS = frozenset((
     "starting_equity", "phase1_profit_target_bps", "phase2_profit_target_bps",
     "max_daily_loss_bps", "max_overall_loss_bps", "minimum_trading_days",
@@ -46,6 +47,12 @@ def _money(raw: object) -> Decimal:
     return Decimal(raw)
 
 
+def _account_mark(raw: object) -> Decimal:
+    if type(raw) is not str or _ACCOUNT_MARK.fullmatch(raw) is None:
+        raise ChallengeInputError("invalid_account_mark")
+    return Decimal(raw)
+
+
 def _event(value: object, phase: int) -> EquitySnapshot:
     if type(value) is not dict or set(value) != _EVENT_FIELDS:
         raise ChallengeInputError("invalid_event_contract")
@@ -58,8 +65,8 @@ def _event(value: object, phase: int) -> EquitySnapshot:
         raise ChallengeInputError("invalid_observation_clock") from exc
     return EquitySnapshot(
         event_id=value["event_id"], phase=value["phase"],
-        observed_at=at, balance=_money(value["balance"]),
-        equity=_money(value["equity"]),
+        observed_at=at, balance=_account_mark(value["balance"]),
+        equity=_account_mark(value["equity"]),
         trades_executed=value["trades_executed"],
     )
 
