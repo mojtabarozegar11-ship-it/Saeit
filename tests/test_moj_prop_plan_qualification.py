@@ -142,3 +142,59 @@ class PurchasedPlanQualificationTests(TestCase):
             self.account, evidence_cutoff=START+timedelta(days=7)
         )
         self.assertTrue(data["purchase_window_valid"])
+
+    def test_c143_account_opened_before_all_evidence_remains_eligible(self):
+        self.six_days_at_plan6()
+        self.account.opened_at=START+timedelta(hours=6)
+        self.account.closed_at=START+timedelta(days=6)
+        self.assertTrue(account_projection(self.account)["purchase_window_valid"])
+
+    def test_c143_equity_prior_to_stage_open_cannot_qualify(self):
+        self.six_days_at_plan6()
+        self.account.opened_at=START+timedelta(days=1)
+        data=account_projection(self.account)
+        self.assertFalse(data["purchase_window_valid"])
+        self.assertFalse(data["assessment"].passed)
+
+    def test_c143_execution_after_account_closed_cannot_qualify(self):
+        self.six_days_at_plan6()
+        self.account.opened_at=START
+        self.account.closed_at=START+timedelta(days=5, hours=11)
+        data=account_projection(self.account)
+        self.assertFalse(data["purchase_window_valid"])
+        self.assertFalse(data["assessment"].passed)
+
+    def test_c143_equity_after_account_closed_cannot_qualify(self):
+        self.six_days_at_plan6()
+        self.account.opened_at=START
+        self.account.closed_at=START+timedelta(days=5, hours=13)
+        data=account_projection(self.account)
+        self.assertFalse(data["purchase_window_valid"])
+
+    def test_c143_closed_at_last_equity_mark_is_inclusive(self):
+        self.six_days_at_plan6()
+        self.account.opened_at=START
+        self.account.closed_at=START+timedelta(days=5, hours=14)
+        self.assertTrue(account_projection(self.account)["purchase_window_valid"])
+
+    def test_c143_stage_open_before_paid_purchase_rejected(self):
+        self.six_days_at_plan6()
+        self.account.opened_at=START-timedelta(seconds=1)
+        self.assertFalse(account_projection(self.account)["purchase_window_valid"])
+
+    def test_c143_stage_closed_after_purchase_expiry_rejected(self):
+        self.six_days_at_plan6()
+        self.account.opened_at=START
+        self.account.closed_at=START+timedelta(days=28)
+        self.assertFalse(account_projection(self.account)["purchase_window_valid"])
+
+    def test_c143_stage_end_before_stage_open_rejected(self):
+        self.six_days_at_plan6()
+        self.account.opened_at=START+timedelta(days=5, hours=15)
+        self.account.closed_at=START+timedelta(days=5, hours=14)
+        self.assertFalse(account_projection(self.account)["purchase_window_valid"])
+
+    def test_c143_naive_opened_at_cannot_qualify(self):
+        self.six_days_at_plan6()
+        self.account.opened_at=datetime(2026, 10, 1, 0, 0)
+        self.assertFalse(account_projection(self.account)["purchase_window_valid"])
