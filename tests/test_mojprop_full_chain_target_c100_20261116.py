@@ -71,7 +71,11 @@ class PrewriteMigrationMismatchTests(unittest.TestCase):
             ctx = patch.object(installer, name, obj)
             ctx.start()
             self.addCleanup(ctx.stop)
-        for name in ("backup_target", "run_checked", "restart_passenger",
+        # These tests isolate the schema/restore stage and deliberately use
+        # temporary mock WSGI bytes. The REAL SHA/owner/link preflight is
+        # independently exercised by test_mojprop_passenger_exact_hash_deploy_c119.
+        for name in ("verify_reviewed_passenger_entrypoint", "backup_target",
+                     "run_checked", "restart_passenger",
                      "patch_models", "patch_admin", "atomic_replace"):
             ctx = patch.object(installer, name)
             mock = ctx.start()
