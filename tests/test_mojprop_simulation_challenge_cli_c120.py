@@ -139,6 +139,9 @@ class MojPropChallengeCliC120Tests(unittest.TestCase):
         for amount in ("0.00", "-10.00"):
             doc = valid()
             doc["phase1"][0]["equity"] = amount
+            # A phase-1 breach must not unlock, or even evaluate, phase 2.
+            # Check the observed loss classification with no phase-2 attempt.
+            doc["phase2"] = []
             with self.subTest(amount=amount):
                 result = run(doc)
                 self.assertEqual(result["phase1"]["status"],
@@ -146,6 +149,17 @@ class MojPropChallengeCliC120Tests(unittest.TestCase):
                 self.assertEqual(result["phase1"]["latest_observed_equity"],
                                  "11000.00")
                 self.assertFalse(result["funded_account_provisioning_allowed"])
+                self.assertIsNone(result["phase2"])
+
+    def test_17_phase2_is_denied_after_nonpositive_phase1_equity_breach(self):
+        for amount in ("0.00", "-10.00"):
+            doc = valid()
+            doc["phase1"][0]["equity"] = amount
+            with self.subTest(amount=amount):
+                with self.assertRaisesRegex(
+                    ChallengeInputError, "phase2_requires_phase1_simulation_target"
+                ):
+                    run(doc)
 
     def test_16_negative_initial_capital_is_not_an_allowed_challenge(self):
         doc = valid()
