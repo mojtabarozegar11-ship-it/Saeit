@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from verify_frozen_manifest import verify
+from research.irrigation_synthetic_audit.verify_frozen_manifest import verify
 
 class ManifestTests(unittest.TestCase):
     def setUp(self):
