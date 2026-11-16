@@ -95,6 +95,23 @@ class VerifiedFiftyTradesTests(SimpleTestCase):
         self.assertEqual(data.unknown_origin_positions,50)
         self.assertTrue(data.sufficient)
 
+    def test_c141_verified_one_position_cannot_override_minimum_to_one(self):
+        with self.assertRaisesRegex(ValueError, "below the canonical policy"):
+            self.inspect([e(0)], required=1)
+
+    def test_c141_verified_fortynine_cannot_override_minimum_to_fortynine(self):
+        with self.assertRaisesRegex(ValueError, "below the canonical policy"):
+            self.inspect([e(i) for i in range(49)], required=49)
+
+    def test_c141_higher_threshold_can_still_be_enforced(self):
+        self.assertFalse(self.inspect([e(i) for i in range(50)], required=51).sufficient)
+        self.assertTrue(self.inspect([e(i) for i in range(51)], required=51).sufficient)
+
+    def test_c141_minimum_matches_published_owner_policy(self):
+        from prop_firm.rules import POLICY
+        self.assertEqual(self.inspect([]).required, POLICY.min_closed_trades_per_challenge)
+        self.assertEqual(POLICY.min_closed_trades_per_challenge, 50)
+
     def test_imprecise_or_invalid_required_count_rejected(self):
         for value in (False, "50", 0, -1, 49.5):
             with self.subTest(value=value), self.assertRaises(ValueError):
