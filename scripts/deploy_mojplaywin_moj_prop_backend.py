@@ -195,6 +195,10 @@ def atomic_replace(source: Path, target: Path, mode: int) -> None:
 
 def atomic_write_text(target: Path, text: str, mode: int) -> None:
     assert_safe_parent(target, ROOT)
+    # This path is used for URL configuration and the selected migration.
+    # A symlink installed after preflight is an owner-owned file boundary.
+    if target.is_symlink():
+        raise RuntimeError("unsafe live target symlink before text replacement")
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{target.name}.mojprop-", dir=str(target.parent)
     )
