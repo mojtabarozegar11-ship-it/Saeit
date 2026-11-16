@@ -849,8 +849,10 @@ class MojPropStarter30Order(T):
                 name="mojprop30_fixed_merchant",
             ),
             models.CheckConstraint(
-                condition=models.Q(status__in=("draft", "issued", "settled", "delivered", "cancelled")),
-                name="mojprop30_known_order_state",
+                # No source-only order can become payable/settled by an arbitrary
+                # admin or ORM field update without an independently reviewed ledger.
+                condition=models.Q(status="draft"),
+                name="mojprop30_draft_only",
             ),
         ]
 
@@ -862,6 +864,8 @@ class MojPropStarter30Order(T):
         )
         super().clean()
         errors = {}
+        if self.status != "draft":
+            errors["status"] = "This source-only order cannot issue, settle or deliver."
         if self.issued_at is None or self.expires_at is None:
             errors["expires_at"] = "Both invoice timestamps are required."
         elif (
