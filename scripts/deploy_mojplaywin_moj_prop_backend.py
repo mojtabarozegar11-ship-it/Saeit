@@ -625,10 +625,51 @@ def verify_backup_manifest(backup: Path) -> dict:
     return manifest
 
 
+def mark_schema_migration_started(backup: Path) -> None:
+    """Durably mark the backup unsafe for a source-only rollback BEFORE DDL.
+
+    A later explicit 'rollback RUN_ID' must not bypass the deploy-time guard.
+    Absence or corruption of the phase marker fails closed during restore.
+    """
+    manifest = verify_backup_manifest(backup)
+    if manifest.get("schema_migration_attempted") is not False:
+        raise RuntimeError("backup's pre-migration phase is not verified")
+    manifest["schema_migration_attempted"] = True
+    target = backup / "manifest.json"
+    assert_regular(target, "pre-migration manifest")
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".mojprop-schema-phase-", dir=str(backup)
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            json.dump(manifest, output, ensure_ascii=False, indent=2)
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, target)
+        directory_fd = os.open(str(backup), os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+    if verify_backup_manifest(backup).get("schema_migration_attempted") is not True:
+        raise RuntimeError("schema migration phase marker was not persisted")
+
+
 def restore(backup: Path) -> None:
     # Unlike file-by-file checks, a corrupt later file cannot partially revert
     # earlier live files. This is NOT a substitute for a DB restore.
     manifest = verify_backup_manifest(backup)
+    if manifest.get("schema_migration_attempted") is not False:
+        raise RuntimeError(
+            "source-only rollback DENIED: database migration may have started; "
+            "independent schema reconciliation and recovery are required"
+        )
     for relative in ALL_FILES:
         entry = manifest[str(relative)]
         target = ROOT / relative
@@ -755,7 +796,7 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
     if backup.exists():
         raise RuntimeError(f"refusing to reuse backend backup: {backup}")
     backup.mkdir(parents=True, mode=0o700)
-    manifest = {"run_id": run_id, "commit": commit, "files": [str(item) for item in ALL_FILES]}
+    manifest = {"run_id": run_id, "commit": commit, "files": [str(item) for item in ALL_FILES], "schema_migration_attempted": False}
     for relative in ALL_FILES:
         backup_target(ROOT / relative, backup, manifest, relative)
     (backup / "manifest.json").write_text(
@@ -790,6 +831,7 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         # Schema closure rejected any unknown core migration >=0041.
         # Set BEFORE launching migrations: DDL may be committed even if the
         # command errors or times out; never assume a clean schema rollback.
+        mark_schema_migration_started(backup)
         schema_migration_attempted = True
         run_checked([str(python), "manage.py", "migrate",
                      "core", migration_target, "--noinput"], ROOT)
