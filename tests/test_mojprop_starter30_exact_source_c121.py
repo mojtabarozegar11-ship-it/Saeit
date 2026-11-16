@@ -54,7 +54,7 @@ class Starter30ReviewedExactBytesC121Tests(unittest.TestCase):
 
     def test_03_guide_small_text_change_cannot_fake_reviewed_content(self):
         item = self.stage / "journal-guide.txt"
-        item.write_bytes(item.read_bytes().replace(b"ten-session", b"nine-session", 1))
+        item.write_bytes(item.read_bytes().replace(b"Ten-session", b"Nine-session", 1))
         with self.assertRaisesRegex(RuntimeError, "do not match reviewed Git source"):
             rel.preflight("123", COMMIT)
 
