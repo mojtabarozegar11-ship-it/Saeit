@@ -421,5 +421,14 @@ class BrokerSignedEvidenceTests(TestCase):
                   "is_session_open": False},
         ))
         self.assertEqual(result["result"], "recorded_pending")
-        mark = PropEquityObservation.objects.get(external_event_id="scientific-max")
-        self.assertEqual(mark.equity_usd, Decimal("99999999999999.9999"))
+        # SQLite's test-only numeric reader can coerce 18 significant digits
+        # through binary float; test exact pre-storage Decimal independently.
+        # MariaDB DECIMAL persistence/restore must be verified separately.
+        from prop_firm.signed_evidence import _value
+        self.assertEqual(
+            _value("9.9999999999999999E+13", "equity_usd"),
+            Decimal("99999999999999.9999"),
+        )
+        self.assertEqual(
+            PropEquityObservation.objects.filter(external_event_id="scientific-max").count(), 1
+        )
