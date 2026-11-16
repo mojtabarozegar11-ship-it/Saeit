@@ -208,7 +208,10 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
     # Without this guard the v1.1 assessment path omits v1.2 trade/social
     # conditions and can mark an already paid challenge as eligible.
     purchase_window_valid = not (
-        purchase is not None and account.policy_version != purchase.terms_version
+        purchase is not None and (
+            account.policy_version != NEW_CONTRACT_VERSION
+            or purchase.terms_version != NEW_CONTRACT_VERSION
+        )
     )
     selected_plan = None
     if purchase is not None:
