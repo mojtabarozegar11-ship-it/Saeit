@@ -125,6 +125,23 @@ class MojPropBackupIntegrityTests(unittest.TestCase):
             self.assertEqual((self.live / rel).read_bytes(), b"new-live-bytes")
         self.restart.assert_not_called()
 
+    def test_cli_staging_root_does_not_resolve_away_symlink(self):
+        live = self.base / "source-bundle"
+        live.mkdir()
+        alias = self.base / "symlink-bundle"
+        alias.symlink_to(live, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "symlinked staged command path"):
+            backend.staged_cli_root(str(alias))
+        self.assertEqual(backend.staged_cli_root(str(live)), live)
+
+    def test_cli_staging_root_rejects_symlinked_ancestor(self):
+        real = self.base / "real-stage"
+        (real / "nested").mkdir(parents=True)
+        alias = self.base / "alias-stage"
+        alias.symlink_to(real, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "symlinked staged command path"):
+            backend.staged_cli_root(str(alias / "nested"))
+
     def test_staged_source_inventory_blocks_nested_symlink_before_execution(self):
         staged = self.base / "staged-app"
         staged.mkdir()
