@@ -35,7 +35,7 @@ class CpanelStorageNoDeleteContract(unittest.TestCase):
 
     def test_no_secret_ssh_or_deletion_operation_reenabled(self):
         prohibited = (
-            r"secrets\\.",
+            r"secrets\.",
             r"\bssh\s+-[A-Za-z]",
             r"\bscp\s+",
             r"\brsync\s+",
