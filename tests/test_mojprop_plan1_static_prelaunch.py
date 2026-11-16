@@ -68,10 +68,10 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
         self.assertNotIn("action='/moj-prop/interest/'", self.page)
         self.assertIn('manual review, not enrolment', self.page)
 
-    def test_legacy_crm_is_labeled_prelaunch_and_nonpayable(self):
-        self.assertIn("The explicit product identity is recorded in notes", self.page)
-        self.assertIn("not a paid order", self.page)
-        self.assertIn("Prelaunch interest ONLY:", self.page)
+    def test_generic_desk_is_not_a_plan_one_intake(self):
+        self.assertIn("Other service requests — not Plan 1", self.page)
+        self.assertIn("Other prop-program design consultation (not MOJ-PROP-01)", self.page)
+        self.assertNotIn('<option value="blueprint">Moj Prop Plan 1 prelaunch enquiry</option>', self.page)
 
     def test_no_live_payment_action_or_wallet_exposure(self):
         self.assertNotIn('action="/moj-prop/checkout/', self.page)
@@ -132,6 +132,111 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
     def test_private_data_and_withdrawal_are_disclosed(self):
         self.assertIn("withdrawal of prelaunch contact consent", self.page)
         self.assertIn("never disclose passwords, wallet keys or KYC documents", self.page)
+
+
+
+    def test_metadata_factual_prelaunch_not_funded_product(self):
+        self.assertIn("Trading evaluation prelaunch — information only", self.page)
+        self.assertIn("free prelaunch information only, no payment", self.page)
+
+    def test_marketing_does_not_claim_reserved_account(self):
+        self.assertIn("no paid challenge, reserved slot, funded account", self.page)
+        self.assertIn("no payment, booking, broker account or capital allocation", self.page)
+
+    def test_no_unverified_bot_autodelivery_claim(self):
+        self.assertIn("aims to review requests, disclose blocking conditions", self.page)
+
+    def test_generic_service_consent_is_explicit_and_narrow(self):
+        self.assertIn("I consent to storing this other-service request", self.page)
+        self.assertIn("No recurring marketing consent is given", self.page)
+
+    def test_generic_service_selector_cannot_choose_real_plan_one(self):
+        self.assertNotIn('<option value="blueprint">Moj Prop Plan 1', self.page)
+        self.assertIn("Other prop-program design consultation", self.page)
+
+    def test_generic_service_draft_placeholder_excludes_funded_offer(self):
+        self.assertNotIn('placeholder="Please ask me about the MOJ-PROP-01', self.page)
+        self.assertIn("Describe your other service request", self.page)
+
+    def test_plan_one_url_prefix_not_in_generic_javascript(self):
+        self.assertNotIn("planOnePrefix", self.page)
+        self.assertNotIn("planOneRequested", self.page)
+        self.assertNotIn("syncPlanOne", self.page)
+
+    def test_plan_one_generic_hidden_summary_removed(self):
+        self.assertNotIn('id="selected-plan-one"', self.page)
+        self.assertIn("Generic services must not infer a funded-challenge SKU", self.page)
+
+    def test_server_persistence_is_required_for_optin_claim(self):
+        self.assertIn("confirmed server receipt", self.page)
+        self.assertIn("not a saved lead", self.page)
+
+    def test_review_consent_not_bulk_marketing(self):
+        self.assertIn("does <strong>not</strong> opt you into bulk email", self.page)
+        self.assertIn("Consent to one-to-one review", self.page)
+
+    def test_pii_never_requested_for_prelaunch(self):
+        self.assertIn("Never submit a password, ID scan", self.page)
+        self.assertIn("wallet key", self.page)
+
+    def test_withdrawal_and_data_rights_are_visible(self):
+        self.assertIn("consent withdrawal or a request for personal-data deletion", self.page)
+        self.assertIn("/moj-prop/contact/", self.page)
+
+    def test_refund_rules_prepayment_disclosure(self):
+        self.assertIn("eventual refund policy must be disclosed before payment", self.page)
+        self.assertIn("no paid refund is processed", self.page)
+
+    def test_country_is_a_gate_not_automatic_eligibility(self):
+        self.assertIn("Country of residence and regulatory eligibility must be independently checked", self.page)
+
+    def test_persian_section_is_labeled_rtl_and_accessible(self):
+        self.assertIn('id="plan-one-fa" lang="fa" dir="rtl"', self.page)
+        self.assertIn('aria-labelledby="plan-one-fa-title"', self.page)
+        self.assertIn('lang="fa">فارسی</a>', self.page)
+
+    def test_persian_fee_is_not_payable_today(self):
+        self.assertIn("۳۰٬۰۰۰٬۰۰۰ SUN", self.page)
+        self.assertIn("اکنون هیچ وجهی دریافت نمی‌شود", self.page)
+
+    def test_persian_targets_and_six_days_each_phase(self):
+        for phrase in ("۹٫۶٪", "۶٪", "۶ روز معاملاتی واجد شرایط در هر مرحله"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.page)
+
+    def test_persian_fifty_trades_and_28_day_clock(self):
+        self.assertIn("۵۰ معامله بسته‌شده یکتای تأییدشده", self.page)
+        self.assertIn("۲۸ روز تقویمی", self.page)
+
+    def test_persian_drawdown_and_best_day_consistency(self):
+        self.assertIn("۴٪ / ۸٪", self.page)
+        self.assertIn("۳۲٪", self.page)
+
+    def test_persian_profit_split_and_100_funding_conditional(self):
+        self.assertIn("۷۰٪ معامله‌گر و ۳۰٪ شرکت", self.page)
+        self.assertIn("۱۰۰ دلار سرمایه واقعی", self.page)
+        self.assertIn("تأیید قانونی", self.page)
+
+    def test_persian_privacy_withdrawal_and_no_credentials(self):
+        self.assertIn("لغو رضایت", self.page)
+        self.assertIn("کلید کیف پول", self.page)
+        self.assertIn("شرایط اقامت", self.page)
+
+    def test_persian_cta_remains_nonpayable_nonjs_main_route(self):
+        self.assertIn("درخواست رایگان اطلاعات — بدون پرداخت", self.page)
+        self.assertIn("فرم در نسخه اصلی ممکن است انگلیسی باشد", self.page)
+        self.assertGreaterEqual(self.page.count("package=moj-prop-01"), 4)
+
+    def test_persian_does_not_pretend_20_locals_translated(self):
+        self.assertIn("برای ۱۸ زبان دیگر هنوز ترجمه حقوقی تأییدشده منتشر نشده است", self.page)
+
+    def test_persian_section_is_only_one_and_has_no_payment_form(self):
+        self.assertEqual(self.page.count('id="plan-one-fa"'), 1)
+        self.assertNotIn('action="/moj-prop/payment/"', self.page)
+
+    def test_editorial_guide_is_separate_from_checkout(self):
+        self.assertIn('id="prelaunch-guidance"', self.page)
+        self.assertNotIn('name="wallet_address"', self.page)
 
 
 
