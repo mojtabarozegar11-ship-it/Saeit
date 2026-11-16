@@ -1,0 +1,60 @@
+name: Mojtaba site-agent merge impact — offline NO-GO gate
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - "scripts/mojtaba_site_main_merge_impact_readonly.py"
+      - "tests/test_mojtaba_site_main_merge_impact_readonly.py"
+      - "scripts/mojtaba_site_consumer_cutover_readonly.py"
+      - "core/mojtaba_site_*.py"
+      - "core/management/commands/mojtaba_site_*.py"
+      - "command_center/mpw_monitor_views.py"
+      - "command_center/mpw_private_telemetry.py"
+      - "content/zomorod-business/app.php"
+permissions:
+  contents: read
+jobs:
+  read-only-merge-impact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate no-host scanner with synthetic and repository fixtures
+        run: |
+          python3 -m py_compile scripts/mojtaba_site_main_merge_impact_readonly.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_site_main_merge_impact_readonly.py' -v
+      - name: Exact PR changed paths against all checked-out workflows (no SSH)
+        shell: bash
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$PR_BASE" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$PR_HEAD" =~ ^[a-f0-9]{40}$ ]]
+          git cat-file -e "$PR_BASE^{commit}"
+          git cat-file -e "$PR_HEAD^{commit}"
+          git diff --name-only --no-renames "$PR_BASE" "$PR_HEAD" > "$RUNNER_TEMP/site-agent-changed-paths.txt"
+          set +e
+          python3 scripts/mojtaba_site_main_merge_impact_readonly.py \
+            --changed-paths-file "$RUNNER_TEMP/site-agent-changed-paths.txt" \
+            --enforce > "$RUNNER_TEMP/site-agent-merge-impact.json"
+          rc=$?
+          set -e
+          python3 - "$RUNNER_TEMP/site-agent-merge-impact.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding="utf-8"))
+          print("SCANNED_WORKFLOWS="+str(x["workflow_files_scanned"]))
+          print("EXACT_CHANGED_PATHS="+str(x["changed_file_count"]))
+          print("MAIN_PUSH_OR_WORKFLOW_RUN_POSSIBLE="+str(x["possible_trigger_count"]))
+          print("UNKNOWN_TRIGGER_SYNTAX="+str(x["unknown_count"]))
+          print("SOURCE_MERGE_VERDICT="+x["verdict"])
+          for item in x["blockers"][:35]:
+              print("REVIEW_REQUIRED="+item["workflow"]+" / "+item["classification"])
+          print("HOST_CLEANUP_AUTHORIZED=false")
+          PY
+          exit "$rc"
