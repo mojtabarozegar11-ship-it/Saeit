@@ -29,6 +29,7 @@ from scripts.mojprop_schema_preflight_c83 import (
     migration_operations_signature,
 )
 from scripts.mojprop_db_release_evidence import verify_database_restore_evidence
+from scripts.mojprop_restore_capacity_admission import require_signed_capacity_receipt
 
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
@@ -69,6 +70,7 @@ FILES = (
     Path("scripts/fixtures/mojprop_legacy_admin_source_c84.py"),
     Path("scripts/mojprop_schema_preflight_c83.py"),
     Path("scripts/mojprop_db_release_evidence.py"),
+    Path("scripts/mojprop_restore_capacity_admission.py"),
     Path("scripts/mojprop_live_database_identity_c85.py"),
 )
 ALL_FILES = (URLCONF, SETTINGSCONF) + FILES
@@ -79,6 +81,7 @@ REPLACE_FILES = tuple(path for path in FILES if path not in (
     # Private evidence must be verified from the staged bundle, not installed
     # into the production application source tree.
     Path("scripts/mojprop_db_release_evidence.py"),
+    Path("scripts/mojprop_restore_capacity_admission.py"),
     Path("scripts/mojprop_live_database_identity_c85.py"),
 ))
 
@@ -848,6 +851,23 @@ def require_independent_db_restore(run_id: str, commit: str, staged_root: Path) 
     )
     if verified.get("rehearsal_receipt_verified") is not True:
         raise RuntimeError("signed independent DB restore receipt was not verified")
+    # A DB-only signature does NOT verify off-host app/media recovery or the
+    # destination's account-specific inode quota. Require a separately signed,
+    # exact-case bound full recovery/capacity statement BEFORE FIRST FILE WRITE.
+    capacity = require_signed_capacity_receipt(
+        path=INDEPENDENT_DB_EVIDENCE_ROOT / evidence_case /
+             "independent-restore-capacity.json",
+        run_id=evidence_case,
+        source_commit=commit,
+        database_identity_sha256=actual_identity,
+        snapshot_sha256=verified["snapshot_sha256"],
+        verifier_key=key.encode("utf-8"),
+    )
+    if capacity.get("capacity_receipt_verified") is not True:
+        raise RuntimeError("independent complete-recovery capacity proof denied")
+    # A reviewer-signed statement is not independent verification of a real
+    # remote backup or isolated restore. Authorized operator must audit it.
+    print("MOJ_PROP_RESTORE_CAPACITY=SIGNED_REVIEWER_ATTESTATION")
     # Do not print database credentials, reviewer signature or private backups.
     print("MOJ_PROP_INDEPENDENT_DB_RESTORE_EVIDENCE=VERIFIED")
     return verified
