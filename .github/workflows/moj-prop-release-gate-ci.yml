@@ -55,6 +55,7 @@ jobs:
           tests.test_moj_prop_allocation_service
           tests.test_moj_prop_signed_evidence
           tests.test_moj_prop_phase_sequence_c141
+          tests.test_moj_prop_future_evidence_c144
           tests.test_moj_prop_plan_qualification
           tests.test_moj_prop_fifty_trades
           tests.test_tron_manual_reconciliation
