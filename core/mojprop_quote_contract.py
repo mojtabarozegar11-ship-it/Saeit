@@ -6,6 +6,7 @@ commercial snapshot. It never charges, sends, delivers, or marks revenue.
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal, InvalidOperation
 import re
+import unicodedata
 
 class QuoteContractError(ValueError):
     pass
@@ -34,7 +35,9 @@ def validate_acceptance_reference(value):
     # controls that can alter the apparent buyer approval in logs and reports.
     forbidden_bidi = set(range(0x202A, 0x202F)) | set(range(0x2066, 0x206A))
     if any(ord(ch) < 32 or 0x7F <= ord(ch) <= 0x9F
-           or ord(ch) in forbidden_bidi for ch in reference):
+           or ord(ch) in forbidden_bidi
+           or unicodedata.category(ch) in ("Cf", "Zl", "Zp", "Cc", "Cs")
+           for ch in reference):
         raise QuoteContractError("invalid acceptance reference")
     return reference
 
