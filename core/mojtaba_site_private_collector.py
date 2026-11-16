@@ -7,6 +7,8 @@ the central VPS never participates. No free-form command/path arguments.
 from __future__ import annotations
 
 import os
+import fcntl
+from contextlib import contextmanager
 from pathlib import Path
 import pwd
 import subprocess
@@ -19,13 +21,17 @@ HOME = Path("/home/zomorod2")
 LEGACY_CRON_MARKER = "MPW_MAIN_AGENT_DASHBOARD_COLLECTOR_20261018"
 
 
-def validate_private_mpw_context(*, username, home, cron_text, private_dir_valid):
+def validate_private_mpw_context(*, username, home, cron_text, private_dir_valid, process_text=None):
     if username != OWNER or Path(home) != HOME:
         raise SiteFleetError("MPW_PRIVATE_COLLECTOR_WRONG_HOST")
     if cron_text is None or not isinstance(cron_text, str):
         raise SiteFleetError("MPW_CRON_INVENTORY_UNAVAILABLE")
     if not private_dir_valid:
         raise SiteFleetError("MPW_PRIVATE_TENANT_DIR_UNSAFE")
+    if process_text is None or not isinstance(process_text, str):
+        raise SiteFleetError("MPW_PROCESS_INVENTORY_UNAVAILABLE")
+    if any("mpw_monitor_collector.py" in line for line in process_text.splitlines()):
+        raise SiteFleetError("MPW_LEGACY_COLLECTOR_PROCESS_STILL_RUNNING")
     running_lines = [
         line for line in cron_text.splitlines()
         if line.strip() and not line.lstrip().startswith("#")
@@ -36,6 +42,30 @@ def validate_private_mpw_context(*, username, home, cron_text, private_dir_valid
     return {"tenant": "mojplaywin", "single_writer_preflight": True,
             "legacy_cron_detected": False}
 
+
+
+
+@contextmanager
+def _single_site_writer_lock(target):
+    """Reject symlink lock and protect against concurrent canonical writes."""
+    path = target / ".mojtaba-site-history.lock"
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags, 0o600)
+    try:
+        status = os.fstat(fd)
+        if (status.st_uid != os.geteuid()
+                or status.st_mode & 0o077 != 0):
+            raise SiteFleetError("MPW_WRITER_LOCK_UNSAFE")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise SiteFleetError("MPW_CANONICAL_WRITER_ALREADY_RUNNING") from exc
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
 
 def collect_private_mpw_as_canonical_bot():
     """The sole explicitly invoked write is the site's existing safe collector.
@@ -70,14 +100,21 @@ def collect_private_mpw_as_canonical_bot():
         cron_text = cron.stdout if cron.returncode == 0 else None
     except (subprocess.TimeoutExpired, OSError):
         cron_text = None
+    try:
+        processes = subprocess.run(["ps", "-eo", "args="], capture_output=True,
+                                   text=True, timeout=8, check=False)
+        process_text = processes.stdout if processes.returncode == 0 else None
+    except (subprocess.TimeoutExpired, OSError):
+        process_text = None
     validate_private_mpw_context(
         username=user, home=Path.home(), cron_text=cron_text,
-        private_dir_valid=valid_dir,
+        private_dir_valid=valid_dir, process_text=process_text,
     )
     if Agent.objects.filter(code="mojtaba-bot-ai", active=True).count() != 1:
         raise SiteFleetError("CANONICAL_SITE_AGENT_NOT_ACTIVE")
     # No user-controlled path, source, tenant, command, or arbitrary delete.
-    result = collect()
+    with _single_site_writer_lock(target):
+        result = collect()
     if (not isinstance(result, dict)
             or result.get("status") != "private_history_updated"
             or result.get("history") != HISTORY

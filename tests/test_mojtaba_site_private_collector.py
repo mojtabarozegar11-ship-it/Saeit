@@ -15,21 +15,21 @@ class MpwPrivateCollectorCutoverTests(SimpleTestCase):
         with self.assertRaisesRegex(SiteFleetError, "STILL_ACTIVE"):
             validate_private_mpw_context(
                 username="zomorod2", home=Path("/home/zomorod2"),
-                cron_text=cron, private_dir_valid=True,
+                cron_text=cron, private_dir_valid=True, process_text="",
             )
 
     def test_unknown_crontab_blocks_migration(self):
         with self.assertRaisesRegex(SiteFleetError, "UNAVAILABLE"):
             validate_private_mpw_context(
                 username="zomorod2", home=Path("/home/zomorod2"),
-                cron_text=None, private_dir_valid=True,
+                cron_text=None, private_dir_valid=True, process_text="",
             )
 
     def test_wrong_host_or_unsafe_private_dir_blocks(self):
         for params in (
-            {"username": "other", "home": Path("/home/zomorod2"), "cron_text": "", "private_dir_valid": True},
+            {"username": "other", "home": Path("/home/zomorod2"), "cron_text": "", "private_dir_valid": True, "process_text": ""},
             {"username": "zomorod2", "home": Path("/home/vps"), "cron_text": "", "private_dir_valid": True},
-            {"username": "zomorod2", "home": Path("/home/zomorod2"), "cron_text": "", "private_dir_valid": False},
+            {"username": "zomorod2", "home": Path("/home/zomorod2"), "cron_text": "", "private_dir_valid": False, "process_text": ""},
         ):
             with self.subTest(params=params), self.assertRaises(SiteFleetError):
                 validate_private_mpw_context(**params)
@@ -38,10 +38,25 @@ class MpwPrivateCollectorCutoverTests(SimpleTestCase):
         ctx = validate_private_mpw_context(
             username="zomorod2", home=Path("/home/zomorod2"),
             cron_text="0 * * * * /usr/bin/python3 safe_report.py",
-            private_dir_valid=True,
+            private_dir_valid=True, process_text="",
         )
         self.assertTrue(ctx["single_writer_preflight"])
         self.assertNotIn("legacy_files_retired", ctx)
+
+    def test_running_legacy_collector_blocks_cutover_even_after_cron_removed(self):
+        with self.assertRaisesRegex(SiteFleetError, "PROCESS_STILL_RUNNING"):
+            validate_private_mpw_context(
+                username="zomorod2", home=Path("/home/zomorod2"),
+                cron_text="", process_text="python /home/zomorod2/mpw_monitor_collector.py --collect",
+                private_dir_valid=True,
+            )
+
+    def test_missing_process_list_blocks_single_writer_claim(self):
+        with self.assertRaisesRegex(SiteFleetError, "PROCESS_INVENTORY_UNAVAILABLE"):
+            validate_private_mpw_context(
+                username="zomorod2", home=Path("/home/zomorod2"),
+                cron_text="", process_text=None, private_dir_valid=True,
+            )
 
     def test_root_cannot_invoke_site_collector(self):
         with patch("core.mojtaba_site_private_collector.os.geteuid", return_value=0):
