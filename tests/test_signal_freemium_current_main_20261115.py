@@ -47,7 +47,12 @@ class FreeSignalPageContracts(SimpleTestCase):
                 self.assertIn("const endpoint='/moj-prop-intake/';", source)
                 self.assertIn(".get('tier')==='free'", source)
                 self.assertIn("freeTierRequested", source)
-                self.assertIn("response.status!==201", source)
+                if path == V4:
+                    self.assertIn("response.status===201 && data.reused!==true", source)
+                    self.assertIn("response.status===200 && data.reused===true", source)
+                else:
+                    # Legacy intake remains strict HTTP 201 only.
+                    self.assertIn("response.status!==201", source)
                 self.assertIn("X-CSRFToken", source)
                 self.assertIn("mojtaba.bot.ai", source)
 

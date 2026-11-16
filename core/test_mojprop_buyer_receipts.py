@@ -114,3 +114,51 @@ class MojPropBuyerReceiptTests(TestCase):
             self.browser.get("/moj-prop-status/", {"receipt_token": result["receipt_token"]}).status_code,
             200,
         )
+
+    def test_keyed_receipt_round_trips_status_without_duplicate_intake(self):
+        data = {
+            "name": "Manual review buyer", "email": "manual@buyer.example.org",
+            "service": "brief", "horizon": "week",
+            "notes": "Please review this dated educational scope for me.",
+            "consent": True, "website": "",
+            "idempotency_key": "12345678-1234-4234-8234-123456789abc",
+        }
+        def submit():
+            return self.browser.post(
+                "/moj-prop-intake/", data=json.dumps(data),
+                content_type="application/json", HTTP_X_CSRFTOKEN=self.token,
+            )
+        first = submit()
+        self.assertEqual(first.status_code, 201)
+        same = submit()
+        self.assertEqual(same.status_code, 200)
+        self.assertEqual(same.json()["request_id"], first.json()["request_id"])
+        self.assertEqual(verify_receipt_token(same.json()["receipt_token"]),
+                         first.json()["request_id"])
+        status = self.browser.post(
+            "/moj-prop-status/",
+            data=json.dumps({"receipt_token": same.json()["receipt_token"]}),
+            content_type="application/json", HTTP_X_CSRFTOKEN=self.token,
+        )
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(status.json()["request_id"], first.json()["request_id"])
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+
+    def test_old_and_keyed_receipt_shapes_preserve_strict_validation(self):
+        for identifier in (
+            "MOJPROP-20261116-ABCDEF12",
+            "MOJPROP-ID-ABCDEF0123456789ABCDEF01",
+        ):
+            with self.subTest(identifier=identifier):
+                self.assertEqual(verify_receipt_token(make_receipt_token(identifier)),
+                                 identifier)
+        for identifier in (
+            "MOJPROP-ID-" + "a" * 24,
+            "MOJPROP-ID-" + "0" * 23,
+            "MOJPROP-ID-" + "0" * 25,
+            "MOJPROP-ID-" + "X" * 24,
+            "MOJPROP-20261116-ABCDEF1",
+        ):
+            with self.subTest(identifier=identifier):
+                with self.assertRaises(ValueError):
+                    make_receipt_token(identifier)

@@ -48,6 +48,9 @@
       const endpoint='/moj-prop-intake/';
       let csrfToken='';
       let receipt='';
+      // Keep an unconfirmed POST's UUID until the same payload is recovered.
+      // Never put the idempotency key in a URL, receipt, download or storage.
+      let pendingSubmission=null;
 
       const labels={
         blueprint:'Prop-program design',
@@ -168,6 +171,26 @@
       serviceSelector.addEventListener('change',syncStarter30);
       syncStarter30();
 
+      function secureRequestUUID(){
+        // randomUUID is unavailable in some older mobile browsers. Do not
+        // fall back to Math.random, timestamps, localStorage or URL secrets.
+        const crypto=window.crypto;
+        if(!crypto) throw new Error('A secure browser is required for duplicate-safe submission.');
+        if(typeof crypto.randomUUID==='function') return crypto.randomUUID();
+        if(typeof crypto.getRandomValues!=='function'){
+          throw new Error('A secure browser is required for duplicate-safe submission.');
+        }
+        const bytes=crypto.getRandomValues(new Uint8Array(16));
+        if(!(bytes instanceof Uint8Array) || bytes.length!==16){
+          throw new Error('Secure random source unavailable.');
+        }
+        bytes[6]=(bytes[6]&15)|64; // UUIDv4
+        bytes[8]=(bytes[8]&63)|128; // RFC 4122 variant
+        const hex=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+        return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),
+                hex.slice(16,20),hex.slice(20)].join('-');
+      }
+
       async function csrf(signal){
         if(csrfToken) return csrfToken;
         const response=await fetch(endpoint,{credentials:'same-origin',headers:{Accept:'application/json'},cache:'no-store',signal});
@@ -218,33 +241,46 @@
         const timeout=setTimeout(()=>abortController.abort(),15000);
         let postAttempted=false;
         let explicitRejection=false;
+        let previousUnconfirmed=false;
         try{
           if(submittedNotes.length>5000) throw new Error('Shorten notes to fit the selected educational plan.');
+          const payload={name,email,service,horizon,notes:submittedNotes,website,
+            product_id:selectedProduct,consent:document.getElementById('consent').checked};
+          const fingerprint=JSON.stringify(payload);
+          if(pendingSubmission && pendingSubmission.uncertain &&
+             pendingSubmission.fingerprint!==fingerprint){
+            previousUnconfirmed=true;
+            throw new Error('An earlier submission is unconfirmed. Restore the original fields or contact support before changing this request.');
+          }
           const token=await csrf(abortController.signal);
+          if(!pendingSubmission || pendingSubmission.fingerprint!==fingerprint){
+            pendingSubmission={fingerprint, key:secureRequestUUID(), uncertain:false};
+          }
           postAttempted=true;
           const response=await fetch(endpoint,{
             method:'POST',
             credentials:'same-origin',
             signal:abortController.signal,
             headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRFToken':token},
-            body:JSON.stringify({name,email,service,horizon,notes:submittedNotes,website,
-              product_id:selectedProduct,consent:document.getElementById('consent').checked})
+            body:JSON.stringify({...payload,idempotency_key:pendingSubmission.key})
           });
           if(response.status===403) csrfToken='';
           const data=await response.json().catch(()=>({}));
-          // A successful HTTP 200, or an unrelated HTML proxy response, is
-          // not a persistent commercial lead. The server must issue HTTP 201
-          // and a canonical, auditable request ID before receipt controls open.
-          if(response.status!==201 || data.ok!==true ||
+          // Only a new HTTP 201 or explicitly recovered HTTP 200 is valid.
+          // Never treat an arbitrary HTTP 200 as proof of a persisted lead.
+          const persisted=(response.status===201 && data.reused!==true) ||
+                          (response.status===200 && data.reused===true);
+          if(!persisted || data.ok!==true ||
              typeof data.request_id!=='string' ||
-             !/^MOJPROP-[0-9]{8}-[A-F0-9]{8}$/.test(data.request_id) ||
+             !/^MOJPROP-(?:[0-9]{8}-[A-F0-9]{8}|ID-[A-F0-9]{24})$/.test(data.request_id) ||
              (data.receipt_token!==undefined &&
               (typeof data.receipt_token!=='string' || data.receipt_token.length>256))){
-             explicitRejection=[400,403,413,429].includes(response.status) && data.ok===false && typeof data.detail==='string';
+             explicitRejection=[400,403,409,413,429].includes(response.status) && data.ok===false && typeof data.detail==='string';
              const problems=data.fields && typeof data.fields==='object' ? Object.entries(data.fields).map(([field,message])=>field+': '+message).join('; ') : '';
              const retry=response.status===429 ? ' Wait before resubmitting; no new request was recorded.' : '';
              throw new Error((data.detail||'The request could not be received.')+(problems?' '+problems:'')+retry);
            }
+          pendingSubmission=null;
           receipt=draft(name,email,service,horizon,submittedNotes,'received for manual review',data.request_id,data.receipt_token||'',selectedProduct);
           receiptTokenInput.value=data.receipt_token||'';
           if(data.receipt_token!==undefined && typeof data.receipt_token==='string' && data.receipt_token.length<=256){
@@ -258,9 +294,13 @@
           // A failed request is NOT a buyer receipt and must never enable
           // copy/download controls suggesting a customer was registered.
           receipt='';
-          result.textContent=postAttempted && !explicitRejection
-            ? 'Submission status unconfirmed. The server may have saved your request despite a lost response. Avoid duplicate submissions; contact support before retrying. No payment was attempted.'
-            : 'Request NOT submitted. '+(error.name==='AbortError'?'The service timed out before submission.':error.message)+' No ID or payment was created.';
+          if(postAttempted && !explicitRejection && pendingSubmission){
+            pendingSubmission.uncertain=true;
+          }
+          if(explicitRejection) pendingSubmission=null;
+          result.textContent=(previousUnconfirmed || (postAttempted && !explicitRejection))
+            ? 'Submission status unconfirmed. The server may have saved your request. Retry the SAME unchanged form to recover the original receipt without creating a second lead. Do not pay again; contact support if recovery fails.'
+            : 'This submission was not accepted. '+(error.name==='AbortError'?'The request timed out before POST.':error.message)+' No payment was attempted.';
           copy.disabled=true;
           download.disabled=true;
         }finally{

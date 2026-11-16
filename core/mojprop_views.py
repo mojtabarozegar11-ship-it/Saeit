@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import json
 import secrets
+from uuid import UUID
 from datetime import timedelta
 
 from django.conf import settings
@@ -45,7 +46,8 @@ def _text(payload, key: str, limit: int) -> str:
 
 MAX_BODY_BYTES = 16 * 1024
 ALLOWED_FIELDS = frozenset((
-    "name", "email", "service", "horizon", "notes", "consent", "website", "product_id"
+    "name", "email", "service", "horizon", "notes", "consent", "website", "product_id",
+    "idempotency_key",
 ))
 # Only listed products may create an unpaid digital inquiry, never an invoice.
 CATALOG_INQUIRY_PRODUCTS = frozenset((72, 225, 879))
@@ -137,6 +139,54 @@ def _request_id() -> str:
     return f"MOJPROP-{timezone.now():%Y%m%d}-{secrets.token_hex(4).upper()}"
 
 
+def _keyed_request_id(raw: str) -> str:
+    """Map an unpredictable UUIDv4 to an existing DB-unique request_id.
+
+    A keyed retry needs no new column/migration. The key never appears in an
+    URL or server response, and a different payload with the same key fails.
+    """
+    if type(raw) is not str or len(raw) != 36:
+        raise ValueError("Require canonical UUIDv4 idempotency key")
+    try:
+        key = UUID(raw)
+    except (ValueError, AttributeError) as exc:
+        raise ValueError("Require canonical UUIDv4 idempotency key") from exc
+    if key.version != 4 or str(key) != raw:
+        raise ValueError("Require canonical UUIDv4 idempotency key")
+    tag = hmac.new(
+        str(settings.SECRET_KEY).encode("utf-8"),
+        ("mojprop:intake:v1:" + raw).encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest().upper()[:24]
+    return "MOJPROP-ID-" + tag
+
+
+def _matches_keyed_retry(row, *, name, email, route, horizon, notes, product_id):
+    """Keep a stolen/reused key from granting another buyer's private receipt."""
+    return (
+        row.source == "moj-prop-public" and row.consent is True
+        and row.name == name and row.email == email
+        and row.route == route and row.horizon == horizon
+        and row.notes == notes and row.product_id == product_id
+    )
+
+
+def _intake_success(row, *, reused):
+    return _json({
+        "ok": True,
+        "request_id": row.request_id,
+        "receipt_token": make_receipt_token(row.request_id),
+        "status": row.status,
+        "next_step": "manual_review",
+        "reused": reused,
+        "message": (
+            "Your prior request was found; no duplicate was created. No payment was taken."
+            if reused else
+            "Your request draft was received for manual review. No payment was taken."
+        ),
+    }, status=200 if reused else 201)
+
+
 def _rate_limited(email: str, ip_hash: str) -> bool:
     since = timezone.now() - RATE_WINDOW
     recent = MojPropRequest.objects.filter(created_at__gte=since)
@@ -173,7 +223,7 @@ def mojprop_intake(request):
 
     # Type-check JSON values; Python stringification must not turn arrays,
     # objects or integers into fabricated buyer names/addresses.
-    for field in ("name", "email", "service", "horizon", "notes", "website"):
+    for field in ("name", "email", "service", "horizon", "notes", "website", "idempotency_key"):
         if field in payload and not isinstance(payload[field], str):
             return _json({"ok": False, "detail": "Invalid field types."}, status=400)
     product_id = payload.get("product_id")
@@ -194,7 +244,8 @@ def mojprop_intake(request):
     # Truncation can convert two distinct contacts into the same CRM address,
     # or create a quote for a materially different scope than the buyer sent.
     limits = {"name": 200, "email": 254, "service": 30,
-              "horizon": 20, "notes": 5000, "website": 120}
+              "horizon": 20, "notes": 5000, "website": 120,
+              "idempotency_key": 36}
     oversized = {key: "Field exceeds maximum length."
                  for key, maximum in limits.items()
                  if len(payload.get(key, "")) > maximum}
@@ -253,29 +304,52 @@ def mojprop_intake(request):
     if errors:
         return _json({"ok": False, "detail": "Please correct the highlighted fields.", "fields": errors}, status=400)
 
+    product_scope = product_id if route == "digital" else None
+    keyed_id = None
+    if "idempotency_key" in payload:
+        try:
+            keyed_id = _keyed_request_id(payload["idempotency_key"])
+        except ValueError:
+            return _json({"ok": False, "detail": "Invalid idempotency key."}, status=400)
+
+    def existing_keyed_response(row):
+        if not _matches_keyed_retry(
+            row, name=name, email=email, route=route,
+            horizon=horizon, notes=notes, product_id=product_scope,
+        ):
+            # Never disclose the record, account or receipt on key reuse.
+            return _json({"ok": False, "detail": "Request key conflict."}, status=409)
+        return _intake_success(row, reused=True)
+
+    # Reconnect before throttling: an already persisted, identical retry must
+    # recover the receipt instead of creating a sixth lead or a second quote.
+    if keyed_id:
+        prior = MojPropRequest.objects.filter(request_id=keyed_id).first()
+        if prior is not None:
+            return existing_keyed_response(prior)
+
     ip_hash = _ip_hash(request)
     if _rate_limited(email, ip_hash):
         response = _json(
             {"ok": False, "detail": "Too many requests. Please try again later.", "retry_after": 600},
             status=429,
         )
-        # API clients and browsers can honor this standard response header.
-        # It is not a signal to retry a paid order or bypass the throttle.
         response["Retry-After"] = "600"
         return response
 
     request_obj = None
-    for _ in range(3):
+    for _ in range(1 if keyed_id else 3):
+        request_id = keyed_id or _request_id()
         try:
             with transaction.atomic():
                 request_obj = MojPropRequest.objects.create(
-                    request_id=_request_id(),
+                    request_id=request_id,
                     name=name,
                     email=email,
                     route=route,
                     horizon=horizon,
                     notes=notes,
-                    product_id=product_id if route == "digital" else None,
+                    product_id=product_scope,
                     consent=True,
                     source="moj-prop-public",
                     ip_hash=ip_hash,
@@ -283,22 +357,17 @@ def mojprop_intake(request):
                 )
             break
         except IntegrityError:
-            continue
+            if keyed_id:
+                # Unique DB index serializes competing first POSTs. Never
+                # generate a second CRM lead for a conflicting keyed retry.
+                prior = MojPropRequest.objects.filter(request_id=keyed_id).first()
+                if prior is not None:
+                    return existing_keyed_response(prior)
+                return _json({"ok": False, "detail": "Request state unavailable."}, status=503)
     if request_obj is None:
         return _json({"ok": False, "detail": "Could not allocate a request ID. Please retry."}, status=503)
 
-    return _json(
-        {
-            "ok": True,
-            "request_id": request_obj.request_id,
-            "receipt_token": make_receipt_token(request_obj.request_id),
-            "status": request_obj.status,
-            "next_step": "manual_review",
-            "message": "Your request draft was received for manual review. No payment was taken.",
-        },
-        status=201,
-    )
-
+    return _intake_success(request_obj, reused=False)
 
 @csrf_protect
 @require_http_methods(["GET", "POST"])

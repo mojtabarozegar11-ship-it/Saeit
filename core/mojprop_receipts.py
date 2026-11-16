@@ -10,7 +10,9 @@ from django.core import signing
 
 RECEIPT_SALT = "mojprop-review-receipt-v1"
 RECEIPT_AGE_SECONDS = 90 * 24 * 60 * 60
-RECEIPT_ID = re.compile(r"MOJPROP-[0-9]{8}-[0-9A-F]{8}\Z")
+# Retain all old signed receipts while accepting the HMAC-derived, DB-unique
+# UUIDv4 replay identifier. Neither format embeds buyer identity or a key.
+RECEIPT_ID = re.compile(r"(?:MOJPROP-[0-9]{8}-[0-9A-F]{8}|MOJPROP-ID-[0-9A-F]{24})\Z")
 MAX_TOKEN_CHARS = 256
 
 PUBLIC_STATUSES = {

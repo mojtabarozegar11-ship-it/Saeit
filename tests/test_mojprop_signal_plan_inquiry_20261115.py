@@ -51,7 +51,16 @@ const ctx = {
   AbortController,
   setTimeout: () => 1,
   clearTimeout: () => {},
-  window: { location: { search: process.argv[2] || "" } },
+  // Both modern and older secure WebCrypto are simulated in this sealed VM.
+  // Never simulate an insecure Math.random fallback.
+  window: { location: { search: process.argv[2] || "" },
+    crypto: process.argv[5] === "crypto-missing" ? undefined
+      : process.argv[5] === "crypto-legacy"
+      ? { getRandomValues: bytes => {
+          for(let i=0;i<bytes.length;i++) bytes[i]=i;
+          return bytes;
+        }}
+      : { randomUUID: () => "12345678-1234-4234-8234-123456789abc" } },
   document: { getElementById(id) {
     if (!elements[id]) throw Error("Missing test DOM node: " + id);
     return elements[id];
@@ -61,11 +70,15 @@ const ctx = {
       return {ok:true, json:async()=>({csrf_token:"test-only-csrf"})};
     }
     posted.push({url, body:JSON.parse(options.body)});
-    if (process.argv[5]==="response-lost") throw Error("response lost after POST");
+    if (process.argv[5]==="response-lost" ||
+        (process.argv[5]==="response-lost-then-retry" && posted.length===1))
+      throw Error("response lost after POST");
     if (process.argv[5]==="bad-email") return {status:400,ok:false,json:async()=>({ok:false,detail:"Invalid fields",fields:{email:"Use a real email."}})};
     if (process.argv[5]==="throttled") return {status:429,ok:false,json:async()=>({ok:false,detail:"Too many requests."})};
-    return {status:201,ok:true,json:async()=>({
-      ok:true, request_id:"MOJPROP-20261115-A1B2C3D4",
+    return {status:process.argv[5]==="response-lost-then-retry"?200:201,
+      ok:true,json:async()=>({
+      ok:true, reused:process.argv[5]==="response-lost-then-retry",
+      request_id:"MOJPROP-20261115-A1B2C3D4",
       receipt_token:"synthetic-signed-token"
     })};
   }
@@ -78,6 +91,8 @@ if (process.argv[3]) {
 }
 (async () => {
   await elements["request-form"].listeners.submit({preventDefault(){}});
+  if (process.argv[5]==="response-lost-then-retry")
+    await elements["request-form"].listeners.submit({preventDefault(){}});
   process.stdout.write(JSON.stringify({
     posted,
     service:elements["service"].value,
@@ -176,7 +191,7 @@ class SignalPlanInquiryTests(unittest.TestCase):
         )
         self.assertEqual(state["posted"], [])
         self.assertFalse(state["downloadEnabled"])
-        self.assertIn("Request NOT submitted", state["receipt"])
+        self.assertIn("This submission was not accepted", state["receipt"])
 
 
     def test_free_educational_request_preserves_free_scope_not_paid_sku(self):
@@ -258,7 +273,7 @@ class SignalPlanInquiryTests(unittest.TestCase):
         state = self._browser("?service=blueprint&package=starter-30-trx", notes="X"*4970)
         self.assertEqual(state["posted"], [])
         self.assertFalse(state["downloadEnabled"])
-        self.assertIn("Request NOT submitted", state["receipt"])
+        self.assertIn("This submission was not accepted", state["receipt"])
 
     def test_customer_edited_starter_prefill_survives_service_change(self):
         state = self._browser(
@@ -282,19 +297,48 @@ class SignalPlanInquiryTests(unittest.TestCase):
     def test_server_explicit_400_keeps_correctable_error(self):
         state = self._browser("?service=blueprint&package=starter-30-trx", mode="bad-email")
         self.assertIn("email: Use a real email.", state["receipt"])
-        self.assertIn("Request NOT submitted", state["receipt"])
+        self.assertIn("This submission was not accepted", state["receipt"])
         self.assertNotIn("Submission status unconfirmed", state["receipt"])
 
     def test_server_explicit_429_keeps_retry_guidance(self):
         state = self._browser("?service=blueprint&package=starter-30-trx", mode="throttled")
         self.assertIn("Wait before resubmitting", state["receipt"])
-        self.assertIn("Request NOT submitted", state["receipt"])
+        self.assertIn("This submission was not accepted", state["receipt"])
+
+    def test_lost_response_retry_uses_exact_same_key_and_recovers_signed_receipt(self):
+        state = self._browser("?service=blueprint&package=starter-30-trx",
+                              mode="response-lost-then-retry")
+        self.assertEqual(len(state["posted"]), 2)
+        first, second = state["posted"]
+        self.assertEqual(first["body"], second["body"])
+        self.assertEqual(first["body"]["idempotency_key"],
+                         "12345678-1234-4234-8234-123456789abc")
+        self.assertIn("Request ID: MOJPROP-20261115-A1B2C3D4", state["receipt"])
+        self.assertTrue(state["downloadEnabled"])
+        self.assertNotIn("Submission status unconfirmed", state["receipt"])
+
+    def test_older_browser_secure_getrandomvalues_generates_valid_uuidv4(self):
+        state = self._browser("?service=blueprint&package=starter-30-trx",
+                              mode="crypto-legacy")
+        self.assertEqual(len(state["posted"]), 1)
+        key = state["posted"][0]["body"]["idempotency_key"]
+        self.assertRegex(key, r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+        self.assertEqual(key, "00010203-0405-4607-8809-0a0b0c0d0e0f")
+        self.assertTrue(state["downloadEnabled"])
+
+    def test_missing_secure_crypto_fails_closed_and_never_posts_customer_data(self):
+        state = self._browser("?service=blueprint&package=starter-30-trx",
+                              mode="crypto-missing")
+        self.assertEqual(state["posted"], [])
+        self.assertFalse(state["downloadEnabled"])
+        self.assertIn("secure browser is required", state["receipt"])
+        self.assertNotIn("Request ID:", state["receipt"])
 
     def test_lost_post_response_never_claims_payment_or_id(self):
         state = self._browser("?service=blueprint&package=starter-30-trx", mode="response-lost")
         self.assertEqual(len(state["posted"]), 1)
         self.assertIn("Submission status unconfirmed", state["receipt"])
-        self.assertIn("Avoid duplicate submissions", state["receipt"])
+        self.assertIn("Retry the SAME unchanged form", state["receipt"])
         self.assertNotIn("No ID or payment was created", state["receipt"])
         self.assertFalse(state["downloadEnabled"])
 
