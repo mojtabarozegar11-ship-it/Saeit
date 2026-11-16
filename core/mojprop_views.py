@@ -455,8 +455,12 @@ def mojprop_receipt_status(request):
         request_id = verify_receipt_token(token)
         if request_id is None:
             return status_form(request, error="Receipt invalid or expired.", status=404)
-        stage = (MojPropRequest.objects.filter(request_id=request_id)
-                 .values_list("status", flat=True).first())
+        try:
+            stage = (MojPropRequest.objects.filter(request_id=request_id)
+                     .values_list("status", flat=True).first())
+        except DatabaseError:
+            return status_form(request, error="Review status temporarily unavailable.",
+                               status=503)
         if stage is None:
             return status_form(request, error="Receipt unavailable.", status=404)
         return status_result(request_id, public_status_text(stage))
