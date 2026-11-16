@@ -46,5 +46,25 @@ class ManifestTests(unittest.TestCase):
     def test_19_wrong_hash(self): self.entries[0]["sha256"]="0"*64; self.assertBlocked()
     def test_20_invalid_hash(self): self.entries[0]["sha256"]="xyz"; self.assertBlocked()
 
+    def test_21_missing_required_role_due_to_bad_hash(self):
+        self.entries[0]["sha256"] = "0" * 64
+        errors = self.runcheck()
+        self.assertTrue(any("missing input role" in e for e in errors))
+
+    def test_22_missing_required_role_due_to_wrong_size(self):
+        self.entries[1]["bytes"] += 1
+        errors = self.runcheck()
+        self.assertTrue(any("missing generator role" in e for e in errors))
+
+    def test_23_missing_required_role_due_to_absent_file(self):
+        (self.root / "config.txt").unlink()
+        errors = self.runcheck()
+        self.assertTrue(any("missing config role" in e for e in errors))
+
+    def test_24_optional_role_does_not_replace_required_role(self):
+        self.entries[3]["role"] = "analysis"
+        errors = self.runcheck()
+        self.assertTrue(any("missing output role" in e for e in errors))
+
 if __name__ == "__main__":
     unittest.main()
