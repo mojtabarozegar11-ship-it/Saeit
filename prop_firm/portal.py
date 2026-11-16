@@ -197,6 +197,11 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
             # Invalid events cannot be silently excluded to improve results.
             if any(not start <= event.closed_at < end for event in executions):
                 purchase_window_valid = False
+            # Equity snapshots are also broker evidence, not just executions.
+            # Post-deadline or pre-payment equity must not be used to qualify
+            # a 28-day challenge, even when the final P&L appears favourable.
+            if any(not start <= mark.observed_at < end for mark in snapshots):
+                purchase_window_valid = False
             cohort_executions = PropExecution.objects.filter(
                 account__challenge_enrollment=purchase,
                 account__kind__in=(PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO),
