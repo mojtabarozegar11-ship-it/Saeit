@@ -79,7 +79,10 @@ class MerchantCanaryAtBoundCheckout(unittest.TestCase):
         self.assertNotIn("merchant_canary = True", src)
 
     def test_06_historical_download_and_recovery_unmodified(self):
-        self.assertIn("def recovery(request)", TEXT)
+        self.assertIn("def recovery_request(request)", TEXT)
+        self.assertIn("def recovery_verify(request)", TEXT)
+        self.assertIn("def recovery_orders(request)", TEXT)
+        self.assertIn("def recovery_download(request, invoice_id)", TEXT)
         self.assertIn("def bound_checkout(", TEXT)
         self.assertIn("GuestOrderEmail.objects.create(", TEXT)
         self.assertIn("Checkout email ownership binding unavailable", TEXT)
