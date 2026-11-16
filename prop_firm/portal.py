@@ -4,7 +4,7 @@ No financial mutation. Every verified observation is checked for historical
 breaches; missing session-open data and incomplete reconciliation fail closed.
 """
 from collections import defaultdict
-from django.db.models import F
+from django.db.models import F, Q
 from datetime import timedelta
 from datetime import timezone as utc_timezone
 from django.utils import timezone as django_timezone
@@ -315,7 +315,18 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
             # The cohort-wide count must use the SAME temporal ceiling as
             # P&L/risk. Otherwise the other phase can supply a future 50th
             # trade even when this account's events are correctly filtered.
+            # Bound each provider close to the lifetime of the phase that
+            # actually owns it. Foreign/backdated closes must not provide
+            # the 50th position through a correct-looking paid enrollment.
+            # Historic rows with absent lifecycle fields remain subject to
+            # the independent broker/source provenance release gate.
             cohort_executions = cohort_executions.filter(
+                Q(account__opened_at__isnull=True)
+                | Q(closed_at__gte=F("account__opened_at")),
+            ).filter(
+                Q(account__closed_at__isnull=True)
+                | Q(closed_at__lte=F("account__closed_at")),
+            ).filter(
                 closed_at__lte=effective_cutoff
             )
             if evidence_cutoff is not None:
