@@ -69,6 +69,22 @@ class OwnerStaticHorizonTests(unittest.TestCase):
         self.assertTrue(data["option_values_distinct"])
         self.assertTrue(data["surgical_value_only_candidate"])
 
+    def test_10_all_empty_value_attributes_can_be_safely_classified(self):
+        empty = VALID
+        for code in (b"immediate", b"seven_days", b"thirty_days", b"explore"):
+            empty = empty.replace(b'value="' + code + b'"', b'value=""')
+        data = classify(empty, SHA(empty))
+        self.assertTrue(data["all_four_values_empty"])
+        self.assertFalse(data["option_values_distinct"])
+        self.assertTrue(data["surgical_value_only_candidate"])
+
+    def test_11_mixed_duplicate_codes_remain_blocked(self):
+        mixed = VALID.replace(b"immediate", b"").replace(b"seven_days", b"")
+        data = classify(mixed, SHA(mixed))
+        self.assertFalse(data["all_four_values_empty"])
+        self.assertFalse(data["option_values_distinct"])
+        self.assertFalse(data["surgical_value_only_candidate"])
+
     def test_08_true_if_all_acceptance_and_no_customer_writes(self):
         x = classify(VALID, SHA(VALID))
         self.assertFalse(x["writes_or_customer_records_accessed"])
