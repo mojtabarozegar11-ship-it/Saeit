@@ -540,7 +540,7 @@ def _print_passenger_diagnostics() -> None:
         print("MOJ_PROP_PROCESS_DIAGNOSTIC_ERROR=" + type(exc).__name__)
 
 
-def _restart_public_lswsgi_workers() -> None:
+def _restart_public_lswsgi_workers() -> int:
     marker = "/home/zomorod2/mojplaywin.com/passenger_wsgi.py"
     pids = []
     proc_root = Path("/proc")
@@ -561,9 +561,12 @@ def _restart_public_lswsgi_workers() -> None:
             pass
         except PermissionError as exc:
             raise RuntimeError(f"Cannot restart MojPlayWin lswsgi worker {pid}") from exc
-    if pids:
-        time.sleep(2)
-    print("MOJ_PROP_PUBLIC_LSWGI_RESTART=PASS")
+    if not pids:
+        print("MOJ_PROP_PUBLIC_LSWGI_RESTART=NOT_VERIFIED")
+        return 0
+    time.sleep(2)
+    print("MOJ_PROP_PUBLIC_LSWGI_RESTART=SIGNAL_SENT_NOT_HTTP_VERIFIED")
+    return len(pids)
 
 
 def restart_passenger() -> None:
@@ -604,8 +607,11 @@ def restart_passenger() -> None:
                 _restart_public_lswsgi_workers()
                 return
         raise RuntimeError("CloudLinux Python Selector could not restart mojplaywin.com")
-    _restart_public_lswsgi_workers()
-    print("MOJ_PROP_PASSENGER_RESTART=TOUCH_ONLY")
+    # A touch with zero identifiable workers is NOT evidence of successful
+    # Passenger reload and must never produce BACKEND_DEPLOY=PASS.
+    if _restart_public_lswsgi_workers() < 1:
+        raise RuntimeError("Passenger restart not independently confirmed")
+    print("MOJ_PROP_PASSENGER_RESTART=TOUCH_AND_SIGNAL_ONLY")
 
 
 def require_private_backup_directory(backup: Path) -> None:
