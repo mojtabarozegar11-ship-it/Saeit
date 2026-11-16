@@ -11,7 +11,7 @@ from django.test import TestCase
 
 from prop_firm.models import PropAccount, PropChallengeEnrollment, PropTrader
 from prop_firm.portal import completed_paid_phase_one_before_stage_two
-from prop_firm.social_policy import NEW_CONTRACT_VERSION
+from prop_firm.social_policy import LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION
 
 START = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
 DAY = timedelta(days=1)
@@ -166,6 +166,48 @@ class CompletedPhaseOneChronologyTests(TestCase):
     def test_24_close_exactly_at_phase_two_start_is_allowed(self):
         self.mutate(self.phase1, closed_at=self.phase2.opened_at)
         self.assertTrue(self.accepted())
+
+
+    def test_25_paid_stage_2_cannot_use_legacy_contract(self):
+        self.mutate(self.phase2, policy_version=LEGACY_CONTRACT_VERSION)
+        self.assertFalse(self.accepted())
+
+    def test_26_relabelled_both_paid_phases_cannot_downgrade(self):
+        self.mutate(self.phase1, policy_version=LEGACY_CONTRACT_VERSION)
+        self.mutate(self.phase2, policy_version=LEGACY_CONTRACT_VERSION)
+        self.assertFalse(self.accepted())
+
+    def test_27_relabelled_purchase_and_both_paid_phases_cannot_downgrade(self):
+        self.mutate(self.phase1, policy_version=LEGACY_CONTRACT_VERSION)
+        self.mutate(self.phase2, policy_version=LEGACY_CONTRACT_VERSION)
+        self.mutate(self.purchase, terms_version=LEGACY_CONTRACT_VERSION)
+        # Clear the cached relation: simulate a fresh request loaded from SQL.
+        self.phase2.refresh_from_db()
+        self.assertFalse(self.accepted())
+
+    def test_28_new_terms_cannot_be_replaced_by_legacy_receipt(self):
+        self.mutate(self.purchase, terms_version=LEGACY_CONTRACT_VERSION)
+        self.phase2.refresh_from_db()
+        self.assertFalse(self.accepted())
+
+    def test_29_historical_unpurchased_legacy_trial_is_not_treated_as_new_sale(self):
+        prior = PropAccount.objects.create(
+            trader=self.trader, kind=PropAccount.Kind.PHASE_ONE,
+            status=PropAccount.Status.PASSED,
+            reconciled_by_operator=True,
+            challenge_enrollment=None,
+            opened_at=START+DAY,
+            closed_at=START+timedelta(days=2),
+            policy_version=LEGACY_CONTRACT_VERSION,
+        )
+        phase2 = PropAccount.objects.create(
+            trader=self.trader, kind=PropAccount.Kind.PHASE_TWO,
+            challenge_enrollment=None,
+            opened_at=START+timedelta(days=3),
+            policy_version=LEGACY_CONTRACT_VERSION,
+        )
+        self.assertTrue(completed_paid_phase_one_before_stage_two(phase2))
+        self.assertIsNone(prior.challenge_enrollment_id)
 
 
 if __name__ == "__main__":
