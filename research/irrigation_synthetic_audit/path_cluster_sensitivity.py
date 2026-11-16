@@ -140,7 +140,7 @@ def summarize_family(report: dict) -> dict:
         }
     return {
         "family": family, "source": "synthetic-model-output-only",
-        "independent_climate_path_blocks": 12,
+        "climate_path_blocks": 12,
         "factorial_settings_per_path": 45,
         "interval_coverage_claim": False,
         "field_validity_claim": False,
