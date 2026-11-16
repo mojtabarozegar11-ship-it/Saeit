@@ -410,6 +410,12 @@ def bound_checkout(request, view, identity, install_cookie, args, kwargs):
     """
     if not _host(request):
         raise Http404
+    # This email-bound path may wrap a private checkout adapter directly.
+    # Require the actual merchant canary before email parsing, identity creation,
+    # an atomic block, or the order/invoice view; never infer safety from a
+    # previously paid receipt or a public checkout-enabled setting.
+    if getattr(settings, "MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED", False) is not True:
+        raise Http404("New TRX merchant checkout unavailable")
     try:
         email = _posted_email(request)
     except ValueError:
