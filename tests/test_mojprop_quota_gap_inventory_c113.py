@@ -79,7 +79,7 @@ class MojPropQuotaGapInventoryTests(unittest.TestCase):
             path = Path(home)
             with patch.object(probe.subprocess, "run",
                               return_value=SimpleNamespace(stdout="10240\t"+str(path)+"\n")) as run:
-                state, band = probe.category_usage(path)
+                state, band = probe.category_usage(path, runner=run)
             self.assertEqual((state, band), ("counted", "1-64"))
             self.assertEqual(run.call_args.args[0],
                              ["/usr/bin/du", "-sk", "--", str(path)])
