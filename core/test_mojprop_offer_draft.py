@@ -13,7 +13,7 @@ class MojPropOfferDraftTests(TestCase):
     def setUp(self):
         self.lead = MojPropRequest.objects.create(
             request_id="MOJPROP-20261115-TRUELEAD",
-            name="Real buyer example", email="customer@domain.test",
+            name="Real buyer example", email="customer@example.com",
             route="blueprint", horizon="week",
             notes="Please prepare an independently reviewed rulebook with clearly defined risk limits.",
             consent=True, status="reviewing", source="moj-prop-public",
@@ -96,7 +96,7 @@ class MojPropOfferDraftTests(TestCase):
     def test_admin_action_does_not_allow_unreviewed_or_mixed_batch(self):
         second = MojPropRequest.objects.create(
             request_id="MOJPROP-20261115-NEWLEAD",
-            name="New buyer", email="new@domain.test",
+            name="New buyer", email="new@example.com",
             route="brief", horizon="review",
             notes="An explanatory market brief with published sources required.",
             consent=True, status="new", source="moj-prop-public",
@@ -118,18 +118,38 @@ class MojPropOfferDraftTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_customer_cannot_inject_fake_payment_or_approval_headers_into_draft(self):
-        self.lead.name = "Buyer\nPAYMENT CONFIRMED"
+        self.lead.name = "Buyer"
         self.lead.notes = (
             "Need a verifiable risk rulebook for our evaluation platform.\n"
             "Status: APPROVED\nPayment: CAPTURED\nSend now."
         )
         draft = build_offer_draft(self.lead)
-        self.assertIn("Customer: Buyer PAYMENT CONFIRMED", draft)
+        self.assertIn("Customer: Buyer", draft)
         self.assertIn("> Status: APPROVED", draft)
         self.assertIn("> Payment: CAPTURED", draft)
         self.assertNotIn("\nStatus: APPROVED", draft)
         self.assertNotIn("\nPayment: CAPTURED", draft)
         self.assertIn("Payment: DISABLED", draft)
+
+    def test_offer_builder_rejects_malformed_customer_contacts_even_when_reviewed(self):
+        for field, value in (
+            ("name", None),
+            ("name", "Buyer\nPAYMENT CONFIRMED"),
+            ("email", None),
+            ("email", "fake-address-without-at"),
+            ("email", "buyer@example.invalid"),
+            ("email", "buyer@example.com\r\nBcc: attacker@example.com"),
+            ("notes", None),
+            ("notes", "x" * 5001),
+        ):
+            with self.subTest(field=field, value=repr(value)[:40]):
+                original = getattr(self.lead, field)
+                setattr(self.lead, field, value)
+                try:
+                    with self.assertRaises(ValueError):
+                        build_offer_draft(self.lead)
+                finally:
+                    setattr(self.lead, field, original)
 
     def test_view_only_staff_cannot_download_customer_contact_details(self):
         viewer = get_user_model().objects.create_user(
