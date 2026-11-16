@@ -2,6 +2,13 @@ name: MojPlayWin main and protected subsite continuity
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/mpw-subsite-continuity-20261026.yml
+      - scripts/mpw_subsite_continuity_guard_20261026.py
+      - scripts/mpw_retired_subsite_policy.py
+      - runtime/retired_picm_manifest.json
+      - tests/test_mpw_retired_picm_policy_c101_20261116.py
   schedule:
     - cron: '23 * * * *'
   push:
@@ -19,12 +26,17 @@ concurrency:
 
 jobs:
   read-only-public-route-guard:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'))
     runs-on: ubuntu-latest
     timeout-minutes: 13
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Check continuity guard script without network or mutations
         run: |
