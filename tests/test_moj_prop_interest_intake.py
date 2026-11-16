@@ -10,7 +10,7 @@ from prop_firm.models import PropAccount, PropChallengeEnrollment
 
 @override_settings(ALLOWED_HOSTS=["mojplaywin.com","www.mojplaywin.com","zomorodmelal.ir"])
 class PropInterestIntakeTests(TestCase):
-    PATH = "/moj-prop/interest/"
+    PATH = "/moj-prop-interest/"
     VALID = {
         "email": "Buyer@farmco.org",
         "plan_code": "MOJ-PROP-01",
