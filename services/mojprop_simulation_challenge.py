@@ -129,8 +129,8 @@ class EquitySnapshot:
         if (type(self.trades_executed) is not int
                 or not 0 <= self.trades_executed <= MAX_TRADES_PER_SNAPSHOT):
             raise ChallengeInputError("invalid_trades_executed")
-        _decimal_money(self.balance, "balance")
-        _decimal_money(self.equity, "equity")
+        _decimal_account_mark(self.balance, "balance")
+        _decimal_account_mark(self.equity, "equity")
         return self.observed_at.astimezone(timezone.utc)
 
 
