@@ -2,8 +2,8 @@
 """Read-only HTTP continuity check for MojPlayWin and its protected child sites.
 
 The real sub-sites are URL prefixes beneath mojplaywin.com, not unverified
-hostnames such as taniya.mojplaywin.com. Only GET is used: /farnaz/ and
-/picm/ intentionally do not support HEAD.
+hostnames such as taniya.mojplaywin.com. Only scoped anonymous GET is
+used. PICM is owner-retired and is intentionally NOT an active monitored site.
 """
 
 from __future__ import annotations
@@ -324,7 +324,7 @@ def main() -> int:
             summary.write("## MojPlayWin protected subsite continuity\n\n")
             summary.write(f"- Main and child GET pages: {len(checks)} passed\n")
             summary.write(f"- Protected child apps: {', '.join(PROTECTED_CHILDREN)}\n")
-            summary.write("- Owner-retired PICM excluded by verified E7 policy; not a working-site claim\\n")
+            summary.write("- Owner-retired PICM excluded by verified E7 policy; not a working-site claim\n")
             summary.write(f"- Owner's personal website: {len(PERSONAL_PATHS)} pages unchanged and accessible\n")
             summary.write(f"- Unique sitemap entries: {sitemap_count}\n")
             summary.write("- Anonymous product checkout guards: 3 passed\n")
