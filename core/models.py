@@ -918,6 +918,13 @@ class MojPropStarter30Order(T):
             raise ValidationError({"order_ref": "Invalid Starter30 invoice contract."}) from exc
 
     def save(self, *args, **kwargs):
+        # Only first insertion is allowed in the source-only order table.
+        # Allowing ORM edits after a TXID is claimed could rewrite the buyer,
+        # payer, receiver, or invoice window and misattribute that same txID.
+        # QuerySet.update()/raw SQL can bypass this method; DB grants and
+        # a reviewed immutable ledger remain mandatory before live issuance.
+        if self.pk is not None or not self._state.adding:
+            raise ValidationError({"order_ref": "Starter30 order identity is append-only."})
         self.full_clean()
         return super().save(*args, **kwargs)
 
@@ -957,5 +964,10 @@ class MojPropStarter30TxClaim(T):
             raise ValidationError({"state": "This source-only claim cannot prove settlement."})
 
     def save(self, *args, **kwargs):
+        # Never permit reassignment of an existing txID via Model.save():
+        # changing an old claim frees its UNIQUE(txid) for reuse elsewhere.
+        # Database-level UPDATE permissions must also be restricted on release.
+        if self.pk is not None or not self._state.adding:
+            raise ValidationError({"txid": "Starter30 TXID claims are append-only."})
         self.full_clean()
         return super().save(*args, **kwargs)
