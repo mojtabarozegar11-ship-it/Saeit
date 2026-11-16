@@ -103,3 +103,79 @@ def record_public_cycle(report, *, cycle_id):
             )
     return {"written": True, "idempotent_replay": False,
             "cycle_id": cycle_id, "site_receipts": len(ROUTES)}
+
+
+
+def inspect_public_monitor_continuity(*, now=None):
+    """Read only the last 24 hours of canonical public-monitor AuditLog rows.
+
+    Two independent successful cycles spaced >=5 min qualify solely for
+    *public route monitoring* review. They NEVER prove private agent migration,
+    payment safety, DNS ownership, publication or host cleanup permission.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        raise SiteFleetError("UTC_CLOCK_REQUIRED")
+    oldest = now - timedelta(hours=24)
+    records = list(
+        AuditLog.objects.filter(
+            actor_type="system", actor_id=ACTOR, action=ACTION,
+            target_type="site_native_public_monitor",
+            created_at__gte=oldest,
+            created_at__lte=now,
+        ).order_by("-created_at", "-pk").values(
+            "target_id", "trace_id", "created_at", "after_state",
+        )[:250]
+    )
+    results = {}
+    for tenant, roles in ROUTES.items():
+        # No trust in missing identifiers or duplicated audit rows.
+        grouped = {}
+        for row in records:
+            if row["target_id"] != tenant:
+                continue
+            key = row["trace_id"]
+            grouped.setdefault(key, []).append(row)
+        good = []
+        for key, items in grouped.items():
+            if not (isinstance(key, str) and CYCLE_ID.fullmatch(key)
+                    and len(items) == 1):
+                continue
+            item = items[0]
+            state = item.get("after_state")
+            if not isinstance(state, dict):
+                continue
+            if (state.get("observed_roles") != len(roles)
+                    or state.get("http_ok_count") != len(roles)
+                    or state.get("all_public_routes_ok") is not True
+                    or state.get("private_worker_execution_verified") is not False
+                    or state.get("legacy_agent_retirement_authorized") is not False
+                    or not isinstance(state.get("sha256_public_observations"), str)
+                    or not SHA.fullmatch(state["sha256_public_observations"])):
+                continue
+            good.append(item["created_at"])
+        times = sorted(good)
+        pair_ready = len(times) >= 2 and (
+            times[-1] - times[0] >= timedelta(minutes=5)
+        )
+        results[tenant] = {
+            "successful_public_observation_receipts_24h": len(times),
+            "two_distinct_spaced_cycles": bool(pair_ready),
+            "public_monitor_continuity_observed": bool(pair_ready),
+            "private_site_worker_replacement_verified": False,
+            "legacy_host_cleanup_authorized": False,
+        }
+    return {
+        "canonical_bot": CANONICAL_BOT,
+        "evidence_source": "local_django_auditlog_not_independent_host_attestation",
+        "sites": results,
+        "all_public_monitors_have_two_cycles": all(
+            r["two_distinct_spaced_cycles"] for r in results.values()
+        ),
+        "private_workers_migrated": False,
+        "site_files_deleted": 0,
+        "cron_entries_removed": 0,
+        "legacy_host_cleanup_authorized": False,
+    }
