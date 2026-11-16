@@ -34,7 +34,7 @@ jobs:
           python3 -B -m py_compile scripts/mojprop_quota_gap_inventory_readonly_c113.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_quota_gap_inventory_c113 tests.test_mojprop_db_table_profile_c115 -q
           test ! -L scripts/mojprop_quota_gap_inventory_readonly_c113.py
-          test "$(git hash-object -- scripts/mojprop_quota_gap_inventory_readonly_c113.py)" = "b42aa09ce76cce496de3e433939781e30f72ea03"
+          test "$(git hash-object -- scripts/mojprop_quota_gap_inventory_readonly_c113.py)" = "08d6b4b69221dc3d27a33eaf7e1d3cd1c80b670b"
 
       - name: Connect existing VPS to pinned owner cPanel SSH
         shell: bash
