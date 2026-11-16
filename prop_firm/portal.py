@@ -95,10 +95,10 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
     if evidence_cutoff is not None:
         if getattr(evidence_cutoff, "tzinfo", None) is None or evidence_cutoff.utcoffset() is None:
             raise ValueError("evidence_cutoff must be timezone-aware")
+    effective_as_of = min(present, as_of) if as_of is not None else present
     effective_cutoff = min(
-        (present, *([as_of] if as_of is not None else []),
-         *([evidence_cutoff] if evidence_cutoff is not None else []))
-    )
+        effective_as_of, evidence_cutoff
+    ) if evidence_cutoff is not None else effective_as_of
     source_executions = PropExecution.objects.filter(account=account)
     source_equity = PropEquityObservation.objects.filter(account=account)
     # Future-dated VERIFIED evidence is a reconciliation defect, not a new
@@ -275,7 +275,7 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
                 )
             social_decision = check_social_posting(
                 purchase_confirmed_at=start,
-                as_of=django_timezone.now() if as_of is None else as_of,
+                as_of=effective_as_of,
                 verified_posts=[{
                     "platform": item.platform,
                     "post_url": item.post_url,
@@ -324,7 +324,7 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
             # Never reuse lifetime P&L to qualify a specific monthly promotion.
             promotion_period = most_recent_completed_period(
                 opened_at=account.opened_at,
-                as_of=django_timezone.now() if as_of is None else as_of,
+                as_of=effective_as_of,
             )
             promotion_stats = period_statistics(executions, promotion_period)
             if promotion_stats is not None:
