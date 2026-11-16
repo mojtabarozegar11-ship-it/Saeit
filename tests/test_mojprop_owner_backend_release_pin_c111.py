@@ -21,9 +21,15 @@ class MojPropPinnedOwnerReleaseContract(unittest.TestCase):
 
     def test_02_only_exact_owner_can_invoke_backend_release(self):
         self.assertIn("github.actor == 'mojtabarozegar11-ship-it'", self.deploy)
+        self.assertIn("github.triggering_actor == 'mojtabarozegar11-ship-it'", self.deploy)
         self.assertIn("github.event_name == 'workflow_dispatch'", self.deploy)
         self.assertIn("github.ref == 'refs/heads/main'", self.deploy)
         self.assertIn("inputs.owner_approval == 'OWNER_APPROVED'", self.deploy)
+
+    def test_02b_rerun_cannot_reuse_old_owner_authorization(self):
+        # A rerun keeps the original github.actor; triggering_actor differs.
+        self.assertIn("github.triggering_actor == 'mojtabarozegar11-ship-it'", self.deploy)
+        self.assertIn("github.run_attempt == 1", self.deploy)
 
     def test_03_sha_must_be_approved_outside_dispatch_input(self):
         self.assertIn("vars.MOJPROP_APPROVED_MAIN_SHA == github.sha", self.deploy)
