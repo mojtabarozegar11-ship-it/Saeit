@@ -1,6 +1,7 @@
 """C124 source and live HTML observer privacy regression; never HTTP POST."""
 import io
 import json
+import hashlib
 import unittest
 from contextlib import redirect_stdout
 from tempfile import TemporaryDirectory
@@ -19,6 +20,7 @@ class LiveHorizonContractTests(unittest.TestCase):
     def test_01_valid_four_codes_recognized_without_release(self):
         data = classify(BASE.encode(), {"known": BASE.encode()})
         self.assertTrue(data["frontend_contract_valid"])
+        self.assertEqual(data["public_sha256"], hashlib.sha256(BASE.encode()).hexdigest())
         self.assertTrue(data["exact_horizon_choices"])
         self.assertEqual(data["source_class"], "known")
         self.assertFalse(data["commercial_release_authorized"])
@@ -45,6 +47,7 @@ class LiveHorizonContractTests(unittest.TestCase):
         for value in (b"", b"a" * 1_048_577, None):
             data = classify(value, {})
             self.assertFalse(data["body_available"])
+            self.assertIsNone(data["public_sha256"])
             self.assertFalse(data["frontend_contract_valid"])
             self.assertFalse(data["commercial_release_authorized"])
 
