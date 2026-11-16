@@ -40,6 +40,31 @@ class CPanelInventoryTests(unittest.TestCase):
             self.assertNotIn("--secret", str(result))
             self.assertEqual(result["candidate_bytes_not_confirmed_reclaimable"], 4*len("real code fixture "*9))
 
+    def test_bounded_metadata_census_measures_private_tenant_usage_without_reading_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            zm = home / ".private/zomorod-business"
+            mpw = home / ".private_mojplaywin_main_agents"
+            zm.mkdir(parents=True)
+            mpw.mkdir(parents=True)
+            (zm / "history.json").write_bytes(b"x" * 400)
+            (mpw / "module.py").write_bytes(b"y" * 700)
+            report = m.scan(home, cron_text="")
+            self.assertEqual(report["tenant_storage"]["zomorodmelal"]["bytes"], 400)
+            self.assertEqual(report["tenant_storage"]["mojplaywin"]["bytes"], 700)
+            self.assertFalse(report["tenant_storage"]["mojplaywin"]["file_bodies_read"])
+            self.assertEqual(report["tenant_storage"]["zomorodmelal"]["verified_reclaimable_bytes"], 0)
+
+    def test_private_directory_symlink_does_not_escape_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            outer = home / "outer"
+            outer.mkdir()
+            (home / ".private_mojplaywin_main_agents").symlink_to(outer, target_is_directory=True)
+            data = m.scan(home, cron_text="")
+            self.assertEqual(data["tenant_storage"]["mojplaywin"]["state"], "unsafe_symlink")
+            self.assertIsNone(data["tenant_storage"]["mojplaywin"]["bytes"])
+
     def test_symlink_target_not_followed(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
