@@ -265,7 +265,10 @@ def _confirmation_page(request, title, message, action_label):
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def signal_free_confirm(request, token):
-    subscriber = _validated_token(token, "confirm")
+    try:
+        subscriber = _validated_token(token, "confirm")
+    except SignalConsentStorageUnavailable:
+        return _consent_storage_unavailable()
     if subscriber is None or subscriber.status != "pending":
         return _answer({"ok": False, "detail": "Confirmation link invalid or expired."}, 404)
     if request.method == "GET":
@@ -276,9 +279,12 @@ def signal_free_confirm(request, token):
         )
     if not _smtp_ready():
         return _answer({"ok": False, "detail": "Verified registration is not currently available."}, 503)
-    updated = MojSignalFreeSubscription.objects.filter(
-        pk=subscriber.pk, status="pending", nonce=subscriber.nonce,
-    ).update(status="confirmed", confirmed_at=timezone.now(), unsubscribed_at=None)
+    try:
+        updated = MojSignalFreeSubscription.objects.filter(
+            pk=subscriber.pk, status="pending", nonce=subscriber.nonce,
+        ).update(status="confirmed", confirmed_at=timezone.now(), unsubscribed_at=None)
+    except DatabaseError:
+        return _consent_storage_unavailable()
     if not updated:
         return _answer({"ok": False, "detail": "Confirmation link invalid or expired."}, 404)
     return _answer({"ok": True, "status": "confirmed", "paid_entitlement": False})
@@ -287,7 +293,10 @@ def signal_free_confirm(request, token):
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def signal_free_unsubscribe(request, token):
-    subscriber = _validated_token(token, "unsubscribe")
+    try:
+        subscriber = _validated_token(token, "unsubscribe")
+    except SignalConsentStorageUnavailable:
+        return _consent_storage_unavailable()
     if subscriber is None or subscriber.status != "confirmed":
         return _answer({"ok": False, "detail": "Unsubscribe link invalid or expired."}, 404)
     if request.method == "GET":
@@ -296,10 +305,13 @@ def signal_free_unsubscribe(request, token):
             "You can stop free educational updates without payment, account login or an email to support.",
             "Unsubscribe",
         )
-    updated = MojSignalFreeSubscription.objects.filter(
-        pk=subscriber.pk, status="confirmed", nonce=subscriber.nonce,
-    ).update(status="unsubscribed", unsubscribed_at=timezone.now(),
-             nonce=secrets.token_urlsafe(24))
+    try:
+        updated = MojSignalFreeSubscription.objects.filter(
+            pk=subscriber.pk, status="confirmed", nonce=subscriber.nonce,
+        ).update(status="unsubscribed", unsubscribed_at=timezone.now(),
+                 nonce=secrets.token_urlsafe(24))
+    except DatabaseError:
+        return _consent_storage_unavailable()
     if not updated:
         return _answer({"ok": False, "detail": "Unsubscribe link invalid or expired."}, 404)
     return _answer({"ok": True, "status": "unsubscribed", "paid_entitlement": False})
