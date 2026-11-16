@@ -38,7 +38,7 @@ def _private_html(title, body, *, status=200):
 
 
 def _safe_service_prefill(request):
-    """Only accept known service codes and the one canonical Starter30 scope.
+    """Accept bounded, untrusted Plan 1 prelaunch navigation without a checkout.
 
     Query strings are untrusted navigation hints, never prices, accepted
     contract terms, a customer identity, payment proof or persisted records.
@@ -54,7 +54,23 @@ def _safe_service_prefill(request):
     if service not in routes:
         return None, ""
     if packages:
-        if service != "blueprint" or packages != ["starter-30-trx"]:
+        if service != "blueprint":
+            return None, ""
+        if packages == ["moj-prop-01"]:
+            # Navigation hint ONLY: buyer edits notes; the CRM receipt is
+            # not a SKU-authenticated paid order or funded enrollment.
+            return service, (
+                "Prelaunch interest only: MOJ-PROP-01 (two-stage proprietary "
+                "funded-trading CHALLENGE; proposed 30 native TRX fee is "
+                "NOT payable at this time).\n"
+                "Please send legal eligibility, country availability, "
+                "risk rules, KYC and refund terms for MOJ-PROP-01. "
+                "I understand the evaluation is simulated and an actual "
+                "company-funded initial USD 100 account after passing "
+                "requires independent capital, broker agreement and "
+                "legal approval; no payment, account or return is promised."
+            )
+        if packages != ["starter-30-trx"]:
             return None, ""
         # This is still a buyer-editable, unverified request. The existing
         # offer-draft classifier recognises the exact leading product line;
@@ -84,7 +100,16 @@ def request_form(request, *, error=None, status=200):
     csrf = escape(get_token(request), quote=True)
     selected, prefill_notes = _safe_service_prefill(request)
     message = ('<p role="alert">' + escape(error) + '</p>') if error else ''
-    if prefill_notes:
+    if prefill_notes.startswith("Prelaunch interest only: MOJ-PROP-01"):
+        message += (
+            '<p><strong>MOJ-PROP-01 funded-trading challenge — PRELAUNCH.</strong> '
+            '30 TRX is a proposed future challenge fee, not a purchase today. '
+            'The two evaluation stages are simulated. A real funded account '
+            'is conditional on a verified broker, company capital, legal '
+            'eligibility and written customer terms. This form takes no '
+            'payment and creates no challenge registration.</p>'
+        )
+    elif prefill_notes:
         message += ('<p>Starter30 is a <strong>request for written terms only</strong>; '
                     'no payment, challenge or funded trading account is available.</p>')
     form = (
