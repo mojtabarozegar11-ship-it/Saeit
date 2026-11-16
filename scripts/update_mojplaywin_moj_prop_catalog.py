@@ -270,6 +270,39 @@ def verified_manifest(path: Path) -> dict:
     return value
 
 
+def verified_saved_bytes(backup: Path, manifest: dict) -> dict[str, bytes]:
+    """Verify the COMPLETE backup inventory before the first live file write.
+
+    In particular, a corrupt index.html must not be discovered *after* a
+    catalog.html restore was performed. Keep reviewed bytes in memory so a
+    post-check symlink swap or mutation cannot feed an automated rollback.
+    This is file-level integrity only; it does not attest a database restore.
+    """
+    if backup.parent != BACKUPS or backup.is_symlink() or not backup.is_dir():
+        raise RuntimeError("Untrusted Moj Prop catalog backup scope")
+    records: dict[str, bytes] = {}
+    for item in manifest["files"]:
+        if not item["existed"]:
+            continue
+        saved = backup / "files" / item["path"]
+        ancestor = saved.parent
+        while ancestor != backup:
+            if ancestor.is_symlink() or not ancestor.is_dir():
+                raise RuntimeError("Unsafe backup directory ancestry: " + item["path"])
+            ancestor = ancestor.parent
+        assert_file(saved)
+        metadata = saved.lstat()
+        if (metadata.st_uid != os.geteuid()
+                or metadata.st_mode & 0o077
+                or not stat.S_ISREG(metadata.st_mode)):
+            raise RuntimeError("Unsafe saved backup owner or permissions: " + item["path"])
+        raw = saved.read_bytes()
+        if digest(raw) != item["before_sha"]:
+            raise RuntimeError("Backup checksum mismatch before any live change: " + item["path"])
+        records[item["path"]] = raw
+    return records
+
+
 def restore(backup: Path, *, automated: bool = False) -> None:
     verify_private_backup_root(create=False)
     if backup.parent != BACKUPS or backup.is_symlink():
@@ -288,17 +321,15 @@ def restore(backup: Path, *, automated: bool = False) -> None:
         assert_file(target)
         if digest(target.read_bytes()) != item["after_sha"]:
             raise RuntimeError("Refusing to roll back a subsequently modified file: " + item["path"])
+    # Verify EVERY original backup before touching ANY live file.
+    # A later corrupt entry must never create a half-rolled-back website.
+    saved_bytes = verified_saved_bytes(backup, manifest)
     for item in reversed(manifest["files"]):
         if not item["changed"]:
             continue
         target = ROUTE / item["path"]
         if item["existed"]:
-            previous = backup / "files" / item["path"]
-            assert_file(previous)
-            data = previous.read_bytes()
-            if digest(data) != item["before_sha"]:
-                raise RuntimeError("Backup checksum mismatch: " + item["path"])
-            atomic_write(target, data, int(item["mode"]))
+            atomic_write(target, saved_bytes[item["path"]], int(item["mode"]))
         else:
             target.unlink()
         if item["existed"] and digest(target.read_bytes()) != item["before_sha"]:
@@ -350,6 +381,9 @@ def deploy(run_id: str, commit: str) -> None:
             saved.write_bytes(previous.read_bytes())
             os.chmod(saved, 0o600)
     (backup / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    # Verify all saved source bytes before the first publish write. The same
+    # immutable, verified snapshot is used for any in-process rollback.
+    saved_bytes = verified_saved_bytes(backup, manifest)
     applied = []
     try:
         for item in changes:
@@ -372,7 +406,7 @@ def deploy(run_id: str, commit: str) -> None:
             target = ROUTE / item["path"]
             if not target.is_symlink() and target.is_file() and digest(target.read_bytes()) == item["after_sha"]:
                 if item["existed"]:
-                    atomic_write(target, (backup / "files" / item["path"]).read_bytes(), int(item["mode"]))
+                    atomic_write(target, saved_bytes[item["path"]], int(item["mode"]))
                 else:
                     target.unlink()
         raise
