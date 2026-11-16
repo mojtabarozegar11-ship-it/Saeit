@@ -125,6 +125,24 @@ class MojPropBackupIntegrityTests(unittest.TestCase):
             self.assertEqual((self.live / rel).read_bytes(), b"new-live-bytes")
         self.restart.assert_not_called()
 
+    def test_staged_source_inventory_blocks_nested_symlink_before_execution(self):
+        staged = self.base / "staged-app"
+        staged.mkdir()
+        real = self.base / "other-tenant-source"
+        real.mkdir()
+        (real / "source.py").write_text("raise RuntimeError('other tenant')\n")
+        (staged / "core").symlink_to(real, target_is_directory=True)
+        with patch.object(backend, "ALL_FILES", (Path("core/source.py"),)):
+            with self.assertRaisesRegex(RuntimeError, "symlink parent refused"):
+                backend.assert_staged_inventory(staged)
+
+    def test_staged_source_inventory_accepts_only_regular_local_files(self):
+        staged = self.base / "staged-app"
+        (staged / "core").mkdir(parents=True)
+        (staged / "core" / "source.py").write_text("VALUE = 1\n")
+        with patch.object(backend, "ALL_FILES", (Path("core/source.py"),)):
+            backend.assert_staged_inventory(staged)
+
     def test_parent_guard_rejects_lexical_escape_outside_reviewed_tenant(self):
         escaped = self.live / ".." / "other-tenant" / "source.py"
         with self.assertRaisesRegex(RuntimeError, "traversal refused"):
