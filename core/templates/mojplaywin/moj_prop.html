@@ -28,6 +28,7 @@
       <a href="#ladder">{{ nav.1 }}</a>
       <a href="#rules">{{ nav.2 }}</a>
       <a href="#faq">{{ nav.3 }}</a>
+      <a href="#plan-one-interest">{{ interest_copy.0 }}</a>
     </div>
     <details class="mp-language">
       <summary aria-label="{{ lang_name }}"><span aria-hidden="true">◎</span> <span>{{ lang_name }}</span><span aria-hidden="true">⌄</span></summary>
@@ -46,7 +47,7 @@
       <h1 id="mp-hero-title">{{ hero.1 }}<span>{{ hero.2 }}</span></h1>
       <p class="mp-hero-lead">{{ hero.3 }}</p>
       <div class="mp-hero-actions">
-        <a class="mp-button mp-button-gold" href="#rules">{{ hero.6 }}<span aria-hidden="true">↗</span></a>
+        <a class="mp-button mp-button-gold" href="#plan-one-interest">{{ interest_copy.0 }}<span aria-hidden="true">↗</span></a>
         <a class="mp-button mp-button-quiet" href="#ladder">{{ nav.1 }}<span aria-hidden="true">↘</span></a>
       </div>
       <div class="mp-availability" role="status">
@@ -127,11 +128,40 @@
         <strong class="mp-plan-fee" dir="ltr">{{ plan.fee_trx_proposed }} TRX</strong>
         <p class="mp-plan-field">{{ plans_copy.maximum }}: <b dir="ltr">&#36;{{ plan.maximum_capital_usd }}</b></p>
         <p class="mp-plan-meta" dir="ltr">{{ plan.duration_days }} DAYS · {{ plan.minimum_trades }} TRADES · 2 STAGES</p>
-        <span class="mp-plan-lock" role="status">{{ plans_copy.notice }}</span>
+        {% if plan.number == 1 %}
+          <a class="mp-button mp-button-quiet" href="#plan-one-interest">{{ interest_copy.0 }}</a>
+        {% else %}
+          <span class="mp-plan-lock" role="status">{{ plans_copy.notice }}</span>
+        {% endif %}
       </article>
       {% endfor %}
     </div>
     <p class="mp-fineprint">{{ plans_copy.notice }}</p>
+  </section>
+
+
+  <section class="mp-section" id="plan-one-interest" aria-labelledby="mp-interest-title">
+    <div class="mp-section-head">
+      <p class="mp-index">MOJ PROP · 01 · CONTACT ONLY</p>
+      <h2 id="mp-interest-title">{{ interest_copy.0 }}</h2>
+      <p>MOJ-PROP-01 · $100 · 30 TRX — {{ interest_copy.4 }}</p>
+    </div>
+    <form method="post" action="/moj-prop-interest/" accept-charset="UTF-8"
+          style="max-width:600px;padding:20px;border:1px solid #536277;border-radius:12px">
+      {% csrf_token %}
+      <input type="hidden" name="plan_code" value="MOJ-PROP-01">
+      <input type="hidden" name="consent_version" value="moj-prop-interest-v1">
+      <input type="hidden" name="source_language" value="{{ code }}">
+      <label for="mp-interest-email">{{ interest_copy.1 }}</label>
+      <input id="mp-interest-email" name="email" type="email" autocomplete="email" required maxlength="254"
+             style="display:block;max-width:100%;width:100%;padding:12px;margin:8px 0 16px" aria-required="true">
+      <label style="display:block;margin-bottom:15px">
+        <input type="checkbox" name="contact_consent" value="yes" required>
+        {{ interest_copy.2 }}
+      </label>
+      <p class="mp-fineprint">{{ interest_copy.4 }}</p>
+      <button class="mp-button mp-button-gold" type="submit">{{ interest_copy.3 }}</button>
+    </form>
   </section>
 
   <section class="mp-section mp-rules" id="rules" aria-labelledby="mp-rules-title">
