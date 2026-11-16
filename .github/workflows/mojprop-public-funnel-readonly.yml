@@ -1,0 +1,47 @@
+# Public MOJ-PROP-01 funnel diagnostics. No customer submission or payment.
+name: MOJ PROP B Public Funnel Read-Only Audit
+
+on:
+  push:
+    branches: [cycle-b-public-funnel-dns-audit-20261117]
+    paths:
+      - 'scripts/mojprop_public_funnel_audit.py'
+      - 'tests/test_mojprop_public_funnel_audit.py'
+      - '.github/workflows/mojprop-public-funnel-readonly.yml'
+  pull_request:
+    branches: [feature/prop-firm-policy-v11-20261114]
+    paths:
+      - 'scripts/mojprop_public_funnel_audit.py'
+      - 'tests/test_mojprop_public_funnel_audit.py'
+      - '.github/workflows/mojprop-public-funnel-readonly.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-public-funnel-readonly
+  cancel-in-progress: true
+
+jobs:
+  public-read-only:
+    name: Observe public Plan1 DNS HTTPS and inquiry route (NO POST)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: .
+    steps:
+      - name: Checkout without credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate observer syntax and safety tests (mocked network)
+        run: |
+          python3 -B -m py_compile \
+            scripts/mojprop_public_funnel_audit.py \
+            tests/test_mojprop_public_funnel_audit.py
+          python3 -B -m unittest discover -s tests -p 'test_mojprop_public_funnel_audit.py' -v
+      - name: Observe 3 public URLs with HTTPS GET ONLY (never submit buyer form)
+        run: |
+          python3 -B scripts/mojprop_public_funnel_audit.py
+          echo "NOTE: successful diagnostic execution is NOT evidence that any website or checkout is working."
