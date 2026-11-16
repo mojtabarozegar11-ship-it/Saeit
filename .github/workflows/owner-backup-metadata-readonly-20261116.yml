@@ -1,0 +1,61 @@
+name: Owner backup metadata reconciliation (strict read only)
+on:
+  push:
+    branches: [ops/verified-disk-reclaim-20261116]
+    paths: [".github/workflows/owner-backup-metadata-readonly-20261116.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: saeit-owner-backup-metadata-readonly-20261116
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/ops/verified-disk-reclaim-20261116' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 8
+    steps:
+      - name: Checkout exact pinned source without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Validate read-only source
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=scripts/owner_backup_metadata_matrix_readonly_20261116.py
+          test ! -L "$file"
+          test "$(git hash-object -- "$file")" = "0d1bc8f51ba8e35530612206b0aaad56590adeed"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import ast,pathlib; ast.parse(pathlib.Path("scripts/owner_backup_metadata_matrix_readonly_20261116.py").read_text(encoding="utf-8"))'
+          echo BACKUP_METADATA_SCRIPT_PINNED=PASS
+      - name: Check cPanel and VPS backup folder metadata using pinned verified existing SSH links
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${VPS_KEY:?}"
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/owner-backup-meta-20261116"
+          install -d -m 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/cpanel.key"
+          chmod 600 "$work/"*.key
+          ssh-keygen -y -P '' -f "$work/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$work/cpanel.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/vps.known" 2>/dev/null
+          test -s "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$work/cpanel.known" 2>/dev/null
+          test -s "$work/cpanel.known"
+          test "$(ssh-keygen -lf "$work/cpanel.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo STORAGE_BRIDGE_FINGERPRINTS=PINNED_VERIFIED
+          timeout 125s ssh -T -i "$work/cpanel.key" -p 1396 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/cpanel.known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ForwardAgent=no -o RequestTTY=no zomorod2@178.239.147.125 'PYTHONDONTWRITEBYTECODE=1 python3 -B - cpanel' < scripts/owner_backup_metadata_matrix_readonly_20261116.py |
+            PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import json,sys; s=sys.stdin.read(5000); p="OWNER_BACKUP_METADATA="; xs=[x for x in s.splitlines() if x.startswith(p)]; assert len(xs)==1,"INVALID_CPANEL_BACKUP_METADATA"; d=json.loads(xs[0][len(p):]); assert d["schema"]=="owner.storage.backup_metadata.readonly.v1" and d["role"]=="cpanel" and d["files_created_modified_or_deleted"] is False and d["backup_contents_read"] is False and d["restore_executed"] is False; print(xs[0])'
+          timeout 125s ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ForwardAgent=no -o RequestTTY=no githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -B - vps' < scripts/owner_backup_metadata_matrix_readonly_20261116.py |
+            PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import json,sys; s=sys.stdin.read(5000); p="OWNER_BACKUP_METADATA="; xs=[x for x in s.splitlines() if x.startswith(p)]; assert len(xs)==1,"INVALID_VPS_BACKUP_METADATA"; d=json.loads(xs[0][len(p):]); assert d["schema"]=="owner.storage.backup_metadata.readonly.v1" and d["role"]=="vps" and d["files_created_modified_or_deleted"] is False and d["backup_contents_read"] is False and d["restore_executed"] is False; print(xs[0])'
+          echo OWNER_BACKUP_META_READONLY=PASS
