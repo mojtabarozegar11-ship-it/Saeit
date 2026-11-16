@@ -78,11 +78,15 @@ jobs:
               Check().feed(html)
           home = (root / "index.html").read_text(encoding="utf-8")
           catalog = (root / "catalog/index.html").read_text(encoding="utf-8")
-          home_required = ["<title>Moj Prop", 'href="/moj-prop/catalog/"', '/moj-prop-intake/', "See service prices", "Send request for review"]
+          home_required = ["<title>Moj Prop", 'href="/moj-prop/catalog/"', '/moj-prop-intake/', "MOJ-PROP-01", "PRELAUNCH", "No wallet or payment collection now.", "Send request for review"]
           catalog_required = ["<title>Moj Prop Catalog", "From US$149", "From US$249"] + ["/moj-prop/samples/" + slug + "/" for slug in ("prop-blueprint", "gold-market-brief", "educational-signal", "commercial-gate-audit")]
           missing = [item for item in home_required + catalog_required if item not in home + catalog]
           if missing:
               raise SystemExit(f"Moj Prop catalog content missing: {missing}")
+          if "MOJPROP-STARTER30" in home or 'action="/moj-prop/checkout/' in home or "Send 30 TRX" in home:
+              raise SystemExit("Real Plan1 prelaunch home cannot market educational checkout or demand payment")
+          if '/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01' not in home:
+              raise SystemExit("Real Plan1 must link to the source-supported no-JS intake route")
           assert 'href="/styles.css"' not in home + catalog and 'src="/app.js"' not in home + catalog
           print("Moj Prop catalog pages parse and contain the expected standalone content.")
           PY
