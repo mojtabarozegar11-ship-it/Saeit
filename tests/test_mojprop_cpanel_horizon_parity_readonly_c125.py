@@ -85,6 +85,23 @@ class OwnerStaticHorizonTests(unittest.TestCase):
         self.assertFalse(data["option_values_distinct"])
         self.assertFalse(data["surgical_value_only_candidate"])
 
+    def test_12_no_value_attributes_all_four_is_a_precise_repair_candidate(self):
+        missing = VALID
+        for name in (b"immediate", b"seven_days", b"thirty_days", b"explore"):
+            missing = missing.replace(b' value="' + name + b'"', b"")
+        data = classify(missing, SHA(missing))
+        self.assertTrue(data["all_four_value_attributes_missing"])
+        self.assertEqual(data["missing_value_attribute_count"], 4)
+        self.assertTrue(data["surgical_value_only_candidate"])
+        self.assertFalse(data["production_change_authorized"])
+
+    def test_13_mixed_missing_and_present_is_not_an_automatic_repair(self):
+        mixed = VALID.replace(b' value="immediate"', b"")
+        data = classify(mixed, SHA(mixed))
+        self.assertFalse(data["all_four_value_attributes_missing"])
+        self.assertEqual(data["missing_value_attribute_count"], 1)
+        self.assertFalse(data["surgical_value_only_candidate"])
+
     def test_08_true_if_all_acceptance_and_no_customer_writes(self):
         x = classify(VALID, SHA(VALID))
         self.assertFalse(x["writes_or_customer_records_accessed"])
