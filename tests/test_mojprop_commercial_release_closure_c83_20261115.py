@@ -61,6 +61,12 @@ class CommercialBackendClosureTests(unittest.TestCase):
             target = self.stage / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(SOURCE / relative, target)
+        # A reviewed 0047 release package cannot include 0048 Django models.
+        model = self.stage / "core/models.py"
+        text = model.read_text(encoding="utf-8")
+        marker = "\nclass MojPropStarter30Order(T):"
+        assert text.count(marker) == 1
+        model.write_text(text.split(marker, 1)[0].rstrip() + "\n", encoding="utf-8")
 
     def test_full_staged_schema_closure_for_real_repo(self):
         result = check_schema_closure(self.live, self.stage)
@@ -103,12 +109,12 @@ class CommercialBackendClosureTests(unittest.TestCase):
 
     def test_existing_complete_live_model_and_admin_match_is_accepted(self):
         for name in ("models.py", "admin.py"):
-            shutil.copyfile(SOURCE / "core" / name, self.live / "core" / name)
+            shutil.copyfile(self.stage / "core" / name, self.live / "core" / name)
         self.assertFalse(check_schema_closure(self.live, self.stage)["manual_deploy_authorized"])
 
     def test_existing_live_offer_model_drift_requires_independent_reconciliation(self):
         for name in ("models.py", "admin.py"):
-            shutil.copyfile(SOURCE / "core" / name, self.live / "core" / name)
+            shutil.copyfile(self.stage / "core" / name, self.live / "core" / name)
         model = self.live / "core/models.py"
         original = model.read_text(encoding="utf-8")
         self.assertIn("class MojPropOffer(T):", original)
