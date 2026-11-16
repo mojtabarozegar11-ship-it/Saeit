@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from .social_policy import aware_utc, DURATION_DAYS
+from .rules import POLICY
 
 
 @dataclass(frozen=True)
@@ -26,8 +27,10 @@ class ChallengeTradeCount:
 def count_challenge_trades(executions, *, paid_at, required=50):
     start = aware_utc(paid_at, "paid_at")
     end = start + timedelta(days=DURATION_DAYS)
-    if type(required) is not int or required < 1:
-        raise ValueError("Required trade count must be a positive integer")
+    # A caller must not defeat v1.2 qualification by requesting fewer than
+    # the owner-approved fifty independently verified closed positions.
+    if type(required) is not int or required < POLICY.min_closed_trades_per_challenge:
+        raise ValueError("Required trade count cannot be below the canonical policy")
     if executions is None:
         raise ValueError("Trusted trade ledger required")
     positions = {}
