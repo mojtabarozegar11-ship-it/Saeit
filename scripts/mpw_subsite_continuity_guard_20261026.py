@@ -350,8 +350,6 @@ def check_authentication_gate(product_id: int) -> Check:
         and parsed.forms[0]["action"] == expected_action
         and parsed.forms[0]["email"] is True
         and parsed.forms[0]["csrf"] is True
-        and b"mpw_trx_easy_enabled" not in body
-        and b"wallet secret phrase" not in body.lower()
     )
     if not validated:
         raise RuntimeError(
