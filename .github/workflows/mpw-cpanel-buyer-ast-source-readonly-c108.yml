@@ -1,0 +1,115 @@
+name: MPW owner-only cPanel buyer source AST contract C108 (read only)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/mpw-cpanel-buyer-ast-source-readonly-c108.yml'
+      - 'scripts/mpw_cpanel_buyer_source_contract_readonly_c108.py'
+      - 'tests/test_mpw_cpanel_buyer_source_contract_readonly_c108.py'
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mpw-checkout-cpanel-source-c108
+  cancel-in-progress: false
+
+jobs:
+  local-contract:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - name: Validate fixed original source and sanitize synthetic evidence
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mpw_cpanel_buyer_source_contract_readonly_c108.py
+          test "$(git hash-object -- scripts/mpw_cpanel_buyer_source_contract_readonly_c108.py)" = '0d97840fe0516e7269bba3a977690efe2f752bc0'
+          python3 -B -m unittest -q \
+            tests.test_mpw_cpanel_buyer_source_contract_readonly_c108
+          echo 'CPANEL_BUYER_AST_NOT_ACCESSED_IN_PR_CI'
+          echo 'LIVE_PAYMENT=NOT_ENABLED'
+
+  owner-readonly:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'issue_comment' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.number == 1600 &&
+      !github.event.issue.pull_request &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'MPW-BUYER-AST-READONLY-20261116'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable default-branch source only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Run fixed offline contracts without remote access
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mpw_cpanel_buyer_source_contract_readonly_c108.py
+          test "$(git hash-object -- scripts/mpw_cpanel_buyer_source_contract_readonly_c108.py)" = '0d97840fe0516e7269bba3a977690efe2f752bc0'
+          python3 -B -m unittest -q \
+            tests.test_mpw_cpanel_buyer_source_contract_readonly_c108
+      - name: Pin the previously authorized cPanel SSH host and inventory source
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-live-buyer-ast-c108-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/host.key" "$d/known" "$d/config"; rmdir "$d"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read().replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10); sys.stdout.write(s)' > "$d/host.key"
+          chmod 600 "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          timeout 15s ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host owner-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 80s ssh -T -F "$d/config" owner-cpanel \
+            'test "$(id -un)" = "zomorod2" && test -x /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mpw_cpanel_buyer_source_contract_readonly_c108.py \
+            | python3 -B -m scripts.mpw_cpanel_buyer_source_contract_readonly_c108 --sanitize
+          echo 'MPW_BUYER_AST_INVENTORY_COMPLETE=READ_ONLY'
+          echo 'PAYMENT_MIGRATION_RESTART_OR_DEPLOY=NONE'
