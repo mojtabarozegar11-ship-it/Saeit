@@ -135,7 +135,7 @@ _SOURCE_ONLY_UNRELEASED = {
     # Exact reviewed Git blob object for the not-yet-deployable Starter30
     # 0048 migration. This exception is ONLY for repository selftest and
     # cannot authorize staging or a production database change.
-    "0048_mojprop_starter30_order": "de0ab0f49c9eaaf0c26fcf12d63bba3ffbb068cc",
+    "0048_mojprop_starter30_order": "dec883ba1cc29807d2930a86d83fee31b3c65875",
 }
 
 
