@@ -84,6 +84,20 @@ class SiteFleetTests(unittest.TestCase):
             self.assertFalse(v["root_or_parent_directory_deletion_allowed"])
             self.assertIn("independent_functional_receipt_ids_missing", v["blockers"])
 
+    def test_77_slot_gate_is_mojplaywin_only(self):
+        now = datetime.now(timezone.utc)
+        raw = {k: {"tenant": k, "observed_at_utc": now.isoformat(),
+                   "functional_receipt_ids": ["a"*64, "b"*64],
+                   **{gate: True for gate in fleet.GATES}}
+               for k in fleet.TENANTS}
+        raw["mojplaywin"]["legacy_77_executors_accounted_for"] = False
+        result = fleet.retirement_decision(raw, now=now)
+        self.assertTrue(result["site_decisions"]["zomorodmelal"]["ready_for_host_scoped_retirement_review"])
+        self.assertFalse(result["site_decisions"]["mojplaywin"]["ready_for_host_scoped_retirement_review"])
+        self.assertIn("legacy_77_executors_accounted_for",
+                      result["site_decisions"]["mojplaywin"]["blockers"])
+        self.assertFalse(result["all_sites_ready"])
+
     def test_fake_truthy_flags_fail_closed(self):
         now = datetime.now(timezone.utc)
         raw = {k: {"tenant": k, "observed_at_utc": now.isoformat(),
@@ -96,6 +110,7 @@ class SiteFleetTests(unittest.TestCase):
         raw = {k: {"tenant": k, "observed_at_utc": now.isoformat(),
                    "functional_receipt_ids": ["a"*64, "b"*64],
                    **{gate: True for gate in fleet.GATES}} for k in fleet.TENANTS}
+        raw["mojplaywin"]["legacy_77_executors_accounted_for"] = True
         d = fleet.retirement_decision(raw, now=now)
         self.assertTrue(d["all_sites_ready"])
         self.assertEqual(d["files_deleted"], 0)
