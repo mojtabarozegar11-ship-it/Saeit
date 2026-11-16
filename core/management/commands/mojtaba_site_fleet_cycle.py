@@ -9,6 +9,7 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 
 from core.mojtaba_site_fleet import CANONICAL_BOT, inventory, run_one_bot_public_cycle
+from core.models import Agent
 
 
 class Command(BaseCommand):
@@ -22,6 +23,11 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         if options.get("observe_public"):
+            # A string constant in a JSON report is not proof of a real bot.
+            # Public observations must be owned by the actual, active canonical
+            # Django Agent record. Never auto-create an identity as a side effect.
+            if Agent.objects.filter(code="mojtaba-bot-ai", active=True).count() != 1:
+                raise CommandError("CANONICAL_BOT_RUNTIME_IDENTITY_NOT_PROVISIONED")
             report = run_one_bot_public_cycle()
         else:
             report = inventory()
