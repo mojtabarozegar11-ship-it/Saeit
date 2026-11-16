@@ -124,6 +124,17 @@ class MojPropBackupIntegrityTests(unittest.TestCase):
             self.assertEqual((self.live / rel).read_bytes(), b"new-live-bytes")
         self.restart.assert_not_called()
 
+    def test_atomic_text_write_rejects_new_symlink_before_migration_write(self):
+        source = self.base / "owner-source.py"
+        source.write_text("# owner-owned, must remain\n", encoding="utf-8")
+        target = self.live / "core" / "0041_new.py"
+        target.symlink_to(source)
+        with self.assertRaisesRegex(RuntimeError, "unsafe live target symlink"):
+            backend.atomic_write_text(target, "print('new')\n", 0o640)
+        self.assertTrue(target.is_symlink())
+        self.assertEqual(source.read_text(encoding="utf-8"),
+                         "# owner-owned, must remain\n")
+
     def test_atomic_replace_rejects_racing_live_symlink_without_changes(self):
         rel = FILES[0]
         target = self.live / rel
