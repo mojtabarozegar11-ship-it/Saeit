@@ -514,14 +514,24 @@ def restart_passenger() -> None:
     print("MOJ_PROP_PASSENGER_RESTART=TOUCH_ONLY")
 
 
+def require_private_backup_directory(backup: Path) -> None:
+    # File mode alone cannot protect a backup when another user may rename
+    # the run directory under a writable parent or redirect its ancestors.
+    for directory in (backup.parent, backup):
+        if (directory.is_symlink() or not directory.is_dir()
+                or stat.S_IMODE(directory.stat().st_mode) & 0o077):
+            raise RuntimeError("private backend backup directory required")
+        if any(parent.is_symlink() for parent in directory.parents):
+            raise RuntimeError("backend backup has symlink ancestor")
+
+
 def verify_backup_manifest(backup: Path) -> dict:
     """Verify the *entire* pinned backup before changing any restored file.
 
     This protects Python source recovery integrity only. MariaDB requires its
     own independently proven snapshot and restore procedure.
     """
-    if backup.is_symlink() or not backup.is_dir():
-        raise RuntimeError("backend backup directory is missing or symlinked")
+    require_private_backup_directory(backup)
     manifest_path = backup / "manifest.json"
     if not manifest_path.is_file() or manifest_path.is_symlink():
         raise RuntimeError("backend backup manifest is missing")
@@ -656,10 +666,14 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
     # No source file, backup or schema mutation until independent proof.
     require_independent_db_restore(run_id, commit, staged_root)
 
+    if (BACKUP_ROOT.is_symlink() or not BACKUP_ROOT.is_dir()
+            or stat.S_IMODE(BACKUP_ROOT.stat().st_mode) & 0o077
+            or any(parent.is_symlink() for parent in BACKUP_ROOT.parents)):
+        raise RuntimeError("private backend backup root not provisioned")
     backup = BACKUP_ROOT / run_id
-    if backup.exists():
+    if backup.exists() or backup.is_symlink():
         raise RuntimeError(f"refusing to reuse backend backup: {backup}")
-    backup.mkdir(parents=True, mode=0o700)
+    backup.mkdir(mode=0o700)
     manifest = {"run_id": run_id, "commit": commit, "files": [str(item) for item in ALL_FILES]}
     for relative in ALL_FILES:
         backup_target(ROOT / relative, backup, manifest, relative)
