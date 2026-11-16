@@ -173,7 +173,9 @@ class MojPropNoJavascriptIntakeTests(TestCase):
         self.no_write(self.submit({**self.form, "payment": "paid", "wallet": "Tfake"}))
 
     def test_28_oversize_body_rejected(self):
-        self.no_write(self.submit({**self.form, "notes": "x" * 17000}))
+        # Body-limit breaches use HTTP 413, not a field-validation 400.
+        # Preserve the no-write database assertion for oversized POSTs.
+        self.no_write(self.submit({**self.form, "notes": "x" * 17000}), status=413)
 
     def test_29_native_rate_limit_stops_sixth_lead(self):
         for ix in range(5):
