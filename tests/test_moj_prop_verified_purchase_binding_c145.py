@@ -66,6 +66,9 @@ class PaidChallengePresentationGateTests(TestCase):
         )
 
     def denied(self):
+        # QuerySet.update() intentionally bypasses model validation in the
+        # tampering fixtures. Drop Django's cached FK relation before reading.
+        self.account.refresh_from_db()
         row = account_projection(self.account)
         self.assertEqual(row["net_profit"], Decimal("1.00"))
         self.assertFalse(row["purchase_window_valid"])
