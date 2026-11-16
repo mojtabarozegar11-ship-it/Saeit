@@ -51,14 +51,16 @@ def _day(value):
     return value.astimezone(utc_timezone.utc).date()
 
 
-def completed_paid_phase_one_before_stage_two(account, *, as_of=None):
-    """Require an earlier, proven qualifying v1.2 phase, not just a PASSED flag.
+def completed_paid_phase_one_before_stage_two(
+        account, *, as_of=None, require_verified_assessment=False):
+    """Check paid phase chronology; optionally require a proved v1.2 pass.
 
-    A status and operator checkbox prove neither six days of actual execution
-    nor the 9.6% net-profit and 32% consistency requirements. For a paid v1.2
-    stage, re-evaluate the earlier stage from reconciled broker/equity evidence
-    strictly before stage two opens. Historical unpurchased v1.1 trials keep
-    their legacy chronology-only contract. Read-only; never starts trading.
+    Existing chronology-only callers validate same buyer, immutable purchase
+    and correct opening/closing order without treating status as financial
+    qualification. Actual stage-two assessment MUST set
+    require_verified_assessment=True: a PASSED flag and operator checkbox alone
+    do not prove six days, 9.6% net return, drawdown or 32% consistency.
+    No payouts, funding or broker calls.
     """
     if (not isinstance(account, PropAccount)
             or account.kind != PropAccount.Kind.PHASE_TWO
@@ -110,7 +112,7 @@ def completed_paid_phase_one_before_stage_two(account, *, as_of=None):
             opened_at__gte=start,
             closed_at__lt=end,
         )
-    if account.policy_version != NEW_CONTRACT_VERSION:
+    if not require_verified_assessment or account.policy_version != NEW_CONTRACT_VERSION:
         return q.exists()
 
     # A v1.2 PASSED flag is not proof of a passed challenge. Re-evaluate all
@@ -387,7 +389,7 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
     if risk is not None:
         if account.kind in (PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO):
             prior = completed_paid_phase_one_before_stage_two(
-                account, as_of=evidence_cutoff
+                account, as_of=evidence_cutoff, require_verified_assessment=True
             )
             assessment = assess_challenge(
                 phase=1 if account.kind == PropAccount.Kind.PHASE_ONE else 2,
