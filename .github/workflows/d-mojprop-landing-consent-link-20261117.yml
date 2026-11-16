@@ -1,4 +1,4 @@
-name: D/E Plan1 static CTA links to real consent-only root
+name: D/E Plan1 static CTA uses existing consented prelaunch root
 on:
   push:
     branches:
@@ -22,12 +22,14 @@ jobs:
           persist-credentials: false
       - name: Enforce real Plan1 nonpayable prelaunch and correct link contract
         run: python3 -m unittest -v tests.test_mojprop_plan1_static_prelaunch
-      - name: No educational checkout or generic CRM substitution for Plan1
+      - name: No educational checkout; clearly disclosed general CRM prelaunch scope
         run: |
           python3 - <<'PY'
           from pathlib import Path
           html=Path('templates/moj-prop-v4/index.html').read_text(encoding='utf8')
-          assert html.count('/moj-prop-interest/form/') >= 3
+          assert html.count('/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01') >= 3
+          assert '/moj-prop-interest/form/' not in html
+          assert 'if packages == ["moj-prop-01"]:' in Path('core/mojprop_accessible_intake.py').read_text(encoding='utf8')
           assert '/moj-prop/?service=blueprint&amp;package=moj-prop-01#request' not in html
           assert 'MOJPROP-STARTER30' not in html
           assert 'No wallet or payment collection now.' in html
