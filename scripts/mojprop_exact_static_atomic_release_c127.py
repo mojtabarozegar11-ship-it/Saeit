@@ -81,8 +81,25 @@ def checked_regular(path: Path, *, euid: int) -> tuple[bytes, os.stat_result]:
             or s.st_mode & 0o002 or s.st_nlink != 1
             or s.st_size > BOUND or path.is_symlink()):
         raise SafetyGate("FILE_IDENTITY_OR_PERMISSION_UNSAFE")
-    with path.open("rb") as f:
-        content = f.read(BOUND + 1)
+    # File-descriptor anchoring prevents a link swap between lstat and read.
+    fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        opened = os.fstat(fd)
+        if (opened.st_dev != s.st_dev or opened.st_ino != s.st_ino
+                or opened.st_uid != euid or opened.st_size != s.st_size
+                or not stat.S_ISREG(opened.st_mode)):
+            raise SafetyGate("FILE_REPLACED_DURING_READ")
+        chunks = []
+        remaining = BOUND + 1
+        while remaining:
+            block = os.read(fd, remaining)
+            if not block:
+                break
+            chunks.append(block)
+            remaining -= len(block)
+        content = b"".join(chunks)
+    finally:
+        os.close(fd)
     if len(content) != s.st_size:
         raise SafetyGate("FILE_READ_RACE")
     return content, s
@@ -164,6 +181,10 @@ def transact(mode: str, target: Path = TARGET, backup: Path = BACKUP, *, euid: i
     lock = backup.parent / LOCK.name
     lockfd = os.open(str(lock), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     try:
+        ls = os.fstat(lockfd)
+        if (not stat.S_ISREG(ls.st_mode) or ls.st_uid != euid
+                or ls.st_mode & 0o077 or ls.st_nlink != 1):
+            raise SafetyGate("UNSAFE_LOCKFILE")
         fcntl.flock(lockfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         current, _ = checked_regular(target, euid=euid)
         if mode == "apply":
