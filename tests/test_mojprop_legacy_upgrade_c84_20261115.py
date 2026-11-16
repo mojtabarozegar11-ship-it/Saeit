@@ -96,6 +96,25 @@ class MojPropLegacyUpgradeTests(unittest.TestCase):
                 installer.patch_admin(self.root / "core/admin.py", SOURCE / "core/admin.py")
         self.assertEqual(after, [(self.root / name).read_bytes() for name in PREFIXES])
 
+    def test_install_migration_rejects_two_competing_core_0040_heads(self):
+        migrations = self.root / "core/migrations"
+        for name in ("0040_branch_a.py", "0040_branch_b.py"):
+            (migrations / name).write_text("class Migration: pass\n")
+        target = migrations / "0041_mojprop_request.py"
+        source = SOURCE / "core/migrations/0041_mojprop_request.py"
+        with patch.object(installer, "ROOT", self.root):
+            with self.assertRaisesRegex(RuntimeError, "ambiguous core migration parent"):
+                installer.install_migration(source, target)
+        self.assertFalse(target.exists())
+
+    def test_install_migration_rejects_unknown_empty_core_history(self):
+        target = self.root / "core/migrations/0041_mojprop_request.py"
+        source = SOURCE / "core/migrations/0041_mojprop_request.py"
+        with patch.object(installer, "ROOT", self.root):
+            with self.assertRaisesRegex(RuntimeError, "reviewed core migration parent is missing"):
+                installer.install_migration(source, target)
+        self.assertFalse(target.exists())
+
     def test_migrations_directory_symlink_to_other_tenant_is_refused(self):
         path = self.root / "core/migrations"
         path.rmdir()
