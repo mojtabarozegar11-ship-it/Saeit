@@ -83,6 +83,11 @@ class ReviewedLegacyUpgradeTests(unittest.TestCase):
         self.patch_both()
         self.assertEqual(first, [(self.live / relative).read_bytes() for relative in PREFIXES])
 
+    def test_expanded_sources_pass_current_main_closure(self):
+        self.patch_both()
+        result = check_schema_closure(self.live, SOURCE)
+        self.assertEqual(result["source_chain"][-1], "0047_mpw_guest_email_recovery")
+
     def test_unknown_legacy_suffix_is_denied(self):
         path = self.live / "core/models.py"
         path.write_text(path.read_text() + "\n# unreviewed edit\n", encoding="utf-8")
