@@ -18,3 +18,15 @@
 
 **حالت انتشار:** source-only / Draft. اجرای روی هاست، انتقال داده، حذف یا هزینه: ۰.
 **مرجع قبلی:** `docs/audits/two-sites-factory-capability-diff-2026-10-20.md`؛ `runtime/mojtaba_bot_disposition_sources_v1.json`.
+
+## ادامه اجرایی همان روز — تبدیل نقش‌ها و مسیر پاکسازی
+- `core/mojtaba_site_quality.py`: بازنویسی چهار کنترل ساختاری HTML ایجنت سابق زمرد (title/H1/meta description/anchor) بدون ثبت متن محتوا؛ جایگزین فقط **کیفیت ساختاری و پایش عمومی** است، نه تولیدکننده محتوا یا پژوهش.
+- `core/management/commands/mojtaba_site_fleet_cycle.py`: فرمان یکپارچه `manage.py mojtaba_site_fleet_cycle` برای inventory و `--observe-public` برای اجرای ۱۴ GET محدود. اجرای واقعی به رکورد فعال `Agent(code='mojtaba-bot-ai')` نیاز دارد؛ خودکار رکورد نمی‌سازد.
+- `scripts/mojtaba_site_legacy_cpanel_inventory.py`: فقط در حساب cPanel با دسترسی همان کاربر اجرا می‌شود و ۳ فایل مشخص در `.private/zomorod-business` + ۱ فایل در `.private_mojplaywin_main_agents/evolution_runtime_20261018` و دو Cron با markerهای دقیق را به صورت hash/bytes می‌سنجد. فاقد write/delete/chmod، با مقابله اولیه با symlink/TOCTOU است.
+- `.github/workflows/mojtaba-site-cpanel-inventory-readonly.yml`: PR تنها تست آفلاین اجرا می‌کند؛ `workflow_dispatch` از `main` با هویت مخزن اصلی و SSH مستقیمِ دارای pin ثابت، بدون دخالت VPS، ممیزی زنده فقط‌خواندنی را فراهم می‌کند. این Workflow هنوز برای استفاده عملی باید با CI و بررسی خطر workflowهای push-to-main تعیین تکلیف شود.
+- `tests/test_mojtaba_site_quality.py`، `tests/test_mojtaba_site_fleet_command.py` و `tests/test_mojtaba_site_legacy_cpanel_inventory.py`: آزمون‌های رگرسیون جایگزین و حذف امن.
+
+### تعیین تکلیف پاکسازی از ریشه
+فقط پس از استقرار واقعی یک scheduler مرکزی، دو چرخه عملیاتی موفق، تولید شاهد برای نقش‌های غیرعمومی (نه صرفاً HTTP 200)، اطمینان از عدم تأثیر بر ثبت سفارش/تراکنش/ارسال رسید، نسخه پشتیبان **خارج هاست** با بازیابی مستقل، و مقایسه SHA و Cron دقیق، حذف **فایل‌های بسیار مشخص و از پیش تأییدشده** بررسی شود. هیچ مسیر دایرکتوری مادر، `.sqlite3`، فایل سفارش، آرشیو هویت مشتری، محصول یا داده مالی حذف نشود.
+
+**حکم امروز:** انتقال قابلیت پایش عمومی در کد انجام شد؛ انتقال/اجرای ۷۷ ماژول، تولیدکننده‌های خصوصی، DNS و Workerهای زنده **نامعلوم/تکمیل‌نشده**؛ فضای آزادشده در هاست = **۰ بایت اثبات‌شده**.
