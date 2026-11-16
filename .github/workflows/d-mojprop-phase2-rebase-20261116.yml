@@ -1,0 +1,58 @@
+name: D real MOJ-PROP-01 authoritative purchase full release gate (no deployment)
+on:
+  push:
+    branches:
+      - d/mojprop-paid-enrollment-integrate-c2-20261116
+  pull_request:
+    branches:
+      - feature/prop-firm-policy-v11-20261114
+    paths:
+      - "prop_firm/portal.py"
+      - "tests/test_moj_prop_purchase_cache_d.py"
+      - "tests/test_moj_prop_phase2_db_binding_d2.py"
+      - ".github/workflows/d-mojprop-phase2-rebase-20261116.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  full-source-integrity-no-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "d-only-synthetic-notproduction"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install exact source dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Check schema
+        run: python manage.py makemigrations --check --dry-run prop_firm
+      - name: Run old failed gate plus new 32 synthetic purchase regression methods
+        run: >
+          python manage.py test
+          tests.test_moj_prop_policy_integrity
+          tests.test_moj_prop_challenge_commerce
+          tests.test_moj_prop_release_gate
+          tests.test_tron_rollout_inventory
+          tests.test_moj_prop_independent_attestation
+          tests.test_moj_prop_allocation_service
+          tests.test_moj_prop_signed_evidence
+          tests.test_moj_prop_phase_sequence_c141
+          tests.test_moj_prop_future_evidence_c144
+          tests.test_moj_prop_verified_purchase_binding_c145
+          tests.test_moj_prop_enrollment_immutability_c145
+          tests.test_moj_prop_plan_enrollment
+          tests.test_moj_prop_plan_qualification
+          tests.test_moj_prop_fifty_trades
+          tests.test_tron_manual_reconciliation
+          tests.test_moj_prop_purchase_cache_d
+          tests.test_moj_prop_phase2_db_binding_d2
+          --verbosity 2
