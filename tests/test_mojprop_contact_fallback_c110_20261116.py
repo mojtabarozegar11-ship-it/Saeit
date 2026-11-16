@@ -27,7 +27,7 @@ class MojPropManualSupportFallbackTests(unittest.TestCase):
         page = (ROOT / "templates/moj-prop-v4/index.html").read_text()
         links = _Links()
         links.feed(page)
-        self.assertIn("/moj-prop/contact/", links.links)
+        self.assertIn("/contact/", links.links)
         self.assertNotIn(MAILTO, links.links)
         self.assertNotIn("mailto:", page.lower())
         self.assertIn("/moj-prop-intake/?format=html", links.links)
