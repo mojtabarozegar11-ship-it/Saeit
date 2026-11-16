@@ -85,11 +85,35 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
         raise ValueError("Persisted PropAccount required")
 
     # A past period must never be evaluated against transactions booked later.
-    all_executions = PropExecution.objects.filter(account=account)
-    all_equity = PropEquityObservation.objects.filter(account=account)
+    # A read-only projection must never book future broker data as completed
+    # P&L or allow a historical report to look ahead at later executions.
+    # An explicit historical cutoff stays exclusive, matching its contract.
+    present = django_timezone.now()
+    if as_of is not None:
+        if getattr(as_of, "tzinfo", None) is None or as_of.utcoffset() is None:
+            raise ValueError("as_of must be timezone-aware")
     if evidence_cutoff is not None:
         if getattr(evidence_cutoff, "tzinfo", None) is None or evidence_cutoff.utcoffset() is None:
             raise ValueError("evidence_cutoff must be timezone-aware")
+    effective_cutoff = min(
+        (present, *([as_of] if as_of is not None else []),
+         *([evidence_cutoff] if evidence_cutoff is not None else []))
+    )
+    source_executions = PropExecution.objects.filter(account=account)
+    source_equity = PropEquityObservation.objects.filter(account=account)
+    # Future-dated VERIFIED evidence is a reconciliation defect, not a new
+    # trade; it must not qualify even when enough earlier trades exist.
+    future_verified_evidence = (
+        source_executions.filter(
+            reconciliation_status="verified", closed_at__gt=present
+        ).exists()
+        or source_equity.filter(
+            reconciliation_status="verified", observed_at__gt=present
+        ).exists()
+    )
+    all_executions = source_executions.filter(closed_at__lte=effective_cutoff)
+    all_equity = source_equity.filter(observed_at__lte=effective_cutoff)
+    if evidence_cutoff is not None:
         all_executions = all_executions.filter(closed_at__lt=evidence_cutoff)
         all_equity = all_equity.filter(observed_at__lt=evidence_cutoff)
     executions = list(
@@ -161,6 +185,7 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
         account.reconciled_by_operator and risk is not None
         and not partial_trades and not partial_equity
         and not reasons and not historical_breach
+        and not future_verified_evidence
         and account.status not in {PropAccount.Status.BREACHED, PropAccount.Status.CLOSED}
         and account.policy_version in (LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION)
         and bool(executions)
@@ -227,6 +252,12 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
             cohort_executions = PropExecution.objects.filter(
                 account__challenge_enrollment=purchase,
                 account__kind__in=(PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO),
+            )
+            # The cohort-wide count must use the SAME temporal ceiling as
+            # P&L/risk. Otherwise the other phase can supply a future 50th
+            # trade even when this account's events are correctly filtered.
+            cohort_executions = cohort_executions.filter(
+                closed_at__lte=effective_cutoff
             )
             if evidence_cutoff is not None:
                 cohort_executions = cohort_executions.filter(closed_at__lt=evidence_cutoff)
