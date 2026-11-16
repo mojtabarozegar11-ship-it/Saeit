@@ -45,6 +45,9 @@ FILES = (
     Path("core/mojprop_offer_draft.py"),
     Path("core/mojprop_quote_contract.py"),
     Path("core/mojprop_quote_views.py"),
+    # The owner CRM sales queue was missing from the live cPanel tree (C95).
+    # Ship as a rollback-tracked source module with the reviewed intake.
+    Path("core/management/commands/mojprop_sales_action_queue.py"),
     Path("core/signal_free_models.py"),
     Path("core/guest_recovery_models.py"),
     Path("core/signal_free_views.py"),
@@ -119,6 +122,7 @@ def selftest(repo_root: Path) -> None:
     model = (repo_root / "core/models.py").read_text(encoding="utf-8")
     required = (
         ("mojprop_intake", view),
+        ("def action_queue_snapshot(", (repo_root / "core/management/commands/mojprop_sales_action_queue.py").read_text(encoding="utf-8")),
         ("mojprop_receipt_status", view),
         ("from .mojprop_receipts import", view),
         ("MojPropRequest", model),
