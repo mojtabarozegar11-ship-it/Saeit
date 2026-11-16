@@ -42,6 +42,8 @@ class AnonymousMariaDbFootprintTests(unittest.TestCase):
         self.assertEqual(c115.table_class("Any customer‮ sensitive"), "other")
         self.assertEqual(c115.table_class(None), "other")
         self.assertEqual(c115.table_class("core_history_event"), "event_and_audit")
+        self.assertEqual(c115.table_class("product_catalog"), "content_research")
+        self.assertEqual(c115.table_class("operation_log"), "event_and_audit")
         self.assertEqual(c115.table_class("service_payments"), "payment_and_orders")
         self.assertEqual(c115.table_class("django_session"), "sessions")
         self.assertEqual(c115.table_class("auth_user"), "system_tables")
@@ -53,6 +55,7 @@ class AnonymousMariaDbFootprintTests(unittest.TestCase):
                [("abc", True, 2)], [("abc", -1, 1)],
                [("abc", "1", 1)], [("abc", None, 0)],
                [("abc", float("nan"), 1)], [("abc", float("inf"), 1)],
+               [("abc", Decimal("NaN"), 1)], [("abc", Decimal("Infinity"), 1)],
                [(None, 100, 100)])
         for obj in bad:
             with self.subTest(obj=str(obj)[:80]), self.assertRaises(ValueError):
