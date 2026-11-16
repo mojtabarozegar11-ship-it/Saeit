@@ -187,5 +187,40 @@ class MojPropQuotaGapInventoryTests(unittest.TestCase):
                 self.assertFalse(result["release_authorized"])
 
 
+    def test_20_jetbackup_index_no_cli_is_unknown_not_no_backup(self):
+        with patch.object(probe.Path, "is_file", return_value=False):
+            outcome = probe._jetbackup_inventory_readonly()
+        self.assertEqual(outcome["status"], "cli_unavailable")
+        self.assertFalse(outcome["provider_backup_restorability_verified"])
+        self.assertFalse(outcome["independent_restore_verified"])
+
+    def test_21_jetbackup_listing_requires_correct_tenant_and_never_logs_data(self):
+        response = {"success": 1, "data": {"backups": [
+            {"account": probe.OWNER, "name": "private-data-do-not-log",
+             "created": "2026-11-16T00:00:00Z", "size": 1234}]}}
+        with patch.object(probe.Path, "is_file", return_value=True):
+            with patch.object(probe.Path, "is_symlink", return_value=False):
+                with patch.object(probe.subprocess, "run",
+                                  return_value=SimpleNamespace(
+                                      stdout=json.dumps(response))) as call:
+                    outcome = probe._jetbackup_inventory_readonly()
+        self.assertEqual(outcome["status"], "account_full_backups_listed_unverified")
+        self.assertEqual(outcome["count_band"], "1-10")
+        self.assertNotIn("private-data", json.dumps(outcome))
+        self.assertEqual(call.call_args.args[0][1:],
+                         ["-F", "listBackups", "-D", "type=1&contains=511",
+                          "-O", "json"])
+        self.assertFalse(outcome["provider_backup_restorability_verified"])
+        response["data"]["backups"][0]["account"] = "another-tenant"
+        with patch.object(probe.Path, "is_file", return_value=True):
+            with patch.object(probe.Path, "is_symlink", return_value=False):
+                with patch.object(probe.subprocess, "run",
+                                  return_value=SimpleNamespace(
+                                      stdout=json.dumps(response))):
+                    denied = probe._jetbackup_inventory_readonly()
+        self.assertEqual(denied["status"], "unverified_account_scope")
+        self.assertEqual(denied["count_band"], "unknown")
+
+
 if __name__ == "__main__":
     unittest.main()
