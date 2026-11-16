@@ -48,8 +48,22 @@ class CommercialBackendClosureTests(unittest.TestCase):
             "class UnrelatedAdmin: pass\n", encoding="utf-8"
         )
 
+        # The approved 0041-0047 release bundle is intentionally isolated
+        # from the source-only unreleased 0048 migration now on main.
+        self.stage = Path(self.sandbox.name) / "reviewed_staging"
+        for relative in (
+            "core/models.py", "core/admin.py", "config/urls.py", "config/settings.py",
+            *MODULES,
+            "scripts/fixtures/mojprop_legacy_request_source_c84.py",
+            "scripts/fixtures/mojprop_legacy_admin_source_c84.py",
+            *(f"core/migrations/{name}.py" for name in MIGRATIONS),
+        ):
+            target = self.stage / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(SOURCE / relative, target)
+
     def test_full_staged_schema_closure_for_real_repo(self):
-        result = check_schema_closure(self.live, SOURCE)
+        result = check_schema_closure(self.live, self.stage)
         self.assertEqual(result["source_chain"], list(MIGRATIONS))
         self.assertEqual(result["models"], len(MODELS))
         self.assertFalse(result["live_db_restored"])
@@ -77,7 +91,7 @@ class CommercialBackendClosureTests(unittest.TestCase):
         )
         before = (self.live / "core/models.py").read_bytes()
         with self.assertRaisesRegex(RuntimeError, "partial Moj Prop model"):
-            check_schema_closure(self.live, SOURCE)
+            check_schema_closure(self.live, self.stage)
         self.assertEqual((self.live / "core/models.py").read_bytes(), before)
 
     def test_partially_installed_admin_refused_before_mutation(self):
@@ -85,12 +99,12 @@ class CommercialBackendClosureTests(unittest.TestCase):
             "class MojPropRequestAdmin: pass\n", encoding="utf-8"
         )
         with self.assertRaisesRegex(RuntimeError, "partial Moj Prop admin"):
-            check_schema_closure(self.live, SOURCE)
+            check_schema_closure(self.live, self.stage)
 
     def test_existing_complete_live_model_and_admin_match_is_accepted(self):
         for name in ("models.py", "admin.py"):
             shutil.copyfile(SOURCE / "core" / name, self.live / "core" / name)
-        self.assertFalse(check_schema_closure(self.live, SOURCE)["manual_deploy_authorized"])
+        self.assertFalse(check_schema_closure(self.live, self.stage)["manual_deploy_authorized"])
 
     def test_existing_live_offer_model_drift_requires_independent_reconciliation(self):
         for name in ("models.py", "admin.py"):
@@ -104,7 +118,7 @@ class CommercialBackendClosureTests(unittest.TestCase):
             encoding="utf-8",
         )
         with self.assertRaisesRegex(RuntimeError, "differs from reviewed source"):
-            check_schema_closure(self.live, SOURCE)
+            check_schema_closure(self.live, self.stage)
 
     def test_unknown_migration_operations_not_overwritten(self):
         target = self.live / "core/migrations/0042_mojprop_offer.py"
@@ -113,17 +127,17 @@ class CommercialBackendClosureTests(unittest.TestCase):
                           encoding="utf-8")
         before = target.read_bytes()
         with self.assertRaisesRegex(RuntimeError, "existing live migration differs"):
-            check_schema_closure(self.live, SOURCE)
+            check_schema_closure(self.live, self.stage)
         self.assertEqual(target.read_bytes(), before)
 
     def test_unknown_live_schema_revision_is_denied_before_migration(self):
         path = self.live / "core/migrations/0046_unreviewed_feature.py"
         path.write_text("class Migration: pass\n", encoding="utf-8")
         with self.assertRaisesRegex(RuntimeError, "unreviewed later"):
-            check_schema_closure(self.live, SOURCE)
+            check_schema_closure(self.live, self.stage)
         path.rename(self.live / "core/migrations/0041_conflicting_branch.py")
         with self.assertRaisesRegex(RuntimeError, "conflicting core migration"):
-            check_schema_closure(self.live, SOURCE)
+            check_schema_closure(self.live, self.stage)
 
     def test_production_migration_targets_exact_reviewed_core_head(self):
         """Guard migration target against current graph without stale literals."""
@@ -288,7 +302,7 @@ class CommercialBackendClosureTests(unittest.TestCase):
         path = self.live / "core/signal_free_models.py"
         path.write_text("class UnknownLiveCustom: pass\\n", encoding="utf-8")
         with self.assertRaisesRegex(RuntimeError, "unreviewed live signal-free module drift"):
-            check_schema_closure(self.live, SOURCE)
+            check_schema_closure(self.live, self.stage)
         self.assertIn("UnknownLiveCustom", path.read_text())
 
     def test_quote_route_installed_once_and_never_pays(self):
