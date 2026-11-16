@@ -417,7 +417,7 @@ class BrokerSignedEvidenceTests(TestCase):
     def test_scientific_ledger_capacity_boundary_does_not_round_up(self):
         result = ingest_signed_evidence(**self.packet(
             event_type="equity", event_id="scientific-max",
-            data={"equity_usd": "9.9999999999999999E+13",
+            data={"equity_usd": "9.99999999999999999E+13",
                   "is_session_open": False},
         ))
         self.assertEqual(result["result"], "recorded_pending")
@@ -426,7 +426,7 @@ class BrokerSignedEvidenceTests(TestCase):
         # MariaDB DECIMAL persistence/restore must be verified separately.
         from prop_firm.signed_evidence import _value
         self.assertEqual(
-            _value("9.9999999999999999E+13", "equity_usd"),
+            _value("9.99999999999999999E+13", "equity_usd"),
             Decimal("99999999999999.9999"),
         )
         self.assertEqual(
