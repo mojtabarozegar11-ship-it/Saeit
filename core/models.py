@@ -849,6 +849,24 @@ class MojPropStarter30Order(T):
                 name="mojprop30_fixed_merchant",
             ),
             models.CheckConstraint(
+                # SQL updates bypass clean()/save(); reject reverse or zero
+                # invoice windows at the MariaDB layer as well.
+                condition=models.Q(expires_at__gt=models.F("issued_at")),
+                name="mojprop30_positive_window",
+            ),
+            models.CheckConstraint(
+                # Never accept an unbound, blank contract/wallet/order even
+                # through raw SQL. Owner wallet and legal consent still
+                # require independent checks before any payable issuance.
+                condition=(
+                    ~models.Q(order_ref="")
+                    & ~models.Q(recipient="")
+                    & ~models.Q(payer_hex41="")
+                    & ~models.Q(buyer_terms_acceptance="")
+                ),
+                name="mojprop30_required_fields",
+            ),
+            models.CheckConstraint(
                 # No source-only order can become payable/settled by an arbitrary
                 # admin or ORM field update without an independently reviewed ledger.
                 condition=models.Q(status="draft"),
