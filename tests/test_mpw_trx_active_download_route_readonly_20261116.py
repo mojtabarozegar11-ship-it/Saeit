@@ -27,6 +27,19 @@ class MerchantNativeDownloadRouteSafety(unittest.TestCase):
             "/commerce/trx-easy/download/1/",
         )
 
+    def test_relative_django_path_normalizes_to_same_exact_route(self):
+        self.assertEqual(
+            expand_literal_route("commerce/trx-easy/download/<int:item_id>/"),
+            "/commerce/trx-easy/download/1/",
+        )
+
+    def test_relative_registry_download_can_bind_to_active_handler(self):
+        result = inspect_active_patterns(
+            [("commerce/trx-easy/download/<int:item_id>/", handler)],
+            match, {"download_paid": handler},
+        )
+        self.assertTrue(result["resolved_download_is_current_registered_handler"])
+
     def test_wrong_external_prefix_rejected(self):
         self.assertIsNone(expand_literal_route("/admin/download/<int:id>/"))
 
