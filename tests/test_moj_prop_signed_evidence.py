@@ -339,3 +339,96 @@ class BrokerSignedEvidenceTests(TestCase):
             ingest_signed_evidence(**self._signed_raw(raw))
         self.assertFalse(PropExecution.objects.exists())
         self.assertFalse(PropEquityObservation.objects.exists())
+
+    def test_huge_positive_exponents_fail_closed_without_decimal_overflow(self):
+        # A correctly signed broker packet is not automatically well formed.
+        for field in ("gross_usd", "fees_usd", "equity_usd"):
+            equity = field == "equity_usd"
+            data = ({"equity_usd": "100", "is_session_open": False}
+                    if equity else
+                    {"symbol": "EURUSD", "gross_usd": "5", "fees_usd": "0"})
+            data[field] = "1E+999999999"
+            with self.subTest(field=field), self.assertRaisesRegex(
+                    EvidenceRejected, "amount exceeds ledger capacity"):
+                ingest_signed_evidence(**self.packet(
+                    event_type="equity" if equity else "execution",
+                    data=data, event_id="large-exponent-" + field,
+                ))
+        self.assertFalse(PropExecution.objects.exists())
+        self.assertFalse(PropEquityObservation.objects.exists())
+
+    def test_tiny_nonzero_exponents_never_silently_round_to_zero(self):
+        for field in ("gross_usd", "fees_usd", "equity_usd"):
+            equity = field == "equity_usd"
+            data = ({"equity_usd": "100", "is_session_open": False}
+                    if equity else
+                    {"symbol": "EURUSD", "gross_usd": "5", "fees_usd": "0"})
+            data[field] = "1E-999999999"
+            with self.subTest(field=field), self.assertRaisesRegex(
+                    EvidenceRejected, "precision exceeds ledger"):
+                ingest_signed_evidence(**self.packet(
+                    event_type="equity" if equity else "execution",
+                    data=data, event_id="tiny-exponent-" + field,
+                ))
+        self.assertFalse(PropExecution.objects.exists())
+        self.assertFalse(PropEquityObservation.objects.exists())
+
+    def test_significant_fifth_decimal_is_rejected_despite_trailing_zeros(self):
+        for amount in ("1.23456000", "0.000010000", "-0.000010000"):
+            with self.subTest(amount=amount), self.assertRaisesRegex(
+                    EvidenceRejected, "precision exceeds ledger"):
+                ingest_signed_evidence(**self.packet(
+                    event_type="execution", event_id="fractional-" + str(len(amount)),
+                    data={"symbol": "EURUSD", "gross_usd": amount, "fees_usd": "0"},
+                ))
+        self.assertFalse(PropExecution.objects.exists())
+
+    def test_insignificant_trailing_zero_and_scientific_amount_are_exact(self):
+        row = ingest_signed_evidence(**self.packet(
+            event_type="execution", event_id="trailing-zeros",
+            data={"symbol": "EURUSD", "gross_usd": "1.23450000",
+                  "fees_usd": "0.0000"},
+        ))
+        self.assertEqual(row["result"], "recorded_pending")
+        saved = PropExecution.objects.get(external_event_id="trailing-zeros")
+        self.assertEqual(saved.gross_realized_usd, Decimal("1.2345"))
+        self.assertEqual(saved.reconciliation_status, "pending")
+        result = ingest_signed_evidence(**self.packet(
+            event_type="equity", event_id="scientific-equity",
+            data={"equity_usd": "1.230000E+2", "is_session_open": False},
+        ))
+        self.assertEqual(result["result"], "recorded_pending")
+        mark = PropEquityObservation.objects.get(external_event_id="scientific-equity")
+        self.assertEqual(mark.equity_usd, Decimal("123"))
+
+    def test_scientific_zero_canonicalizes_without_loss_of_significant_value(self):
+        for event_id, amount in (
+            ("zero-large-negative-exponent", "0E-999999999"),
+            ("negative-zero-large-exponent", "-0E+999999999"),
+        ):
+            result = ingest_signed_evidence(**self.packet(
+                event_type="equity", event_id=event_id,
+                data={"equity_usd": amount, "is_session_open": False},
+            ))
+            self.assertEqual(result["result"], "recorded_pending")
+            mark = PropEquityObservation.objects.get(external_event_id=event_id)
+            self.assertEqual(mark.equity_usd, Decimal("0"))
+
+    def test_scientific_ledger_capacity_boundary_does_not_round_up(self):
+        result = ingest_signed_evidence(**self.packet(
+            event_type="equity", event_id="scientific-max",
+            data={"equity_usd": "9.99999999999999999E+13",
+                  "is_session_open": False},
+        ))
+        self.assertEqual(result["result"], "recorded_pending")
+        # SQLite's test-only numeric reader can coerce 18 significant digits
+        # through binary float; test exact pre-storage Decimal independently.
+        # MariaDB DECIMAL persistence/restore must be verified separately.
+        from prop_firm.signed_evidence import _value
+        self.assertEqual(
+            _value("9.99999999999999999E+13", "equity_usd"),
+            Decimal("99999999999999.9999"),
+        )
+        self.assertEqual(
+            PropEquityObservation.objects.filter(external_event_id="scientific-max").count(), 1
+        )

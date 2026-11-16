@@ -31,15 +31,26 @@ def _value(value, field):
         d = dec(value)
     except (ValueError, TypeError) as exc:
         raise EvidenceRejected(f"{field}: invalid decimal") from exc
-    # DecimalField(max_digits=18, decimal_places=4): at most 14 integer digits.
-    # Trailing zeros and scientific notation must not cause false rejection;
-    # never silently round values with more than four effective decimal places.
-    normalized = d.normalize()
-    if normalized.as_tuple().exponent < -4:
-        raise EvidenceRejected(f"{field}: precision exceeds ledger")
-    if d.copy_abs() >= Decimal("100000000000000"):
+    # DecimalField(max_digits=18, decimal_places=4) has 14 integer places.
+    # Do not call Decimal.normalize(): extreme but well-formed exponents can
+    # raise decimal.Overflow or round a tiny nonzero input to zero under the
+    # process decimal context. Both outcomes corrupt the ingestion contract.
+    if d.is_zero():
+        return Decimal("0")
+    if d.adjusted() >= 14:
         raise EvidenceRejected(f"{field}: amount exceeds ledger capacity")
-    return d
+    parts = d.as_tuple()
+    digits = list(parts.digits)
+    effective_exponent = parts.exponent
+    # Remove only insignificant coefficient zeros. This canonicalizes an
+    # exact value for Django DecimalField validation without quantize(),
+    # rounding, decimal context changes or an arithmetic overflow.
+    while len(digits) > 1 and digits[-1] == 0:
+        digits.pop()
+        effective_exponent += 1
+    if effective_exponent < -4:
+        raise EvidenceRejected(f"{field}: precision exceeds ledger")
+    return Decimal((parts.sign, tuple(digits), effective_exponent))
 
 
 def _id(value, field, max_length=160):
