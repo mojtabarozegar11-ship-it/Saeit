@@ -123,6 +123,41 @@ def _stage(run_id: str) -> Path:
     return HOME / (".mojprop-starter30-stage-" + run_id) / "templates/moj-prop-v4/starter-30-trx"
 
 
+def exact_git_blob(data: bytes) -> str:
+    """Git's source-byte framing; source identity only, not a signature."""
+    if type(data) is not bytes or len(data) > MAX_STAGE_FILE_BYTES:
+        raise RuntimeError("staged source outside reviewed byte limit")
+    return hashlib.sha1(
+        b"blob " + str(len(data)).encode("ascii") + bytes([0]) + data
+    ).hexdigest()
+
+
+def _read_reviewed_stage_file(stage: Path, name: str) -> bytes:
+    if name not in FILES or set(REVIEWED_GIT_BLOBS) != set(FILES):
+        raise RuntimeError("unreviewed static SKU source list")
+    target = stage / name
+    _check_ancestors(HOME, target)
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    try:
+        fd = os.open(target, flags)
+    except OSError as exc:
+        raise RuntimeError("staged reviewed SKU asset unavailable") from exc
+    with os.fdopen(fd, "rb") as stream:
+        meta = os.fstat(stream.fileno())
+        if (not stat.S_ISREG(meta.st_mode)
+                or meta.st_uid != os.geteuid()
+                or meta.st_nlink != 1
+                or meta.st_mode & 0o022
+                or not 10 <= meta.st_size <= MAX_STAGE_FILE_BYTES):
+            raise RuntimeError("unsafe staged reviewed SKU asset")
+        data = stream.read(MAX_STAGE_FILE_BYTES + 1)
+        if len(data) != meta.st_size:
+            raise RuntimeError("staged SKU file changed during preflight")
+    if exact_git_blob(data) != REVIEWED_GIT_BLOBS[name]:
+        raise RuntimeError("staged SKU bytes do not match reviewed Git source")
+    return data
+
+
 def _stage_bytes(run_id: str) -> dict[str, bytes]:
     stage = _stage(run_id)
     if stage.is_symlink() or not stage.is_dir():
