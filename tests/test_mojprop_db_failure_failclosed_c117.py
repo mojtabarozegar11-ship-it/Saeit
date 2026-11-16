@@ -120,6 +120,42 @@ class MojPropCrmOutageC117Tests(TestCase):
         self.assert_no_receipt(result)
         self.assertNotIn(token, result.content.decode())
 
+    def test_09_reconnect_same_uuid_after_outage_creates_only_one_real_lead(self):
+        with patch("core.mojprop_views._rate_limited",
+                   side_effect=DatabaseError("SQL temporarily offline")):
+            failed = self.request(keyed=True)
+        self.assert_no_receipt(failed)
+        first = self.request(keyed=True)
+        second = self.request(keyed=True)
+        self.assertEqual((first.status_code, second.status_code), (201, 200))
+        self.assertEqual(first.json()["request_id"], second.json()["request_id"])
+        self.assertTrue(second.json()["reused"])
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+
+    def test_10_html_request_db_outage_returns_private_503_and_no_false_receipt(self):
+        csrf_page = self.browser.get("/moj-prop-intake/?format=html")
+        self.assertEqual(csrf_page.status_code, 200)
+        with patch("core.mojprop_views._rate_limited",
+                   side_effect=DatabaseError("private auth SQL details")):
+            response = self.browser.post(
+                "/moj-prop-intake/?format=html",
+                data={
+                    "name": "Native HTML customer",
+                    "email": "buyer@example.com",
+                    "service": "blueprint",
+                    "horizon": "week",
+                    "notes": "Please prepare written educational terms for review.",
+                    "consent": "on",
+                    "website": "",
+                },
+                HTTP_X_CSRFTOKEN=self.csrf,
+            )
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("no-store", response.get("Cache-Control", ""))
+        self.assertIn(b"temporarily", response.content.lower() if b"temporarily" in response.content.lower() else b"Request status unavailable")
+        self.assertNotIn(b"buyer@example.com", response.content)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
     def test_08_html_receipt_status_db_failure_has_no_bearer_in_html(self):
         created = self.request(keyed=True)
         token = created.json()["receipt_token"]
