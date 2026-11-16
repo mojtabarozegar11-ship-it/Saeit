@@ -158,6 +158,19 @@ class MojPropBackupIntegrityTests(unittest.TestCase):
         self.assertEqual(external.read_bytes(), b"owner-unchanged")
         self.assertEqual(staged.read_bytes(), b"new-code")
 
+    def test_oversized_backup_manifest_refused_before_parse_or_restore(self):
+        manifest = self.backup / "manifest.json"
+        manifest.write_bytes(b" " * (1024 * 1024 + 1))
+        with self.assertRaisesRegex(RuntimeError, "manifest size is unsafe"):
+            backend.verify_backup_manifest(self.backup)
+        self.restart.assert_not_called()
+
+    def test_empty_backup_manifest_refused_before_parse_or_restore(self):
+        (self.backup / "manifest.json").write_bytes(b"")
+        with self.assertRaisesRegex(RuntimeError, "manifest size is unsafe"):
+            backend.verify_backup_manifest(self.backup)
+        self.restart.assert_not_called()
+
     def test_group_writable_backend_backup_root_prevents_recovery(self):
         self.base.chmod(0o770)
         with self.assertRaisesRegex(RuntimeError, "private backend backup directory required"):
