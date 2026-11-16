@@ -91,7 +91,7 @@ def verify_full_restore_review(*, root: Path, run_id: str,
     _check(type(run_id) is str and bool(RUN.fullmatch(run_id)))
     _check(type(source_commit) is str and bool(SHA40.fullmatch(source_commit)))
     _check(type(reviewer_key) is bytes and len(reviewer_key) >= 32)
-    _check(type(root) is Path)
+    _check(isinstance(root, Path))
     _private_dir(root)
     case = root / run_id
     _private_dir(case)
