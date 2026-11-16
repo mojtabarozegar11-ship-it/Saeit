@@ -165,6 +165,24 @@ class TwoStageMojPropSimulationContractTests(unittest.TestCase):
         self.assertIs(out["requires_independent_broker_evidence"], True)
         self.assertIs(out["official_challenge_passed"], False)
 
+    def test_19_rule_revision_changes_report_digest_without_changing_snapshot_proof(self):
+        original = evaluate_simulated_phase(policy(), [snap(0)], phase=1)
+        revised = evaluate_simulated_phase(
+            policy(phase1_profit_target_bps=900), [snap(0)], phase=1
+        )
+        self.assertNotEqual(original["rules_sha256"], revised["rules_sha256"])
+        self.assertEqual(original["observations_sha256"], revised["observations_sha256"])
+        self.assertEqual(original["rules_provenance"],
+                         "illustrative_not_verified_customer_contract")
+
+    def test_20_one_rule_identity_shared_across_both_educational_stages(self):
+        one = evaluate_simulated_phase(policy(), [snap(0)], phase=1)
+        two = evaluate_simulated_phase(
+            policy(), [snap(0, phase=2)], phase=2
+        )
+        self.assertEqual(one["rules_sha256"], two["rules_sha256"])
+        self.assertNotEqual(one["observations_sha256"], two["observations_sha256"])
+
     def test_15_target_requires_multiple_actual_trade_days_not_record_count(self):
         rows = [snap(i, "11000.00", at=START+timedelta(minutes=i)) for i in range(5)]
         out = evaluate_simulated_phase(policy(), rows, phase=1)
