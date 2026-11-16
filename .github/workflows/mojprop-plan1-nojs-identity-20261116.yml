@@ -1,0 +1,56 @@
+name: MOJ PROP Plan1 no-JavaScript first lead prelaunch
+on:
+  push:
+    branches:
+      - fix/mojprop-first-lead-nojs-plan1-20261116
+    paths:
+      - core/mojprop_accessible_intake.py
+      - tests/test_mojprop_plan1_nojs_prefill_20261116.py
+      - .github/workflows/mojprop-plan1-nojs-identity-20261116.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - core/mojprop_accessible_intake.py
+      - tests/test_mojprop_plan1_nojs_prefill_20261116.py
+      - .github/workflows/mojprop-plan1-nojs-identity-20261116.yml
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-nojs-plan1-identity-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  prelaunch-source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DEBUG: "False"
+      SECRET_KEY: "temporary-ci-only-do-not-use-in-production"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,mojplaywin.com"
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install application requirements
+        run: python -m pip install -r requirements.txt
+      - name: Validate Django and 14 nonpayable Plan1 noJS regressions
+        run: |
+          python manage.py check
+          python manage.py test tests.test_mojprop_plan1_nojs_prefill_20261116 --verbosity 1
+      - name: Assert no checkout/broker/merchant changes in the form branch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src=Path("core/mojprop_accessible_intake.py").read_text("utf-8")
+          assert 'if packages == ["moj-prop-01"]:' in src
+          assert "MOJ-PROP-01 funded-trading challenge" in src
+          assert "This form takes no" in src
+          assert 'ACTION = "/moj-prop-intake/?format=html"' in src
+          assert 'from .models import MojPropRequest' in src
+          print("NO_PAYMENT_NO_INVOICE_NO_ENTITLEMENT")
+          PY
