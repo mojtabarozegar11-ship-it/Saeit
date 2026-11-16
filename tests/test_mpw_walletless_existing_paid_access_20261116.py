@@ -264,6 +264,79 @@ class HistoricalWalletlessPaidDigitalAccessTests(SimpleTestCase):
     def test_file_check_must_be_callable(self):
         self.assertFalse(self.allowed(check=False))
 
+    def test_deleted_related_product_or_order_denied_without_server_error(self):
+        for related in ("order", "product"):
+            with self.subTest(related=related):
+                old = getattr(self.item, related)
+                setattr(self.item, related, None)
+                try:
+                    self.assertFalse(self.allowed())
+                finally:
+                    setattr(self.item, related, old)
+
+    def test_nonfinite_paid_order_total_never_grants_access(self):
+        for bad in (Decimal("NaN"), Decimal("Infinity"),
+                    Decimal("-Infinity"), Decimal("sNaN")):
+            with self.subTest(bad=str(bad)):
+                original = self.item.order.total
+                self.item.order.total = bad
+                try:
+                    self.assertFalse(self.allowed())
+                finally:
+                    self.item.order.total = original
+
+    def test_nonfinite_item_unit_price_never_grants_access(self):
+        for bad in (Decimal("NaN"), Decimal("Infinity"),
+                    Decimal("-Infinity"), Decimal("sNaN")):
+            with self.subTest(bad=str(bad)):
+                original = self.item.unit_price
+                self.item.unit_price = bad
+                try:
+                    self.assertFalse(self.allowed())
+                finally:
+                    self.item.unit_price = original
+
+    def test_non_decimal_amounts_never_grant_historical_access(self):
+        for obj, field in ((self.item.order, "total"),
+                           (self.item, "unit_price"),
+                           (self.item.order.payment_intent, "amount")):
+            for bad in (None, "7.50", 7.5, True):
+                with self.subTest(field=field, bad=repr(bad)):
+                    original = getattr(obj, field)
+                    setattr(obj, field, bad)
+                    try:
+                        self.assertFalse(self.allowed())
+                    finally:
+                        setattr(obj, field, original)
+
+    def test_missing_or_corrupt_payment_intent_denied_without_500(self):
+        order = self.item.order
+        original = order.payment_intent
+        try:
+            order.payment_intent = None
+            self.assertFalse(self.allowed())
+            del order.payment_intent
+            self.assertFalse(self.allowed())
+        finally:
+            order.payment_intent = original
+
+    def test_missing_persisted_provider_reference_denied_without_500(self):
+        intent = self.item.order.payment_intent
+        original = intent.provider_reference
+        try:
+            del intent.provider_reference
+            self.assertFalse(self.allowed())
+        finally:
+            intent.provider_reference = original
+
+    def test_paid_item_read_database_outage_denies_access(self):
+        self.OrderItem.objects.filter.side_effect = ConnectionError("db unavailable")
+        self.assertFalse(self.allowed())
+
+    def test_refund_ledger_outage_is_not_permission_to_unlock(self):
+        self.ledger_rows.exists.side_effect = RuntimeError("ledger unavailable")
+        self.assertFalse(self.allowed())
+
     def test_no_live_financial_or_download_action_in_module(self):
         code = (ROOT / "services/mpw_walletless_existing_paid_access.py").read_text()
         for bad in ("objects.create(", "objects.update(", ".save(", ".delete(",
