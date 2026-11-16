@@ -15,7 +15,7 @@ class CanaryReportIntegrityTests(unittest.TestCase):
         cls.source = WORKFLOW.read_text(encoding="utf-8")
 
     def test_live_sku_sellability_requires_literal_merchant_true(self):
-        sale = self.source.split("is_sellable=(eligible and rights and file_ready", 1)[1].split(")", 1)[0]
+        sale = self.source.split("is_sellable=(eligible and rights and file_ready", 1)[1].split("record={", 1)[0]
         self.assertIn('getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False) is True', sale)
         self.assertIn('getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is True', sale)
         self.assertIn("release_authorized", sale)
