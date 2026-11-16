@@ -9,7 +9,8 @@ from prop_firm.plan1_orm_consent_review import review_existing_interest
 
 class ConsentOnlyOrmReviewTests(SimpleTestCase):
     def call(self, **overrides):
-        data = dict(actor=SimpleNamespace(is_authenticated=True, is_active=True, is_staff=True,\n                                          has_perm=lambda p: p == 'prop_firm.view_propinterest'),
+        data = dict(actor=SimpleNamespace(is_authenticated=True, is_active=True, is_staff=True,
+                                          has_perm=lambda p: p == 'prop_firm.view_propinterest'),
                     interest_pk=1, inquiry=None, consent_attestation=None,
                     consent_tag_hex="", consent_key=b"", request_ref="",
                     inquiry_sha256="", consent_evidence_sha256="",
