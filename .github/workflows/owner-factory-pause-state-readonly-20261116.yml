@@ -1,0 +1,89 @@
+name: Owner factory scheduler pause-state read only 2026-11-16
+on:
+  push:
+    branches: [ops/verified-disk-reclaim-20261116]
+    paths: [".github/workflows/owner-factory-pause-state-readonly-20261116.yml"]
+permissions:
+  contents: read
+jobs:
+  status:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/ops/verified-disk-reclaim-20261116' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - name: Check safety gates and scheduler tags through pinned VPS SSH without modification
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${VPS_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/owner-factory-scheduler-pause-20261116"
+          install -d -m 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test -s "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo PINNED_VPS_OWNER_SSH=YES
+          timeout 65s ssh -T -i "$work/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ForwardAgent=no -o RequestTTY=no githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE' |
+          import json, os, pwd, stat, subprocess
+          from pathlib import Path
+          uid=os.geteuid()
+          assert pwd.getpwuid(uid).pw_name=="githubops"
+          root=Path("/home/githubops/factory-runtime")
+          ops=root/"operations"
+          for path in (root,ops):
+              s=path.lstat()
+              assert stat.S_ISDIR(s.st_mode) and s.st_uid==uid
+          cr=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8)
+          assert cr.returncode==0 or "no crontab for" in cr.stderr.lower()
+          tags=("SAEIT_MASTER_AGENT_V1","SAEIT_FACTORY_EVERY_MINUTE_V1","SAEIT_FACTORY_LIFECYCLE_12_V1")
+          cron_tags={key:sum(key in line and not line.lstrip().startswith("#") for line in cr.stdout.splitlines()) for key in tags}
+          st=os.statvfs(root)
+          free=st.f_bavail*st.f_frsize
+          file=ops/"vps-only-loop.pid"
+          status="missing"
+          expected_pid=-1
+          if file.is_symlink():
+              status="unsafe_symlink"
+          elif file.is_file():
+              status="present"
+              raw=file.read_text(errors="replace")[:50].strip()
+              if raw.isdecimal(): expected_pid=int(raw)
+          pid_exists=False
+          pid_owner_matches=False
+          pid_command_matches=False
+          if expected_pid>1:
+              proc=Path("/proc")/str(expected_pid)
+              try:
+                  ps=proc.stat()
+                  pid_exists=True
+                  pid_owner_matches=ps.st_uid==uid
+                  cmd=(proc/"cmdline").read_bytes()[:16000].replace(bytes([0]),b" ").decode("utf-8","replace")
+                  pid_command_matches="vps-only-loop.sh" in cmd
+              except (FileNotFoundError, PermissionError, ProcessLookupError):
+                  pass
+          out={"schema":"owner.factory.cron_pause_status.readonly.v1",
+               "cron_job_active_tag_counts":cron_tags,
+               "all_three_tagged_schedulers_absent":all(v==0 for v in cron_tags.values()),
+               "cron_list_available":True,
+               "free_bytes":free,
+               "above_historical_512MiB_disk_reserve":free>=524288*1024,
+               "loop_pidfile":status,
+               "pid_exists":pid_exists,
+               "pid_owned_by_factory":pid_owner_matches,
+               "pid_command_matches_loop":pid_command_matches,
+               "scheduler_updated":False,
+               "service_started_or_restarted":False,
+               "log_recreated":False,
+               "backup_files_modified":False,
+               "costs_incurred":False,
+               "automatic_resume_authorized":False}
+          print("OWNER_FACTORY_PAUSE_STATE="+json.dumps(out,sort_keys=True,separators=(",",":")))
+          REMOTE
+            PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import sys,json; s=sys.stdin.read(4000).splitlines(); p="OWNER_FACTORY_PAUSE_STATE="; q=[x for x in s if x.startswith(p)]; assert len(q)==1; d=json.loads(q[0][len(p):]); assert d["schema"]=="owner.factory.cron_pause_status.readonly.v1" and d["scheduler_updated"] is False and d["service_started_or_restarted"] is False and d["backup_files_modified"] is False; print(q[0])'
+          echo FACTORY_PAUSE_INSPECTION_READ_ONLY=PASS
