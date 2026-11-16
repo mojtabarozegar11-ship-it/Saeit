@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation, localcontext
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, localcontext
 import hashlib
 import json
 import re
@@ -200,7 +200,15 @@ def evaluate_simulated_phase(
             overall_loss = max(Decimal(0), overall_reference - effective)
             # Different days have different opening bases; compare risk in
             # basis points of that day and the selected overall reference.
-            worst_daily_loss_bps = max(worst_daily_loss_bps, daily_loss / day_open * BPS)
+            # Once the account closes at zero/negative equity, subsequent
+            # days have no meaningful positive opening denominator. The
+            # earlier terminal breach persists, and division by zero is
+            # impossible. Do not pretend losses in that state are 0%.
+            current_daily_bps = (
+                daily_loss / day_open * BPS if day_open > 0
+                else (BPS if daily_loss > 0 else Decimal(0))
+            )
+            worst_daily_loss_bps = max(worst_daily_loss_bps, current_daily_bps)
             worst_overall_loss_bps = max(
                 worst_overall_loss_bps, overall_loss / overall_reference * BPS,
             )
@@ -251,8 +259,8 @@ def evaluate_simulated_phase(
             "target_equity": format(target_equity, "f"),
             "latest_observed_equity": format(last_equity, "f"),
             "profit_target_observed": target_met,
-            "worst_observed_daily_loss_bps": format(worst_daily_loss_bps.quantize(Decimal("0.01")), "f"),
-            "worst_observed_overall_loss_bps": format(worst_overall_loss_bps.quantize(Decimal("0.01")), "f"),
+            "worst_observed_daily_loss_bps": format(worst_daily_loss_bps.quantize(Decimal("0.01"), rounding=ROUND_CEILING), "f"),
+            "worst_observed_overall_loss_bps": format(worst_overall_loss_bps.quantize(Decimal("0.01"), rounding=ROUND_CEILING), "f"),
             "observations_sha256": digest.hex(),
             "daily_reference_definition": "previous_day_last_observed_equity_utc",
             "overall_reference_definition": policy.overall_drawdown_mode,
