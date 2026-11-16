@@ -86,6 +86,29 @@ class AccessibleCurrentMainLeadTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(MojPropRequest.objects.count(), 0)
 
+    def test_04d_actual_rendered_form_submits_one_crm_lead(self):
+        # Rendered HTML, not self.data constructed by the test suite: this
+        # catches duplicate or missing hidden inputs before release.
+        pairs = re.findall(
+            r'<input type="hidden" name="([^"]+)" value="([^"]*)">',
+            self.first.content.decode("utf-8"),
+        )
+        pairs += [
+            ("name", self.data["name"]),
+            ("email", self.data["email"]),
+            ("service", self.data["service"]),
+            ("horizon", self.data["horizon"]),
+            ("notes", self.data["notes"]),
+            ("consent", self.data["consent"]),
+        ]
+        response = self.client.post(
+            URL, data=urlencode(pairs),
+            content_type="application/x-www-form-urlencoded",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+        self.assertIn(b'private-receipt', response.content)
+
     def test_05_sensitive_response_headers(self):
         self.assertIn("no-store", self.first["Cache-Control"])
         self.assertEqual(self.first["Referrer-Policy"], "no-referrer")
