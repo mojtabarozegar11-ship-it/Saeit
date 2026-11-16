@@ -44,12 +44,23 @@ class StatusPreflightReleaseTests(unittest.TestCase):
     def test_json_error_contract_must_fail_closed_before_static_publication(self):
         src = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("MOJPROP_STATUS_API_NOT_READY", status_preflight())
-        self.assertIn("Receipt invalid or expired", status_preflight())
+        self.assertIn("Check a private receipt using the secure POST status form.", status_preflight())
+        self.assertNotIn("Receipt invalid or expired", status_preflight())
+        self.assertIn("type(response) is not dict", status_preflight())
         self.assertIn("Receipt API contract missing; abort static publication", status_preflight())
         self.assertLess(
             src.index("      - name: Verify private status receipt API exists"),
             src.index("      - name: Update", src.index("      - name: Verify private status receipt API exists")),
         )
+
+    def test_status_get_preflight_matches_current_main_privacy_contract(self):
+        # The unauthenticated GET must never use a synthetic bearer token.
+        current = (ROOT / "core/mojprop_views.py").read_text(encoding="utf-8")
+        phrase = "Check a private receipt using the secure POST status form."
+        self.assertIn(phrase, current)
+        self.assertIn(phrase, status_preflight())
+        self.assertNotIn("receipt_token=", status_preflight())
+        self.assertIn('[[ "$code" == "404" ]]', status_preflight())
 
     def test_dependent_module_changes_trigger_both_source_workflows(self):
         src = WORKFLOW.read_text(encoding="utf-8")
