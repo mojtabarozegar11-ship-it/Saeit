@@ -9,7 +9,7 @@ from prop_firm.plan1_orm_consent_review import review_existing_interest
 
 class ConsentOnlyOrmReviewTests(SimpleTestCase):
     def call(self, **overrides):
-        data = dict(actor=SimpleNamespace(is_authenticated=True, is_active=True, is_staff=True),
+        data = dict(actor=SimpleNamespace(is_authenticated=True, is_active=True, is_staff=True,\n                                          has_perm=lambda p: p == 'prop_firm.view_propinterest'),
                     interest_pk=1, inquiry=None, consent_attestation=None,
                     consent_tag_hex="", consent_key=b"", request_ref="",
                     inquiry_sha256="", consent_evidence_sha256="",
@@ -40,4 +40,37 @@ class ConsentOnlyOrmReviewTests(SimpleTestCase):
             for invalid in (None, True, 0, -1, "1", 1.5):
                 with self.subTest(invalid=invalid), self.assertRaises(Plan1OrderGateClosed):
                     self.call(interest_pk=invalid)
+            atomic.assert_not_called()
+
+    def test_staff_without_model_permission_denied_before_database(self):
+        with patch("prop_firm.plan1_orm_consent_review.transaction.atomic") as atomic:
+            with self.assertRaises(Plan1OrderGateClosed):
+                self.call(actor=SimpleNamespace(
+                    is_authenticated=True, is_active=True, is_staff=True,
+                    has_perm=lambda _p: False))
+            atomic.assert_not_called()
+
+    def test_boolean_permission_proxy_denied_before_database(self):
+        with patch("prop_firm.plan1_orm_consent_review.transaction.atomic") as atomic:
+            with self.assertRaises(Plan1OrderGateClosed):
+                self.call(actor=SimpleNamespace(
+                    is_authenticated=True, is_active=True, is_staff=True,
+                    has_perm=lambda _p: 1))
+            atomic.assert_not_called()
+
+    def test_missing_permission_method_denied_before_database(self):
+        with patch("prop_firm.plan1_orm_consent_review.transaction.atomic") as atomic:
+            with self.assertRaises(Plan1OrderGateClosed):
+                self.call(actor=SimpleNamespace(
+                    is_authenticated=True, is_active=True, is_staff=True))
+            atomic.assert_not_called()
+
+    def test_permission_provider_failure_denied_before_database(self):
+        def failed(_permission):
+            raise RuntimeError("permission store unavailable")
+        with patch("prop_firm.plan1_orm_consent_review.transaction.atomic") as atomic:
+            with self.assertRaises(Plan1OrderGateClosed):
+                self.call(actor=SimpleNamespace(
+                    is_authenticated=True, is_active=True, is_staff=True,
+                    has_perm=failed))
             atomic.assert_not_called()
