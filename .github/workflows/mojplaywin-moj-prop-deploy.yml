@@ -16,6 +16,7 @@ on:
       - "core/mojprop_offer_draft.py"
       - "core/mojprop_workflow.py"
       - "tests/test_mojprop_backend_receipts_release_20261115.py"
+      - "tests/test_mojprop_direct_support_fallback_c134_20261116.py"
       - "core/migrations/0041_mojprop_request.py"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
   push:
@@ -34,6 +35,7 @@ on:
       - "core/mojprop_offer_draft.py"
       - "core/mojprop_workflow.py"
       - "tests/test_mojprop_backend_receipts_release_20261115.py"
+      - "tests/test_mojprop_direct_support_fallback_c134_20261116.py"
       - "core/migrations/0041_mojprop_request.py"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
   workflow_dispatch:
@@ -62,6 +64,7 @@ jobs:
           python3 -m py_compile scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py core/mojprop_catalog_contract.py core/mojprop_offer_draft.py core/mojprop_workflow.py
           python3 -m unittest discover -s tests -p test_mojprop_commercial_samples_release.py -q
           python3 -m unittest discover -s tests -p test_mojprop_backend_receipts_release_20261115.py -v
+          python3 -m unittest discover -s tests -p test_mojprop_direct_support_fallback_c134_20261116.py -q
           python3 scripts/deploy_mojplaywin_moj_prop_backend.py selftest .
           python3 - <<'PY'
           from html.parser import HTMLParser

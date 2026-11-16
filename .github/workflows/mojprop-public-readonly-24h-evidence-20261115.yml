@@ -40,6 +40,8 @@ jobs:
           targets=(
             "mojprop_root|https://mojplaywin.com/moj-prop/"
             "mojprop_catalog|https://mojplaywin.com/moj-prop/catalog/"
+            "mojprop_contact|https://mojplaywin.com/moj-prop/contact/"
+            "mpw_contact|https://mojplaywin.com/contact/"
             "mojprop_intake_get|https://mojplaywin.com/moj-prop-intake/"
             "mojprop_intake_html|https://mojplaywin.com/moj-prop-intake/?format=html"
             "mojprop_status_html|https://mojplaywin.com/moj-prop-status/?format=html"
