@@ -155,6 +155,37 @@ class PaidCohortTradeIdentityTests(TestCase):
         PropAccount.objects.filter(pk=self.donor.pk).update(trader=self.other_buyer)
         self.assert_only_fortynine()
 
+    def test_13_trade_before_own_stage_open_cannot_count(self):
+        PropAccount.objects.filter(pk=self.donor.pk).update(
+            opened_at=self.close_at + timedelta(seconds=1),
+        )
+        self.assert_only_fortynine()
+
+    def test_14_trade_after_own_stage_close_cannot_count(self):
+        PropAccount.objects.filter(pk=self.donor.pk).update(
+            closed_at=self.close_at - timedelta(seconds=1),
+        )
+        self.assert_only_fortynine()
+
+    def test_15_trade_exactly_at_own_stage_open_counts(self):
+        PropAccount.objects.filter(pk=self.donor.pk).update(
+            opened_at=self.close_at,
+        )
+        self.assertEqual(self.count().valid_closed_positions, 50)
+
+    def test_16_trade_exactly_at_own_stage_close_counts(self):
+        PropAccount.objects.filter(pk=self.donor.pk).update(
+            closed_at=self.close_at,
+        )
+        self.assertEqual(self.count().valid_closed_positions, 50)
+
+    def test_17_inverted_stage_dates_cannot_donate_trade(self):
+        PropAccount.objects.filter(pk=self.donor.pk).update(
+            opened_at=self.close_at + timedelta(seconds=1),
+            closed_at=self.close_at - timedelta(seconds=1),
+        )
+        self.assert_only_fortynine()
+
     def test_12_matching_after_single_invalid_metadata_repaired_in_fixture(self):
         PropAccount.objects.filter(pk=self.donor.pk).update(
             tier_index=1, policy_version="2026-11-14/v1.1"
