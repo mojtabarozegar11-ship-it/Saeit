@@ -107,12 +107,27 @@ class PrewriteMigrationMismatchTests(unittest.TestCase):
         with patch.object(installer, "check_schema_closure",
                           return_value={"source_chain": list(CHAIN),
                                         "live_db_restored": False,
-                                        "manual_deploy_authorized": False}):
+                                        "manual_deploy_authorized": False}), \
+             patch.object(installer, "require_independent_db_restore",
+                          return_value={"rehearsal_receipt_verified": True}) as proof:
             self.backup_target_mock.side_effect = halt_before_first_backup
             with self.assertRaisesRegex(RuntimeError, "STOP_BEFORE_BACKUP_WRITES"):
                 installer.deploy("123456", "a" * 40, self.staged)
+            proof.assert_called_once()
         self.run_checked_mock.assert_not_called()
         self.atomic_replace_mock.assert_not_called()
+
+    def test_exact_chain_still_refuses_missing_independent_db_proof(self):
+        with patch.object(installer, "check_schema_closure",
+                          return_value={"source_chain": list(CHAIN),
+                                        "live_db_restored": False,
+                                        "manual_deploy_authorized": False}), \
+             patch.dict("os.environ", {"MOJPROP_APPROVED_RESTORE_CASE_ID": ""}):
+            with self.assertRaisesRegex(RuntimeError, "independent restore case ID"):
+                installer.deploy("123456", "a" * 40, self.staged)
+        self.assertFalse(self.backups.exists())
+        self.backup_target_mock.assert_not_called()
+        self.run_checked_mock.assert_not_called()
 
 
 if __name__ == "__main__":
