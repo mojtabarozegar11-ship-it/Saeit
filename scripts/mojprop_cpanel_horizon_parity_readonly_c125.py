@@ -92,11 +92,14 @@ def classify(data: bytes, http_digest: str) -> dict:
         type(x) is str and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 _./-]{0,63}", x) is not None
         for x in p.values
     ) and len(set(p.values)) == 4
+    empty_values = len(p.values) == 4 and all(value == "" for value in p.values)
+    result["all_four_values_empty"] = empty_values
     result["option_values_safe_ascii_bounded"] = values_bounded
     result["option_values_distinct"] = len(set(p.values)) == 4
     result["surgical_value_only_candidate"] = (
         result["public_http_matches_disk"] and result["four_options_found"]
-        and result["option_labels_exact_reviewed"] and values_bounded
+        and result["option_labels_exact_reviewed"]
+        and (values_bounded or empty_values)
         and not result["horizon_values_canonical"]
     )
     return result
