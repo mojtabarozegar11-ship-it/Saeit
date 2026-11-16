@@ -183,6 +183,25 @@ class TwoStageMojPropSimulationContractTests(unittest.TestCase):
         self.assertEqual(one["rules_sha256"], two["rules_sha256"])
         self.assertNotEqual(one["observations_sha256"], two["observations_sha256"])
 
+    def test_21_zero_equity_is_liquidation_breach_not_a_malformed_journal(self):
+        out = evaluate_simulated_phase(policy(), [snap(0, "0.00")], phase=1)
+        self.assertEqual(out["status"], "observed_simulation_rule_breach")
+        self.assertEqual(out["first_observed_breach"],
+                         "observed_overall_drawdown_breach")
+        self.assertEqual(out["latest_observed_equity"], "0.00")
+
+    def test_22_negative_equity_is_still_counted_as_loss(self):
+        out = evaluate_simulated_phase(policy(), [snap(0, "-10.00")], phase=1)
+        self.assertEqual(out["status"], "observed_simulation_rule_breach")
+        self.assertEqual(out["latest_observed_equity"], "-10.00")
+        self.assertFalse(out["official_challenge_passed"])
+
+    def test_23_zero_balance_with_nonzero_equity_also_causes_loss(self):
+        out = evaluate_simulated_phase(
+            policy(), [snap(0, "10000.00", balance="0.00")], phase=1
+        )
+        self.assertEqual(out["status"], "observed_simulation_rule_breach")
+
     def test_15_target_requires_multiple_actual_trade_days_not_record_count(self):
         rows = [snap(i, "11000.00", at=START+timedelta(minutes=i)) for i in range(5)]
         out = evaluate_simulated_phase(policy(), rows, phase=1)
