@@ -7,6 +7,8 @@ on:
       - "scripts/mojtaba_site_legacy_cpanel_inventory.py"
       - "scripts/mojtaba_zomorod_history_parity_readonly.py"
       - "tests/test_mojtaba_zomorod_history_parity_readonly.py"
+      - "tests/test_zomorod_agent_archive_fallback_contract.py"
+      - "content/zomorod-business/app.php"
       - "tests/test_mojtaba_site_legacy_cpanel_inventory.py"
       - ".github/workflows/mojtaba-site-cpanel-inventory-readonly.yml"
 permissions:
@@ -27,6 +29,7 @@ jobs:
           python3 -m py_compile scripts/mojtaba_site_legacy_cpanel_inventory.py scripts/mojtaba_zomorod_history_parity_readonly.py
           python3 -m unittest discover -s tests -p test_mojtaba_zomorod_history_parity_readonly.py -v
           python3 -m unittest discover -s tests -p test_mojtaba_site_legacy_cpanel_inventory.py -v
+          python3 -m unittest discover -s tests -p test_zomorod_agent_archive_fallback_contract.py -v
   live-cpanel:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
     needs: offline
