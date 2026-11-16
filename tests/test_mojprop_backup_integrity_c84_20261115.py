@@ -26,7 +26,8 @@ class MojPropBackupIntegrityTests(unittest.TestCase):
         self.live = self.base / "live"
         self.live.mkdir()
         self.backup = self.base / RUN
-        self.backup.mkdir()
+        self.backup.mkdir(mode=0o700)
+        self.backup.chmod(0o700)
         self.patch1 = patch.object(backend, "ROOT", self.live)
         self.patch2 = patch.object(backend, "ALL_FILES", FILES)
         self.patch3 = patch.object(backend, "restart_passenger")
@@ -156,6 +157,30 @@ class MojPropBackupIntegrityTests(unittest.TestCase):
         self.assertTrue(target.is_symlink())
         self.assertEqual(external.read_bytes(), b"owner-unchanged")
         self.assertEqual(staged.read_bytes(), b"new-code")
+
+    def test_group_writable_backend_backup_root_prevents_recovery(self):
+        self.base.chmod(0o770)
+        with self.assertRaisesRegex(RuntimeError, "private backend backup directory required"):
+            backend.verify_backup_manifest(self.backup)
+        self.base.chmod(0o700)
+
+    def test_world_readable_backend_backup_dir_prevents_recovery(self):
+        self.backup.chmod(0o705)
+        with self.assertRaisesRegex(RuntimeError, "private backend backup directory required"):
+            backend.verify_backup_manifest(self.backup)
+        self.backup.chmod(0o700)
+
+    def test_backup_run_symlink_parent_prevents_recovery(self):
+        alias = self.base / "backup-alias"
+        actual = self.base / "actual-backups"
+        actual.mkdir(mode=0o700)
+        actual.chmod(0o700)
+        alias.symlink_to(actual, target_is_directory=True)
+        run = actual / RUN
+        run.mkdir(mode=0o700)
+        run.chmod(0o700)
+        with self.assertRaisesRegex(RuntimeError, "symlink ancestor"):
+            backend.verify_backup_manifest(alias / RUN)
 
     def test_backup_refuses_dangling_live_symlink_before_manifest_creation(self):
         rel = FILES[0]
