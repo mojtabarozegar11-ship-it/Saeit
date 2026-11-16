@@ -1,0 +1,98 @@
+name: Owner-only one-file Moj Prop horizon atomic release C127
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+concurrency:
+  group: owner-mojprop-one-html-release-c127
+  cancel-in-progress: false
+jobs:
+  atomically-repair-one-static-html:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.number == 2519 &&
+      !github.event.issue.pull_request &&
+      github.event.comment.body == 'APPROVE-MOJPROP-C127-STATIC-HTML-ONEFILE-b2e9381b-to-76918c51'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Pin exact owner-reviewed release source and run offline regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_file=scripts/mojprop_exact_static_atomic_release_c127.py
+          test ! -L "$source_file"
+          test "$(git hash-object -- "$source_file")" = "53ae88515fd8d3720ab1c968ca4c881c91a08dc1"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_exact_static_atomic_release_c127 -q
+          echo C127_EXACT_RELEASE_SOURCE_AND_OFFLINE_TESTS=PASS
+      - name: Release only one known static file after pinned preflight, with automatic rollback
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test "$(id -u)" -ne 0
+          test -n "$HOST_KEY"
+          umask 077
+          work="$RUNNER_TEMP/owner-mojprop-c127-onefile"
+          install -d -m 700 "$work"
+          applied=0
+          release_file=scripts/mojprop_exact_static_atomic_release_c127.py
+          cleanup() {
+            rc=$?
+            trap - EXIT
+            if test "$applied" = 1; then
+              echo C127_POST_APPLY_NOT_VERIFIED_ATTEMPTING_EXACT_ROLLBACK=TRUE
+              set +e
+              timeout 55s ssh -T -F "$work/config" cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - rollback' < "$release_file"
+              recovery_rc=$?
+              if test "$recovery_rc" -eq 0; then
+                echo C127_ROLLBACK_COMMAND=SUCCESS
+              else
+                echo C127_ROLLBACK_COMMAND=UNVERIFIED_CHECK_ORIGINAL_BEFORE_FURTHER_ACTION
+              fi
+            fi
+            rm -rf -- "$work"
+            exit "$rc"
+          }
+          trap cleanup EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          echo C127_EXISTING_PINNED_CPANEL_LINK=VERIFIED
+          status="$(curl --proto '=https' --tlsv1.2 --retry 0 --max-redirs 0 --silent --show-error --connect-timeout 7 --max-time 18 -o "$work/public-before" -w '%{http_code}' 'https://mojplaywin.com/moj-prop/')"
+          test "$status" = 200
+          test "$(sha256sum "$work/public-before" | awk '{print $1}')" = 'b2e9381b2ac70a92b62de150277b9089bb28ca56c7a98948dd42673435bfc3ff'
+          echo C127_PRECHANGE_PUBLIC_HASH_MATCH=TRUE
+          timeout 55s ssh -T -F "$work/config" cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - preflight' < "$release_file"
+          echo C127_CPANEL_PRECHECK_READONLY=PASS
+          # Flag rollback before issuing the first possible remote write.
+          applied=1
+          timeout 55s ssh -T -F "$work/config" cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - apply' < "$release_file"
+          success=0
+          for trial in 1 2 3; do
+            status="$(curl --proto '=https' --tlsv1.2 --retry 0 --max-redirs 0 --silent --show-error --connect-timeout 7 --max-time 18 -o "$work/public-after" -w '%{http_code}' 'https://mojplaywin.com/moj-prop/' || true)"
+            if test "$status" = 200 && test "$(sha256sum "$work/public-after" | awk '{print $1}')" = '76918c5129ff669ef02f82435a68f61a32d70141800712100d4a7fe9e8554895'; then
+              success=1
+              break
+            fi
+            sleep 2
+          done
+          test "$success" = 1
+          applied=0
+          echo C127_ONE_STATIC_FILE_PUBLIC_HASH_VERIFIED=TRUE
+          echo C127_SSH_DNS_FIREWALL_CRON_SERVICE_CHANGED=FALSE
+          echo C127_PAYMENTS_DATABASE_CUSTOMERS_TOUCHED=FALSE
