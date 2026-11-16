@@ -156,10 +156,12 @@ def verified_static_no_host_guard(filename: str, source: str) -> bool:
         # Exactly the known publish job is explicitly manual; no other job.
         jobs = re.findall(r"(?m)^  ([A-Za-z_][\w-]*):\s*$",
                           source.split("\njobs:", 1)[-1])
-        return jobs == ["publish"] and bool(re.search(
-            r"(?m)^  publish:\s*\n    if: github\.event_name == 'workflow_dispatch'\s*$",
-            source,
-        ))
+        anchor = re.search(r"(?m)^  publish:\s*$", source)
+        if jobs != ["publish"] or anchor is None:
+            return False
+        first = next((line.strip() for line in source[anchor.end():].splitlines()
+                      if line.strip() and not line.lstrip().startswith("#")), "")
+        return first == "if: github.event_name == 'workflow_dispatch'"
     return False
 
 
