@@ -9,6 +9,7 @@ Observed syntax/call tokens are NOT proof of operational paid fulfillment.
 import ast
 import json
 import os
+import sys
 from pathlib import Path
 import stat
 
@@ -204,9 +205,78 @@ def inspect(root=ROOT):
     return report
 
 
+SAFE_PREFIX = "MPW_LIVE_BUYER_AST_SAFE="
+MAX_REPORT_BYTES = 24000
+
+
+def sanitize(raw):
+    """Discard all untrusted remote fields and reject malformed inventory."""
+    if type(raw) is not bytes or not 0 < len(raw) <= MAX_REPORT_BYTES:
+        raise ValueError("invalid bounded AST evidence")
+    line = raw.decode("utf-8").strip()
+    if "\n" in line or not line.startswith(PREFIX):
+        raise ValueError("not a single expected report")
+    doc = json.loads(line[len(PREFIX):])
+    if type(doc) is not dict or doc.get("schema") != (
+            "mpw.cpanel.buyer-source-ast.readonly.v1"):
+        raise ValueError("wrong AST report schema")
+    if not set(("root_valid", "module_states", "source_signals")).issubset(doc):
+        raise ValueError("incomplete report")
+    for name, expected in (
+        ("read_only", True),
+        ("application_imported", False),
+        ("customer_data_read", False),
+        ("database_read", False),
+        ("network_used", False),
+        ("files_modified", False),
+        ("release_permitted", False),
+        ("payment_proven", False),
+        ("runtime_passenger_proven", False),
+    ):
+        if doc.get(name) is not expected:
+            raise ValueError("inconsistent readonly envelope")
+    if type(doc["root_valid"]) is not bool:
+        raise ValueError("untrusted root status")
+    modules = doc["module_states"]
+    signals = doc["source_signals"]
+    if (type(modules) is not dict or set(modules) != set(FILES)
+            or type(signals) is not dict or set(signals) != set(_SIGNAL_NAMES)):
+        raise ValueError("unknown source path or signal")
+    for p in FILES:
+        if type(modules[p]) is not dict:
+            raise ValueError("invalid module state")
+        for n in ("present", "parseable", "exports_present"):
+            if type(modules[p].get(n)) is not bool:
+                raise ValueError("invalid module evidence")
+    if any(type(signals[n]) is not bool for n in _SIGNAL_NAMES):
+        raise ValueError("untrusted source signal")
+    return {
+        "schema": "mpw.cpanel.buyer-source-ast.sanitized.v1",
+        "root_valid": doc["root_valid"],
+        "modules": {p: {n: modules[p][n] for n in
+                        ("present", "parseable", "exports_present")}
+                    for p in FILES},
+        "source_signals": {name: signals[name] for name in _SIGNAL_NAMES},
+        "release_permitted": False,
+        "payment_proven": False,
+        "files_modified": False,
+    }
+
+
 def main():
+    if sys.argv[1:] == ["--sanitize"]:
+        try:
+            result = sanitize(sys.stdin.buffer.read(MAX_REPORT_BYTES + 1))
+        except (ValueError, UnicodeError, json.JSONDecodeError):
+            print(SAFE_PREFIX + "INVALID_OR_INCOMPLETE")
+            return 2
+        print(SAFE_PREFIX + json.dumps(result, sort_keys=True, separators=(",", ":")))
+        return 0
+    if sys.argv[1:]:
+        return 2
     print(PREFIX + json.dumps(inspect(), sort_keys=True, separators=(",", ":")))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
