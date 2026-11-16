@@ -240,6 +240,128 @@ def _db_metadata_profile():
     return classify_table_storage(rows, model_ownership=ownership)
 
 
+
+
+def _backup_inventory_readonly():
+    """Inspect only the cPanel account-visible backup INDEX, never backup data.
+
+    An empty Backup::list_backups response does NOT establish that provider-
+    managed / JetBackup archives do not exist outside the account home.
+    """
+    outcome = {
+        "source": "cpanel_uapi_backup_list_backups",
+        "status": "unavailable",
+        "count_band": "unknown",
+        "provider_managed_backups_verified": False,
+        "backup_file_contents_accessed": False,
+        "independent_restore_verified": False,
+        "release_authorized": False,
+    }
+    try:
+        process = subprocess.run(
+            [UAPI, "--output=json", "Backup", "list_backups"],
+            timeout=20, check=True, capture_output=True, text=True,
+            env=dict(ENV),
+        )
+        if len(process.stdout) > 65536:
+            outcome["status"] = "response_too_large"
+            return outcome
+        parsed = json.loads(process.stdout)
+        if type(parsed) is not dict:
+            outcome["status"] = "invalid_response"
+            return outcome
+        payload = parsed.get("result")
+        if type(payload) is not dict or payload.get("status") != 1:
+            outcome["status"] = "feature_unavailable_or_api_failed"
+            return outcome
+        entries = payload.get("data")
+        if type(entries) is not list or len(entries) > 500 or any(
+                type(item) is not dict for item in entries):
+            outcome["status"] = "invalid_index"
+            return outcome
+        count = len(entries)
+        outcome["status"] = (
+            "user_list_nonempty_unverified" if count
+            else "empty_list_not_host_backup_proof"
+        )
+        outcome["count_band"] = (
+            "0" if count == 0 else "1-10" if count <= 10 else
+            "11-50" if count <= 50 else "51-500"
+        )
+    except subprocess.TimeoutExpired:
+        outcome["status"] = "timeout"
+    except (OSError, subprocess.SubprocessError):
+        outcome["status"] = "api_unavailable"
+    except (TypeError, ValueError):
+        outcome["status"] = "invalid_json"
+    return outcome
+
+
+
+def _jetbackup_inventory_readonly():
+    """Owner-scoped JetBackup 5 FULL backup listing; no restore or download.
+
+    Absence of this CLI or an empty response cannot disprove host-managed
+    backups; neither a listed entry nor an API success proves restorable data.
+    """
+    result = {
+        "source": "jetbackup5api_listBackups",
+        "status": "cli_unavailable",
+        "count_band": "unknown",
+        "independent_restore_verified": False,
+        "backup_file_contents_accessed": False,
+        "provider_backup_restorability_verified": False,
+        "release_authorized": False,
+    }
+    candidates = (
+        Path("/usr/bin/jetbackup5api"),
+        Path("/usr/local/bin/jetbackup5api"),
+    )
+    cmd = next((path for path in candidates if path.is_file()
+                and not path.is_symlink()), None)
+    if cmd is None:
+        return result
+    try:
+        response = subprocess.run(
+            [str(cmd), "-F", "listBackups", "-D", "type=1&contains=511",
+             "-O", "json"],
+            check=True, capture_output=True, text=True, env=dict(ENV),
+            timeout=20,
+        )
+        if len(response.stdout) > 65536:
+            result["status"] = "response_too_large"
+            return result
+        payload = json.loads(response.stdout)
+        if (type(payload) is not dict
+                or payload.get("success") not in (1, "1")):
+            result["status"] = "api_error_or_unrecognized"
+            return result
+        data = payload.get("data")
+        records = data.get("backups") if type(data) is dict else None
+        if type(records) is not list or len(records) > 100 or any(
+                type(record) is not dict for record in records):
+            result["status"] = "unrecognized_response"
+            return result
+        # A user CLI should not reveal any other tenant; if it does,
+        # reject the result entirely rather than counting their backups.
+        if any(record.get("account") != OWNER for record in records):
+            result["status"] = "unverified_account_scope"
+            return result
+        count = len(records)
+        result["status"] = ("account_full_backups_listed_unverified"
+                            if count else "empty_list_not_provider_proof")
+        result["count_band"] = (
+            "0" if count == 0 else "1-10" if count <= 10 else
+            "11-50" if count <= 50 else "51-100"
+        )
+    except subprocess.TimeoutExpired:
+        result["status"] = "timeout"
+    except (OSError, subprocess.SubprocessError):
+        result["status"] = "cli_or_permission_failed"
+    except (TypeError, ValueError):
+        result["status"] = "unrecognized_json"
+    return result
+
 def _quota_bytes():
     r = subprocess.run(
         [UAPI, "--output=json", "Quota", "get_quota_info"],
@@ -333,6 +455,8 @@ def main():
     for label, path in CANDIDATES:
         state, size = category_usage(path)
         result["category_usage"][label] = {"state": state, "mib_bucket": size}
+    result["backup_inventory"] = _backup_inventory_readonly()
+    result["jetbackup_inventory"] = _jetbackup_inventory_readonly()
     print("MOJPROP_C113_QUOTA_GAP=" + json.dumps(result, sort_keys=True))
 
 
