@@ -160,6 +160,13 @@ def choose_python() -> Path:
     raise RuntimeError("verified Django Python runtime not found")
 
 
+def safe_source_mode(mode: int) -> int:
+    if (type(mode) is not int or mode < 0 or mode > 0o777
+            or mode & 0o022):
+        raise RuntimeError("unsafe group/world-writable commercial source mode")
+    return mode
+
+
 def backup_target(target: Path, backup: Path, manifest: dict, relative: Path) -> None:
     assert_safe_parent(target, ROOT)
     # Path.exists() is False for a dangling symlink. Recording it as an
@@ -174,6 +181,7 @@ def backup_target(target: Path, backup: Path, manifest: dict, relative: Path) ->
         # redirect saved customer-facing application source elsewhere.
         assert_safe_parent(saved, backup)
         saved.parent.mkdir(parents=True, exist_ok=True)
+        source_mode = safe_source_mode(stat.S_IMODE(target.stat().st_mode))
         original_sha = digest(target)
         shutil.copy2(target, saved)
         if digest(saved) != original_sha:
@@ -181,7 +189,7 @@ def backup_target(target: Path, backup: Path, manifest: dict, relative: Path) ->
         manifest[str(relative)] = {
             "existed": True,
             "sha256": original_sha,
-            "mode": stat.S_IMODE(target.stat().st_mode),
+            "mode": source_mode,
         }
     else:
         manifest[str(relative)] = {"existed": False}
@@ -575,6 +583,7 @@ def verify_backup_manifest(backup: Path) -> dict:
             mode = entry.get("mode")
             if type(mode) is not int or mode < 0 or mode > 0o777:
                 raise RuntimeError("backend backup mode is invalid")
+            safe_source_mode(mode)
             assert_regular(saved, "backend saved source")
             if digest(saved) != entry["sha256"]:
                 raise RuntimeError("backend backup source checksum mismatch")
