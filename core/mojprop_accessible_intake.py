@@ -6,7 +6,6 @@ paid checkout, external scripts, third-party CSS, or release side effects.
 """
 from html import escape
 from uuid import uuid4
-from uuid import uuid4
 
 from django.http import HttpResponse
 from django.middleware.csrf import get_token
@@ -57,7 +56,6 @@ def request_form(request, *, error=None, status=200):
         '<form method="post" action="' + ACTION + '" '
         'enctype="application/x-www-form-urlencoded">'
         '<input type="hidden" name="csrfmiddlewaretoken" value="' + csrf + '">'
-        '<input type="hidden" name="idempotency_key" value="' + str(uuid4()) + '">'
         '<p><label>Your name <input name="name" autocomplete="name" '
         'required minlength="2" maxlength="200"></label></p>'
         '<p><label>Contact email <input type="email" name="email" '
