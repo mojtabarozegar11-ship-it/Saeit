@@ -101,7 +101,20 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         self.assertEqual(EXPECTED["core/mojprop_receipts.py"],
                          "9fe6eb1ad13857143440517b14b3f2ebcfef6db3")
         self.assertEqual(EXPECTED["core/mojprop_accessible_intake.py"],
-                         "48f3920958f0a17249fb3ae854647352baadf545")
+                         "9642945352357f824cb6ac3b15816b134cb22dec")
+
+
+    def test_all_pins_match_exact_reviewed_source_bytes_in_this_commit(self):
+        # A source-only PR must not quietly ship an old git blob identity.
+        # The live host probe compares these fixed hashes without uploading
+        # credentials or customer data. A changed source must update its pin.
+        root = Path(__file__).resolve().parents[1]
+        for relative, expected in EXPECTED.items():
+            with self.subTest(source=relative):
+                source = root / relative
+                self.assertTrue(source.is_file(), relative)
+                self.assertFalse(source.is_symlink(), relative)
+                self.assertEqual(exact_git_blob(source.read_bytes()), expected)
 
 
 if __name__ == "__main__":
