@@ -19,9 +19,15 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
 
-from scripts.mpw_retired_subsite_policy import (
-    assert_no_retired_routes, assert_retired_picm_manifest,
-)
+# This audit is used both as python -m scripts.* and as a direct cron script.
+if __package__:
+    from .mpw_retired_subsite_policy import (
+        assert_no_retired_routes, assert_retired_picm_manifest,
+    )
+else:
+    from mpw_retired_subsite_policy import (
+        assert_no_retired_routes, assert_retired_picm_manifest,
+    )
 from html.parser import HTMLParser
 
 
