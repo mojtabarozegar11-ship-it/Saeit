@@ -15,6 +15,10 @@ import json
 import os
 import re
 import stat
+import gzip
+import tarfile
+import zlib
+from pathlib import PurePosixPath
 
 SCHEMA = "mojprop.plan1.full-restore-review.d1"
 DOMAIN = "mojplaywin.com"
@@ -26,6 +30,8 @@ IDENTITY = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{3,63}\Z")
 TARGET = re.compile(r"mojprop_iso_[a-z0-9_]{8,60}\Z")
 TOP = {"schema", "run_id", "source_commit", "domain", "offsite_backup",
        "backups", "restore", "backup_operator", "restore_reviewer", "mac"}
+MAX_UNCOMPRESSED_BYTES = 8 * 1024 ** 3
+MAX_TAR_MEMBERS = 100_000
 RESTORE = {"target", "completed_at", "completed", "db_schema_verified",
            "db_rows_verified", "app_boot_verified", "media_files_verified",
            "tenant_isolation_verified", "production_modified"}
@@ -64,7 +70,53 @@ def _moment(value: object) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
-def _artifact(path: Path, entry: object) -> None:
+def _validate_compressed_payload(path: Path, *, kind: str) -> None:
+    """Stream actual decompression to EOF: verify gzip CRC and detect truncation.
+
+    Do not extract, write, contact production or load full backups into RAM.
+    Require safe tar members for application/media, not just gzip magic.
+    """
+    expanded = 0
+    try:
+        with gzip.open(path, "rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                expanded += len(chunk)
+                _check(expanded <= MAX_UNCOMPRESSED_BYTES)
+        _check(expanded > 0)
+        if kind == "db":
+            return
+        _check(kind in ("app", "media"))
+        names = set()
+        files = 0
+        total = 0
+        count = 0
+        with tarfile.open(path, "r|gz") as archive:
+            for entry in archive:
+                count += 1
+                _check(count <= MAX_TAR_MEMBERS)
+                name = entry.name
+                _check(type(name) is str and 1 <= len(name) <= 4096)
+                _check(chr(0) not in name and chr(92) not in name)
+                parts = PurePosixPath(name)
+                _check(not parts.is_absolute() and ".." not in parts.parts)
+                canonical = str(parts)
+                _check(canonical not in ("", ".", "/") and canonical not in names)
+                names.add(canonical)
+                _check(entry.isfile() or entry.isdir())
+                if entry.isfile():
+                    files += 1
+                    _check(type(entry.size) is int and entry.size >= 0)
+                    total += entry.size
+                    _check(total <= MAX_UNCOMPRESSED_BYTES)
+        _check(files > 0)
+    except (OSError, EOFError, zlib.error, tarfile.TarError, UnicodeError) as exc:
+        raise FullRestoreEvidenceDenied("compressed backup structure cannot be verified") from exc
+
+
+def _artifact(path: Path, entry: object, *, kind: str) -> None:
     _check(type(entry) is dict and set(entry) == {"name", "sha256", "bytes"})
     _check(entry["name"] == path.name)
     _check(type(entry["sha256"]) is str and bool(SHA64.fullmatch(entry["sha256"])))
@@ -78,6 +130,7 @@ def _artifact(path: Path, entry: object) -> None:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     _check(hmac.compare_digest(digest.hexdigest(), entry["sha256"]))
+    _validate_compressed_payload(path, kind=kind)
 
 
 def verify_full_restore_review(*, root: Path, run_id: str,
@@ -128,7 +181,7 @@ def verify_full_restore_review(*, root: Path, run_id: str,
     backups = receipt["backups"]
     _check(type(backups) is dict and set(backups) == set(FILES))
     for kind, name in FILES.items():
-        _artifact(case / name, backups[kind])
+        _artifact(case / name, backups[kind], kind=kind)
     return {
         "schema": SCHEMA,
         "source_commit": source_commit,

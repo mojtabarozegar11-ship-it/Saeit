@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import gzip
+import io
+import tarfile
 import hashlib
 import hmac
 import json
@@ -31,7 +33,11 @@ class TestFullRecoveryReview(unittest.TestCase):
         self.backups = {}
         for kind, name in FILES.items():
             path = self.case / name
-            path.write_bytes(gzip.compress(os.urandom(2048)))
+            if kind == "db":
+                payload = b"-- compatible SQL database backup\n" * 80
+            else:
+                payload = self.tar_bytes([(kind + "/snapshot.txt", b"backup-content-" * 80)])
+            path.write_bytes(gzip.compress(payload))
             path.chmod(0o600)
             payload = path.read_bytes()
             self.backups[kind] = {
@@ -258,6 +264,106 @@ class TestFullRecoveryReview(unittest.TestCase):
     def test_signing_key_mismatch_rejected(self):
         with self.assertRaises(FullRestoreEvidenceDenied):
             self.check(reviewer_key=b"different-independent-reviewer-test-key!")
+
+    @staticmethod
+    def tar_bytes(members):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tar:
+            for name, content in members:
+                member = tarfile.TarInfo(name=name)
+                member.mode = 0o600
+                member.size = len(content)
+                tar.addfile(member, io.BytesIO(content))
+        return buf.getvalue()
+
+    def write_backup(self, kind, payload):
+        path = self.case / FILES[kind]
+        path.write_bytes(gzip.compress(payload))
+        path.chmod(0o600)
+        contents = path.read_bytes()
+        self.backups[kind] = {
+            "name": path.name,
+            "sha256": hashlib.sha256(contents).hexdigest(),
+            "bytes": len(contents),
+        }
+        self.write_receipt()
+
+    def test_db_gzip_crc_corrupt_with_resigned_manifest_rejected(self):
+        path = self.case / FILES["db"]
+        raw = bytearray(path.read_bytes())
+        raw[-7] ^= 0x10
+        path.write_bytes(raw)
+        self.backups["db"]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        self.write_receipt()
+        self.denied()
+
+    def test_db_gzip_truncated_with_resigned_manifest_rejected(self):
+        path = self.case / FILES["db"]
+        path.write_bytes(path.read_bytes()[:-5])
+        self.backups["db"]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        self.backups["db"]["bytes"] = path.stat().st_size
+        self.write_receipt()
+        self.denied()
+
+    def test_application_valid_gzip_non_tar_rejected(self):
+        self.write_backup("app", b"not-a-tar" * 100)
+        self.denied()
+
+    def test_media_valid_gzip_non_tar_rejected(self):
+        self.write_backup("media", b"not-a-tar" * 100)
+        self.denied()
+
+    def test_archive_absolute_member_rejected(self):
+        self.write_backup("app", self.tar_bytes([("/root/escape.txt", b"unsafe")]))
+        self.denied()
+
+    def test_archive_parent_traversal_rejected(self):
+        self.write_backup("media", self.tar_bytes([("../escape.txt", b"unsafe")]))
+        self.denied()
+
+    def test_archive_duplicate_member_rejected(self):
+        self.write_backup("media", self.tar_bytes([("a.txt", b"a"), ("./a.txt", b"b")]))
+        self.denied()
+
+    def test_archive_no_regular_file_rejected(self):
+        self.write_backup("app", self.tar_bytes([]))
+        self.denied()
+
+    def test_archive_symlink_member_rejected(self):
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w") as tar:
+            entry = tarfile.TarInfo("link")
+            entry.type = tarfile.SYMTYPE
+            entry.linkname = "../unsafe"
+            tar.addfile(entry)
+            regular = tarfile.TarInfo("safe.txt")
+            regular.size = 4
+            tar.addfile(regular, io.BytesIO(b"okay"))
+        self.write_backup("app", buffer.getvalue())
+        self.denied()
+
+    def test_archive_hardlink_member_rejected(self):
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w") as tar:
+            entry = tarfile.TarInfo("link")
+            entry.type = tarfile.LNKTYPE
+            entry.linkname = "other"
+            tar.addfile(entry)
+            regular = tarfile.TarInfo("safe.txt")
+            regular.size = 4
+            tar.addfile(regular, io.BytesIO(b"okay"))
+        self.write_backup("media", buffer.getvalue())
+        self.denied()
+
+    def test_archive_backslash_member_rejected(self):
+        self.write_backup("app", self.tar_bytes([("folder\\name.txt", b"unsafe")]))
+        self.denied()
+
+    def test_valid_app_and_media_tar_still_do_not_authorize_release(self):
+        result = self.check()
+        self.assertTrue(result["all_three_backup_bytes_verified"])
+        self.assertFalse(result["deployment_authorized"])
+        self.assertFalse(result["payment_authorized"])
 
 
 if __name__ == "__main__":
