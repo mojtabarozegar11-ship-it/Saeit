@@ -219,6 +219,63 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         for path in release.STARTER30_FILES + (Path("starter-30-trx/index.html"),):
             self.assertFalse((self.route / path).exists(), str(path))
 
+    def test_corrupted_last_backup_refuses_any_partial_live_restore(self):
+        # Reverse-order rollback would restore catalog BEFORE discovering that
+        # its final saved home/index.html is corrupt. Verify zero live writes.
+        release.deploy("123", "a" * 40)
+        backup = self.backups / "moj-prop-catalog-123"
+        live_home = (self.route / "index.html").read_bytes()
+        live_catalog = (self.route / "catalog/index.html").read_bytes()
+        live_starter = (self.route / "starter-30-trx/index.html").read_bytes()
+        saved_home = backup / "files/index.html"
+        original = saved_home.read_bytes()
+        saved_home.write_bytes(b"tampered old home")
+        with self.assertRaisesRegex(RuntimeError, "Backup checksum mismatch before any live change"):
+            release.restore(backup)
+        self.assertEqual((self.route / "index.html").read_bytes(), live_home)
+        self.assertEqual((self.route / "catalog/index.html").read_bytes(), live_catalog)
+        self.assertEqual((self.route / "starter-30-trx/index.html").read_bytes(), live_starter)
+        saved_home.write_bytes(original)
+        release.restore(backup)
+        self.assertNotEqual((self.route / "index.html").read_bytes(), live_home)
+
+    def test_symlinked_saved_home_is_denied_before_rollback_modifies_site(self):
+        release.deploy("123", "a" * 40)
+        backup = self.backups / "moj-prop-catalog-123"
+        live_catalog = (self.route / "catalog/index.html").read_bytes()
+        saved_home = backup / "files/index.html"
+        saved_home.unlink()
+        foreign = self.home / "external-owner-content"
+        foreign.write_bytes(b"unrelated tenant content")
+        saved_home.symlink_to(foreign)
+        with self.assertRaisesRegex(RuntimeError, "Expected a regular file"):
+            release.restore(backup)
+        self.assertEqual((self.route / "catalog/index.html").read_bytes(), live_catalog)
+        self.assertEqual(foreign.read_bytes(), b"unrelated tenant content")
+
+    def test_insecure_saved_backup_mode_is_denied_before_rollback(self):
+        release.deploy("123", "a" * 40)
+        backup = self.backups / "moj-prop-catalog-123"
+        saved = backup / "files/index.html"
+        saved.chmod(0o644)
+        original_live = (self.route / "index.html").read_bytes()
+        with self.assertRaisesRegex(RuntimeError, "Unsafe saved backup owner or permissions"):
+            release.restore(backup)
+        self.assertEqual((self.route / "index.html").read_bytes(), original_live)
+
+    def test_deploy_denies_unverified_saved_bytes_before_publication(self):
+        # Even if the backup was corrupted immediately after copying it, the
+        # static publisher must refuse before changing any public sales page.
+        old_home = (self.route / "index.html").read_bytes()
+        old_catalog = (self.route / "catalog/index.html").read_bytes()
+        with patch.object(release, "verified_saved_bytes",
+                          side_effect=RuntimeError("all-file backup failed")):
+            with self.assertRaisesRegex(RuntimeError, "all-file backup failed"):
+                release.deploy("123", "a" * 40)
+        self.assertEqual((self.route / "index.html").read_bytes(), old_home)
+        self.assertEqual((self.route / "catalog/index.html").read_bytes(), old_catalog)
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
+
     def test_mismatched_live_starter30_digest_prevents_incorrect_rollback(self):
         release.deploy("123", "a" * 40)
         buyer_access = self.route / "starter-30-trx/journal-guide.txt"
