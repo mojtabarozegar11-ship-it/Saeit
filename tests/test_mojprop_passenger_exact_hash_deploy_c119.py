@@ -47,6 +47,22 @@ class ExactPassengerPreflightC119Tests(unittest.TestCase):
                     self.verify()
         self.launcher.chmod(0o600)
 
+
+    def test_05_hardlinked_launcher_denied(self):
+        alias = self.docroot / "extra-link"
+        os.link(self.launcher, alias)
+        try:
+            with self.assertRaisesRegex(RuntimeError, "unsafe"):
+                self.verify()
+        finally:
+            alias.unlink()
+
+    def test_06_foreign_owner_denied_even_with_identical_bytes(self):
+        with patch("scripts.deploy_mojplaywin_moj_prop_backend.os.geteuid",
+                   return_value=os.geteuid() + 1):
+            with self.assertRaisesRegex(RuntimeError, "unsafe"):
+                installer.verify_reviewed_passenger_entrypoint(self.docroot)
+
     def test_04_symlink_launcher_denied_before_content_read(self):
         backup = self.docroot / "inside-real-launcher"
         self.launcher.rename(backup)
