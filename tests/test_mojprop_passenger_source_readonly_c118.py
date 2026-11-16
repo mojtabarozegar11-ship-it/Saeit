@@ -73,6 +73,43 @@ class PassengerIdentityC118Tests(unittest.TestCase):
             self.assertEqual(_owned_safe_file(root / "core" / "private.py", root=root),
                              "unsafe")
 
+    def test_writable_intermediate_dir_blocks_source_identity(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            subdir = root / "core"
+            subdir.mkdir()
+            file = subdir / "views.py"
+            file.write_text("application = None")
+            file.chmod(0o600)
+            self.assertEqual(_owned_safe_file(file, root=root), "present")
+            subdir.chmod(0o777)
+            self.assertEqual(_owned_safe_file(file, root=root), "unsafe")
+            subdir.chmod(0o700)
+
+    def test_writable_root_blocks_even_readonly_module(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            file = root / "passenger_wsgi.py"
+            file.write_text("application = None")
+            file.chmod(0o600)
+            self.assertEqual(_owned_safe_file(file, root=root), "present")
+            root.chmod(0o777)
+            self.assertEqual(_owned_safe_file(file, root=root), "unsafe")
+            root.chmod(0o700)
+
+    def test_hardlinked_entrypoint_does_not_prove_identity(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            file = root / "passenger_wsgi.py"
+            file.write_text("application = None")
+            file.chmod(0o600)
+            self.assertEqual(_owned_safe_file(file, root=root), "present")
+            alias = root / "alias.py"
+            os.link(file, alias)
+            self.assertEqual(_owned_safe_file(file, root=root), "unsafe")
+            alias.unlink()
+            self.assertEqual(_owned_safe_file(file, root=root), "present")
+
     def test_unsupported_path_outside_root_is_not_scanned(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "root"
