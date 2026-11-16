@@ -45,36 +45,47 @@ def verified_existing_walletless_item_access(user, item_id, *, asset_is_releasab
             or not callable(asset_is_releasable)):
         return False
 
-    from django.apps import apps
-    from core.models import LedgerEntry, OrderItem
-
-    item = OrderItem.objects.filter(
-        pk=item_id, order__customer_id=user.pk
-    ).select_related("order", "product", "order__payment_intent").first()
-    if item is None:
-        return False
-
-    order = item.order
-    product = item.product
-    if (order.customer_id != user.pk
-            or order.status != "paid" or order.currency != "USD"
-            or order.total <= Decimal("0")
-            or product.active is not True
-            or type(product.product_type) is not str
-            or product.product_type not in _ALLOWED_DIGITAL_PRODUCT_TYPES
-            or item.currency != "USD"
-            or type(item.quantity) is not int or item.quantity < 1
-            or item.unit_price <= Decimal("0")):
-        return False
-
+    # Historical paid orders may have a missing/deleted related product or
+    # malformed legacy decimal. Treat corrupt relations and database errors as
+    # DENY, never as HTTP 500 or as permission to charge a buyer again.
     try:
+        from django.apps import apps
+        from core.models import LedgerEntry, OrderItem
+
+        item = OrderItem.objects.filter(
+            pk=item_id, order__customer_id=user.pk
+        ).select_related("order", "product", "order__payment_intent").first()
+        if item is None:
+            return False
+
+        order = item.order
+        product = item.product
+        if (order.customer_id != user.pk
+                or order.status != "paid" or order.currency != "USD"
+                or type(order.total) is not Decimal
+                or not order.total.is_finite()
+                or order.total <= Decimal("0")
+                or product.active is not True
+                or type(product.product_type) is not str
+                or product.product_type not in _ALLOWED_DIGITAL_PRODUCT_TYPES
+                or item.currency != "USD"
+                or type(item.quantity) is not int or item.quantity < 1
+                or type(item.unit_price) is not Decimal
+                or not item.unit_price.is_finite()
+                or item.unit_price <= Decimal("0")):
+            return False
+
         intent = order.payment_intent
+        if (intent.provider != PROVIDER or intent.status != "paid"
+                or intent.order_id != order.pk
+                or intent.currency != "USD"
+                or type(intent.amount) is not Decimal
+                or not intent.amount.is_finite()
+                or intent.amount != order.total):
+            return False
     except Exception:
-        return False
-    if (intent.provider != PROVIDER or intent.status != "paid"
-            or intent.order_id != order.pk
-            or intent.currency != "USD"
-            or intent.amount != order.total):
+        # Missing private models, corrupt foreign keys, db outages and
+        # malformed payment intent are not a reason to release an asset.
         return False
 
     try:
@@ -87,10 +98,14 @@ def verified_existing_walletless_item_access(user, item_id, *, asset_is_releasab
     except (ValueError, TypeError):
         return False
 
-    if LedgerEntry.objects.filter(
-        order_id=order.pk,
-        entry_type__in=("refund", "reversal", "chargeback")
-    ).exists():
+    try:
+        if LedgerEntry.objects.filter(
+            order_id=order.pk,
+            entry_type__in=("refund", "reversal", "chargeback")
+        ).exists():
+            return False
+    except Exception:
+        # A refund ledger outage must never turn an old payment into access.
         return False
 
     try:
