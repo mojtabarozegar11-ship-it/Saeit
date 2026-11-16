@@ -40,7 +40,7 @@ def owned_process_use(uid, target):
             if scanned > 750:
                 unknown += 1
                 break
-            cmd = (proc / "cmdline").read_bytes()[:32768].replace(b"\\x00", b" ").decode("utf-8", "replace").lower()
+            cmd = (proc / "cmdline").read_bytes()[:32768].replace(bytes([0]), b" ").decode("utf-8", "replace").lower()
             if any(n in cmd for n in needles):
                 candidate_package_procs += 1
             links = []
