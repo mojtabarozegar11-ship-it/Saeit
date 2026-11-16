@@ -1,0 +1,36 @@
+name: C112 paid checkout legacy publishers — source-only owner release guard
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-tron-bounded-head-production-deploy-20261025.yml"
+      - ".github/workflows/mpw-trongrid-indexer-production-deploy-20261025.yml"
+      - ".github/workflows/mpw-legacy-checkout-fintech-v2-live-20261021.yml"
+      - ".github/workflows/mpw-two-books-checkout-links-live-20261019.yml"
+      - ".github/workflows/mpw-checkout-return-path-repair-20261024.yml"
+      - ".github/workflows/mpw-guest-checkout-live-release.yml"
+      - ".github/workflows/mpw-legacy-release-security-source-c112.yml"
+      - "tests/test_mpw_legacy_release_owner_gate_c112.py"
+
+permissions: {contents: read}
+
+jobs:
+  source-only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Check six owner-pinned releases and deny push/comment deployments
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mpw_legacy_release_owner_gate_c112
+          echo "C112_LEGACY_AUTO_PUBLISH_DISABLED=PASS"
+          echo "CHECKOUT_TX=NONE; SSH=NONE; LIVE_RELEASE=NONE"
