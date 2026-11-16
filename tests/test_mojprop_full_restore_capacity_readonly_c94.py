@@ -209,5 +209,92 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
                              ["Quota", "get_quota_info"])
 
 
+    def test_quota_cli_decimal_and_binary_units_are_handled_conservatively(self):
+        from scripts.mojprop_full_restore_capacity_readonly_c94 import _parse_quota_bytes
+        self.assertEqual(_parse_quota_bytes("123", consumed=False), 123 * 1024)
+        self.assertEqual(_parse_quota_bytes("123", consumed=True), 123 * 1024)
+        self.assertEqual(_parse_quota_bytes("3M", consumed=False), 2 * 1024**2)
+        self.assertEqual(_parse_quota_bytes("3M", consumed=True), 4 * 1024**2)
+        self.assertLess(_parse_quota_bytes("1.5G", consumed=False),
+                        _parse_quota_bytes("1.5G", consumed=True))
+        self.assertEqual(_parse_quota_bytes("0K", consumed=False), 0)
+
+    def test_quota_cli_approves_sufficient_verified_2x_disk_space(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+        fs = SimpleNamespace(f_bavail=3_000_000, f_frsize=4096, f_favail=500)
+        good = SimpleNamespace(stdout="/dev/vda1 100M 8000M 8000M 100 9000 10000\\n")
+        with patch.object(mod.os, "open", return_value=10), \
+             patch.object(mod.os, "fstatvfs", return_value=fs), \
+             patch.object(mod.os, "close"), \
+             patch("subprocess.run", return_value=good):
+            allowed, reason = mod._quota_result(2 * 1024**3)
+        self.assertTrue(allowed)
+        self.assertEqual(reason, "quota_exact_verified")
+
+    def test_quota_cli_refuses_near_limit_display_rounding(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+        fs = SimpleNamespace(f_bavail=3_000_000, f_frsize=4096, f_favail=500)
+        # Only 4G nominal quota; conservative 1G unit uncertainty prevents
+        # certifying a ~3G backup need just from this rounded report.
+        near = SimpleNamespace(stdout="/dev/vda1 1G 4G 4G 100 9000 10000\\n")
+        with patch.object(mod.os, "open", return_value=10), \
+             patch.object(mod.os, "fstatvfs", return_value=fs), \
+             patch.object(mod.os, "close"), \
+             patch("subprocess.run", return_value=near):
+            allowed, reason = mod._quota_result(2 * 1024**3)
+        self.assertFalse(allowed)
+        self.assertEqual(reason, "quota_blocks_insufficient")
+
+    def test_quota_cli_unknown_or_starred_units_never_authorize(self):
+        from scripts.mojprop_full_restore_capacity_readonly_c94 import _parse_quota_bytes
+        for raw in ("3M*", "1MiB", "1.4.5G", "-2G", "1.0000M",
+                    "unknown", "2e6", "1.5", "999999999999999P",
+                    None, 900, "∞"):
+            with self.subTest(raw=raw):
+                self.assertIsNone(_parse_quota_bytes(raw, consumed=False))
+
+    def test_quota_cli_unbounded_zero_limits_are_not_proof(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+        fs = SimpleNamespace(f_bavail=3_000_000, f_frsize=4096, f_favail=500)
+        report = SimpleNamespace(stdout="/dev/vda1 200M 0 0 100 0 0\\n")
+        with patch.object(mod.os, "open", return_value=10), \
+             patch.object(mod.os, "fstatvfs", return_value=fs), \
+             patch.object(mod.os, "close"), \
+             patch("subprocess.run", return_value=report):
+            allowed, reason = mod._quota_result(2 * 1024**3)
+        self.assertFalse(allowed)
+        self.assertEqual(reason, "quota_unbounded_not_verified")
+
+    def test_quota_cli_bad_inode_limits_remain_blocked(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+        fs = SimpleNamespace(f_bavail=3_000_000, f_frsize=4096, f_favail=500)
+        report = SimpleNamespace(stdout="/dev/vda1 10M 8000M 8000M 989 1000 1000\\n")
+        with patch.object(mod.os, "open", return_value=10), \
+             patch.object(mod.os, "fstatvfs", return_value=fs), \
+             patch.object(mod.os, "close"), \
+             patch("subprocess.run", return_value=report):
+            allowed, reason = mod._quota_result(2 * 1024**3)
+        self.assertFalse(allowed)
+        self.assertEqual(reason, "quota_inodes_insufficient")
+
+    def test_quota_cli_never_executes_shell_or_quota_change(self):
+        from pathlib import Path
+        src = (ROOT / "scripts/mojprop_full_restore_capacity_readonly_c94.py").read_text()
+        self.assertIn('["quota", "-wvu", ACCOUNT]', src)
+        self.assertIn('"quota_unbounded_not_verified"', src)
+        self.assertNotIn("setquota", src)
+        self.assertNotIn('shell=True', src)
+        self.assertNotIn("subprocess.Popen(", src)
+
+
+
 if __name__ == "__main__":
     unittest.main()
