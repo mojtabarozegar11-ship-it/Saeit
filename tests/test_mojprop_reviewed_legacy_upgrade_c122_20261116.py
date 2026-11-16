@@ -49,6 +49,11 @@ class ReviewedLegacyUpgradeTests(unittest.TestCase):
             target = self.stage / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(SOURCE / relative, target)
+        model = self.stage / "core/models.py"
+        text = model.read_text(encoding="utf-8")
+        marker = "\nclass MojPropStarter30Order(T):"
+        assert text.count(marker) == 1
+        model.write_text(text.split(marker, 1)[0].rstrip() + "\n", encoding="utf-8")
         for relative, prefix in PREFIXES.items():
             path = self.live / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -60,7 +65,7 @@ class ReviewedLegacyUpgradeTests(unittest.TestCase):
 
     def patch_both(self):
         with contextlib.redirect_stdout(io.StringIO()):
-            installer.patch_models(self.live / "core/models.py", SOURCE / "core/models.py")
+            installer.patch_models(self.live / "core/models.py", self.stage / "core/models.py")
             installer.patch_admin(self.live / "core/admin.py", SOURCE / "core/admin.py")
 
     def test_exact_legacy_model_suffix_is_recognized(self):
