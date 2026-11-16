@@ -221,7 +221,7 @@ def evaluate_simulated_phase(
             "daily_reference_definition": "previous_day_last_observed_equity_utc",
             "overall_reference_definition": policy.overall_drawdown_mode,
             "data_provenance": "self_reported_not_broker_verified",
-            "between_snapshot_breaches_excluded": False,
+            "between_snapshot_breaches_verified": False,
             "requires_independent_broker_evidence": True,
             "official_challenge_passed": False,
             "funded_account_provisioning_allowed": False,
