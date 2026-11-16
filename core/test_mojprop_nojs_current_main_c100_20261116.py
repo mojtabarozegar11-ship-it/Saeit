@@ -8,6 +8,7 @@ from html import unescape
 from pathlib import Path
 from urllib.parse import urlencode
 from uuid import UUID
+from unittest.mock import patch
 
 from django.test import Client, TestCase, override_settings
 
@@ -246,6 +247,34 @@ class AccessibleCurrentMainLeadTests(TestCase):
         response = self.client.get("/moj-prop-status/?format=html&receipt_token=" + token)
         self.assertEqual(response.status_code, 400)
         self.assertNotIn(token.encode(), response.content)
+
+    def test_24b_html_post_with_query_bearer_is_denied_before_crm(self):
+        token = self._status_token()
+        with patch.object(MojPropRequest.objects, "filter",
+                          side_effect=AssertionError("HTML bearer query reached CRM")):
+            response = self.client.post(
+                "/moj-prop-status/?format=html&receipt_token=" + token,
+                data=urlencode({"receipt_token": token, "csrfmiddlewaretoken": self.csrf}),
+                content_type="application/x-www-form-urlencoded",
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn(token.encode(), response.content)
+        self.assertNotIn(b"buyer@example.org", response.content)
+        self.assertEqual(response["Referrer-Policy"], "no-referrer")
+        self.assertIn("no-store", response["Cache-Control"])
+
+    def test_24c_legacy_token_from_old_url_still_works_in_secure_form(self):
+        token = self._status_token()
+        denied = self.client.get("/moj-prop-status/?format=html&receipt_token=" + token)
+        self.assertEqual(denied.status_code, 400)
+        checked = self.client.post(
+            "/moj-prop-status/?format=html",
+            data=urlencode({"receipt_token": token, "csrfmiddlewaretoken": self.csrf}),
+            content_type="application/x-www-form-urlencoded",
+        )
+        self.assertEqual(checked.status_code, 200)
+        self.assertNotIn(token.encode(), checked.content)
+        self.assertIn(b"Review status", checked.content)
 
     def test_25_private_status_requires_csrf(self):
         fresh = Client(enforce_csrf_checks=True)
