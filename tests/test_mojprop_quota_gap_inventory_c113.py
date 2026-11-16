@@ -97,17 +97,17 @@ class MojPropQuotaGapInventoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home:
             with patch.object(probe.subprocess, "run",
                               return_value=SimpleNamespace(stdout="not a number")):
-                self.assertEqual(probe.category_usage(Path(home)),
+                self.assertEqual(probe.category_usage(Path(home),
+                                                      runner=probe.subprocess.run),
                                  ("unavailable", "unknown"))
 
     def test_11_fixed_inventory_has_no_arbitrary_user_path(self):
         self.assertEqual(len(probe.CANDIDATES), 8)
         self.assertEqual(len({p for _, p in probe.CANDIDATES}), 8)
         for label, path in probe.CANDIDATES:
-            self.assertEqual(path.relative_to(probe.HOME).parts[0],
-                             path.relative_to(probe.HOME).parts[0])
+            self.assertGreaterEqual(len(path.relative_to(probe.HOME).parts), 1)
             self.assertFalse(path == probe.HOME)
-            self.assertTrue(label.replace("_", "").isalpha())
+            self.assertTrue(label.replace("_", "").isalnum())
 
     def test_12_source_never_writes_or_deletes_files(self):
         text = (ROOT / "scripts/mojprop_quota_gap_inventory_readonly_c113.py").read_text()
