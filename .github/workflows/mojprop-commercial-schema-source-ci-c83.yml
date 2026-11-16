@@ -6,6 +6,10 @@ on:
       - ".github/workflows/mojprop-backend-controlled-release-20261115.yml"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
       - "scripts/mojprop_schema_preflight_c83.py"
+      - "scripts/mojprop_db_release_evidence.py"
+      - "scripts/mojprop_live_database_identity_c85.py"
+      - "tests/test_mojprop_db_release_evidence_20261115.py"
+      - "tests/test_mojprop_live_db_identity_c85_20261115.py"
       - "tests/test_mojprop_commercial_release_closure_c83_20261115.py"
       - "tests/test_mojprop_backend_receipts_release_20261115.py"
       - "core/migrations/004?_mojprop_*.py"
@@ -30,6 +34,10 @@ jobs:
           python3 scripts/deploy_mojplaywin_moj_prop_backend.py selftest
       - name: Verify commercial schema closure before live DB mutation
         run: python3 -m unittest discover -s tests -p 'test_mojprop_commercial_release_closure_c83_20261115.py' -v
+      - name: Independently signed DB restore and live DB identity contracts
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mojprop_db_release_evidence_20261115.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojprop_live_db_identity_c85_20261115.py' -v
       - name: Verify signed receipt and routing regressions
         run: python3 -m unittest discover -s tests -p 'test_mojprop_backend_receipts_release_20261115.py' -v
       - name: Assert this action cannot reach any production credential or publish
