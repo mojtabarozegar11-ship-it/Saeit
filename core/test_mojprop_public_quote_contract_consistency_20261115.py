@@ -209,3 +209,23 @@ class PublicQuoteContractConsistencyTests(TestCase):
         response = self.view()
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Catalog product ID: n/a", response.content)
+
+
+    def test_27_token_issuance_denies_unidentified_digital_product(self):
+        self.lead.route = "digital"
+        self.lead.product_id = None
+        self.lead.save(update_fields=["route", "product_id"])
+        with self.assertRaises(ValueError):
+            quote_read_token(self.offer)
+
+    def test_28_token_issuance_accepts_identified_digital_product(self):
+        self.lead.route = "digital"
+        self.lead.product_id = 225
+        self.lead.save(update_fields=["route", "product_id"])
+        token = quote_read_token(self.offer)
+        response = self.client.get(
+            reverse("mojprop_quote_public", kwargs={"token": token}),
+            secure=True, HTTP_HOST="mojplaywin.com",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Catalog product ID: 225", response.content)
