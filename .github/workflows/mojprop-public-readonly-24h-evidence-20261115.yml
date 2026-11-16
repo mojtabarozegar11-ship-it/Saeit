@@ -4,6 +4,12 @@ on:
     paths:
       - "templates/moj-prop-v4/**"
       - ".github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml"
+      - "scripts/mojprop_public_horizon_codes_readonly_c124.py"
+      - "tests/test_mojprop_public_horizon_codes_readonly_c124.py"
+      - "scripts/mojprop_cpanel_horizon_parity_readonly_c125.py"
+      - "tests/test_mojprop_cpanel_horizon_parity_readonly_c125.py"
+      - "scripts/mojprop_surgical_horizon_patch_plan_c126.py"
+      - "tests/test_mojprop_surgical_horizon_patch_plan_c126.py"
   workflow_dispatch:
 
 permissions:
@@ -106,6 +112,14 @@ jobs:
           PY
             fi
           done
+          # Compare ONLY existing downloaded PUBLIC GET response; never submit
+          # buyer details or echo HTML/CSRF. Current main may have fixed the
+          # source while an older cPanel public document is still served.
+          python3 -B scripts/mojprop_public_horizon_codes_readonly_c124.py \
+            "$check_dir/mojprop_root.body" \
+            "templates/moj-prop/index.html" \
+            "templates/moj-prop-v4/index.html"
+          # A diagnostic match does not prove the POST backend, payment or delivery.
           # Compare the public page byte-for-byte with only reviewed source
           # releases. No content is printed; "unknown" prevents unsafe overwrite.
           python3 - "$check_dir/signal_desk.body" <<'PY'
