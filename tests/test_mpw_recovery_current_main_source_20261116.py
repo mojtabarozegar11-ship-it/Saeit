@@ -23,7 +23,8 @@ class MojPlayWinRecoveryCurrentMainSourceTest(unittest.TestCase):
     def test_migration_is_after_current_main_and_additive_only(self):
         migration = self.read("core/migrations/0047_mpw_guest_email_recovery.py")
         tree = ast.parse(migration)
-        source = ast.get_source_segment(migration, tree)
+        source = migration
+        self.assertIsNotNone(tree)
         self.assertIn('"0046_signal_free_subscription"', source)
         self.assertEqual(migration.count("migrations.CreateModel("), 3)
         self.assertNotIn("RunPython", migration)
