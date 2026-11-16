@@ -16,6 +16,7 @@ REQUEST = "REQUEST-ABCDEFGHIJKLMNO"
 BUYER = "BUYER-ABCDEFGHIJKLMNOP"
 SELLER = "SELLER-ABCDEFGHIJKLMNOP"
 NOW = 1_795_000_000
+INQUIRY_DIGEST = "8" * 64  # Synthetic original inquiry form SHA-256.
 
 
 def packet():
@@ -23,6 +24,7 @@ def packet():
     base.update(
         schema=SCHEMA, purpose=PURPOSE,
         request_ref=REQUEST, buyer_ref=BUYER, seller_ref=SELLER,
+        inquiry_intent_sha256=INQUIRY_DIGEST,
         facts={name: True for name in REQUIRED},
         proofs={name: hex(n + 1)[2:] * 64 for n, name in enumerate(REQUIRED_PROOFS)},
         requested_at_sec=NOW-120,
@@ -46,7 +48,9 @@ def call(p=None, **kw):
     inputs = dict(packet=p, signed_tag_hex=tag(p),
                   trusted_reviewer_key=KEY,
                   expected_request_ref=REQUEST, expected_buyer_ref=BUYER,
-                  expected_seller_ref=SELLER, server_now_sec=NOW)
+                  expected_seller_ref=SELLER,
+                  expected_inquiry_intent_sha256=INQUIRY_DIGEST,
+                  server_now_sec=NOW)
     inputs.update(kw)
     return evaluate_signed_plan1_request(**inputs)
 
@@ -233,6 +237,28 @@ class PlanOneSignedBuyerOrderTests(unittest.TestCase):
         p["proofs"]["contract_pdf_sha256"]="f"*64
         with self.assertRaises(Plan1OrderGateClosed):
             call(p,signed_tag_hex=signed)
+
+    def test_original_signed_inquiry_digest_survives_review(self):
+        self.assertEqual(call().inquiry_intent_sha256, INQUIRY_DIGEST)
+
+    def test_reusing_signed_review_for_different_inquiry_fails(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            call(expected_inquiry_intent_sha256="9" * 64)
+
+    def test_missing_server_trusted_inquiry_digest_fails(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            call(expected_inquiry_intent_sha256="")
+
+    def test_buyer_rewrites_inquiry_digest_after_signing_fails(self):
+        p=packet()
+        originally_signed=tag(p)
+        p["inquiry_intent_sha256"]="f" * 64
+        with self.assertRaises(Plan1OrderGateClosed):
+            call(p, signed_tag_hex=originally_signed)
+
+    def test_boolean_inquiry_digest_is_not_accepted(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            call(expected_inquiry_intent_sha256=True)
 
     def test_no_private_documents_or_email_in_result(self):
         a=repr(call())
