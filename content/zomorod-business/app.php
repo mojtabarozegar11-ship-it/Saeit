@@ -24,6 +24,87 @@ $private = $home.'/.private/zomorod-business';
 if(is_file($private.'/site_agents.php')) require_once $private.'/site_agents.php';
 if(is_file($private.'/site_store.php')) require_once $private.'/site_store.php';
 function esc(mixed $s): string {return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');}
+/**
+ * Degraded read-only continuity panel for the ORIGINAL private site-agent DB.
+ * Used ONLY if legacy site_agents.php has already disappeared. Never creates
+ * tables, enables workers, modifies Cron, or proves a canonical bot cutover.
+ * Historical bodies, findings JSON, mission, and customer data are never echoed.
+ */
+function zmAgentArchiveView(string $private): void {
+    $dbfile=$private.'/site_agents.sqlite3';
+    $header='<section class="card"><h2>بایگانی ایجنت‌های پیشین — فقط خواندنی</h2>';
+    $footer='<p class="muted">این نما اجرای ربات جدید، صحت نسخه پشتیبان، یا مجوز حذف فایل‌های قدیمی را اثبات نمی‌کند.</p></section>';
+    $deny=function(string $note)use($header,$footer):void{
+        echo $header.'<p>'.esc($note).'</p>'.$footer;
+    };
+    if(!class_exists('SQLite3')||$private!=='/home/zomorod2/.private/zomorod-business'
+       ||!is_dir($private)||is_link($private)||is_link(dirname($private))
+       ||!is_file($dbfile)||is_link($dbfile)){
+        $deny('بانک بایگانی قابل تأیید نیست؛ موتور قدیمی و تاریخچه آن نباید حذف شوند.');
+        return;
+    }
+    // An immutable/readonly view of an active WAL file is not a safe
+    // historical parity certificate. Require a verified checkpoint first.
+    foreach(['-wal','-shm','-journal'] as $sidecar) {
+        if(file_exists($dbfile.$sidecar)||is_link($dbfile.$sidecar)){
+            $deny('بایگانی در حال ثبت هم‌زمان است؛ برداشت سازگار فقط پس از بستن نویسنده مجاز است.');
+            return;
+        }
+    }
+    $before=@stat($dbfile);
+    if($before===false||$before['size']<=0||$before['size']>536870912){
+        $deny('اندازه یا شناسه بانک خصوصی قابل تأیید نیست.');return;
+    }
+    $sqlite=null;
+    try {
+        $sqlite=new SQLite3($dbfile, SQLITE3_OPEN_READONLY);
+        $sqlite->busyTimeout(800);
+        if(!$sqlite->exec('PRAGMA query_only=ON')||$sqlite->querySingle('PRAGMA quick_check(1)')!=='ok')
+            throw new RuntimeException('read_only_integrity_unavailable');
+        $tables=['agents','runs','site_work_state','site_work_outputs','site_work_generation_evidence'];
+        $counts=[]; $incomplete=false;
+        foreach($tables as $table){
+            $exists=(int)$sqlite->querySingle("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='".$table."'");
+            if($exists!==1){$counts[$table]=null;$incomplete=true;continue;}
+            $count=$sqlite->querySingle("SELECT COUNT(*) FROM ".$table);
+            if(!is_int($count)||$count<0)throw new RuntimeException('bad_archive_count');
+            $counts[$table]=$count;
+        }
+        $listing=[];
+        if($counts['runs']!==null){
+            $q=$sqlite->query('SELECT agent_code,status,http_code,occurred_at FROM runs ORDER BY id DESC LIMIT 14');
+            if($q===false)throw new RuntimeException('unavailable_runs');
+            while($row=$q->fetchArray(SQLITE3_ASSOC))$listing[]=$row;
+        }
+        $quality=[];
+        if($counts['site_work_outputs']!==null){
+            $q=$sqlite->query('SELECT agent_code,status,quality_score,observed_at FROM site_work_outputs ORDER BY id DESC LIMIT 14');
+            if($q===false)throw new RuntimeException('unavailable_quality');
+            while($row=$q->fetchArray(SQLITE3_ASSOC))$quality[]=$row;
+        }
+        $after=@stat($dbfile);clearstatcache(true,$dbfile);
+        $final=@stat($dbfile);
+        if($after===false||$final===false||
+            $before['dev']!==$final['dev']||$before['ino']!==$final['ino']||
+            $before['size']!==$final['size']||$before['mtime']!==$final['mtime']||
+            file_exists($dbfile.'-wal')||file_exists($dbfile.'-journal')||file_exists($dbfile.'-shm'))
+            throw new RuntimeException('archive_changed_during_read');
+        $out=$header;
+        if($incomplete)$out.='<p>یک یا چند جدول تاریخی پیدا نشد؛ انتقال کامل بایگانی هنوز تأیید نشده است.</p>';
+        foreach($counts as $name=>$count){
+            $out.='<p><strong>'.esc($name).': </strong>'.($count===null?'نامشخص':number_format($count)).'</p>';
+        }
+        $out.='<h3>آخرین نتایج پایش قدیمی</h3><div class="scroll"><table><tr><th>نقش</th><th>وضعیت</th><th>HTTP</th><th>زمان</th></tr>';
+        foreach($listing as $row)$out.='<tr><td>'.esc($row['agent_code']).'</td><td>'.esc($row['status']).'</td><td>'.(int)$row['http_code'].'</td><td>'.esc($row['occurred_at']).'</td></tr>';
+        $out.='</table></div><h3>آخرین ممیزی‌های ساختاری</h3><div class="scroll"><table><tr><th>نقش</th><th>وضعیت</th><th>کیفیت</th><th>زمان</th></tr>';
+        foreach($quality as $row)$out.='<tr><td>'.esc($row['agent_code']).'</td><td>'.esc($row['status']).'</td><td>'.(int)$row['quality_score'].'/100</td><td>'.esc($row['observed_at']).'</td></tr>';
+        echo $out.'</table></div>'.$footer;
+    } catch(Throwable $e){
+        $deny('خواندن ایمن بایگانی ممکن نیست؛ تاریخچه اصلی باید حفظ شود.');
+    } finally {
+        if($sqlite instanceof SQLite3)$sqlite->close();
+    }
+}
 function req(string $k, string $default=''): string {return trim((string)($_POST[$k]??$default));}
 function bail(string $m, int $code=422): never {http_response_code($code); throw new RuntimeException($m);}
 function cents(string $s): int {if(!preg_match('/^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,2})?$/',$s))bail('مبلغ نامعتبر است.'); $parts=explode('.',$s,2); return (int)$parts[0]*100+(int)str_pad($parts[1]??'',2,'0');}
@@ -332,8 +413,11 @@ try {
         echo '<section class="grid"><article class="card"><h3>موانع خرید</h3><p>مرحله‌های مسدود یا نامشخص با اثر مستقیم بر خریدار.</p></article><article class="card"><h3>فروش و درآمد</h3><p>تا ثبت سند فروش قطعی، درآمد تأییدنشده جدا نگه داشته می‌شود.</p></article><article class="card"><h3>کارهای بدون خروجی</h3><p>تست بدون شاهد یا نتیجه قابل‌سنجش در این دسته قرار می‌گیرد.</p></article><article class="card"><h3>موارد در انتظار تأیید</h3><p>ایمیل، حذف فاکتور، استقرار و هر تغییر بیرونی نیازمند تصمیم جداگانه است.</p></article></section>';
     } elseif($page==='agent_center'){
         authorize('view');
-        if(!function_exists('zmAgentDb'))bail('موتور ایجنت در دسترس نیست.',503);
-        zmAgentRender(zmAgentDb($private));
+        if(function_exists('zmAgentDb')&&function_exists('zmAgentRender')){
+            zmAgentRender(zmAgentDb($private));
+        }else{
+            zmAgentArchiveView($private);
+        }
     } elseif($page==='store_manager'){
         authorize('view');
         if(!function_exists('zmStoreDb'))bail('فروشگاه در دسترس نیست.',503);
