@@ -69,7 +69,7 @@ def create_private_report(*, source_csv: Path, private_output_dir: Path,
     """
     if type(case_reference) is not str or _ID.fullmatch(case_reference) is None:
         raise PrivateReportRejected("opaque MPS30 case reference required")
-    if type(source_csv) is not Path or type(private_output_dir) is not Path:
+    if not isinstance(source_csv, Path) or not isinstance(private_output_dir, Path):
         raise PrivateReportRejected("explicit trusted local Path arguments required")
     if not source_csv.is_absolute() or not private_output_dir.is_absolute():
         raise PrivateReportRejected("absolute paths required")
@@ -95,12 +95,12 @@ def create_private_report(*, source_csv: Path, private_output_dir: Path,
             file.write(report)
             file.flush()
             os.fsync(file.fileno())
-        created = False
         directory_fd = os.open(private_output_dir, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(directory_fd)
         finally:
             os.close(directory_fd)
+        created = False
     except BaseException:
         if created:
             target.unlink(missing_ok=True)
