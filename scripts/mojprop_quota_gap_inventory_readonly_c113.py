@@ -146,7 +146,7 @@ def table_class(table_name):
     return "other"
 
 
-def classify_table_storage(rows):
+def classify_table_storage(rows, *, model_ownership=None):
     """Aggregate only bounded information_schema metadata, never table names.
 
     DATA_LENGTH and INDEX_LENGTH are estimates; grouping by identifier is
@@ -155,6 +155,9 @@ def classify_table_storage(rows):
     if type(rows) not in (tuple, list) or not 1 <= len(rows) <= 10000:
         raise ValueError("invalid metadata table count")
     groups = {key: 0 for key in TABLE_CLASSES}
+    origins = {key: 0 for key in (
+        "django_managed", "django_unmanaged", "outside_current_registry")}
+    registry = model_ownership if type(model_ownership) is dict else {}
     ranked = []
     for row in rows:
         if type(row) not in (tuple, list) or len(row) != 3:
@@ -174,7 +177,11 @@ def classify_table_storage(rows):
         size = sum(sizes)
         label = table_class(name)
         groups[label] += size
-        ranked.append((size, label))
+        origin = registry.get(name, "outside_current_registry")
+        if origin not in origins:
+            raise ValueError("unsupported model origin")
+        origins[origin] += size
+        ranked.append((size, label, origin))
     # Never log raw table identifiers. Top-rank labels are broad hints only.
     ranked.sort(key=lambda item: item[0], reverse=True)
     return {
@@ -188,10 +195,15 @@ def classify_table_storage(rows):
             key: bucket_bytes(size) for key, size in groups.items()
         },
         "largest_six": [
-            {"rank": i + 1, "class": label, "mib_bucket": bucket_bytes(size)}
-            for i, (size, label) in enumerate(ranked[:6])
+            {"rank": i + 1, "class": label, "origin": origin,
+             "mib_bucket": bucket_bytes(size)}
+            for i, (size, label, origin) in enumerate(ranked[:6])
         ],
         "sum_estimate_mib_bucket": bucket_bytes(sum(groups.values())),
+        "by_model_origin_mib_bucket": {
+            key: bucket_bytes(value) for key, value in origins.items()
+        },
+        "registry_miss_is_not_deletion_permission": True,
         "safe_to_delete_tables_identified": False,
         "isolated_restore_proven": False,
     }
@@ -214,7 +226,18 @@ def _db_metadata_profile():
                 "WHERE TABLE_SCHEMA = DATABASE() LIMIT 10001"
             )
             rows = cur.fetchall()
-    return classify_table_storage(rows)
+    # Installed Django model registry is metadata-only. A table missing from
+    # this registry might belong to another live application or a legacy path;
+    # NEVER infer that it may safely be deleted.
+    from django.apps import apps
+    ownership = {}
+    for model in apps.get_models(include_auto_created=True):
+        name = model._meta.db_table
+        if type(name) is str:
+            ownership[name] = (
+                "django_managed" if model._meta.managed else "django_unmanaged"
+            )
+    return classify_table_storage(rows, model_ownership=ownership)
 
 
 def _quota_bytes():
