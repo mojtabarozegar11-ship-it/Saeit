@@ -23,11 +23,24 @@ on:
       - 'tests/test_prop_plan1_canonical_interest_bridge.py'
       - '.github/workflows/mojprop-plan1-b-source-only.yml'
 
+  pull_request:
+    branches:
+      - feature/prop-firm-policy-v11-20261114
+    paths:
+      - 'prop_firm/order_readiness.py'
+      - 'prop_firm/buyer_order_review.py'
+      - 'prop_firm/buyer_interest_form.py'
+      - 'prop_firm/buyer_precontract_chain.py'
+      - 'prop_firm/plan1_private_order_draft.py'
+      - 'prop_firm/plan1_intake_provenance.py'
+      - 'tests/test_prop_*.py'
+      - '.github/workflows/mojprop-plan1-b-source-only.yml'
+
 permissions:
   contents: read
 
 concurrency:
-  group: mojprop-plan1-b-source-only-branch
+  group: mojprop-plan1-b-source-only-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
