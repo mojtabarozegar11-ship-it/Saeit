@@ -1,6 +1,6 @@
 """Unit tests for conditional algebra only; not empirical R01 validation."""
 import unittest
-from economic_break_even import calculate, FIELDS
+from research.r01.economic_break_even import calculate, FIELDS
 
 class EconomicBreakEvenTests(unittest.TestCase):
     def setUp(self):
