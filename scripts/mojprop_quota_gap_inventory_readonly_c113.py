@@ -121,9 +121,10 @@ def table_class(table_name):
             or re.fullmatch(r"[A-Za-z0-9_]{1,128}", table_name) is None):
         return "other"
     name = table_name.lower()
-    if any(word in name for word in (
-            "audit", "event", "log", "history", "activity", "outbox",
-            "tracking", "telemetry")):
+    if (any(word in name for word in (
+            "audit", "event", "history", "activity", "outbox",
+            "tracking", "telemetry"))
+            or re.search(r"(?:^|_)logs?(?:_|$)", name) is not None):
         return "event_and_audit"
     if any(word in name for word in (
             "payment", "purchase", "invoice", "order", "checkout",
@@ -135,7 +136,8 @@ def table_class(table_name):
     if any(word in name for word in ("mojprop", "signal", "trading", "lead")):
         return "signals_and_prop"
     if any(word in name for word in (
-            "research", "article", "publication", "book", "content")):
+            "research", "article", "publication", "book", "content",
+            "catalog")):
         return "content_research"
     if "session" in name:
         return "sessions"
@@ -164,6 +166,8 @@ def classify_table_storage(rows):
         for value in (data, index):
             if type(value) not in (int, Decimal):
                 raise ValueError("invalid metadata size")
+            if type(value) is Decimal and not value.is_finite():
+                raise ValueError("invalid metadata nonfinite")
             if value < 0 or value > 100 * 1024**4 or int(value) != value:
                 raise ValueError("invalid metadata size range")
             sizes.append(int(value))
