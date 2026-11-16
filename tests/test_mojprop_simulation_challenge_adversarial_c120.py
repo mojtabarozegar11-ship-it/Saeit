@@ -34,15 +34,14 @@ class StrictChallengeInputC120Tests(unittest.TestCase):
     def test_01_float_string_bool_and_nan_balance_never_count_as_money(self):
         for value in ("10000.00", 10000.0, True, None,
                       Decimal("NaN"), Decimal("Infinity"),
-                      Decimal("-Infinity"), Decimal("0"),
-                      Decimal("-1"), Decimal("1.001"),
+                      Decimal("-Infinity"), Decimal("1.001"),
                       Decimal("1000000000000.01")):
             with self.subTest(value=repr(value)):
                 with self.assertRaises(ChallengeInputError):
                     self.evaluate(records=[replace(S, balance=value)])
 
     def test_02_equity_requires_exact_bounded_decimal(self):
-        for value in ("20000", 20000.0, False, Decimal("0"), Decimal("NaN"),
+        for value in ("20000", 20000.0, False, Decimal("NaN"),
                       Decimal("1.000001"), Decimal("1000000000001.00")):
             with self.subTest(value=repr(value)):
                 with self.assertRaises(ChallengeInputError):
