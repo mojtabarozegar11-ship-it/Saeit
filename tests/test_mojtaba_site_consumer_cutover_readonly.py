@@ -20,6 +20,16 @@ def make_consumer_tree(root, *, dependencies=True):
 
 
 class SourceConsumersTests(unittest.TestCase):
+    def test_real_repository_consumer_inventory_preserves_known_blockers(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        output = module.inspect(repo_root)
+        self.assertFalse(output["source_only_retirement_ready"])
+        self.assertFalse(output["live_host_cleanup_authorized"])
+        self.assertEqual(len(output["sites"]["zomorodmelal"]["unresolved_consumer_ids"]), 2)
+        self.assertEqual(len(output["sites"]["mojplaywin"]["unresolved_consumer_ids"]), 3)
+        self.assertEqual(output["files_removed"], 0)
+        self.assertEqual(output["crons_removed"], 0)
+
     def test_existing_php_console_and_mpw_dashboard_block_cleanup(self):
         with tempfile.TemporaryDirectory() as tmp:
             make_consumer_tree(tmp)
