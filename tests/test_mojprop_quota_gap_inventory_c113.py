@@ -62,7 +62,7 @@ class MojPropQuotaGapInventoryTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         probe._quota_bytes()
 
-    def test_07_unknown or_ambiguous_flag_is_denied(self):
+    def test_07_unknown_or_ambiguous_flag_is_denied(self):
         for value in ("01", "true", True, None):
             with self.subTest(value=value):
                 data = {"result":{"status":1,"data":{
@@ -104,7 +104,8 @@ class MojPropQuotaGapInventoryTests(unittest.TestCase):
         self.assertEqual(len(probe.CANDIDATES), 8)
         self.assertEqual(len({p for _, p in probe.CANDIDATES}), 8)
         for label, path in probe.CANDIDATES:
-            self.assertTrue(path.is_relative_to(probe.HOME))
+            self.assertEqual(path.relative_to(probe.HOME).parts[0],
+                             path.relative_to(probe.HOME).parts[0])
             self.assertFalse(path == probe.HOME)
             self.assertTrue(label.replace("_", "").isalpha())
 
