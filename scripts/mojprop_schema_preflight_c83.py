@@ -171,6 +171,18 @@ def check_schema_closure(live_root, staged_root, *, source_only_selftest=False):
         if src.suffix == ".py":
             ast.parse(src.read_text(encoding="utf-8"), filename=path)
 
+    # A staged 0048 plus an older 0047-only release tar would otherwise
+    # install new Django models without their DB schema on the live tenant.
+    # Source selftest is the ONLY allowed exception; real release remains
+    # denied until installer, tar, schema and independent restore are reviewed.
+    if not source_only_selftest:
+        for migration in (staged_root / "core/migrations").glob("*.py"):
+            if migration.is_symlink():
+                raise RuntimeError("unsafe staged core migration symlink")
+            head = migration.stem.split("_", 1)[0]
+            if head.isdigit() and int(head) >= 41 and migration.stem not in set(MIGRATIONS):
+                raise RuntimeError("unreviewed staged core migration: " + migration.stem)
+
     for name in MODELS:
         if name not in _classes(staged_root / "core/models.py"):
             raise RuntimeError("commercial source model is missing: " + name)
