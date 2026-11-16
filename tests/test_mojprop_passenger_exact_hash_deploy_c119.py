@@ -63,6 +63,17 @@ class ExactPassengerPreflightC119Tests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "unsafe"):
                 installer.verify_reviewed_passenger_entrypoint(self.docroot)
 
+
+    def test_07_oversized_launcher_denied_without_parsing_or_execution(self):
+        self.launcher.write_bytes(b"#" * 32769)
+        with self.assertRaisesRegex(RuntimeError, "unsafe"):
+            installer.verify_reviewed_passenger_entrypoint(self.docroot)
+
+    def test_08_missing_launcher_returns_bounded_nonsecret_failure(self):
+        self.launcher.unlink()
+        with self.assertRaisesRegex(RuntimeError, "unavailable"):
+            installer.verify_reviewed_passenger_entrypoint(self.docroot)
+
     def test_04_symlink_launcher_denied_before_content_read(self):
         backup = self.docroot / "inside-real-launcher"
         self.launcher.rename(backup)
