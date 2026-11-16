@@ -39,7 +39,7 @@ jobs:
           python3 -B -m py_compile scripts/mojprop_owner_backup_catalog_readonly_c120.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_owner_backup_catalog_readonly_c120 -q
           test ! -L scripts/mojprop_owner_backup_catalog_readonly_c120.py
-          test "$(git hash-object -- scripts/mojprop_owner_backup_catalog_readonly_c120.py)" = "721eeb05d1453a78d0098055bf2749758f685bd6"
+          test "$(git hash-object -- scripts/mojprop_owner_backup_catalog_readonly_c120.py)" = "a48c1160dc2c2ec54249101d601c8a82c7579ddc"
           test ! -L scripts/mojprop_passenger_source_readonly_c118.py
           test "$(git hash-object -- scripts/mojprop_passenger_source_readonly_c118.py)" = "f6507179c762bdea1e1bb28ea17d5e420e2b4dcb"
           test ! -L scripts/mojprop_live_intake_source_drift_readonly_c95.py
