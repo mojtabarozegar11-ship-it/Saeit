@@ -5,6 +5,7 @@ TRX transactions, migration, or customer access.
 from unittest.mock import patch
 
 from django.core import signing
+from django.middleware.csrf import get_token
 from django.http import Http404
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
@@ -34,12 +35,27 @@ class GuestRecoveryOwnerRevocationTests(SimpleTestCase):
                        MPW_GUEST_RECOVERY_EMAIL_APPROVED=False)
     def test_email_permission_revoked_disables_code_post_before_consumption(self):
         request = self.request("post", code="X" * recovery.CODE_LENGTH)
+        # A real HTTPS POST must pass the original strict CSRF middleware
+        # before the recovery-specific owner revocation is exercised.
+        request.META["HTTP_REFERER"] = (
+            "https://mojplaywin.com" + recovery.ROOT + "verify/"
+        )
+        request.META["HTTP_X_CSRFTOKEN"] = get_token(request)
         with patch.object(recovery, "_consume") as consume:
             with patch.object(recovery, "_allowed") as throttle:
                 with self.assertRaises(Http404):
                     recovery.recovery_verify(request)
             consume.assert_not_called()
             throttle.assert_not_called()
+
+    @override_settings(MPW_GUEST_RECOVERY_ENABLED=True,
+                       MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
+    def test_csrf_protection_is_not_weakened_for_paid_recovery_codes(self):
+        request = self.request("post", code="X" * recovery.CODE_LENGTH)
+        with patch.object(recovery, "_consume") as consume:
+            result = recovery.recovery_verify(request)
+        self.assertEqual(result.status_code, 403)
+        consume.assert_not_called()
 
     @override_settings(MPW_GUEST_RECOVERY_ENABLED=False,
                        MPW_GUEST_RECOVERY_EMAIL_APPROVED=False)
