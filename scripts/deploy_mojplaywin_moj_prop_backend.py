@@ -42,6 +42,7 @@ FILES = (
     Path("core/mojprop_quote_contract.py"),
     Path("core/mojprop_quote_views.py"),
     Path("core/signal_free_models.py"),
+    Path("core/guest_recovery_models.py"),
     Path("core/signal_free_views.py"),
     Path("core/migrations/0041_mojprop_request.py"),
     Path("core/migrations/0042_mojprop_offer.py"),
@@ -49,6 +50,7 @@ FILES = (
     Path("core/migrations/0044_mojprop_acceptance_evidence.py"),
     Path("core/migrations/0045_mojprop_delivery_evidence.py"),
     Path("core/migrations/0046_signal_free_subscription.py"),
+    Path("core/migrations/0047_mpw_guest_email_recovery.py"),
     Path("scripts/mojprop_schema_preflight_c83.py"),
 )
 ALL_FILES = (URLCONF, SETTINGSCONF) + FILES
@@ -332,6 +334,24 @@ def patch_free_model_import(target: Path, source: Path) -> None:
     print("SIGNAL_FREE_MODEL_IMPORT_INSTALLED")
 
 
+
+def patch_recovery_model_import(target: Path, source: Path) -> None:
+    """Install only the disabled recovery model import required by current source."""
+    assert_regular(target, "live recovery model module")
+    assert_regular(source, "staged recovery model source")
+    required = "from .guest_recovery_models import GuestOrderEmail, GuestRecoveryToken, GuestRecoveryRate"
+    if required not in source.read_text(encoding="utf-8"):
+        raise RuntimeError("reviewed recovery model import is missing")
+    live = target.read_text(encoding="utf-8")
+    if required in live:
+        return
+    if "from django.db import models" not in live:
+        raise RuntimeError("live models module has no safe recovery import anchor")
+    mode = stat.S_IMODE(target.stat().st_mode)
+    atomic_write_text(target, live.rstrip() + "\n\n" + required + "\n", mode)
+    print("MPW_RECOVERY_MODEL_IMPORT_INSTALLED")
+
+
 def patch_free_admin_readonly(target: Path, source: Path) -> None:
     """Do not grant any action that could subscribe, email or charge buyers."""
     assert_regular(target, "live admin")
@@ -609,6 +629,7 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
                 if digest(target) != digest(staged_root / relative):
                     raise RuntimeError(f"post-copy hash mismatch: {relative}")
         patch_models(ROOT / Path("core/models.py"), staged_root / Path("core/models.py"))
+        patch_recovery_model_import(ROOT / Path("core/models.py"), staged_root / Path("core/models.py"))
         patch_admin(ROOT / Path("core/admin.py"), staged_root / Path("core/admin.py"))
         patch_urlconf(ROOT / URLCONF)
         patch_free_model_import(ROOT / Path("core/models.py"), staged_root / Path("core/models.py"))

@@ -134,6 +134,11 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default=COMPANY_TRADE_EMAIL)
 # Fail closed: only enable after SMTP ownership, consent, privacy and backup are checked.
 MOJTABA_SIGNAL_FREE_SIGNUP_ENABLED = env.bool("MOJTABA_SIGNAL_FREE_SIGNUP_ENABLED", default=False)
 
+# Cross-device guest recovery is source-only until the full checkout graph, schema lineage,
+# SMTP ownership/consent and rollback are independently verified. Both flags stay off.
+MPW_GUEST_RECOVERY_ENABLED = env.bool("MPW_GUEST_RECOVERY_ENABLED", default=False)
+MPW_GUEST_RECOVERY_EMAIL_APPROVED = env.bool("MPW_GUEST_RECOVERY_EMAIL_APPROVED", default=False)
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.BasicAuthentication",

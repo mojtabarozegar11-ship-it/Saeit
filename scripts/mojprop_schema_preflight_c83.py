@@ -15,6 +15,7 @@ MIGRATIONS = (
     "0044_mojprop_acceptance_evidence",
     "0045_mojprop_delivery_evidence",
     "0046_signal_free_subscription",
+    "0047_mpw_guest_email_recovery",
 )
 MODELS = ("MojPropRequest", "MojPropOffer", "MojPropDeliveryEvidence")
 ADMINS = ("MojPropRequestAdmin", "MojPropOfferAdmin", "MojPropDeliveryEvidenceAdmin")
