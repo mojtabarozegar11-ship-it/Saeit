@@ -84,6 +84,41 @@ class AnonymousMariaDbFootprintTests(unittest.TestCase):
         self.assertIn('"isolated_restore_executed": False', src)
         self.assertIn('"production_deploy_authorized": False', src)
 
+    def test_django_model_origin_distinguishes_live_owned_and_external(self):
+        mib = 1024**2
+        rows = [
+            ("core_known", 4096 * mib, 0),
+            ("external_unknown", 1024 * mib, 0),
+            ("legacy_unmanaged", 128 * mib, 0),
+        ]
+        report = c115.classify_table_storage(rows, model_ownership={
+            "core_known": "django_managed",
+            "legacy_unmanaged": "django_unmanaged",
+        })
+        self.assertEqual(report["largest_six"][0]["origin"], "django_managed")
+        self.assertEqual(report["largest_six"][1]["origin"], "outside_current_registry")
+        self.assertEqual(report["largest_six"][2]["origin"], "django_unmanaged")
+        self.assertTrue(report["registry_miss_is_not_deletion_permission"])
+        self.assertEqual(
+            report["by_model_origin_mib_bucket"]["django_managed"], "2049-4096"
+        )
+        blob = json.dumps(report)
+        for table in ("core_known", "external_unknown", "legacy_unmanaged"):
+            self.assertNotIn(table, blob)
+
+    def test_unknown_table_origin_does_not_mean_unused_or_safe_to_delete(self):
+        report = c115.classify_table_storage([("other_table", 1024, 0)])
+        self.assertEqual(report["largest_six"][0]["origin"],
+                         "outside_current_registry")
+        self.assertFalse(report["safe_to_delete_tables_identified"])
+        with self.assertRaises(ValueError):
+            c115.classify_table_storage(
+                [("known", 1024, 0)], model_ownership={"known": "safe_to_delete"}
+            )
+        source = (ROOT / "scripts/mojprop_quota_gap_inventory_readonly_c113.py").read_text()
+        self.assertIn("apps.get_models(include_auto_created=True)", source)
+        self.assertIn("NEVER infer that it may safely be deleted", source)
+
     def test_zero_byte_views_are_not_called_reclaimable_disk(self):
         report = c115.classify_table_storage([("view_without_storage", 0, 0)])
         self.assertEqual(report["largest_six"][0]["mib_bucket"], "0")
