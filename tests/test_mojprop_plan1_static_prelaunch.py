@@ -50,7 +50,7 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
         self.assertNotIn('action="/moj-prop/interest/"', self.page)
 
     def test_accessible_non_js_request_exists(self):
-        self.assertIn('/moj-prop-intake/?format=html', self.page)
+        self.assertIn('/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01', self.page)
         self.assertIn('package=moj-prop-01#request', self.page)
 
     def test_legacy_crm_is_labeled_prelaunch_and_nonpayable(self):
