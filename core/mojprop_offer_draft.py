@@ -107,7 +107,7 @@ def _starter30_selection(lead) -> str:
 def build_offer_draft(lead) -> str:
     """Render a traceable customer-specific written-scope draft; never charge."""
     if not offer_draft_eligible(lead):
-        raise ValueError("real_consented_reviewed_contact_and_scope_required")
+        raise ValueError("real_consent_and_operator_review_required")
     offers = {item["route"]: item for item in public_service_catalog()}
     service = offers.get(lead.route)
     if service is None:
