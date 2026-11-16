@@ -20,7 +20,7 @@ from django.core import signing
 from django.core.mail import send_mail
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.http import HttpResponse, JsonResponse
 from django.middleware.csrf import get_token
 from django.urls import reverse
@@ -46,6 +46,20 @@ def _answer(payload, status=200):
     response["Cache-Control"] = "no-store, private"
     response["Referrer-Policy"] = "no-referrer"
     response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+class SignalConsentStorageUnavailable(RuntimeError):
+    """Internal-only transient database fault, never exposed to a subscriber."""
+
+
+def _consent_storage_unavailable():
+    response = _answer({
+        "ok": False,
+        "detail": "Subscription status is temporarily unavailable. Please retry later.",
+        "payment_received": False,
+    }, 503)
+    response["Retry-After"] = "60"
     return response
 
 
@@ -101,6 +115,8 @@ def _validated_token(token, purpose):
         subscriber = MojSignalFreeSubscription.objects.get(pk=payload["id"])
     except MojSignalFreeSubscription.DoesNotExist:
         return None
+    except DatabaseError as exc:
+        raise SignalConsentStorageUnavailable("consent storage unavailable") from exc
     return subscriber if constant_time_compare(subscriber.nonce, payload["nonce"]) else None
 
 
@@ -170,9 +186,13 @@ def signal_free_subscribe(request):
         return _answer({"ok": False, "detail": "Valid email and independent consent are required."}, 400)
     now = timezone.now()
     ip_key = _ip_hash(request)
-    if MojSignalFreeSubscription.objects.filter(
-        ip_hash=ip_key, confirmation_sent_at__gte=now - timedelta(hours=1)
-    ).count() >= _HOURLY_IP_LIMIT:
+    try:
+        reached_ip_limit = MojSignalFreeSubscription.objects.filter(
+            ip_hash=ip_key, confirmation_sent_at__gte=now - timedelta(hours=1)
+        ).count() >= _HOURLY_IP_LIMIT
+    except DatabaseError:
+        return _consent_storage_unavailable()
+    if reached_ip_limit:
         return _answer({"ok": False, "detail": "Too many registration requests. Please try later."}, 429)
     # Uniform success body prevents active/unsubscribed account enumeration.
     accepted = {"ok": True, "status": "verification_if_eligible",
@@ -245,7 +265,10 @@ def _confirmation_page(request, title, message, action_label):
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def signal_free_confirm(request, token):
-    subscriber = _validated_token(token, "confirm")
+    try:
+        subscriber = _validated_token(token, "confirm")
+    except SignalConsentStorageUnavailable:
+        return _consent_storage_unavailable()
     if subscriber is None or subscriber.status != "pending":
         return _answer({"ok": False, "detail": "Confirmation link invalid or expired."}, 404)
     if request.method == "GET":
@@ -256,9 +279,12 @@ def signal_free_confirm(request, token):
         )
     if not _smtp_ready():
         return _answer({"ok": False, "detail": "Verified registration is not currently available."}, 503)
-    updated = MojSignalFreeSubscription.objects.filter(
-        pk=subscriber.pk, status="pending", nonce=subscriber.nonce,
-    ).update(status="confirmed", confirmed_at=timezone.now(), unsubscribed_at=None)
+    try:
+        updated = MojSignalFreeSubscription.objects.filter(
+            pk=subscriber.pk, status="pending", nonce=subscriber.nonce,
+        ).update(status="confirmed", confirmed_at=timezone.now(), unsubscribed_at=None)
+    except DatabaseError:
+        return _consent_storage_unavailable()
     if not updated:
         return _answer({"ok": False, "detail": "Confirmation link invalid or expired."}, 404)
     return _answer({"ok": True, "status": "confirmed", "paid_entitlement": False})
@@ -267,7 +293,10 @@ def signal_free_confirm(request, token):
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def signal_free_unsubscribe(request, token):
-    subscriber = _validated_token(token, "unsubscribe")
+    try:
+        subscriber = _validated_token(token, "unsubscribe")
+    except SignalConsentStorageUnavailable:
+        return _consent_storage_unavailable()
     if subscriber is None or subscriber.status != "confirmed":
         return _answer({"ok": False, "detail": "Unsubscribe link invalid or expired."}, 404)
     if request.method == "GET":
@@ -276,10 +305,13 @@ def signal_free_unsubscribe(request, token):
             "You can stop free educational updates without payment, account login or an email to support.",
             "Unsubscribe",
         )
-    updated = MojSignalFreeSubscription.objects.filter(
-        pk=subscriber.pk, status="confirmed", nonce=subscriber.nonce,
-    ).update(status="unsubscribed", unsubscribed_at=timezone.now(),
-             nonce=secrets.token_urlsafe(24))
+    try:
+        updated = MojSignalFreeSubscription.objects.filter(
+            pk=subscriber.pk, status="confirmed", nonce=subscriber.nonce,
+        ).update(status="unsubscribed", unsubscribed_at=timezone.now(),
+                 nonce=secrets.token_urlsafe(24))
+    except DatabaseError:
+        return _consent_storage_unavailable()
     if not updated:
         return _answer({"ok": False, "detail": "Unsubscribe link invalid or expired."}, 404)
     return _answer({"ok": True, "status": "unsubscribed", "paid_entitlement": False})
