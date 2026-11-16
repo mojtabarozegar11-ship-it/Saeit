@@ -13,6 +13,7 @@ import re
 from collections.abc import Mapping
 
 from services.mpw_trx_merchant_binding import validate_tron_recipient
+from services.mojtaba_tron_owner_receiver import approved_recipient
 
 PRODUCT = "MOJPROP-STARTER30"
 NATIVE_AMOUNT_SUN = 30_000_000  # Exactly 30 native TRX; 1 TRX = 1e6 sun.
@@ -82,8 +83,13 @@ def validate_persisted_order(invoice: Starter30PersistedInvoice) -> None:
         raise NativeTRXMatchRejected("independent buyer terms evidence missing")
     try:
         _hex_recipient(invoice.recipient)
+        # A syntactically valid Base58Check address can belong to a STRANGER.
+        # Match the QR-verified owner recipient, never a buyer-supplied or
+        # stale persisted recipient. No RPC or invoice/payment activation.
+        if invoice.recipient != approved_recipient():
+            raise NativeTRXMatchRejected("recipient is not the owner-approved wallet")
     except (ValueError, TypeError, OverflowError) as exc:
-        raise NativeTRXMatchRejected("invalid owner-bound recipient") from exc
+        raise NativeTRXMatchRejected("invalid or unauthorized owner recipient") from exc
     if (invoice.payer_hex41 is not None
             and (type(invoice.payer_hex41) is not str or
                  HEX41.fullmatch(invoice.payer_hex41) is None)):
@@ -120,7 +126,9 @@ def assess_solidified_native_transfer(
         raise NativeTRXMatchRejected("txID is already assigned or replay state missing")
     if not isinstance(solidity_transaction, Mapping) or not isinstance(solidity_receipt, Mapping):
         raise NativeTRXMatchRejected("missing solidified transaction or receipt")
-    if solidity_transaction.get("Error") or solidity_receipt.get("Error"):
+    # A node error field is a failure even if its value is empty, None, zero
+    # or false; accepting a falsey error body could misclassify finality.
+    if "Error" in solidity_transaction or "Error" in solidity_receipt:
         raise NativeTRXMatchRejected("node returned an error, not finality")
     if solidity_transaction.get("txID") != txid or solidity_receipt.get("id") != txid:
         raise NativeTRXMatchRejected("txID disagreement")

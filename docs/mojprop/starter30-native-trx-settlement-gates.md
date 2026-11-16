@@ -7,8 +7,8 @@ This document describes the exact *unmet* production integration gates. Source t
 ## Verified existing code and missing integration
 
 - `services/mpw_trx_merchant_binding.py` already checksum-validates TRON Base58Check and binds each domain/merchant identity to a server-managed recipient; browser input may never override merchant details.
-- The separate source PR for the owner's QR-validated address must complete owner-approval and exact-head CI. Do not automatically enable invoice/solidity feature flags when the address is added.
-- `services/mojprop_starter30_tron_settlement.py` only compares **read-only, trusted solidified node observations** against an already issued immutable, signed-offer, buyer-consented database invoice.
+- The owner QR-validated receiving address now exists in reviewed source as `services/mojtaba_tron_owner_receiver.py`, but this does **not** establish merchant legal eligibility, independent wallet custody reconciliation, enabled billing, or customer invoices. Keep invoice/solidity flags disabled until separately approved and independently verified.
+- `services/mojprop_starter30_tron_settlement.py` only compares **read-only, trusted solidified node observations** against an already issued immutable, signed-offer, buyer-consented database invoice. It must reject even a *checksummed, valid* recipient different from the exact owner-approved wallet. Error fields returned by the node are fatal even if their value is empty/falsey.
 - The existing `MojPropOffer` quote is **USD/IRR-only**; do not mislabel a USD 149 blueprint or rewrite an old USD offer as 30 TRX. A separate reviewed native-TRX order/settlement model or a reconciled, schema-safe store adapter is required.
 
 ## Order issuance (NOT implemented)
