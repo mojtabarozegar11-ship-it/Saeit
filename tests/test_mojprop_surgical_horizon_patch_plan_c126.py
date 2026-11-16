@@ -65,6 +65,16 @@ class ExactByteHorizonPatchPlan(unittest.TestCase):
         candidate, info = plan(data, H(data))
         self.assertIsNone(candidate)
 
+    def test_10_all_empty_horizon_values_can_be_planned_no_write(self):
+        empty = OLD
+        for old in (b"now", b"7-days", b"30-days", b"initial"):
+            empty = empty.replace(b'value="' + old + b'"', b'value=""')
+        candidate, info = plan(empty, H(empty))
+        self.assertTrue(info["candidate_generated"])
+        self.assertEqual(info["replacement_count"], 4)
+        self.assertFalse(info["production_write_authorized"])
+        self.assertIn(b'<option value="urgent">Today / urgent</option>', candidate)
+
     def test_09_never_attest_backup_or_server_or_payment(self):
         candidate, info = plan(OLD, H(OLD))
         self.assertFalse(info["independent_file_backup_verified"])
