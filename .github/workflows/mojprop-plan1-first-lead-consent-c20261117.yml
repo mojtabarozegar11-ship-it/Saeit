@@ -57,6 +57,7 @@ jobs:
           python3 -m venv .venv
           .venv/bin/python -m pip install -q -r requirements.txt
           .venv/bin/python manage.py check
+          .venv/bin/python manage.py collectstatic --noinput
       - name: Run lead form, 20-language landing and public opt-in guards
         shell: bash
         run: |
