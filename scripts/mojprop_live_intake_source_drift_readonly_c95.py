@@ -54,6 +54,10 @@ def safe_source_state(root, rel, reference):
         with target.open("rb") as handle:
             body = handle.read(MAX_SOURCE + 1)
         return "matches" if exact_git_blob(body) == reference else "drifted"
+    except FileNotFoundError:
+        # Distinguish a genuinely absent reviewed module from unreadable
+        # content; never disclose arbitrary paths or exception messages.
+        return "missing"
     except (OSError, ValueError):
         return "unavailable"
 
