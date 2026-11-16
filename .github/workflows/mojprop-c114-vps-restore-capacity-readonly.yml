@@ -27,25 +27,43 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Verify fixed source blobs and sixteen isolated no-write tests
+      - name: Verify fixed source blobs and nineteen isolated no-write tests
         shell: bash
         run: |
           set -euo pipefail
           test ! -L scripts/mojprop_vps_restore_capacity_readonly_c114.py
           test ! -L scripts/mpw_vps_mount_capacity_readonly_20261105.py
-          test "$(git hash-object -- scripts/mojprop_vps_restore_capacity_readonly_c114.py)" = "5dd06b0c593a732a08272245db05a43c4c44edf2"
+          test "$(git hash-object -- scripts/mojprop_vps_restore_capacity_readonly_c114.py)" = "e1a1581320840396c582d2529beb3ce3169b9418"
           test "$(git hash-object -- scripts/mpw_vps_mount_capacity_readonly_20261105.py)" = "89a8b3ec3df04a8994c88caa8f6589bfa2f7ef26"
           python3 -B -m py_compile scripts/mojprop_vps_restore_capacity_readonly_c114.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_vps_restore_capacity_readonly_c114 -q
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mpw_vps_mount_capacity_readonly_20261105 -q
 
-      - name: Read actual factory VPS mount metadata with zero user data access
+      - name: Query actual factory VPS over previously verified fingerprint-pinned SSH
         shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          test "$(id -un)" = "githubops"
-          test -d /home/githubops/factory-runtime
-          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_vps_restore_capacity_readonly_c114.py |
+          : "${VPS_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/mojprop-c114-vps-ssh"
+          install -d -m 700 "$work"
+          trap 'rm -f -- "$work/key" "$work/known"; rmdir "$work" 2>/dev/null || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test -s "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          timeout 80s ssh -T -i "$work/key" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" \
+            -o ConnectTimeout=15 -o ConnectionAttempts=1 \
+            -o ForwardAgent=no -o RequestTTY=no \
+            githubops@178.239.147.150 \
+            'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
+            < scripts/mojprop_vps_restore_capacity_readonly_c114.py |
             python3 -c 'import json,sys; lines=sys.stdin.read(5000).splitlines(); pre="MOJPROP_C114_VPS_RESTORE_SCREEN="; z=[q for q in lines if q.startswith(pre)]; assert len(z)==1,"MISSING_SANITIZED_VPS_SCREEN"; data=json.loads(z[0][len(pre):]); assert data["schema"]=="mojprop.vps.restore_screen.readonly.v1" and data["read_only"] is True and data["owner_verified"] is True and data["factory_root_verified"] is True and data["live_services_modified"] is False and data["files_created_or_deleted"] is False and data["restoration_test_performed"] is False and data["production_release_authorized"] is False; print(z[0])'
-          echo 'MOJPROP_C114_READONLY_VPS_STORAGE_CHECK_EXECUTED=PASS'
-          echo 'Only candidate sizes, not verified independent restore, quota, encryption, or release.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'MOJPROP_C114_PINNED_SSH_VPS_READONLY=PASS'
+          echo 'Storage capacity is only a screen; no independent DB restore, payment or deployment was performed.' >> "$GITHUB_STEP_SUMMARY"
