@@ -3,6 +3,7 @@ import hashlib
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from scripts.mojprop_live_intake_source_drift_readonly_c95 import (
     EXPECTED, MAX_SOURCE, exact_git_blob, safe_source_state
@@ -40,12 +41,25 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
             target.write_bytes(b"unreviewed changes\n")
             self.assertEqual(safe_source_state(root, "core/mojprop_views.py", ref), "drifted")
 
-    def test_missing_source_is_unavailable_not_implicitly_matching(self):
+    def test_missing_source_is_explicitly_missing_not_implicitly_matching(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual(
                 safe_source_state(Path(d), "core/nonexistent.py", "0" * 40),
-                "unavailable"
+                "missing"
             )
+
+    def test_unreadable_existing_source_is_not_classified_as_missing(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            target = root / "existing.py"
+            target.write_bytes(b"present but unreadable")
+            target.chmod(0o600)
+            with patch.object(Path, "open", side_effect=PermissionError):
+                self.assertEqual(
+                    safe_source_state(root, "existing.py",
+                                      exact_git_blob(b"present but unreadable")),
+                    "unavailable"
+                )
 
     def test_nested_symlink_is_denied_without_following_content(self):
         with tempfile.TemporaryDirectory() as d:
