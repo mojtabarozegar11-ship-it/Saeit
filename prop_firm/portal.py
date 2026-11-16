@@ -202,6 +202,28 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
             # a 28-day challenge, even when the final P&L appears favourable.
             if any(not start <= mark.observed_at < end for mark in snapshots):
                 purchase_window_valid = False
+            # A verified account lifecycle must bound *both* execution and
+            # marked-equity observations. Otherwise a close booked before the
+            # stage opened, or after it was closed, could still qualify.
+            # Legacy rows without lifecycle dates remain governed by separate
+            # independent attestation/restore gates; this does not invent dates.
+            opened = account.opened_at
+            closed = account.closed_at
+            if opened is not None:
+                if (opened.tzinfo is None or opened.utcoffset() is None
+                        or opened < start or opened >= end
+                        or any(event.closed_at < opened for event in executions)
+                        or any(mark.observed_at < opened for mark in snapshots)):
+                    purchase_window_valid = False
+            if closed is not None:
+                if (closed.tzinfo is None or closed.utcoffset() is None
+                        or not start <= closed < end
+                        or (opened is not None and
+                            opened.tzinfo is not None and
+                            opened.utcoffset() is not None and closed < opened)
+                        or any(event.closed_at > closed for event in executions)
+                        or any(mark.observed_at > closed for mark in snapshots)):
+                    purchase_window_valid = False
             cohort_executions = PropExecution.objects.filter(
                 account__challenge_enrollment=purchase,
                 account__kind__in=(PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO),
