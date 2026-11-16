@@ -96,6 +96,44 @@ class MojPropLegacyUpgradeTests(unittest.TestCase):
                 installer.patch_admin(self.root / "core/admin.py", SOURCE / "core/admin.py")
         self.assertEqual(after, [(self.root / name).read_bytes() for name in PREFIXES])
 
+    def test_urlconf_comments_cannot_masquerade_as_live_business_routes(self):
+        import ast
+        target = self.root / "config/urls.py"
+        target.parent.mkdir(parents=True)
+        target.write_text(
+            'from django.urls import path\n'
+            'urlpatterns = []\n'
+            '# path("moj-prop-intake/", fake)\n'
+            '# path("moj-prop-status/", fake)\n'
+            '# path("moj-prop-quote/<str:token>/", fake)\n',
+            encoding="utf-8"
+        )
+        with patch.object(installer, "ROOT", self.root):
+            installer.patch_urlconf(target)
+        tree = ast.parse(target.read_text("utf-8"))
+        actual = installer._declared_url_routes(target.read_text("utf-8"))
+        self.assertEqual(actual, {
+            "moj-prop-intake/", "moj-prop-status/",
+            "moj-prop-quote/<str:token>/",
+        })
+        self.assertTrue(any(isinstance(node, ast.AugAssign) for node in tree.body))
+
+    def test_urlconf_with_real_business_routes_remains_unchanged(self):
+        target = self.root / "config/urls.py"
+        target.parent.mkdir(parents=True)
+        source = (
+            'from django.urls import path\n'
+            'urlpatterns = [\n'
+            '    path("moj-prop-intake/", intake),\n'
+            '    path("moj-prop-status/", status),\n'
+            '    path("moj-prop-quote/<str:token>/", quote),\n'
+            ']\n'
+        )
+        target.write_text(source, encoding="utf-8")
+        with patch.object(installer, "ROOT", self.root):
+            installer.patch_urlconf(target)
+        self.assertEqual(target.read_text(encoding="utf-8"), source)
+
     def test_installer_does_not_rewrite_0040_marker_hidden_in_comment(self):
         migrations = self.root / "core/migrations"
         (migrations / "0040_known.py").write_text("class Migration: pass\n")
