@@ -177,6 +177,30 @@ class Starter30ContractTests(unittest.TestCase):
         result = assess_journal(journal("0.00"))
         self.assertIn({"session": 1, "rule": "daily_loss"}, result["rule_breaches"])
 
+    def test_zero_then_zero_does_not_claim_second_daily_loss(self):
+        rows = journal("0.00", n=3)
+        result = assess_journal(rows)
+        self.assertIn({"session": 1, "rule": "daily_loss"}, result["rule_breaches"])
+        self.assertNotIn({"session": 2, "rule": "daily_loss"}, result["rule_breaches"])
+        self.assertNotIn({"session": 3, "rule": "daily_loss"}, result["rule_breaches"])
+        for session in (1, 2, 3):
+            self.assertIn({"session": session, "rule": "overall_peak_drawdown"}, result["rule_breaches"])
+
+    def test_recovery_after_zero_is_not_a_new_daily_loss(self):
+        rows = journal("100.00", n=4)
+        rows[0]["closing_equity_usd"] = "0.00"
+        rows[1]["closing_equity_usd"] = "25.00"
+        rows[2]["closing_equity_usd"] = "50.00"
+        rows[3]["closing_equity_usd"] = "48.00"
+        result = assess_journal(rows)
+        self.assertIn({"session": 1, "rule": "daily_loss"}, result["rule_breaches"])
+        self.assertNotIn({"session": 2, "rule": "daily_loss"}, result["rule_breaches"])
+        self.assertNotIn({"session": 3, "rule": "daily_loss"}, result["rule_breaches"])
+        self.assertIn({"session": 4, "rule": "daily_loss"}, result["rule_breaches"])
+        self.assertEqual(result["status"], "incomplete_training")
+        self.assertFalse(result["payment_recorded"])
+        self.assertFalse(result["funded_account_earned"])
+
     def test_public_contract_is_serializable(self):
         import json
         self.assertEqual(json.loads(json.dumps(public_product()))["price_sun"], 30_000_000)
