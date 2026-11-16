@@ -103,8 +103,11 @@ class SignedCompleteRestoreCapacityEvidenceTests(unittest.TestCase):
         self.assertFalse(proof["release_authorized"])
 
     def test_rejects_tampered_measurement_with_old_mac(self):
-        self.payload["capacity"]["tenant_quota_free_bytes"] = 1
-        self.write(sign=False)
+        old = json.loads(self.path.read_text(encoding="utf-8"))
+        old["capacity"]["tenant_quota_free_bytes"] = 1
+        # Keep the legitimate HMAC: only the capacity claim is tampered.
+        self.path.write_text(json.dumps(old, sort_keys=True), encoding="utf-8")
+        os.chmod(self.path, 0o600)
         self.deny()
 
     def test_rejects_bad_hmac_even_when_inventory_is_consistent(self):
