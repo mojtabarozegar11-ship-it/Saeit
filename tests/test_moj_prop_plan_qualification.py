@@ -31,6 +31,7 @@ class PurchasedPlanQualificationTests(TestCase):
             status=PropAccount.Status.ACTIVE,
             tier_index=5,starting_capital_usd=Decimal("3000"),
             reconciled_by_operator=True,
+            opened_at=START+timedelta(hours=1),
         )
 
     def six_days_at_plan6(self):
