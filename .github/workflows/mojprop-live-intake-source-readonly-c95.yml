@@ -35,7 +35,7 @@ jobs:
           python3 -B -m py_compile scripts/mojprop_passenger_source_readonly_c118.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_passenger_source_readonly_c118 -q
           test ! -L scripts/mojprop_passenger_source_readonly_c118.py
-          test "$(git hash-object -- scripts/mojprop_passenger_source_readonly_c118.py)" = "cfc1c4edbe29a133cac314aa9ee5a2eef5e24fb7"
+          test "$(git hash-object -- scripts/mojprop_passenger_source_readonly_c118.py)" = "f6507179c762bdea1e1bb28ea17d5e420e2b4dcb"
           test ! -L scripts/mojprop_live_intake_source_drift_readonly_c95.py
           test "$(git hash-object -- scripts/mojprop_live_intake_source_drift_readonly_c95.py)" = "fb5f1320f4795656390bfb34195a6e52c77fb6e3"
       - name: Connect only through pinned factory runner to the existing cPanel
