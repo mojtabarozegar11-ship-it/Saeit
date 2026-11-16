@@ -10,6 +10,8 @@ on:
       - "tests/test_mojprop_cpanel_horizon_parity_readonly_c125.py"
       - "scripts/mojprop_surgical_horizon_patch_plan_c126.py"
       - "tests/test_mojprop_surgical_horizon_patch_plan_c126.py"
+      - "scripts/mojprop_public_nojs_get_contract_c123.py"
+      - "tests/test_mojprop_public_nojs_get_contract_c123_20261116.py"
   workflow_dispatch:
 
 permissions:
@@ -39,6 +41,8 @@ jobs:
             "mojprop_root|https://mojplaywin.com/moj-prop/"
             "mojprop_catalog|https://mojplaywin.com/moj-prop/catalog/"
             "mojprop_intake_get|https://mojplaywin.com/moj-prop-intake/"
+            "mojprop_intake_html|https://mojplaywin.com/moj-prop-intake/?format=html"
+            "mojprop_status_html|https://mojplaywin.com/moj-prop-status/?format=html"
             "signal_desk|https://mojplaywin.com/moj-prop/signals/"
             "signal_free_signup_api|https://mojplaywin.com/moj-signal-free-subscribe/"
             "saman_brand_signals|https://mojplaywin.com/saman/market-signals/"
@@ -112,6 +116,11 @@ jobs:
           PY
             fi
           done
+          # Sensitive GET content (including CSRF) remains only in ephemeral runner
+          # files. Print Boolean shape diagnostics, never response bodies.
+          python3 -B scripts/mojprop_public_nojs_get_contract_c123.py \
+            "$check_dir/mojprop_intake_html.body" \
+            "$check_dir/mojprop_status_html.body"
           # Compare ONLY existing downloaded PUBLIC GET response; never submit
           # buyer details or echo HTML/CSRF. Current main may have fixed the
           # source while an older cPanel public document is still served.
