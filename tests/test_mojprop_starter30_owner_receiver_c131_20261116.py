@@ -100,10 +100,11 @@ class OwnerRecipientBoundSettlementTests(unittest.TestCase):
             match(alien, tx, receipt)
 
     def test_owner_wallet_registry_absent_fails_closed(self):
+        saved_invoice = invoice()
         with patch("services.mojprop_starter30_tron_settlement.approved_recipient",
                    side_effect=ValueError("invalid wallet registry")):
             with self.assertRaises(NativeTRXMatchRejected):
-                validate_persisted_order(invoice())
+                validate_persisted_order(saved_invoice)
 
     def test_owner_wallet_registry_changed_does_not_retarget_saved_invoice(self):
         old_invoice = invoice()
