@@ -82,24 +82,45 @@ def inspect() -> dict:
                 or info.st_uid not in (0, os.geteuid())):
             return result
         result["uapi_program_safe"] = True
-        process = subprocess.run(
+        # On some cPanel installations --user is permitted only for WHM
+        # administrative contexts. We have already authenticated the fixed
+        # *same account* via getpwuid; retry exactly once without --user.
+        # Both variants invoke only the documented read-only UAPI method.
+        env = {"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin",
+               "HOME": "/home/zomorod2", "USER": USERNAME,
+               "LOGNAME": USERNAME}
+        for args in (
             [UAPI_BINARY, "--output=json", "--user=" + USERNAME,
              "Backup", "list_backups"],
-            capture_output=True, timeout=14, check=False,
-            env={"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin",
-                 "HOME": "/home/zomorod2", "USER": USERNAME,
-                 "LOGNAME": USERNAME},
-        )
-        if (process.returncode != 0
-                or len(process.stdout) > MAX_API_BYTES
-                or len(process.stdout) == 0):
-            return result
-        result["uapi_query_completed"] = True
-        try:
-            parsed = json.loads(process.stdout)
-        except (UnicodeError, ValueError, TypeError):
-            return result
-        result.update(classify_backup_catalog(parsed))
+            [UAPI_BINARY, "--output=json", "Backup", "list_backups"],
+        ):
+            try:
+                process = subprocess.run(
+                    args, capture_output=True, timeout=14,
+                    check=False, env=env,
+                )
+            except (OSError, subprocess.SubprocessError):
+                result["uapi_outcome"] = "cli_unavailable_or_failed"
+                continue
+            if process.returncode != 0:
+                result["uapi_outcome"] = "cli_nonzero_or_feature_unavailable"
+                continue
+            if not 0 < len(process.stdout) <= MAX_API_BYTES:
+                result["uapi_outcome"] = "cli_output_size_invalid"
+                continue
+            result["uapi_query_completed"] = True
+            try:
+                parsed = json.loads(process.stdout)
+            except (UnicodeError, ValueError, TypeError):
+                result["uapi_outcome"] = "cli_json_invalid"
+                continue
+            summary = classify_backup_catalog(parsed)
+            if not summary["catalog_schema_recognized"]:
+                result["uapi_outcome"] = "api_denied_or_schema_unknown"
+                continue
+            result.update(summary)
+            result["uapi_outcome"] = "catalog_recognized"
+            break
     except (OSError, subprocess.SubprocessError, ValueError, KeyError):
         # Never expose subprocess stderr, backup names, private paths, IDs,
         # command output or API credentials, even on unexpected provider error.
