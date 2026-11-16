@@ -33,7 +33,7 @@ jobs:
           python3 -B -m py_compile scripts/mojprop_cpanel_uapi_cause_readonly_c111.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_cpanel_uapi_cause_readonly_c111 -q
           test ! -L scripts/mojprop_cpanel_uapi_cause_readonly_c111.py
-          test "$(git hash-object -- scripts/mojprop_cpanel_uapi_cause_readonly_c111.py)" = "75d44d36dc428d354f572325fcbf118f1b7590ad"
+          test "$(git hash-object -- scripts/mojprop_cpanel_uapi_cause_readonly_c111.py)" = "235f4c25ce6ee2657d521672cd89274419bee19c"
 
       - name: Connect existing VPS to pinned owner cPanel SSH
         shell: bash
