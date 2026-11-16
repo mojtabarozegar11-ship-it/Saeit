@@ -13,6 +13,8 @@ from unittest.mock import patch
 from scripts import deploy_mojplaywin_moj_prop_backend as backend
 
 
+REAL_RESTART_PASSENGER = backend.restart_passenger
+
 RUN = "840001"
 SHA = "a" * 40
 FILES = (Path("core/a.py"), Path("core/b.py"))
@@ -192,6 +194,20 @@ class MojPropBackupIntegrityTests(unittest.TestCase):
         self.assertTrue(target.is_symlink())
         self.assertEqual(external.read_bytes(), b"owner-unchanged")
         self.assertEqual(staged.read_bytes(), b"new-code")
+
+    def test_unconfirmed_touch_only_reload_can_never_report_success(self):
+        docroot = self.base / "private-fake-docroot"
+        docroot.mkdir()
+        with patch.object(backend, "DOCROOT", docroot), \
+                patch.object(backend, "_print_passenger_diagnostics"), \
+                patch.object(backend, "_passenger_config", return_value=None), \
+                patch.object(backend.shutil, "which", return_value=None), \
+                patch.object(backend, "_restart_public_lswsgi_workers", return_value=0):
+            with self.assertRaisesRegex(
+                RuntimeError, "Passenger restart not independently confirmed"
+            ):
+                REAL_RESTART_PASSENGER()
+        self.assertTrue((docroot / "tmp/restart.txt").is_file())
 
     def test_oversized_backup_manifest_refused_before_parse_or_restore(self):
         manifest = self.backup / "manifest.json"
