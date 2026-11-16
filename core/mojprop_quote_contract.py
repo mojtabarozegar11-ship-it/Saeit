@@ -138,7 +138,9 @@ def make_quote_snapshot(offer, *, now=None):
     }
 
 
-def render_public_quote(snapshot: dict) -> str:
+def render_public_quote(
+    snapshot: dict, *, service_route: str, product_id: int | None,
+) -> str:
     """Display a checked, unpaid quote without spoofable top-level headings.
 
     No financial operation occurs. The caller must independently validate
@@ -159,6 +161,14 @@ def render_public_quote(snapshot: dict) -> str:
             or snapshot["revenue_status"] != "not_received"
             or snapshot["payable"] is not False):
         raise QuoteContractError("public quote cannot attest payment or fulfillment")
+    if (type(service_route) is not str or service_route not in
+            ("blueprint", "signals", "brief", "audit", "digital")):
+        raise QuoteContractError("unrecognized customer service route")
+    if (product_id is not None and
+            (type(product_id) is not int or product_id <= 0)):
+        raise QuoteContractError("invalid catalog product identity")
+    if service_route == "digital" and product_id is None:
+        raise QuoteContractError("digital product quote requires a catalog product id")
     reference = snapshot["reference"]
     if type(reference) is not str or _REFERENCE.fullmatch(reference) is None:
         raise QuoteContractError("invalid buyer request reference")
@@ -190,6 +200,8 @@ def render_public_quote(snapshot: dict) -> str:
     lines = [
         "MOJ PROP / mojtaba.bot.ai - MANUAL PROPOSAL (NOT A PAYMENT INVOICE)",
         f"Reference: {reference} / version {version}",
+        f"Service route: {service_route}",
+        f"Catalog product ID: {product_id if product_id is not None else 'n/a'}",
         f"Deliverable: {title}",
         "Scope (quoted customer terms):",
         *quote_lines(scope),
