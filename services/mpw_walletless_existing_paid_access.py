@@ -95,7 +95,8 @@ def verified_existing_walletless_item_access(user, item_id, *, asset_is_releasab
                 or type(doc.get("sun")) is not int
                 or doc["sun"] <= 0):
             return False
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
+        # A damaged historical provider-reference field is not payment proof.
         return False
 
     try:
