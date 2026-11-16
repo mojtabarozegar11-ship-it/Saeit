@@ -140,14 +140,22 @@ def choose_python() -> Path:
 
 
 def backup_target(target: Path, backup: Path, manifest: dict, relative: Path) -> None:
+    assert_safe_parent(target, ROOT)
+    # A dangling symlink reports exists() == False; never treat it as absent.
+    if target.is_symlink():
+        raise RuntimeError("unsafe live backend target symlink before backup")
     if target.exists():
         assert_regular(target, "live target")
         saved = backup / relative
+        assert_safe_parent(saved, backup)
         saved.parent.mkdir(parents=True, exist_ok=True)
+        original_sha = digest(target)
         shutil.copy2(target, saved)
+        if digest(saved) != original_sha:
+            raise RuntimeError("backend backup copy differs from live source")
         manifest[str(relative)] = {
             "existed": True,
-            "sha256": digest(target),
+            "sha256": original_sha,
             "mode": stat.S_IMODE(target.stat().st_mode),
         }
     else:
@@ -157,6 +165,8 @@ def backup_target(target: Path, backup: Path, manifest: dict, relative: Path) ->
 def atomic_replace(source: Path, target: Path, mode: int) -> None:
     assert_regular(source, "staged source")
     assert_safe_parent(target, ROOT)
+    if target.is_symlink():
+        raise RuntimeError("backend live replacement target became symlink")
     target.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{target.name}.mojprop-", dir=str(target.parent)
@@ -561,11 +571,50 @@ def restart_passenger() -> None:
     print("MOJ_PROP_PASSENGER_RESTART=TOUCH_ONLY")
 
 
-def restore(backup: Path) -> None:
+def verify_backup_manifest(backup: Path) -> dict:
+    """Verify every saved file before any restore write; DB restore is separate."""
+    if backup.is_symlink() or not backup.is_dir():
+        raise RuntimeError("backend backup directory missing or unsafe")
     manifest_path = backup / "manifest.json"
-    if not manifest_path.is_file() or manifest_path.is_symlink():
-        raise RuntimeError("backend backup manifest is missing")
+    assert_regular(manifest_path, "backend backup manifest")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if type(manifest) is not dict:
+        raise RuntimeError("backend backup manifest must be a dictionary")
+    if manifest.get("files") != [str(relative) for relative in ALL_FILES]:
+        raise RuntimeError("backend backup inventory differs from pinned installer")
+    if type(manifest.get("run_id")) is not str:
+        raise RuntimeError("backend backup run_id is invalid")
+    validate_run_id(manifest["run_id"])
+    if manifest["run_id"] != backup.name:
+        raise RuntimeError("backend backup run_id mismatch")
+    if type(manifest.get("commit")) is not str:
+        raise RuntimeError("backend backup commit is invalid")
+    validate_commit(manifest["commit"])
+    for relative in ALL_FILES:
+        entry = manifest.get(str(relative))
+        if type(entry) is not dict or type(entry.get("existed")) is not bool:
+            raise RuntimeError("backend backup entry missing or invalid")
+        saved = backup / relative
+        assert_safe_parent(saved, backup)
+        if entry["existed"]:
+            sha = entry.get("sha256")
+            mode = entry.get("mode")
+            if type(sha) is not str or re.fullmatch(r"[0-9a-f]{64}", sha) is None:
+                raise RuntimeError("backend saved source has invalid digest")
+            if type(mode) is not int or not 0 <= mode <= 0o777:
+                raise RuntimeError("backend saved source has invalid mode")
+            assert_regular(saved, "backend saved source")
+            if digest(saved) != sha:
+                raise RuntimeError("backend saved source digest mismatch")
+        elif saved.exists() or saved.is_symlink():
+            raise RuntimeError("unexpected backup file for absent live source")
+    return manifest
+
+
+def restore(backup: Path) -> None:
+    # Unlike file-by-file checks, a corrupt later file cannot partially revert
+    # earlier live files. This is NOT a substitute for a DB restore.
+    manifest = verify_backup_manifest(backup)
     for relative in ALL_FILES:
         entry = manifest[str(relative)]
         target = ROOT / relative
@@ -573,8 +622,12 @@ def restore(backup: Path) -> None:
         if entry["existed"]:
             saved = backup / relative
             assert_regular(saved, "backend backup")
+            if digest(saved) != entry["sha256"]:
+                raise RuntimeError("backend backup changed during restore")
             atomic_replace(saved, target, int(entry["mode"]))
-        elif target.exists():
+            if digest(target) != entry["sha256"]:
+                raise RuntimeError("restored backend source hash mismatch")
+        elif target.exists() or target.is_symlink():
             assert_regular(target, "unexpected target")
             target.unlink()
     restart_passenger()
@@ -606,6 +659,20 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
     closure = check_schema_closure(ROOT, staged_root)
     print("MOJ_PROP_SCHEMA_CLOSURE=PASS; MIGRATIONS=" + ",".join(closure["source_chain"]))
     print("MOJ_PROP_DB_RESTORE_EVIDENCE=INDEPENDENTLY_REQUIRED")
+    # The reviewed commercial chain includes 0047 guest email recovery.
+    # A source-only check NEVER substitutes for an isolated MariaDB restore.
+    # Refuse an unknown later migration before backing up or writing files.
+    migration_target = "0047_mpw_guest_email_recovery"
+    if (closure["source_chain"][-1] != migration_target
+            or closure["source_chain"] != [
+                "0041_mojprop_request", "0042_mojprop_offer",
+                "0043_mojprop_digital_inquiry",
+                "0044_mojprop_acceptance_evidence",
+                "0045_mojprop_delivery_evidence",
+                "0046_signal_free_subscription",
+                migration_target,
+            ]):
+        raise RuntimeError("Moj Prop backend installer schema target is stale; release denied")
 
     backup = BACKUP_ROOT / run_id
     if backup.exists():
@@ -617,6 +684,7 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
     (backup / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+    verify_backup_manifest(backup)
 
     try:
         for relative in REPLACE_FILES:
@@ -643,7 +711,7 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         # unreviewed pending DDL on the commercial production database.
         # Schema closure rejected any unknown core migration >=0041.
         run_checked([str(python), "manage.py", "migrate",
-                     "core", "0046_signal_free_subscription", "--noinput"], ROOT)
+                     "core", migration_target, "--noinput"], ROOT)
         run_checked([str(python), "manage.py", "collectstatic", "--noinput"], ROOT)
 
         restart_passenger()
