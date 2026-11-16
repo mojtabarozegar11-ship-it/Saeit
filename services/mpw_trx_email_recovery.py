@@ -149,20 +149,44 @@ def _guest(order):
 
 
 def _ready(order):
-    """All items must be ready, not merely one item or a paid flag."""
-    Fulfillment = apps.get_model("mpw_commerce", "CommerceFulfillment")
-    fields = {f.name: f for f in Fulfillment._meta.fields}
-    item = fields.get("item")
-    if (item is None or getattr(getattr(item, "related_model", None), "_meta", None)
-            is None or item.related_model._meta.label_lower != "core.orderitem"
-            or "status" not in fields):
+    """Match every actual core OrderItem to exactly one READY/COMPLETE row.
+
+    Equality of aggregate row counts is not ownership proof: two duplicate
+    fulfillment rows for item A cannot stand in for a missing item B. A paid
+    order's completed item is still deliverable (COMPLETE is not UNREADY).
+    This is a read-only decision; no entitlement or email is issued here.
+    """
+    try:
+        from django.db.models import Q
+
+        Fulfillment = apps.get_model("mpw_commerce", "CommerceFulfillment")
+        fields = {f.name: f for f in Fulfillment._meta.fields}
+        item = fields.get("item")
+        if (item is None
+                or getattr(getattr(item, "related_model", None), "_meta", None) is None
+                or item.related_model._meta.label_lower != "core.orderitem"
+                or "status" not in fields):
+            return False
+        # A bounded query prevents a large hostile order from creating an
+        # unbounded recovery read or a misleading partially matched result.
+        item_ids = list(OrderItem.objects.filter(
+            order_id=order.pk
+        ).values_list("pk", flat=True)[:101])
+        if not 1 <= len(item_ids) <= 100 or len(set(item_ids)) != len(item_ids):
+            return False
+        matching = list(Fulfillment.objects.filter(
+            item_id__in=item_ids
+        ).filter(
+            Q(status__iexact="ready") | Q(status__iexact="complete")
+        ).values_list("item_id", flat=True)[:102])
+        return (len(matching) == len(item_ids)
+                and len(set(matching)) == len(matching)
+                and set(matching) == set(item_ids))
+    except Exception:
+        # A missing private app/schema or broken relationship must never
+        # reveal someone else's paid items or expose 500 on recovery GET.
+        LOG.warning("mpw_recovery_fulfillment_scope_unavailable")
         return False
-    count = OrderItem.objects.filter(order_id=order.pk).count()
-    if count < 1:
-        return False
-    return Fulfillment.objects.filter(
-        item__order_id=order.pk, status__iexact="ready"
-    ).count() == count
 
 
 def _eligible_orders(email_digest):
