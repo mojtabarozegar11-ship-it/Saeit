@@ -98,6 +98,13 @@ class PropAccount(models.Model):
                 enrollment = self.challenge_enrollment
                 if self.trader_id != enrollment.trader_id:
                     raise ValidationError("Funded plan belongs to a different trader")
+                # Contract and payment identity must survive every promotion.
+                # A pending/forged enrollment cannot back a funded-account
+                # compartment, even with a syntactically valid broker reference.
+                if self.policy_version != enrollment.terms_version:
+                    raise ValidationError("Funded account contract differs from purchased terms")
+                if enrollment.settlement_verified is not True:
+                    raise ValidationError("Funded account requires independently settled enrollment")
                 if self.tier_index < plan_for_code(enrollment.plan_code).starting_tier_index:
                     raise ValidationError("Funded account cannot start below purchased plan")
             if self.starting_capital_usd != LEVELS[self.tier_index]:
