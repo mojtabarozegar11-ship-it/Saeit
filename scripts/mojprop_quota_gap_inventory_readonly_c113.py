@@ -105,6 +105,114 @@ def _db_estimate():
     return value
 
 
+
+# Broad labels only. Raw table names, row counts, credentials and customer
+# records must NEVER enter the CI log, even when one table dominates storage.
+TABLE_CLASSES = (
+    "event_and_audit", "payment_and_orders", "gameplay",
+    "signals_and_prop", "content_research", "sessions",
+    "system_tables", "other",
+)
+
+
+def table_class(table_name):
+    """Coarse advisory labels from schema metadata, never a deletion policy."""
+    if (type(table_name) is not str
+            or re.fullmatch(r"[A-Za-z0-9_]{1,128}", table_name) is None):
+        return "other"
+    name = table_name.lower()
+    if any(word in name for word in (
+            "audit", "event", "log", "history", "activity", "outbox",
+            "tracking", "telemetry")):
+        return "event_and_audit"
+    if any(word in name for word in (
+            "payment", "purchase", "invoice", "order", "checkout",
+            "settlement", "wallet", "transaction")):
+        return "payment_and_orders"
+    if any(word in name for word in (
+            "mojcoin", "game", "quest", "hero", "building", "player")):
+        return "gameplay"
+    if any(word in name for word in ("mojprop", "signal", "trading", "lead")):
+        return "signals_and_prop"
+    if any(word in name for word in (
+            "research", "article", "publication", "book", "content")):
+        return "content_research"
+    if "session" in name:
+        return "sessions"
+    if name.startswith(("auth_", "django_", "admin_")):
+        return "system_tables"
+    return "other"
+
+
+def classify_table_storage(rows):
+    """Aggregate only bounded information_schema metadata, never table names.
+
+    DATA_LENGTH and INDEX_LENGTH are estimates; grouping by identifier is
+    descriptive, not permission to delete, truncate or OPTIMIZE any table.
+    """
+    if type(rows) not in (tuple, list) or not 1 <= len(rows) <= 10000:
+        raise ValueError("invalid metadata table count")
+    groups = {key: 0 for key in TABLE_CLASSES}
+    ranked = []
+    for row in rows:
+        if type(row) not in (tuple, list) or len(row) != 3:
+            raise ValueError("invalid metadata shape")
+        name, data, index = row
+        if type(name) is not str:
+            raise ValueError("invalid metadata identifier")
+        sizes = []
+        for value in (data, index):
+            if type(value) not in (int, Decimal):
+                raise ValueError("invalid metadata size")
+            if value < 0 or value > 100 * 1024**4 or int(value) != value:
+                raise ValueError("invalid metadata size range")
+            sizes.append(int(value))
+        size = sum(sizes)
+        label = table_class(name)
+        groups[label] += size
+        ranked.append((size, label))
+    # Never log raw table identifiers. Top-rank labels are broad hints only.
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return {
+        "status": "metadata_only",
+        "table_count_bucket": (
+            "1-64" if len(rows) <= 64 else
+            "65-256" if len(rows) <= 256 else
+            "257-1024" if len(rows) <= 1024 else ">1024"
+        ),
+        "by_class_mib_bucket": {
+            key: bucket_bytes(size) for key, size in groups.items()
+        },
+        "largest_six": [
+            {"rank": i + 1, "class": label, "mib_bucket": bucket_bytes(size)}
+            for i, (size, label) in enumerate(ranked[:6])
+        ],
+        "sum_estimate_mib_bucket": bucket_bytes(sum(groups.values())),
+        "safe_to_delete_tables_identified": False,
+        "isolated_restore_proven": False,
+    }
+
+
+def _db_metadata_profile():
+    from django.db import connection
+    if connection.vendor != "mysql":
+        raise ValueError("wrong DB driver")
+    connection.ensure_connection()
+    def select_only(execute, sql, params, many, context):
+        if type(sql) is not str or not sql.lstrip().upper().startswith("SELECT "):
+            raise PermissionError("non-SELECT metadata blocked")
+        return execute(sql, params, many, context)
+    with connection.execute_wrapper(select_only):
+        with connection.cursor() as cur:
+            cur.execute(
+                "SELECT TABLE_NAME, COALESCE(DATA_LENGTH,0), "
+                "COALESCE(INDEX_LENGTH,0) FROM information_schema.TABLES "
+                "WHERE TABLE_SCHEMA = DATABASE() LIMIT 10001"
+            )
+            rows = cur.fetchall()
+    return classify_table_storage(rows)
+
+
 def _quota_bytes():
     r = subprocess.run(
         [UAPI, "--output=json", "Quota", "get_quota_info"],
@@ -155,6 +263,7 @@ def main():
         "quota_shortfall_bucket_mib": "unknown",
         "combined_quota_capacity_sufficient": False,
         "category_usage": {},
+        "database_table_profile": {"status": "unavailable"},
         "database_dump_created": False,
         "isolated_restore_executed": False,
         "customer_records_accessed": False,
@@ -175,6 +284,13 @@ def main():
         django.setup()
         result["probe_stage"] = "db_metadata"
         db = _db_estimate()
+        # A separate SELECT-only metadata query. Its failure never changes
+        # the quota/release determination or exposes table identifiers.
+        try:
+            result["database_table_profile"] = _db_metadata_profile()
+        except Exception as exc:
+            result["database_table_profile"] = {"status": "unavailable"}
+            result["db_profile_error_class"] = type(exc).__name__
         needed = 2 * db + HEADROOM
         result["probe_stage"] = "uapi_quota"
         free = _quota_bytes()
