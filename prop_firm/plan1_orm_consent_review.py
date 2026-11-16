@@ -23,10 +23,11 @@ from .plan1_private_order_draft import (
 
 
 def _require_authorized_staff(actor):
-    """Only an explicitly permissioned internal operator may review consent."""
+    """Match the owner-private CRM admin boundary: active superuser + permission."""
     if (actor is None or getattr(actor, "is_authenticated", None) is not True
             or getattr(actor, "is_active", None) is not True
-            or getattr(actor, "is_staff", None) is not True):
+            or getattr(actor, "is_staff", None) is not True
+            or getattr(actor, "is_superuser", None) is not True):
         raise Plan1OrderGateClosed("authenticated active staff required")
     permission = getattr(actor, "has_perm", None)
     if not callable(permission):
@@ -160,6 +161,11 @@ def review_verified_precontract_for_interest(
             or link.kyc_proven is not False
             or link.buyer_contact_authorized_by_this_module is not False):
         raise Plan1OrderGateClosed("private lineage may not authorize commerce")
+    # An expired case must not survive a slow lock acquisition or verification.
+    final_now = timezone.now()
+    if (final_now.tzinfo is None or final_now.utcoffset() is None
+            or draft.expires_at_sec <= int(final_now.timestamp())):
+        raise Plan1OrderGateClosed("private review expired during canonical lookup")
     return VerifiedPrivateHandoff(
         interest_pk=interest_pk, request_ref=request_ref,
         private_review_ref=draft.private_review_ref,
