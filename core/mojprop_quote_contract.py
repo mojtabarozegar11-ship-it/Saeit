@@ -24,7 +24,14 @@ def _text(value, name, minimum, maximum):
             or any((ord(ch) < 32 and ch not in "\n\t")
                    or 0xD800 <= ord(ch) <= 0xDFFF for ch in value)):
         raise QuoteContractError("invalid " + name)
-    # Customer-facing price/scope/exclusion fields must not permit invisible\n    # Unicode formatting or bidirectional overrides that spoof contract terms.\n    if any(unicodedata.category(ch) in ("Cf", "Zl", "Zp", "Cs")\n           or ord(ch) in range(0x202A, 0x202F)\n           or ord(ch) in range(0x2066, 0x206A)\n           for ch in value):\n        raise QuoteContractError("unsafe invisible quote formatting in " + name)\n    if name == "title" and any(ch in value for ch in ("\n", "\t", "\u2028", "\u2029")):
+    # Customer-facing price/scope/exclusion fields must not permit invisible
+    # Unicode formatting or bidirectional overrides that spoof contract terms.
+    if any(unicodedata.category(ch) in ("Cf", "Zl", "Zp", "Cs")
+           or ord(ch) in range(0x202A, 0x202F)
+           or ord(ch) in range(0x2066, 0x206A)
+           for ch in value):
+        raise QuoteContractError("unsafe invisible quote formatting in " + name)
+    if name == "title" and any(ch in value for ch in ("\n", "\t", "\u2028", "\u2029")):
         raise QuoteContractError("title must not inject a second proposal line")
     return value.strip()
 
