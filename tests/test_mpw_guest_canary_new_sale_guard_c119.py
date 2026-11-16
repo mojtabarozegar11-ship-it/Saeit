@@ -3,9 +3,12 @@
 Pure tests: no Django import, no network, no customer database, no payments.
 """
 import ast
+import sys
+import types
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 SOURCE = Path(__file__).resolve().parents[1] / "services/mpw_trx_guest_commerce.py"
 TEXT = SOURCE.read_text(encoding="utf-8")
@@ -93,6 +96,61 @@ class NewTrxMerchantCanaryTests(unittest.TestCase):
         self.assertIn('Http404("New TRX checkout unavailable")', TEXT)
         self.assertIn('Http404("New TRX invoices unavailable")', TEXT)
         self.assertNotIn("MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED = True", TEXT)
+
+
+    def test_09_checkout_get_fails_before_db_without_verified_merchant(self):
+        node = next(n for n in TREE.body if isinstance(n, ast.FunctionDef)
+                    and n.name == "_checkout_page")
+        scope = {"_new_trx_merchant_canary_is_true": pure_canary_guard(),
+                 "Http404": LookupError}
+        exec(compile(ast.Module(body=[node], type_ignores=[]),
+                     str(SOURCE), "exec"), scope)
+        conf = types.ModuleType("django.conf")
+        conf.settings = SimpleNamespace(
+            MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED=False)
+        with patch.dict(sys.modules, {"django": types.ModuleType("django"),
+                                      "django.conf": conf}):
+            with self.assertRaisesRegex(LookupError, "New TRX checkout unavailable"):
+                scope["_checkout_page"](object(), 72, {})
+
+    def test_10_start_order_denied_without_identity_or_invoice_dispatch(self):
+        node = next(n for n in TREE.body if isinstance(n, ast.FunctionDef)
+                    and n.name == "patch_commercial")
+        dispatch = Mock(return_value=SimpleNamespace(status_code=201))
+        scope = {"_new_trx_merchant_canary_is_true": pure_canary_guard(),
+                 "Http404": LookupError, "_dispatch": dispatch}
+        exec(compile(ast.Module(body=[node], type_ignores=[]),
+                     str(SOURCE), "exec"), scope)
+        fake = {"django": types.ModuleType("django"),
+                "django.views": types.ModuleType("django.views"),
+                "django.views.decorators": types.ModuleType("django.views.decorators"),
+                "django.views.decorators.cache": types.ModuleType("django.views.decorators.cache"),
+                "django.views.decorators.csrf": types.ModuleType("django.views.decorators.csrf"),
+                "django.views.decorators.http": types.ModuleType("django.views.decorators.http"),
+                "django.conf": types.ModuleType("django.conf")}
+        for mod, key in (("django.views.decorators.cache", "never_cache"),
+                         ("django.views.decorators.csrf", "csrf_protect"),
+                         ("django.views.decorators.http", "require_GET"),
+                         ("django.views.decorators.http", "require_POST")):
+            setattr(fake[mod], key, lambda view: view)
+        ns = {"_" + name: Mock() for name in (
+            "start_order", "show_invoice", "invoice_status",
+            "reconcile_invoice", "download_paid")}
+        with patch.dict(sys.modules, fake):
+            scope["patch_commercial"](ns)
+            for flag in (False, None, 1, "true"):
+                with self.subTest(flag=flag):
+                    fake["django.conf"].settings = SimpleNamespace(
+                        MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED=flag)
+                    with self.assertRaisesRegex(LookupError, "New TRX invoices unavailable"):
+                        ns["start_order"](object(), product_id=72)
+                    dispatch.assert_not_called()
+            # Existing legitimate paid buyers must retain protected invoice
+            # retrieval; no new identity is created in this path.
+            fake["django.conf"].settings = SimpleNamespace(
+                MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED=False)
+            ns["show_invoice"](object(), invoice_id=123)
+            self.assertEqual(dispatch.call_count, 1)
 
 
 if __name__ == "__main__":
