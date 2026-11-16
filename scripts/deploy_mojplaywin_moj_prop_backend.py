@@ -832,11 +832,10 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         raise RuntimeError("Passenger application root is missing or redirected")
     if DOCROOT.is_symlink() or not DOCROOT.is_dir():
         raise RuntimeError("MojPlayWin document root is missing or redirected")
-    assert_regular(DOCROOT / "passenger_wsgi.py", "Passenger routing file")
-    if "Saeit-staging" not in (DOCROOT / "passenger_wsgi.py").read_text(
-        encoding="utf-8", errors="replace"
-    ):
-        raise RuntimeError("Passenger routing file no longer points to Saeit-staging")
+    # Previously a comment containing 'Saeit-staging' could spoof the route.
+    # The exact audited owner WSGI bytes are a stronger *source* precondition,
+    # although not proof of the executing Passenger process or safe DB restore.
+    verify_reviewed_passenger_entrypoint(DOCROOT)
     if staged_root.is_symlink() or not staged_root.is_dir():
         raise RuntimeError("backend staging root is missing or unsafe")
     for relative in ALL_FILES:
