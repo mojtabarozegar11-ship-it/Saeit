@@ -118,6 +118,10 @@ def probe(tenant, role, *, transport=None):
     safe_type = bool(re.match(r"^(text/html|application/json|application/xhtml\+xml)(;|$)",
                               content_type, flags=re.I))
     valid = status == 200 and 64 <= len(data) <= 262144 and safe_type
+    html_quality = None
+    if valid and content_type.lower().startswith("text/html"):
+        from .mojtaba_site_quality import assess_html
+        html_quality = assess_html(data)
     return {
         "bot": CANONICAL_BOT, "tenant": tenant, "role": role,
         "state": "http_probe_ok" if valid else "unverified",
@@ -125,6 +129,7 @@ def probe(tenant, role, *, transport=None):
         "response_sha256": sha256(data).hexdigest() if valid else None,
         "publication_verified": False, "payment_verified": False,
         "product_generated_verified": False,
+        "site_html_quality": html_quality,
     }
 
 
