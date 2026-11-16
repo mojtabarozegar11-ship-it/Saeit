@@ -76,6 +76,59 @@ def classify_file(home: Path, relative: str) -> dict:
                   digest.hexdigest())
 
 
+DIRS = {
+    "zomorodmelal": ".private/zomorod-business",
+    "mojplaywin": ".private_mojplaywin_main_agents",
+}
+
+
+def scoped_storage_census(home: Path, relative: str) -> dict:
+    """Bounded metadata-only tenant usage census, never opens file data."""
+    parts = Path(relative).parts
+    path = home
+    for part in parts:
+        path = path / part
+        if path.is_symlink():
+            return {"state": "unsafe_symlink", "files": None, "bytes": None}
+    if not path.is_dir():
+        return {"state": "unavailable", "files": None, "bytes": None}
+    stack, seen = [(path, 0)], set()
+    nfiles = nbytes = links = entries = 0
+    incomplete = False
+    while stack and entries < 5000:
+        directory, depth = stack.pop()
+        try:
+            with os.scandir(directory) as rows:
+                for row in rows:
+                    entries += 1
+                    if entries > 5000:
+                        incomplete = True
+                        break
+                    metadata = row.stat(follow_symlinks=False)
+                    if stat.S_ISLNK(metadata.st_mode):
+                        links += 1
+                    elif stat.S_ISREG(metadata.st_mode):
+                        nfiles += 1
+                        nbytes += metadata.st_size
+                    elif stat.S_ISDIR(metadata.st_mode):
+                        key = (metadata.st_dev, metadata.st_ino)
+                        if key not in seen and depth < 6:
+                            seen.add(key)
+                            stack.append((Path(row.path), depth + 1))
+                        else:
+                            incomplete = True
+        except OSError:
+            incomplete = True
+    return {
+        "state": "partial_unknown_remainder" if (incomplete or stack) else "bounded_complete",
+        "files": nfiles, "bytes": nbytes,
+        "symlink_entries_ignored": links,
+        "entries_seen": min(entries, 5000),
+        "verified_reclaimable_bytes": 0,
+        "file_bodies_read": False,
+    }
+
+
 def scan(home: Path, *, cron_text: str | None) -> dict:
     home = Path(home)
     if home.is_symlink() or not home.is_dir():
@@ -85,6 +138,10 @@ def scan(home: Path, *, cron_text: str | None) -> dict:
     file_results = {
         tenant: [classify_file(home, relative) for relative in relatives]
         for tenant, relatives in FILES.items()
+    }
+    tenant_storage = {
+        tenant: scoped_storage_census(home, relative)
+        for tenant, relative in DIRS.items()
     }
     cron_results = {}
     for tenant, marker in CRON_MARKERS.items():
@@ -109,6 +166,7 @@ def scan(home: Path, *, cron_text: str | None) -> dict:
         "canonical_bot": CANONICAL,
         "scope": "cpanel_two_site_agent_subtrees_only",
         "files": file_results,
+        "tenant_storage": tenant_storage,
         "cron": cron_results,
         "candidate_bytes_not_confirmed_reclaimable": sum(
             item["bytes"] for rows in file_results.values() for item in rows
