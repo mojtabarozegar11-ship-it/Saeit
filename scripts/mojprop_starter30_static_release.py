@@ -178,6 +178,9 @@ def _manifest(run_id: str, commit: str, source: dict[str, bytes]) -> dict:
     _safe_id(run_id, commit)
     return {"schema": "mojprop.starter30.static.v1", "run_id": run_id,
             "commit": commit, "files": {name: sha(data) for name, data in source.items()},
+            "reviewed_source_blobs": {
+                name: REVIEWED_GIT_BLOBS[name] for name in FILES
+            },
             "scope": "static-no-payment-no-backend"}
 
 
