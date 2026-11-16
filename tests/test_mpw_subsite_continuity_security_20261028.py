@@ -188,7 +188,7 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
     def test_rejected_redirect_names_only_approved_source_route(self):
         # Live guard had only a generic failure, so operators could not tell
         # which protected site redirected. Never reveal redirect Location.
-        source = guard.ORIGIN + "/zahra$/"
+        source = guard.ORIGIN + guard.PROTECTED_CHILDREN[-1]
         seen = []
 
         class _Refused:
@@ -203,7 +203,7 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
             with self.assertRaises(guard.UnsafeRedirect) as failure:
                 guard.get(source, attempts=3)
         text = str(failure.exception)
-        self.assertIn("/zahra$/", text)
+        self.assertIn(guard.PROTECTED_CHILDREN[-1], text)
         self.assertNotIn("outside.example", text)
         self.assertNotIn("PRIVATE", text)
         self.assertEqual(seen, [source])
