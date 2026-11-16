@@ -112,11 +112,38 @@ class MojPropLegacyUpgradeTests(unittest.TestCase):
             installer.patch_urlconf(target)
         tree = ast.parse(target.read_text("utf-8"))
         actual = installer._declared_url_routes(target.read_text("utf-8"))
-        self.assertEqual(actual, {
+        self.assertEqual(set(actual), {
             "moj-prop-intake/", "moj-prop-status/",
             "moj-prop-quote/<str:token>/",
         })
         self.assertTrue(any(isinstance(node, ast.AugAssign) for node in tree.body))
+
+    def test_urlconf_rejects_existing_business_route_bound_to_unreviewed_view(self):
+        target = self.root / "config/urls.py"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        original = (
+            'from django.urls import path\n'
+            'urlpatterns = [path("moj-prop-intake/", attacker_view)]\n'
+        )
+        target.write_text(original, encoding="utf-8")
+        with patch.object(installer, "ROOT", self.root):
+            with self.assertRaisesRegex(RuntimeError, "unreviewed view"):
+                installer.patch_urlconf(target)
+        self.assertEqual(target.read_text("utf-8"), original)
+
+    def test_urlconf_rejects_duplicate_live_routes_instead_of_claiming_success(self):
+        target = self.root / "config/urls.py"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        original = (
+            'from django.urls import path\n'
+            'urlpatterns = [path("moj-prop-intake/", mojprop_intake), '
+            'path("moj-prop-intake/", other_view)]\n'
+        )
+        target.write_text(original, encoding="utf-8")
+        with patch.object(installer, "ROOT", self.root):
+            with self.assertRaisesRegex(RuntimeError, "duplicate Moj Prop"):
+                installer.patch_urlconf(target)
+        self.assertEqual(target.read_text("utf-8"), original)
 
     def test_urlconf_with_real_business_routes_remains_unchanged(self):
         target = self.root / "config/urls.py"
@@ -124,9 +151,9 @@ class MojPropLegacyUpgradeTests(unittest.TestCase):
         source = (
             'from django.urls import path\n'
             'urlpatterns = [\n'
-            '    path("moj-prop-intake/", intake),\n'
-            '    path("moj-prop-status/", status),\n'
-            '    path("moj-prop-quote/<str:token>/", quote),\n'
+            '    path("moj-prop-intake/", mojprop_intake),\n'
+            '    path("moj-prop-status/", mojprop_receipt_status),\n'
+            '    path("moj-prop-quote/<str:token>/", customer_quote),\n'
             ']\n'
         )
         target.write_text(source, encoding="utf-8")
