@@ -207,7 +207,9 @@ def _cpanel_quota_data_adequate(document, needed_bytes):
 def _cpanel_uapi_quota_result(needed_bytes):
     """Official owner-only read-only UAPI: explicit user, then same-user CLI."""
     import subprocess
-    binary = "/usr/local/cpanel/bin/uapi"
+    # C111 owner-only cPanel probe: /usr/bin/uapi is a real regular executable;
+    # the conventional /usr/local/cpanel/bin/uapi is absent in this SSH view.
+    binary = "/usr/bin/uapi"
     variants = (
         [binary, "--output=json", "--user=" + ACCOUNT,
          "Quota", "get_quota_info"],
