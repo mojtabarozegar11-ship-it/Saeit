@@ -146,5 +146,46 @@ class MojPropQuotaGapInventoryTests(unittest.TestCase):
         self.assertIn('"production_deploy_authorized": False', source)
 
 
+    def test_17_cpanel_backup_listing_is_bounded_and_never_leaks_names(self):
+        payload = {"result": {"status": 1, "data": [
+            {"file": "private-personal-customer-data-123.sql.gz", "size": 999}
+        ]}}
+        with patch.object(probe.subprocess, "run", return_value=SimpleNamespace(
+                stdout=json.dumps(payload))) as run:
+            result = probe._backup_inventory_readonly()
+        self.assertEqual(result["status"], "user_list_nonempty_unverified")
+        self.assertEqual(result["count_band"], "1-10")
+        self.assertNotIn("private-personal", json.dumps(result))
+        self.assertFalse(result["provider_managed_backups_verified"])
+        self.assertFalse(result["independent_restore_verified"])
+        self.assertEqual(run.call_args.args[0],
+                         [probe.UAPI, "--output=json", "Backup", "list_backups"])
+        self.assertEqual(run.call_args.kwargs["env"], probe.ENV)
+        self.assertTrue(run.call_args.kwargs["check"])
+
+    def test_18_empty_user_backups_must_not_be_reported_as_no_host_backup(self):
+        with patch.object(probe.subprocess, "run", return_value=SimpleNamespace(
+                stdout=json.dumps({"result": {"status": 1, "data": []}}))):
+            result = probe._backup_inventory_readonly()
+        self.assertEqual(result["status"], "empty_list_not_host_backup_proof")
+        self.assertEqual(result["count_band"], "0")
+        self.assertFalse(result["provider_managed_backups_verified"])
+
+    def test_19_fail_closed_on_invalid_backup_metadata_or_api_error(self):
+        for response in ('{"result":{"status":0,"data":[]}}',
+                         '{"result":{"status":1,"data":["bad"]}}',
+                         '{"result":{"status":1,"data":{}}}',
+                         '{"result":null}', "not-json"):
+            with self.subTest(response=response):
+                with patch.object(probe.subprocess, "run",
+                                  return_value=SimpleNamespace(stdout=response)):
+                    result = probe._backup_inventory_readonly()
+                self.assertIn(result["status"],
+                              ("feature_unavailable_or_api_failed",
+                               "invalid_index", "invalid_response",
+                               "invalid_json"))
+                self.assertFalse(result["release_authorized"])
+
+
 if __name__ == "__main__":
     unittest.main()
