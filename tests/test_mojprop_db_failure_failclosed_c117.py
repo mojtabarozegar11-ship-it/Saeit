@@ -148,6 +148,23 @@ class MojPropCrmOutageC117Tests(TestCase):
         self.assertNotIn("receipt_token", result.json())
         self.assertEqual(MojPropRequest.objects.count(), 0)
 
+    def test_13_invalid_receipt_never_looks_up_private_crm_database(self):
+        with patch.object(MojPropRequest.objects, "filter",
+                          side_effect=DatabaseError("private database unavailable")):
+            json_response = self.browser.post(
+                "/moj-prop-status/",
+                data=json.dumps({"receipt_token": "bad"}),
+                content_type="application/json", HTTP_X_CSRFTOKEN=self.csrf,
+            )
+            html_response = self.browser.post(
+                "/moj-prop-status/?format=html",
+                data={"receipt_token": "bad"}, HTTP_X_CSRFTOKEN=self.csrf,
+            )
+        self.assertEqual(json_response.status_code, 404)
+        self.assertEqual(html_response.status_code, 404)
+        self.assertNotIn(b"private database unavailable", json_response.content)
+        self.assertNotIn(b"private database unavailable", html_response.content)
+
     def test_07_json_receipt_status_db_failure_is_private_503(self):
         created = self.request(keyed=True)
         token = created.json()["receipt_token"]
