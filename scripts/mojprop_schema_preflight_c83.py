@@ -183,6 +183,14 @@ def check_schema_closure(live_root, staged_root, *, source_only_selftest=False):
             if head.isdigit() and int(head) >= 41 and migration.stem not in set(MIGRATIONS):
                 raise RuntimeError("unreviewed staged core migration: " + migration.stem)
 
+    if not source_only_selftest:
+        # Even if the release tar omits migration 0048, it must not install
+        # the corresponding Django model definitions against a 0047 schema.
+        new_schema = {"MojPropStarter30Order", "MojPropStarter30TxClaim"}
+        hidden = _classes(staged_root / "core/models.py") & new_schema
+        if hidden:
+            raise RuntimeError("unreviewed staged Starter30 model schema: " + ",".join(sorted(hidden)))
+
     for name in MODELS:
         if name not in _classes(staged_root / "core/models.py"):
             raise RuntimeError("commercial source model is missing: " + name)
