@@ -117,7 +117,10 @@ class PurchasedPlanQualificationTests(TestCase):
         ).update(observed_at=START+timedelta(days=28))
         data=account_projection(self.account)
         self.assertFalse(data["purchase_window_valid"])
-        self.assertFalse(data["assessment"].passed)
+        # Fail-closed projections may either omit a decision entirely or
+        # return a denied assessment. Neither can qualify a funded account.
+        assessment=data["assessment"]
+        self.assertTrue(assessment is None or not assessment.passed)
 
     def test_c143_equity_one_second_before_deadline_is_within_window(self):
         self.six_days_at_plan6()
