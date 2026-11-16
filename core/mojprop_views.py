@@ -15,7 +15,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
@@ -207,6 +207,22 @@ def _json(data, status=200):
     return response
 
 
+def _crm_storage_unavailable():
+    """Fail closed without exposing buyer PII or claiming a lead was saved.
+
+    A write might have committed before the connection failed. The browser's
+    unchanged UUIDv4 idempotency key is the only safe retry/reconciliation key.
+    """
+    response = _json({
+        "ok": False,
+        "detail": "Request status unavailable. Keep your original request key and retry later.",
+        "storage_confirmed": False,
+        "payment_status": "not_collected_by_this_service",
+    }, status=503)
+    response["Retry-After"] = "60"
+    return response
+
+
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def mojprop_intake(request):
@@ -354,12 +370,19 @@ def _mojprop_intake_api(request):
     # Reconnect before throttling: an already persisted, identical retry must
     # recover the receipt instead of creating a sixth lead or a second quote.
     if keyed_id:
-        prior = MojPropRequest.objects.filter(request_id=keyed_id).first()
+        try:
+            prior = MojPropRequest.objects.filter(request_id=keyed_id).first()
+        except DatabaseError:
+            return _crm_storage_unavailable()
         if prior is not None:
             return existing_keyed_response(prior)
 
     ip_hash = _ip_hash(request)
-    if _rate_limited(email, ip_hash):
+    try:
+        blocked = _rate_limited(email, ip_hash)
+    except DatabaseError:
+        return _crm_storage_unavailable()
+    if blocked:
         response = _json(
             {"ok": False, "detail": "Too many requests. Please try again later.", "retry_after": 600},
             status=429,
@@ -390,10 +413,15 @@ def _mojprop_intake_api(request):
             if keyed_id:
                 # Unique DB index serializes competing first POSTs. Never
                 # generate a second CRM lead for a conflicting keyed retry.
-                prior = MojPropRequest.objects.filter(request_id=keyed_id).first()
+                try:
+                    prior = MojPropRequest.objects.filter(request_id=keyed_id).first()
+                except DatabaseError:
+                    return _crm_storage_unavailable()
                 if prior is not None:
                     return existing_keyed_response(prior)
-                return _json({"ok": False, "detail": "Request state unavailable."}, status=503)
+                return _crm_storage_unavailable()
+        except DatabaseError:
+            return _crm_storage_unavailable()
     if request_obj is None:
         return _json({"ok": False, "detail": "Could not allocate a request ID. Please retry."}, status=503)
 
@@ -427,8 +455,15 @@ def mojprop_receipt_status(request):
         request_id = verify_receipt_token(token)
         if request_id is None:
             return status_form(request, error="Receipt invalid or expired.", status=404)
-        stage = (MojPropRequest.objects.filter(request_id=request_id)
-                 .values_list("status", flat=True).first())
+        try:
+            stage = (MojPropRequest.objects.filter(request_id=request_id)
+                     .values_list("status", flat=True).first())
+        except DatabaseError:
+            response = status_form(
+                request, error="Review status temporarily unavailable.", status=503,
+            )
+            response["Retry-After"] = "60"
+            return response
         if stage is None:
             return status_form(request, error="Receipt unavailable.", status=404)
         return status_result(request_id, public_status_text(stage))
@@ -454,8 +489,11 @@ def mojprop_receipt_status(request):
             {"ok": False, "detail": "Receipt invalid or expired. Contact support using your original email."},
             status=404,
         )
-    record = (MojPropRequest.objects.filter(request_id=request_id)
-              .values_list("status", flat=True).first())
+    try:
+        record = (MojPropRequest.objects.filter(request_id=request_id)
+                  .values_list("status", flat=True).first())
+    except DatabaseError:
+        return _crm_storage_unavailable()
     if record is None:
         return _json({"ok": False, "detail": "Receipt unavailable."}, status=404)
     response = _json({
