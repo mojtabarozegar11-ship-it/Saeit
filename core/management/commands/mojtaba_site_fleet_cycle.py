@@ -5,10 +5,12 @@ explicitly OUT OF SCOPE. May run against real public websites with bounded GET.
 The caller is a *single* canonical bot; this command never creates an Agent.
 """
 import json
+import uuid
 
 from django.core.management.base import BaseCommand, CommandError
 
 from core.mojtaba_site_fleet import CANONICAL_BOT, inventory, run_one_bot_public_cycle
+from core.mojtaba_site_receipts import record_public_cycle
 from core.models import Agent
 
 
@@ -17,11 +19,17 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
+            "--record-receipt", action="store_true",
+            help="Persist redacted one-cycle public monitor evidence in AuditLog.",
+        )
+        parser.add_argument(
             "--observe-public", action="store_true",
             help="Perform bounded GET of 14 allowlisted public routes; no site writes.",
         )
 
     def handle(self, *args, **options):
+        if options.get("record_receipt") and not options.get("observe_public"):
+            raise CommandError("RECORD_REQUIRES_EXPLICIT_PUBLIC_OBSERVATION")
         if options.get("observe_public"):
             # A string constant in a JSON report is not proof of a real bot.
             # Public observations must be owned by the actual, active canonical
@@ -29,6 +37,10 @@ class Command(BaseCommand):
             if Agent.objects.filter(code="mojtaba-bot-ai", active=True).count() != 1:
                 raise CommandError("CANONICAL_BOT_RUNTIME_IDENTITY_NOT_PROVISIONED")
             report = run_one_bot_public_cycle()
+            if options.get("record_receipt"):
+                report["durable_receipt"] = record_public_cycle(
+                    report, cycle_id=uuid.uuid4().hex
+                )
         else:
             report = inventory()
         if report.get("canonical_bot") != CANONICAL_BOT:
