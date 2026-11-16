@@ -201,3 +201,41 @@ class PurchasedPlanQualificationTests(TestCase):
         self.six_days_at_plan6()
         self.account.opened_at=datetime(2026, 10, 1, 0, 0)
         self.assertFalse(account_projection(self.account)["purchase_window_valid"])
+
+    def test_c146_sql_downgrade_of_paid_stage_cannot_erase_v12_conditions(self):
+        # A real payment cannot become a legacy fee-free trial via SQL edits.
+        self.six_days_at_plan6()
+        PropAccount.objects.filter(pk=self.account.pk).update(
+            policy_version="2026-11-14/v1.1"
+        )
+        self.account.refresh_from_db()
+        result=account_projection(self.account)
+        self.assertFalse(result["purchase_window_valid"])
+        self.assertFalse(result["verified"])
+        self.assertEqual(result["evidence_state"],"pending")
+        self.assertFalse(result["assessment"].passed)
+
+    def test_c146_downgrading_both_sql_terms_and_account_remains_blocked(self):
+        self.six_days_at_plan6()
+        PropAccount.objects.filter(pk=self.account.pk).update(
+            policy_version="2026-11-14/v1.1"
+        )
+        PropChallengeEnrollment.objects.filter(pk=self.purchase.pk).update(
+            terms_version="2026-11-14/v1.1"
+        )
+        self.account.refresh_from_db()
+        result=account_projection(self.account)
+        self.assertFalse(result["purchase_window_valid"])
+        self.assertFalse(result["verified"])
+        self.assertFalse(result["assessment"].passed)
+
+    def test_c146_purchase_version_swap_alone_invalidates_verified_display(self):
+        self.six_days_at_plan6()
+        PropChallengeEnrollment.objects.filter(pk=self.purchase.pk).update(
+            terms_version="2026-11-14/v1.1"
+        )
+        self.account.refresh_from_db()
+        result=account_projection(self.account)
+        self.assertFalse(result["purchase_window_valid"])
+        self.assertFalse(result["verified"])
+        self.assertFalse(result["assessment"].passed)
