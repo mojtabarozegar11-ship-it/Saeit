@@ -145,6 +145,35 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
         self.assertEqual(reason, "cpanel_uapi_quota_verified")
         return data
 
+    def test_c113_cpanel_owner_string_one_flags_are_allowed_only_with_space(self):
+        from scripts.mojprop_full_restore_capacity_readonly_c94 import _cpanel_quota_data_adequate
+        # Live C111 owner UAPI emits exact string "1", not integer 1.
+        data = {"under_quota_overall": "1", "under_megabyte_limit": "1",
+                "under_inode_limit": "1", "megabyte_limit": "900",
+                "megabytes_remain": "500", "inode_limit": 0,
+                "inodes_remain": 0}
+        accepted, reason = _cpanel_quota_data_adequate(
+            {"result": {"status": 1, "data": data}}, 200_000_000)
+        self.assertTrue(accepted, reason)
+        self.assertEqual(reason, "cpanel_uapi_quota_verified")
+
+    def test_c113_quota_flag_bools_and_noncanonical_strings_deny(self):
+        from scripts.mojprop_full_restore_capacity_readonly_c94 import _cpanel_quota_data_adequate
+        data = {"under_quota_overall": "1", "under_megabyte_limit": "1",
+                "under_inode_limit": "1", "megabyte_limit": 900,
+                "megabytes_remain": 500, "inode_limit": 0,
+                "inodes_remain": 0}
+        for key in ("under_quota_overall", "under_megabyte_limit",
+                    "under_inode_limit"):
+            for bad in (True, False, "0", "01", "1 ", " 1", "true",
+                        "", None, 0, 1.0):
+                with self.subTest(flag=key, bad=bad):
+                    wrong = dict(data, **{key: bad})
+                    accepted, reason = _cpanel_quota_data_adequate(
+                        {"result": {"status": 1, "data": wrong}}, 200_000_000)
+                    self.assertFalse(accepted)
+                    self.assertEqual(reason, "cpanel_uapi_limit_exceeded_or_unknown")
+
     def test_cpanel_uapi_quota_unlimited_or_disabled_is_not_proof(self):
         from scripts.mojprop_full_restore_capacity_readonly_c94 import _cpanel_quota_data_adequate
         d = {"result": {"status": 1, "data": {
@@ -164,7 +193,7 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
                  "inodes_remain": 9000}
         for delta in ({}, {"megabytes_remain": "NaN"},
                       {"megabytes_remain": -1},
-                      {"under_inode_limit": "1"},
+                      {"under_inode_limit": " 1"},
                       {"inodes_remain": -1}):
             with self.subTest(delta=delta):
                 d = dict(basis, **delta)
