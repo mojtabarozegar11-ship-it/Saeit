@@ -196,6 +196,9 @@ class ReviewedStarter30GateTests(unittest.TestCase):
         with self.assertRaises(EvidenceGateClosed):
             call(now_sec=True)
 
+    def test_draft_exposes_attestation_ref_for_unique_registry(self):
+        self.assertEqual(call().attestation_ref, packet()["attestation_ref"])
+
     def test_no_personal_identifier_in_returned_repr(self):
         obj = call()
         self.assertNotIn(LEAD, repr(obj))
