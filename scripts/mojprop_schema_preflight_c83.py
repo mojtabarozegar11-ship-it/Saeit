@@ -132,6 +132,14 @@ def check_schema_closure(live_root, staged_root):
     Returns a source-only inventory; never claims a DB dump/restore is verified.
     """
     live_root, staged_root = Path(live_root), Path(staged_root)
+    # A symlinked migration *directory* can redirect model schema checks
+    # and eventually target another Django tenant, even if its .py entries
+    # themselves are regular files.
+    for root in (live_root, staged_root):
+        migration_dir = root / "core/migrations"
+        if (migration_dir.is_symlink() or not migration_dir.is_dir()
+                or any(parent.is_symlink() for parent in migration_dir.parents)):
+            raise RuntimeError("unsafe Moj Prop migrations directory")
     for path in (
         "core/models.py", "core/admin.py", "config/urls.py", *MODULES,
         *LEGACY_BASELINES.values(),
