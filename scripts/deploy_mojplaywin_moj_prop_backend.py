@@ -8,6 +8,7 @@ are therefore patched additively; they are never replaced wholesale.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -301,24 +302,66 @@ def patch_admin(target: Path, source: Path) -> None:
     print("MOJ_PROP_ADMIN_PATCH=PASS")
 
 
+def _declared_url_routes(source: str) -> dict[str, str]:
+    """Bind actual urlpatterns routes to view names, not misleading text."""
+    tree = ast.parse(source)
+    imports_path = any(
+        isinstance(node, ast.ImportFrom) and node.module == "django.urls"
+        and any(alias.name == "path" and alias.asname is None
+                for alias in node.names)
+        for node in tree.body
+    )
+    if not imports_path:
+        raise RuntimeError("live URL configuration does not import path")
+    expressions = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "urlpatterns"
+            for target in node.targets
+        ):
+            expressions.append(node.value)
+        elif (isinstance(node, ast.AugAssign)
+              and isinstance(node.target, ast.Name)
+              and node.target.id == "urlpatterns"):
+            expressions.append(node.value)
+    if not expressions:
+        raise RuntimeError("live URL configuration has no safe urlpatterns definition")
+    routes: dict[str, str] = {}
+    for expression in expressions:
+        for node in ast.walk(expression):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == "path" and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and isinstance(node.args[0].value, str)):
+                route = node.args[0].value
+                view = (node.args[1].id if len(node.args) > 1
+                        and isinstance(node.args[1], ast.Name) else "")
+                if route in routes:
+                    raise RuntimeError("duplicate Moj Prop or Django route requires review")
+                routes[route] = view
+    return routes
+
+
 def patch_urlconf(target: Path) -> None:
-    """Install both API routes, repairing an older intake-only deployment."""
+    """Install actual Django route entries, not misleading text in comments."""
     assert_regular(target, "live URL configuration")
+    assert_safe_parent(target, ROOT)
     source = target.read_text(encoding="utf-8")
-    intake_exists = 'path("moj-prop-intake/"' in source
-    status_exists = 'path("moj-prop-status/"' in source
-    quote_exists = 'path("moj-prop-quote/<str:token>/"' in source
+    actual = _declared_url_routes(source)
+    expected_views = {
+        "moj-prop-intake/": "mojprop_intake",
+        "moj-prop-status/": "mojprop_receipt_status",
+        "moj-prop-quote/<str:token>/": "customer_quote",
+    }
+    for route, view in expected_views.items():
+        if route in actual and actual[route] != view:
+            raise RuntimeError("live Moj Prop URL route points to an unreviewed view")
+    intake_exists = "moj-prop-intake/" in actual
+    status_exists = "moj-prop-status/" in actual
+    quote_exists = "moj-prop-quote/<str:token>/" in actual
     if intake_exists and status_exists and quote_exists:
         print("MOJ_PROP_URLCONF_ALREADY_PATCHED")
         return
-    if "from django.urls import" not in source or "urlpatterns" not in source:
-        raise RuntimeError("live URL configuration has no safe Django path anchor")
-    import_line = next(
-        (line for line in source.splitlines() if line.startswith("from django.urls import ")),
-        "",
-    )
-    if "path" not in import_line:
-        raise RuntimeError("live URL configuration does not import path")
     missing_imports = []
     routes = []
     if not intake_exists:
@@ -340,7 +383,6 @@ def patch_urlconf(target: Path) -> None:
     mode = stat.S_IMODE(target.stat().st_mode)
     atomic_write_text(target, source.rstrip() + additions, mode)
     print("MOJ_PROP_URLCONF_PATCH=PASS")
-
 
 def patch_free_model_import(target: Path, source: Path) -> None:
     """Attach only the independently reviewed free model to the owner code."""
