@@ -91,8 +91,9 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="mojpropstarter30order",
             constraint=models.CheckConstraint(
-                condition=models.Q(status__in=("draft", "issued", "settled", "delivered", "cancelled")),
-                name="mojprop30_known_order_state",
+                # Source-only hold: cannot be falsely marked paid or delivered.
+                condition=models.Q(status="draft"),
+                name="mojprop30_draft_only",
             ),
         ),
         migrations.AddConstraint(
