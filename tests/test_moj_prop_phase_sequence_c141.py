@@ -9,7 +9,10 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from prop_firm.models import PropAccount, PropChallengeEnrollment, PropTrader
+from prop_firm.models import (
+    PropAccount, PropChallengeEnrollment, PropTrader,
+    PropExecution, PropEquityObservation,
+)
 from prop_firm.portal import completed_paid_phase_one_before_stage_two
 from prop_firm.social_policy import LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION
 
@@ -50,6 +53,33 @@ class CompletedPhaseOneChronologyTests(TestCase):
             policy_version=NEW_CONTRACT_VERSION,
             tier_index=0, starting_capital_usd=Decimal("100.00"),
         )
+        # Real qualification may not rely on PASSED and operator flags alone.
+        # These six fabricated CI days supply test-only independent-looking
+        # evidence; they are never a broker connection or funding proof.
+        for i in range(6):
+            start = START + DAY + timedelta(days=i)
+            opening = Decimal("100.00") + Decimal("1.60") * i
+            PropEquityObservation.objects.create(
+                account=self.phase1, external_event_id=f"c141-open-{i}",
+                data_source="CI-NOT-BROKER", observed_at=start,
+                equity_usd=opening, is_session_open=True,
+                reconciliation_status="verified",
+            )
+            PropExecution.objects.create(
+                account=self.phase1, external_event_id=f"c141-trade-{i}",
+                external_position_id=f"ci-c141-pos-{i}",
+                data_source="CI-NOT-BROKER", symbol="XAUUSD",
+                execution_origin="manual", closed_at=start + timedelta(hours=1),
+                gross_realized_usd=Decimal("1.60"),
+                total_fees_usd=Decimal("0"), reconciliation_status="verified",
+            )
+            PropEquityObservation.objects.create(
+                account=self.phase1, external_event_id=f"c141-close-{i}",
+                data_source="CI-NOT-BROKER",
+                observed_at=start + timedelta(hours=2),
+                equity_usd=opening + Decimal("1.60"),
+                is_session_open=False, reconciliation_status="verified",
+            )
 
     def accepted(self):
         return completed_paid_phase_one_before_stage_two(self.phase2)
