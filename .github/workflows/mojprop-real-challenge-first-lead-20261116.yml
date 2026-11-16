@@ -12,6 +12,7 @@ on:
       - "config/urls.py"
       - "tests/test_moj_c29_ten_plan_stage_causality.py"
       - "tests/test_moj_prop_interest_intake.py"
+      - "tests/test_moj_prop_plan_qualification.py"
       - ".github/workflows/mojprop-real-challenge-first-lead-20261116.yml"
   pull_request:
     branches:
@@ -25,6 +26,7 @@ on:
       - "config/urls.py"
       - "tests/test_moj_c29_ten_plan_stage_causality.py"
       - "tests/test_moj_prop_interest_intake.py"
+      - "tests/test_moj_prop_plan_qualification.py"
       - ".github/workflows/mojprop-real-challenge-first-lead-20261116.yml"
 permissions:
   contents: read
