@@ -62,7 +62,7 @@ def _safe_service_prefill(request):
             return service, (
                 "Prelaunch interest only: MOJ-PROP-01 (two-stage proprietary "
                 "funded-trading CHALLENGE; proposed 30 native TRX fee is "
-                "NOT payable at this time).\\n"
+                "NOT payable at this time).\n"
                 "Please send legal eligibility, country availability, "
                 "risk rules, KYC and refund terms for MOJ-PROP-01. "
                 "I understand the evaluation is simulated and an actual "
