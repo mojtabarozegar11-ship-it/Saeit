@@ -1,5 +1,7 @@
 """Synthetic private CRM consent lineage tests; no real customer PII or DB."""
 from dataclasses import replace
+from prop_firm.plan1_private_order_draft import Plan1PrivateOrderReviewDraft
+from prop_firm.plan1_canonical_interest_bridge import match_private_review_to_canonical_interest
 import hashlib
 import hmac
 import json
@@ -235,6 +237,112 @@ class CanonicalConsentLineageTests(unittest.TestCase):
 
     def test_missing_attestation(self):
         self.denied(trusted_consent_attestation=None)
+
+
+def synthetic_draft():
+    return Plan1PrivateOrderReviewDraft(
+        private_review_ref="PROP1-REVIEW-"+"A"*32,
+        original_request_ref=REF,sku="MOJ-PROP-01",
+        terms_version="2026-11-15/v1.2",amount_sun=30_000_000,
+        token_symbol="TRX",chain="TRON-mainnet",
+        contract_pdf_sha256="a"*64,refund_disclosure_sha256="b"*64,
+        buyer_signature_proof_sha256="c"*64,
+        seller_signature_proof_sha256="d"*64,
+        inquiry_sha256=new_inquiry().anonymous_intent_sha256,
+        reviewer_packet_sha256="e"*64,expires_at_sec=1_795_000_000,
+    )
+
+
+class PrivateDraftConsentJoinTests(unittest.TestCase):
+    def test_matching_nonpayable_review_only(self):
+        self.assertEqual(match_private_review_to_canonical_interest(
+            consent_link=bind(),private_order_draft=synthetic_draft()
+        ).state,"CONSENT_LINK_PRIVATE_REVIEW_ONLY")
+
+    def test_missing_review(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            match_private_review_to_canonical_interest(
+                consent_link=bind(),private_order_draft=None)
+
+    def test_missing_link(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            match_private_review_to_canonical_interest(
+                consent_link=None,private_order_draft=synthetic_draft())
+
+    def test_different_request(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            match_private_review_to_canonical_interest(
+                consent_link=bind(),
+                private_order_draft=replace(synthetic_draft(),
+                    original_request_ref="REQUEST-ZYXWVUTSRQPONMLK"))
+
+    def test_different_inquiry_digest(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            match_private_review_to_canonical_interest(
+                consent_link=bind(),
+                private_order_draft=replace(synthetic_draft(),
+                    inquiry_sha256="f"*64))
+
+    def test_educational_sku_blocked(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            match_private_review_to_canonical_interest(
+                consent_link=bind(),
+                private_order_draft=replace(synthetic_draft(),
+                    sku="MOJPROP-STARTER30"))
+
+    def test_wrong_contract_version_blocked(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            match_private_review_to_canonical_interest(
+                consent_link=bind(),
+                private_order_draft=replace(synthetic_draft(),
+                    terms_version="v1.1"))
+
+    def test_wrong_native_trx_amount_blocked(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            match_private_review_to_canonical_interest(
+                consent_link=bind(),
+                private_order_draft=replace(synthetic_draft(),
+                    amount_sun=29_999_999))
+
+    def test_wrong_chain_blocked(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            match_private_review_to_canonical_interest(
+                consent_link=bind(),
+                private_order_draft=replace(synthetic_draft(),
+                    chain="Ethereum"))
+
+    def test_payable_invoice_blocked(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            match_private_review_to_canonical_interest(
+                consent_link=bind(),
+                private_order_draft=replace(synthetic_draft(),
+                    payable=True))
+
+    def test_enrollment_flag_blocked(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            match_private_review_to_canonical_interest(
+                consent_link=bind(),
+                private_order_draft=replace(synthetic_draft(),
+                    enrollment_created=True))
+
+    def test_invoice_flag_blocked(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            match_private_review_to_canonical_interest(
+                consent_link=bind(),
+                private_order_draft=replace(synthetic_draft(),
+                    live_invoice_created=True))
+
+    def test_paid_stage_blocked(self):
+        with self.assertRaises(Plan1OrderGateClosed):
+            match_private_review_to_canonical_interest(
+                consent_link=bind(),
+                private_order_draft=replace(synthetic_draft(),
+                    state="PAID"))
+
+    def test_contact_permission_stays_false(self):
+        x=match_private_review_to_canonical_interest(
+            consent_link=bind(),private_order_draft=synthetic_draft())
+        self.assertFalse(x.buyer_contact_authorized_by_this_module)
 
 
 if __name__=="__main__":
