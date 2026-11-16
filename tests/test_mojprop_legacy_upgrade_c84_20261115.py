@@ -96,6 +96,30 @@ class MojPropLegacyUpgradeTests(unittest.TestCase):
                 installer.patch_admin(self.root / "core/admin.py", SOURCE / "core/admin.py")
         self.assertEqual(after, [(self.root / name).read_bytes() for name in PREFIXES])
 
+    def test_migrations_directory_symlink_to_other_tenant_is_refused(self):
+        path = self.root / "core/migrations"
+        path.rmdir()
+        outsider = self.root / "other-tenant-migrations"
+        outsider.mkdir()
+        path.symlink_to(outsider, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "unsafe Moj Prop migrations directory"):
+            check_schema_closure(self.root, SOURCE)
+        self.assertEqual(list(outsider.iterdir()), [])
+
+    def test_staged_migrations_directory_symlink_is_rejected(self):
+        # Validate preflight in a separate staged tree without any real
+        # tenant or database mutation.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "core").mkdir()
+            source_migrations = root / "migrations-copy"
+            source_migrations.mkdir()
+            (root / "core/migrations").symlink_to(
+                source_migrations, target_is_directory=True
+            )
+            with self.assertRaisesRegex(RuntimeError, "unsafe Moj Prop migrations directory"):
+                check_schema_closure(self.root, root)
+
     def test_live_model_or_admin_symlink_must_not_escape_tenant(self):
         for relative in ("core/models.py", "core/admin.py"):
             with self.subTest(relative=relative):
