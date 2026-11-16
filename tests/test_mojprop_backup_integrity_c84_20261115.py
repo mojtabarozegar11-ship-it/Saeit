@@ -303,6 +303,21 @@ class MojPropBackupIntegrityTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "unexpected source"):
             backend.verify_backup_manifest(self.backup)
 
+    def test_backup_creation_rejects_group_writable_live_source(self):
+        target = self.live / FILES[0]
+        target.chmod(0o664)
+        manifest = {"run_id": RUN, "commit": SHA, "files": list(map(str, FILES))}
+        with self.assertRaisesRegex(RuntimeError, "group/world-writable"):
+            backend.backup_target(target, self.backup, manifest, FILES[0])
+        self.assertNotIn(str(FILES[0]), manifest)
+        target.chmod(0o644)
+
+    def test_restoration_rejects_tampered_world_writable_mode(self):
+        self.rewrite_manifest(lambda m: m[str(FILES[0])].update(mode=0o666))
+        with self.assertRaisesRegex(RuntimeError, "group/world-writable"):
+            backend.verify_backup_manifest(self.backup)
+        self.restart.assert_not_called()
+
     def test_invalid_mode_is_rejected(self):
         self.rewrite_manifest(lambda v: v[str(FILES[0])].update(mode=0o7777))
         with self.assertRaisesRegex(RuntimeError, "mode is invalid"):
