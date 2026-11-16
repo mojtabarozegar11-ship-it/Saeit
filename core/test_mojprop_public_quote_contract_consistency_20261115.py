@@ -187,3 +187,25 @@ class PublicQuoteContractConsistencyTests(TestCase):
         self.assertIn("  | Quoted amount: 0.00 TRX", lines)
         self.assertNotIn("Quoted amount: 0.00 TRX", lines)
         self.assertEqual(lines.count("Quoted amount: 125.00 USD"), 1)
+
+
+    def test_24_public_quote_shows_exact_digital_product_id(self):
+        self.lead.route = "digital"
+        self.lead.product_id = 225
+        self.lead.save(update_fields=["route", "product_id"])
+        response = self.view()
+        self.assertEqual(response.status_code, 200)
+        text = response.content.decode("utf-8")
+        self.assertIn("Catalog product ID: 225", text)
+        self.assertIn("Service route: digital", text)
+
+    def test_25_digital_quote_without_product_id_is_not_public(self):
+        self.lead.route = "digital"
+        self.lead.product_id = None
+        self.lead.save(update_fields=["route", "product_id"])
+        self.assertEqual(self.view().status_code, 404)
+
+    def test_26_default_blueprint_quote_keeps_explicit_na_product_identity(self):
+        response = self.view()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Catalog product ID: n/a", response.content)
