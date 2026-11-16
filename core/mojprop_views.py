@@ -441,6 +441,11 @@ def mojprop_receipt_status(request):
             if request.GET.getlist("receipt_token"):
                 return status_form(request, error="Use the private POST status form.", status=400)
             return status_form(request)
+        # A POST with a bearer query parameter has already exposed the token
+        # to URL logs; deny it even when the HTML form body is otherwise valid.
+        if request.GET.getlist("receipt_token"):
+            return status_form(request, error="Enter the token only in the private form.",
+                               status=400)
         kind = str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].lower()
         if kind != "application/x-www-form-urlencoded":
             return status_form(request, error="Use the private status form.", status=400)
