@@ -47,7 +47,6 @@ GATES = (
     "site_inventory_fresh", "bot_dns_tls_verified", "bot_runtime_deployed",
     "new_executor_two_distinct_cycles_verified",
     "role_by_role_functional_receipts_verified",
-    "legacy_77_executors_accounted_for",
     "agent_history_exported_and_reconciled",
     "pending_queued_running_blocked_zero_or_transferred",
     "publication_and_order_boundaries_preserved",
@@ -57,6 +56,13 @@ GATES = (
     "rollback_drill_verified", "tenant_boundary_verified",
 )
 
+
+TENANT_GATES = {
+    # 77 legacy module slots are MojPlayWin-specific. They cannot block
+    # retirement review of Zomorod's unrelated PHP site monitor.
+    "zomorodmelal": (),
+    "mojplaywin": ("legacy_77_executors_accounted_for",),
+}
 
 class SiteFleetError(ValueError):
     pass
@@ -158,7 +164,8 @@ def retirement_decision(attestations, *, now=None):
             fresh = timedelta(0) <= now - moment <= timedelta(minutes=30)
         except (ValueError, TypeError, KeyError, AttributeError):
             fresh = False
-        failed = [name for name in GATES if row.get(name) is not True]
+        failed = [name for name in (*GATES, *TENANT_GATES[tenant])
+                  if row.get(name) is not True]
         if not fresh:
             failed.insert(0, "fresh_timestamp_within_30_minutes")
         # Role-level counts cannot substitute for immutable receipts.
