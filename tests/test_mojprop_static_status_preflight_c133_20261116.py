@@ -31,8 +31,9 @@ class StatusPreflightReleaseTests(unittest.TestCase):
         lines = text.splitlines()
         pieces = [
             line for line in lines
-            if "max-time 20" in line or
-               'mojprop-status-preflight.json" ' in line
+            if ('code="$(curl' in line and "max-time 20" in line)
+            or ("-H 'Accept: application/json'" in line
+                and "mojprop-status-preflight.json" in line)
         ]
         self.assertEqual(len(pieces), 2)
         for part in pieces:
