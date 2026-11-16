@@ -122,3 +122,32 @@ def bind_canonical_interest_to_private_inquiry(
         inquiry_sha256=expected_inquiry_sha256,
         consent_evidence_sha256=expected_consent_evidence_sha256,
     )
+
+
+def match_private_review_to_canonical_interest(
+    *, consent_link: PrivateInterestLink,
+    private_order_draft: "Plan1PrivateOrderReviewDraft",
+) -> PrivateInterestLink:
+    """Cross-check existing independently verified private review; no issuance.
+
+    Caller must independently re-read the current PropInterest row and consent
+    withdrawal registry in the same protected transaction before any contact.
+    This bridge is not a durable ORM link and cannot grant payment.
+    """
+    from .plan1_private_order_draft import Plan1PrivateOrderReviewDraft
+    if (type(consent_link) is not PrivateInterestLink
+            or type(private_order_draft) is not Plan1PrivateOrderReviewDraft):
+        raise Plan1OrderGateClosed("canonical consent and private review required")
+    if (consent_link.request_ref != private_order_draft.original_request_ref
+            or consent_link.inquiry_sha256 != private_order_draft.inquiry_sha256
+            or consent_link.sku != private_order_draft.sku
+            or consent_link.terms_version != private_order_draft.terms_version
+            or consent_link.state != "CONSENT_LINK_PRIVATE_REVIEW_ONLY"
+            or private_order_draft.state != "PRIVATE_NONPAYABLE_CONTRACT_REVIEW"
+            or private_order_draft.amount_sun != 30_000_000
+            or private_order_draft.chain != "TRON-mainnet"
+            or private_order_draft.payable is not False
+            or private_order_draft.live_invoice_created is not False
+            or private_order_draft.enrollment_created is not False):
+        raise Plan1OrderGateClosed("consent lineage and private contract draft differ")
+    return consent_link
