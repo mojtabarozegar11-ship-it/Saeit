@@ -1,0 +1,76 @@
+name: cPanel owner disposable-cache metadata read only 2026-11-16
+on:
+  push:
+    branches: [ops/verified-disk-reclaim-20261116]
+    paths: [".github/workflows/cpanel-owner-disposable-review-20261116.yml"]
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/ops/verified-disk-reclaim-20261116' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - name: Pinned direct host bridge and read-only disposable inventory
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/cpanel-disposable-inventory"
+          install -d -m 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P "" -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$work/known" 2>/dev/null
+          test -s "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_CPANEL_HOST_KEY=VERIFIED
+          timeout 150s ssh -T -i "$work/key" -p 1396 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ForwardAgent=no -o RequestTTY=no zomorod2@178.239.147.125 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE'
+          import json, os, pwd, stat, subprocess, time
+          from pathlib import Path
+          H=Path("/home/zomorod2")
+          assert pwd.getpwuid(os.geteuid()).pw_name=="zomorod2"
+          assert H.is_dir() and not H.is_symlink()
+          uid=os.geteuid()
+          targets={
+           "download_node_tarball":H/".cache/dc-node-setup/node.tar.gz",
+           "node_download_cache":H/".cache/dc-node-setup",
+           "python_cache":H/".cache/pip",
+           "npm_cache":H/".npm/_cacache",
+           "npm_logs":H/".npm/_logs",
+           "yarn_cache":H/".cache/yarn",
+           "uv_cache":H/".cache/uv",
+           "application_staging":H/"Saeit-staging",
+           "vps_relay_logs":H/"logs",
+          }
+          out={}
+          for label,path in targets.items():
+           try:
+            st=path.lstat()
+           except FileNotFoundError:
+            out[label]={"state":"absent"}
+            continue
+           if st.st_uid!=uid or stat.S_ISLNK(st.st_mode):
+            out[label]={"state":"unsafe_skip"}
+            continue
+           if stat.S_ISDIR(st.st_mode):
+            if label in ("application_staging","vps_relay_logs"):
+             out[label]={"state":"protected_present"}
+             continue
+           elif not stat.S_ISREG(st.st_mode):
+            out[label]={"state":"unsafe_skip"}
+            continue
+           try:
+            du=subprocess.run(["du","-sk",str(path)],capture_output=True,text=True,timeout=12,check=True)
+            out[label]={"state":"counted","allocated_mib":round(int(du.stdout.split()[0])/1024,2),"age_days":max(0,int((time.time()-st.st_mtime)/86400))}
+           except (OSError,IndexError,ValueError,subprocess.CalledProcessError,subprocess.TimeoutExpired):
+            out[label]={"state":"unavailable"}
+          print("CPANEL_DISPOSABLE_PREVIEW="+json.dumps(out,sort_keys=True))
+          print("CPANEL_FILES_MODIFIED=false")
+          print("CPANEL_DELETE_PERMITTED=false")
+          
+          REMOTE
