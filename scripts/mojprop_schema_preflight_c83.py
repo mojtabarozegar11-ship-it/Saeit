@@ -35,10 +35,17 @@ MODULES = (
 
 def _class_signatures(path):
     root = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    return {
-        node.name: ast.dump(node, include_attributes=False)
-        for node in root.body if isinstance(node, ast.ClassDef)
-    }
+    result = {}
+    for node in root.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        # Python silently replaces an earlier same-name class. A duplicate
+        # Moj Prop class defeats a set-based source/upgrade review even if the
+        # reviewed legacy suffix is still present byte-for-byte.
+        if node.name in result and node.name.startswith("MojProp"):
+            raise RuntimeError("duplicate Moj Prop class definition: " + node.name)
+        result[node.name] = ast.dump(node, include_attributes=False)
+    return result
 
 
 def _classes(path):
