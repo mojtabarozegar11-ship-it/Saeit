@@ -146,7 +146,7 @@
       <h2 id="mp-interest-title">{{ interest_copy.0 }}</h2>
       <p>MOJ-PROP-01 · $100 · 30 TRX — {{ interest_copy.4 }}</p>
     </div>
-    <form method="post" action="/moj-prop/interest/" accept-charset="UTF-8"
+    <form method="post" action="/moj-prop-interest/" accept-charset="UTF-8"
           style="max-width:600px;padding:20px;border:1px solid #536277;border-radius:12px">
       {% csrf_token %}
       <input type="hidden" name="plan_code" value="MOJ-PROP-01">
