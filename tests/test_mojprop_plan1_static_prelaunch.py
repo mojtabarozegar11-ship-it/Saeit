@@ -50,10 +50,23 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
         self.assertNotIn('action="/moj-prop/interest/"', self.page)
 
     def test_accessible_non_js_request_exists(self):
-        self.assertGreaterEqual(self.page.count('/moj-prop-interest/form/'), 3)
-        self.assertNotIn('/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01', self.page)
+        self.assertGreaterEqual(self.page.count('/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01'), 3)
+        self.assertNotIn('/moj-prop-interest/form/', self.page)
         self.assertNotIn('/moj-prop/?service=blueprint&amp;package=moj-prop-01#request', self.page)
-        self.assertIn('dedicated Plan 1 consent form', self.page)
+        self.assertIn('prefilled accessible Plan 1 request', self.page)
+
+    def test_no_js_plan1_fallback_exists_in_current_main_backend(self):
+        backend = (ROOT / "core/mojprop_accessible_intake.py").read_text(encoding="utf-8")
+        self.assertIn('if packages == ["moj-prop-01"]:', backend)
+        self.assertIn('Prelaunch interest only: MOJ-PROP-01', backend)
+        self.assertIn('No payment', backend)
+        self.assertIn('ACTION = "/moj-prop-intake/?format=html"', backend)
+
+    def test_nonpayable_root_endpoint_is_used_not_unmerged_feature_app(self):
+        self.assertIn('path("moj-prop-intake/", mojprop_intake', self.urls)
+        self.assertNotIn('href="/moj-prop-interest/form/"', self.page)
+        self.assertNotIn("action='/moj-prop/interest/'", self.page)
+        self.assertIn('manual review, not enrolment', self.page)
 
     def test_legacy_crm_is_labeled_prelaunch_and_nonpayable(self):
         self.assertIn("The explicit product identity is recorded in notes", self.page)
