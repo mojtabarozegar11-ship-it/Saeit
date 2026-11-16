@@ -87,7 +87,15 @@ def assess_journal(sessions: object) -> dict:
         equity = _money(row["closing_equity_usd"])
         if row["risk_plan_recorded"] and row["reflection_recorded"]:
             documented += 1
-        daily_loss = max(Decimal("0"), (previous - equity) * Decimal("100") / previous) if previous > 0 else Decimal("100")
+        # When a prior simulated session closed at zero, there is no
+        # positive opening denominator for a percentage daily-loss rate.
+        # Zero-to-zero or zero-to-positive is NOT a new 100% daily loss.
+        # The original catastrophic loss remains correctly recorded in
+        # that earlier session and the running peak drawdown remains breached.
+        daily_loss = (
+            max(Decimal("0"), (previous - equity) * Decimal("100") / previous)
+            if previous > 0 else Decimal("0")
+        )
         overall_dd = max(Decimal("0"), (peak - equity) * Decimal("100") / peak)
         if daily_loss > MAX_DAILY_LOSS_PERCENT:
             breaches.append({"session": index, "rule": "daily_loss"})
