@@ -228,7 +228,7 @@ def mojprop_intake(request):
         except (UnicodeError, ValueError):
             return request_form(request, error="Request unavailable.", status=503)
         if result.get("ok") is True and api_response.status_code in (200, 201):
-            return created_receipt(result)
+            return created_receipt(result, reused=result.get("reused") is True)
         detail = result.get("detail")
         detail = detail if type(detail) is str and len(detail) <= 200 else "Request unavailable."
         response = request_form(request, error=detail, status=api_response.status_code)
