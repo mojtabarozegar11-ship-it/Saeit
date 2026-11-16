@@ -60,6 +60,17 @@ def _host(request):
     )
 
 
+def _recovery_enabled():
+    """Existing paid purchases remain valid, but recovery access itself may
+    be revoked immediately without affecting payment records or buyer claims.
+    Both independently controlled release flags must be literal booleans.
+    """
+    return (
+        getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True and
+        getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True
+    )
+
+
 def _email(value):
     if not isinstance(value, str) or len(value) > 254 or "\n" in value or "\r" in value:
         raise ValueError("Invalid email")
@@ -269,10 +280,7 @@ def _issue(email, email_digest):
 def recovery_request(request):
     if not _host(request):
         raise Http404
-    if not (
-        getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True and
-        getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True
-    ):
+    if not _recovery_enabled():
         return _page("Email recovery is not yet available",
                      '<p>Do not make another payment. If you already paid, '
                      'contact <a href="mailto:support@mojplaywin.com">purchase support</a> '
@@ -318,7 +326,9 @@ def _consume(code):
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def recovery_verify(request):
-    if not _host(request):
+    # A code issued before owner withdrawal of recovery permission must not
+    # remain usable after shutdown, even within its 15-minute expiry.
+    if not _host(request) or not _recovery_enabled():
         raise Http404
     if request.method == "GET":
         return _page("Enter recovery code", _form(request, ROOT + "verify/",
@@ -340,6 +350,10 @@ def recovery_verify(request):
 
 
 def _scope(request):
+    # This is the common gate for already-issued sessions, order-listing and
+    # downloads. Never revoke the actual paid order or delete its evidence.
+    if not _recovery_enabled():
+        raise Http404
     raw = request.COOKIES.get(SESSION_COOKIE, "")
     if not isinstance(raw, str) or len(raw) > 512:
         raise Http404
