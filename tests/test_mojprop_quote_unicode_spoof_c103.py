@@ -23,6 +23,27 @@ class QuoteTextSecurityTests(unittest.TestCase):
     def test_scope_line_breaks_remain_supported(self):
         value = "Scope details for a written quote with multiple lines.\nExclusions documented."
         self.assertEqual(_text(value, "scope", 50, 10000), value)
+    def test_persian_half_space_between_letters_is_valid_in_terms(self):
+        for field, minimum, maximum in (("title", 3, 180),
+                                        ("scope", 50, 10000),
+                                        ("exclusions", 10, 5000)):
+            text = "این بخش از قرارداد می\u200cشود برای خدمات آموزشی " + "الف" * minimum
+            with self.subTest(field=field):
+                self.assertEqual(_text(text, field, minimum, maximum), text)
+
+    def test_half_space_outside_persian_word_does_not_hide_terms(self):
+        invalid = ("\u200cشروع", "پایان\u200c", "abc\u200cdef",
+                   "داده\u200c5", "5\u200cداده", "داده \u200c جدید",
+                   "داده\u200c\u200cجدید")
+        for field, minimum, maximum in (("title", 3, 180),
+                                        ("scope", 50, 10000),
+                                        ("exclusions", 10, 5000)):
+            for sample in invalid:
+                with self.subTest(field=field, sample=repr(sample)):
+                    value = "الف" * minimum + sample + "ب"
+                    with self.assertRaises(QuoteContractError):
+                        _text(value, field, minimum, maximum)
+
 
 
 if __name__ == "__main__":
