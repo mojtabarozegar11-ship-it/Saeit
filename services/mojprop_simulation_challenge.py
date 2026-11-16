@@ -43,6 +43,21 @@ def _decimal_money(value: object, field: str) -> Decimal:
     return value
 
 
+def _decimal_account_mark(value: object, field: str) -> Decimal:
+    """Zero or negative observed equity is a BREACH, not a parse rejection."""
+    if type(value) is not Decimal or not value.is_finite():
+        raise ChallengeInputError("invalid_" + field)
+    try:
+        with localcontext() as ctx:
+            ctx.prec = 40
+            if (not -MAX_EQUITY <= value <= MAX_EQUITY
+                    or value != value.quantize(Decimal("0.01"))):
+                raise ChallengeInputError("invalid_" + field)
+    except (InvalidOperation, OverflowError) as exc:
+        raise ChallengeInputError("invalid_" + field) from exc
+    return value
+
+
 def _bps(value: object, field: str, *, maximum: int = 10000) -> int:
     if type(value) is not int or not 1 <= value <= maximum:
         raise ChallengeInputError("invalid_" + field)
