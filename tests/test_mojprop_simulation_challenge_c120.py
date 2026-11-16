@@ -144,6 +144,27 @@ class TwoStageMojPropSimulationContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ChallengeInputError, "invalid_snapshot_phase"):
             evaluate_simulated_phase(policy(), [snap(0, phase=1)], phase=2)
 
+
+    def test_16_daily_drawdown_percent_uses_each_day_open_not_original_capital(self):
+        rows = [snap(0, "20000.00"), snap(1, "19000.00")]
+        out = evaluate_simulated_phase(policy(), rows, phase=1)
+        self.assertEqual(out["worst_observed_daily_loss_bps"], "500.00")
+        self.assertIsNone(out["first_observed_breach"])
+
+    def test_17_one_cent_below_higher_daily_reference_is_breach(self):
+        rows = [snap(0, "20000.00"), snap(1, "18999.99")]
+        out = evaluate_simulated_phase(policy(), rows, phase=1)
+        self.assertEqual(out["first_observed_breach"],
+                         "observed_daily_drawdown_breach")
+        self.assertTrue(Decimal(out["worst_observed_daily_loss_bps"]) > 500)
+
+    def test_18_missing_ticks_never_count_as_verified_continuous_risk(self):
+        rows = [snap(0, "10000.00"), snap(1, "11100.00")]
+        out = evaluate_simulated_phase(policy(minimum_trading_days=1), rows, phase=1)
+        self.assertIs(out["between_snapshot_breaches_verified"], False)
+        self.assertIs(out["requires_independent_broker_evidence"], True)
+        self.assertIs(out["official_challenge_passed"], False)
+
     def test_15_target_requires_multiple_actual_trade_days_not_record_count(self):
         rows = [snap(i, "11000.00", at=START+timedelta(minutes=i)) for i in range(5)]
         out = evaluate_simulated_phase(policy(), rows, phase=1)
