@@ -189,7 +189,8 @@ jobs:
           import json,sys
           from pathlib import Path
           response=json.loads(Path(sys.argv[1]).read_text("utf-8"))
-          if response.get("ok") is not False or "Receipt invalid or expired" not in response.get("detail",""):
+          if (type(response) is not dict or response.get("ok") is not False
+                  or response.get("detail") != "Check a private receipt using the secure POST status form."):
               raise SystemExit("Receipt API contract missing; abort static publication")
           print("MOJ_PROP_STATUS_API_PREFLIGHT=PASS")
           PY
