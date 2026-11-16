@@ -46,16 +46,42 @@ def _classes(path):
 
 
 def migration_operations_signature(path):
-    """Compare migration operations, ignoring only installer-selected parent."""
+    """Fingerprint the WHOLE migration, ignoring only its approved DB parent.
+
+    Comparing the operations expression alone misses malicious/unreviewed
+    RunPython helper functions, imports, class options and executable top-level
+    code. The installer may choose the dependency parent, but nothing else.
+    """
     root = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     migrations = [n for n in root.body if isinstance(n, ast.ClassDef) and n.name == "Migration"]
     if len(migrations) != 1:
         raise RuntimeError("Moj Prop migration must contain exactly one Migration class")
-    ops = [n.value for n in migrations[0].body if isinstance(n, ast.Assign)
+    definitions = migrations[0].body
+    ops = [n for n in definitions if isinstance(n, ast.Assign)
            and any(isinstance(t, ast.Name) and t.id == "operations" for t in n.targets)]
-    if len(ops) != 1:
-        raise RuntimeError("Moj Prop migration missing or ambiguous operations")
-    return ast.dump(ops[0], include_attributes=False)
+    parents = [n for n in definitions if isinstance(n, ast.Assign)
+               and any(isinstance(t, ast.Name) and t.id == "dependencies" for t in n.targets)]
+    if len(ops) != 1 or len(parents) != 1:
+        raise RuntimeError("Moj Prop migration missing or ambiguous operations/dependencies")
+    if len(parents[0].targets) != 1 or not isinstance(parents[0].targets[0], ast.Name):
+        raise RuntimeError("Moj Prop migration has unsafe dependency assignment")
+    deps = parents[0].value
+    if not isinstance(deps, (ast.List, ast.Tuple)):
+        raise RuntimeError("Moj Prop migration dependencies must be explicit")
+    core_parents = [
+        entry for entry in deps.elts
+        if (isinstance(entry, ast.Tuple) and len(entry.elts) == 2
+            and isinstance(entry.elts[0], ast.Constant)
+            and entry.elts[0].value == "core"
+            and isinstance(entry.elts[1], ast.Constant)
+            and isinstance(entry.elts[1].value, str))
+    ]
+    if len(core_parents) != 1:
+        raise RuntimeError("Moj Prop migration has ambiguous core parent")
+    # Only the one core predecessor is installer-selectable. Keep swappable
+    # user dependencies and every other dependency byte-for-byte reviewable.
+    core_parents[0].elts[1] = ast.Constant(value="__INSTALLER_SELECTED_PARENT__")
+    return ast.dump(root, include_attributes=False)
 
 
 def _dependency(path, name):
