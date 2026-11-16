@@ -92,19 +92,34 @@ def declared_routes(body: bytes) -> dict[str, str] | None:
     except (UnicodeError, SyntaxError):
         return None
     names: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+    for statement in tree.body:
+        if isinstance(statement, ast.Assign):
+            owns_urls = any(
+                isinstance(target, ast.Name) and target.id == "urlpatterns"
+                for target in statement.targets
+            )
+        elif isinstance(statement, ast.AugAssign):
+            owns_urls = (
+                isinstance(statement.target, ast.Name)
+                and statement.target.id == "urlpatterns"
+            )
+        else:
+            owns_urls = False
+        if not owns_urls:
             continue
-        if node.func.id != "path" or len(node.args) < 2:
-            continue
-        route, view = node.args[:2]
-        if not isinstance(route, ast.Constant) or type(route.value) is not str:
-            continue
-        if route.value not in REQUIRED_ROUTES:
-            continue
-        if not isinstance(view, ast.Name) or route.value in names:
-            return None
-        names[route.value] = view.id
+        for node in ast.walk(statement.value):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            if node.func.id != "path" or len(node.args) < 2:
+                continue
+            route, view = node.args[:2]
+            if not isinstance(route, ast.Constant) or type(route.value) is not str:
+                continue
+            if route.value not in REQUIRED_ROUTES:
+                continue
+            if not isinstance(view, ast.Name) or route.value in names:
+                return None
+            names[route.value] = view.id
     return names
 
 
