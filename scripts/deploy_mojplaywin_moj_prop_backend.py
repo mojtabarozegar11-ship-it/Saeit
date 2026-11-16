@@ -30,6 +30,9 @@ from scripts.mojprop_db_release_evidence import verify_database_restore_evidence
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
 DOCROOT = Path("/home/zomorod2/mojplaywin.com")
+# Observed in actual owner-only cPanel read-only C118, workflow 43874140514.
+# Source SHA is NOT a guarantee that a live Passenger worker has loaded it.
+REVIEWED_PASSENGER_SHA256 = "83a5309b8712aed5139dc7630724ac150edfb32db852af347d0444506fab2581"
 BACKUP_ROOT = Path("/home/zomorod2/.mojplaywin-moj-prop-backups")
 INDEPENDENT_DB_EVIDENCE_ROOT = Path("/home/zomorod2/.mojprop-private-db-restore-evidence")
 URLCONF = Path("config/urls.py")
@@ -585,6 +588,32 @@ def _restart_public_lswsgi_workers() -> None:
     print("MOJ_PROP_PUBLIC_LSWGI_RESTART=PASS")
 
 
+def verify_reviewed_passenger_entrypoint(docroot: Path) -> None:
+    """Reject changed/untrusted Passenger launcher BEFORE any backend writes.
+
+    Actual C118 owner-only scan of the known docroot gave the precise SHA256
+    pinned here. This checks bytes and source ownership, NOT an executing PID.
+    Any legitimate change must obtain a new read-only audit and source PR.
+    """
+    entry = docroot / "passenger_wsgi.py"
+    if docroot.is_symlink() or not docroot.is_dir():
+        raise RuntimeError("Passenger document root is missing or redirected")
+    if entry.is_symlink():
+        raise RuntimeError("Passenger launcher symlink refused")
+    try:
+        info = entry.lstat()
+    except OSError as exc:
+        raise RuntimeError("Passenger launcher unavailable") from exc
+    if (not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.geteuid() or info.st_nlink != 1
+            or info.st_mode & 0o022
+            or not 1 <= info.st_size <= 32768):
+        raise RuntimeError("Passenger launcher owner, mode or bounds unsafe")
+    # Do not import/eval/run the launcher or log its contents.
+    if digest(entry) != REVIEWED_PASSENGER_SHA256:
+        raise RuntimeError("Passenger source SHA differs from owner-reviewed C118")
+
+
 def restart_passenger() -> None:
     restart = DOCROOT / "tmp" / "restart.txt"
     if restart.is_symlink():
@@ -803,11 +832,10 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         raise RuntimeError("Passenger application root is missing or redirected")
     if DOCROOT.is_symlink() or not DOCROOT.is_dir():
         raise RuntimeError("MojPlayWin document root is missing or redirected")
-    assert_regular(DOCROOT / "passenger_wsgi.py", "Passenger routing file")
-    if "Saeit-staging" not in (DOCROOT / "passenger_wsgi.py").read_text(
-        encoding="utf-8", errors="replace"
-    ):
-        raise RuntimeError("Passenger routing file no longer points to Saeit-staging")
+    # Previously a comment containing 'Saeit-staging' could spoof the route.
+    # The exact audited owner WSGI bytes are a stronger *source* precondition,
+    # although not proof of the executing Passenger process or safe DB restore.
+    verify_reviewed_passenger_entrypoint(DOCROOT)
     if staged_root.is_symlink() or not staged_root.is_dir():
         raise RuntimeError("backend staging root is missing or unsafe")
     for relative in ALL_FILES:
