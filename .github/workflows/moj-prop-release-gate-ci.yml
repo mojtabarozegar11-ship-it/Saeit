@@ -57,6 +57,8 @@ jobs:
           tests.test_moj_prop_phase_sequence_c141
           tests.test_moj_prop_future_evidence_c144
           tests.test_moj_prop_verified_purchase_binding_c145
+          tests.test_moj_prop_enrollment_immutability_c145
+          tests.test_moj_prop_plan_enrollment
           tests.test_moj_prop_plan_qualification
           tests.test_moj_prop_fifty_trades
           tests.test_tron_manual_reconciliation
