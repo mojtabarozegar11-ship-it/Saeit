@@ -11,7 +11,10 @@ from django.utils import timezone as django_timezone
 from .periods import most_recent_completed_period, period_statistics
 from decimal import Decimal
 
-from .models import PropAccount, PropEquityObservation, PropExecution, PropSocialEvidence
+from .models import (
+    PropAccount, PropChallengeEnrollment, PropEquityObservation,
+    PropExecution, PropSocialEvidence,
+)
 from .social_policy import check_social_posting, LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION
 from .trade_count import count_challenge_trades
 from .plans import plan_for_code
@@ -20,6 +23,28 @@ from .rules import (
 )
 
 ZERO = Decimal("0")
+
+# A Django related-object cache is not payment authority. Legacy code read the
+# cached enrollment when a second transaction had already changed confirmed_at,
+# and incorrectly considered future payments eligible. Compare every binding
+# field with the authoritative DB row before evaluating either challenge phase.
+_PURCHASE_BINDING_FIELDS = (
+    "trader_id", "verified_invoice_ref", "plan_code", "confirmed_at",
+    "settlement_verified", "terms_version",
+)
+
+
+def _enrollment_matches_authority(purchase):
+    """Deny stale, missing or in-memory-mutated paid enrollment references."""
+    if not isinstance(purchase, PropChallengeEnrollment) or not purchase.pk:
+        return False
+    db = purchase._state.db or "default"
+    snapshot = (PropChallengeEnrollment.objects.using(db)
+                .filter(pk=purchase.pk).values(*_PURCHASE_BINDING_FIELDS).first())
+    return bool(snapshot and all(
+        getattr(purchase, name, None) == snapshot[name]
+        for name in _PURCHASE_BINDING_FIELDS
+    ))
 
 
 def _day(value):
@@ -63,7 +88,8 @@ def completed_paid_phase_one_before_stage_two(account, *, as_of=None):
         q = q.filter(closed_at__lte=cutoff)
     if account.policy_version == NEW_CONTRACT_VERSION:
         purchase = account.challenge_enrollment
-        if (purchase is None or purchase.trader_id != account.trader_id
+        if (purchase is None or not _enrollment_matches_authority(purchase)
+                or purchase.trader_id != account.trader_id
                 or purchase.settlement_verified is not True
                 or purchase.terms_version != NEW_CONTRACT_VERSION):
             return False
@@ -222,7 +248,8 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
     if (account.policy_version == NEW_CONTRACT_VERSION and account.kind in (
             PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO)):
         purchase_window_valid = bool(
-            purchase and selected_plan
+            purchase and _enrollment_matches_authority(purchase)
+            and selected_plan
             and account.starting_capital_usd == selected_plan.starting_capital_usd
             and account.tier_index == selected_plan.starting_tier_index
             and purchase.trader_id == account.trader_id
