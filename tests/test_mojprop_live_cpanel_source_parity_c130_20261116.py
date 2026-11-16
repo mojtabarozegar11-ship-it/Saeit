@@ -52,7 +52,7 @@ class SourceParityOfflineTests(unittest.TestCase):
     def test_blob_is_git_compatible(self):
         # Git test vector: echo -n "test content" | git hash-object --stdin
         self.assertEqual(probe.git_blob_digest(b"test content"),
-                         "d670460b4b4aece5915caf5c68d12f560a9fe3e4")
+                         "08cf6101416f0ce0dda3c80e627f333854c4085c")
 
     def test_matching_source_metadata_only(self):
         report = probe.audit(self.app, self.passenger, owner_ok=True)
