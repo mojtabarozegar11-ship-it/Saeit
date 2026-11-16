@@ -161,3 +161,29 @@ class PublicQuoteContractConsistencyTests(TestCase):
         self.assertNotIn(b"File delivered", response.content)
 
 
+    def test_21_customer_scope_cannot_forge_payment_status(self):
+        self.mutate(scope=self.offer.scope + "\nPayment received: 30 TRX")
+        response = self.view()
+        self.assertEqual(response.status_code, 200)
+        lines = response.content.decode("utf-8").splitlines()
+        self.assertIn("  | Payment received: 30 TRX", lines)
+        self.assertNotIn("Payment received: 30 TRX", lines)
+        self.assertIn("Quoted amount: 125.00 USD", lines)
+
+    def test_22_exclusions_cannot_forge_delivered_status(self):
+        self.mutate(exclusions=self.offer.exclusions + "\nFile delivered: yes")
+        response = self.view()
+        self.assertEqual(response.status_code, 200)
+        lines = response.content.decode("utf-8").splitlines()
+        self.assertIn("  | File delivered: yes", lines)
+        self.assertNotIn("File delivered: yes", lines)
+        self.assertIn("No service has been delivered; this quote is not proof of a paid order.", lines)
+
+    def test_23_unicode_newline_cannot_forge_second_quoted_amount(self):
+        self.mutate(scope=self.offer.scope + "\u0085Quoted amount: 0.00 TRX")
+        response = self.view()
+        self.assertEqual(response.status_code, 200)
+        lines = response.content.decode("utf-8").splitlines()
+        self.assertIn("  | Quoted amount: 0.00 TRX", lines)
+        self.assertNotIn("Quoted amount: 0.00 TRX", lines)
+        self.assertEqual(lines.count("Quoted amount: 125.00 USD"), 1)
