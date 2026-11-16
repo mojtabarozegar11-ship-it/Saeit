@@ -214,6 +214,9 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
             and purchase.trader_id == account.trader_id
             and purchase.settlement_verified is True
             and purchase.terms_version == NEW_CONTRACT_VERSION
+            and getattr(purchase.confirmed_at, "tzinfo", None) is not None
+            and purchase.confirmed_at.utcoffset() is not None
+            and purchase.confirmed_at <= effective_as_of
         )
         if purchase_window_valid:
             start = purchase.confirmed_at
