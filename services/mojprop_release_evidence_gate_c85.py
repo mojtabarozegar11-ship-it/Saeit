@@ -57,8 +57,13 @@ def validate_evidence(document: object, expected_sha: str, now: dt.datetime | No
             errors.append(f"{key}: duplicate artifact reference")
         else:
             artifact_refs.add(uri)
-        if not isinstance(item.get("reviewer"), str) or not item["reviewer"].strip():
-            errors.append(f"{key}: missing reviewer")
+        reviewer = item.get("reviewer")
+        if (not isinstance(reviewer, str) or not reviewer.strip()
+            or reviewer != reviewer.strip()
+            or reviewer.casefold() in {"none", "n/a", "unknown", "pending", "todo", "tbd", "test"}
+            or any(ord(ch) < 32 or ord(ch) == 127 or 0x202A <= ord(ch) <= 0x202E
+                   or 0x2066 <= ord(ch) <= 0x2069 for ch in reviewer)):
+            errors.append(f"{key}: missing or invalid reviewer")
         try:
             stamp = dt.datetime.fromisoformat(item["verified_at"].replace("Z", "+00:00"))
             if stamp.tzinfo is None or stamp > now or now - stamp > dt.timedelta(hours=24):
