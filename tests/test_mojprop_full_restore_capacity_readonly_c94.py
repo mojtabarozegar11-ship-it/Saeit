@@ -1,4 +1,5 @@
 """Moj Prop real backup feasibility cannot be fabricated from source-only CI."""
+# Owner-readonly execution marker: no behavior or release authority changed.
 import unittest
 from pathlib import Path
 from scripts.mojprop_full_restore_capacity_readonly_c94 import HEADROOM, capacity_flags
