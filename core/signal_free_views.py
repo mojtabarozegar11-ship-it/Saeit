@@ -20,7 +20,7 @@ from django.core import signing
 from django.core.mail import send_mail
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.http import HttpResponse, JsonResponse
 from django.middleware.csrf import get_token
 from django.urls import reverse
@@ -46,6 +46,20 @@ def _answer(payload, status=200):
     response["Cache-Control"] = "no-store, private"
     response["Referrer-Policy"] = "no-referrer"
     response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+class SignalConsentStorageUnavailable(RuntimeError):
+    """Internal-only transient database fault, never exposed to a subscriber."""
+
+
+def _consent_storage_unavailable():
+    response = _answer({
+        "ok": False,
+        "detail": "Subscription status is temporarily unavailable. Please retry later.",
+        "payment_received": False,
+    }, 503)
+    response["Retry-After"] = "60"
     return response
 
 
