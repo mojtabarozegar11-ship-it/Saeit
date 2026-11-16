@@ -66,5 +66,33 @@ class ManifestTests(unittest.TestCase):
         errors = self.runcheck()
         self.assertTrue(any("missing output role" in e for e in errors))
 
+
+    def test_25_duplicate_json_keys_rejected(self):
+        p = self.root / "manifest.json"
+        p.write_text('{"schema_version":1,"schema_version":1,"study":"R01","artifacts":[]}')
+        self.assertTrue(any("duplicate JSON key" in e for e in verify(p)))
+
+    def test_26_nan_rejected(self):
+        p = self.root / "manifest.json"
+        p.write_text('{"schema_version":1,"study":"R01","artifacts":NaN}')
+        self.assertTrue(any("non-finite" in e for e in verify(p)))
+
+    def test_27_infinity_rejected(self):
+        p = self.root / "manifest.json"
+        p.write_text('{"schema_version":1,"study":"R01","artifacts":Infinity}')
+        self.assertTrue(any("non-finite" in e for e in verify(p)))
+
+    def test_28_manifest_symlink_rejected(self):
+        p = self.root / "manifest.json"
+        target = self.root / "real.json"
+        target.write_text(json.dumps(self.data))
+        p.symlink_to(target)
+        self.assertTrue(verify(p))
+
+    def test_29_manifest_size_limit(self):
+        p = self.root / "manifest.json"
+        p.write_bytes(b" " * (2 * 1024 * 1024 + 1))
+        self.assertTrue(any("size limit" in e for e in verify(p)))
+
 if __name__ == "__main__":
     unittest.main()
