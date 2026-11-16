@@ -33,7 +33,7 @@ REQUIRED_PROOFS = (
 )
 REQUIRED_KEYS = frozenset((
     "schema", "purpose", "request_ref", "buyer_ref", "seller_ref",
-    "contract_version", "sku", "native_fee_sun",
+    "contract_version", "sku", "native_fee_sun", "inquiry_intent_sha256",
     "funded_tier_usd", "evaluation_phase_count", "duration_days",
     "min_distinct_closed_positions", "min_trading_days_per_phase",
     "profit_share_trader_pct", "profit_share_company_pct",
@@ -110,6 +110,7 @@ class PrivateOrderCase:
     native_fee_sun: int
     verified_fact_count: int
     review_packet_sha256: str
+    inquiry_intent_sha256: str
     expires_at_sec: int
     stage: str = "private_review_only"
     payable_invoice_created: bool = False
@@ -123,7 +124,8 @@ class PrivateOrderCase:
 def evaluate_signed_plan1_request(
     *, packet: dict, signed_tag_hex: str, trusted_reviewer_key: bytes,
     expected_request_ref: str, expected_buyer_ref: str,
-    expected_seller_ref: str, server_now_sec: int,
+    expected_seller_ref: str, expected_inquiry_intent_sha256: str,
+    server_now_sec: int,
 ) -> PrivateOrderCase:
     """Review ONLY a signed, already independently checked buyer request.
 
@@ -145,6 +147,12 @@ def evaluate_signed_plan1_request(
     ):
         _require(type(expected) is str and REF.fullmatch(expected) is not None
                  and packet[field] == expected, f"untrusted {field} binding")
+    _require(type(expected_inquiry_intent_sha256) is str and
+             SHA256.fullmatch(expected_inquiry_intent_sha256) is not None,
+             "server-trusted inquiry digest required")
+    _require(type(packet["inquiry_intent_sha256"]) is str and
+             packet["inquiry_intent_sha256"] == expected_inquiry_intent_sha256,
+             "signed review must match the original buyer inquiry digest")
     for field, expected in FIXED.items():
         _require(type(packet[field]) is type(expected)
                  and packet[field] == expected,
@@ -182,5 +190,6 @@ def evaluate_signed_plan1_request(
         contract_version=TERMS_VERSION, native_fee_sun=30_000_000,
         verified_fact_count=len(REQUIRED),
         review_packet_sha256=sha256(body).hexdigest(),
+        inquiry_intent_sha256=expected_inquiry_intent_sha256,
         expires_at_sec=expires,
     )
