@@ -299,6 +299,164 @@ class Plan1VerifiedOrmHandoffTests(SimpleTestCase):
                 review_verified_precontract_for_interest(**data)
 
 
+
+    def _deny_amended_signed_consent(self, key, value):
+        data, _ = self.fixture()
+        attestation = dict(data["consent_attestation"])
+        if value is None:
+            attestation.pop(key)
+        else:
+            attestation[key] = value
+        data["consent_attestation"] = attestation
+        data["consent_tag_hex"] = consent_sign(attestation)
+        with self.assertRaises(Plan1OrderGateClosed):
+            self.run_review(data)
+
+    def _deny_amended_signed_review(self, key, value):
+        data, _ = self.fixture()
+        packet = copy.deepcopy(data["reviewed_packet"])
+        packet[key] = value
+        data["reviewed_packet"] = packet
+        data["reviewer_tag_hex"] = sign(packet)
+        with self.assertRaises(Plan1OrderGateClosed):
+            self.run_review(data)
+
+    def _deny_amended_signed_proof(self, key, value):
+        data, _ = self.fixture()
+        packet = copy.deepcopy(data["reviewed_packet"])
+        packet["proofs"][key] = value
+        data["reviewed_packet"] = packet
+        data["reviewer_tag_hex"] = sign(packet)
+        with self.assertRaises(Plan1OrderGateClosed):
+            self.run_review(data)
+
+    def test_signed_consent_wrong_purpose(self):
+        self._deny_amended_signed_consent("purpose", "generic-mailing-list")
+
+    def test_signed_consent_missing_purpose(self):
+        self._deny_amended_signed_consent("purpose", None)
+
+    def test_signed_consent_scope_broadened_to_marketing(self):
+        self._deny_amended_signed_consent("contact_scope", "newsletter_marketing")
+
+    def test_signed_consent_scope_missing(self):
+        self._deny_amended_signed_consent("contact_scope", None)
+
+    def test_signed_consent_retracted(self):
+        self._deny_amended_signed_consent("withdrawn", True)
+
+    def test_signed_consent_wrong_sku(self):
+        self._deny_amended_signed_consent("sku", "MOJPROP-STARTER30")
+
+    def test_signed_consent_wrong_terms(self):
+        self._deny_amended_signed_consent("terms_version", "v1.1")
+
+    def test_signed_consent_wrong_request(self):
+        self._deny_amended_signed_consent("request_ref", "REQUEST-ZYXWVUTSRQPONMLK")
+
+    def test_signed_consent_wrong_optin_version(self):
+        self._deny_amended_signed_consent("consent_version", "outdated-optin-v0")
+
+    def test_signed_consent_wrong_interest_pk(self):
+        self._deny_amended_signed_consent("interest_pk", 18)
+
+    def test_signed_consent_wrong_intent_digest(self):
+        self._deny_amended_signed_consent("inquiry_sha256", "f"*64)
+
+    def test_signed_consent_wrong_receipt_digest(self):
+        self._deny_amended_signed_consent("consent_evidence_sha256", "f"*64)
+
+    def test_signed_consent_adds_invoice_authorization(self):
+        self._deny_amended_signed_consent("invoice_authorized", True)
+
+    def test_signed_review_one_phase_rejected(self):
+        self._deny_amended_signed_review("evaluation_phase_count", 1)
+
+    def test_signed_review_deadline_27_days_rejected(self):
+        self._deny_amended_signed_review("duration_days", 27)
+
+    def test_signed_review_49_positions_rejected(self):
+        self._deny_amended_signed_review("min_distinct_closed_positions", 49)
+
+    def test_signed_review_five_days_per_phase_rejected(self):
+        self._deny_amended_signed_review("min_trading_days_per_phase", 5)
+
+    def test_signed_review_funded_tier_forged_rejected(self):
+        self._deny_amended_signed_review("funded_tier_usd", 999)
+
+    def test_signed_review_simulated_disclosure_removed(self):
+        self._deny_amended_signed_review("simulated_evaluation", False)
+
+    def test_signed_review_funding_condition_removed(self):
+        self._deny_amended_signed_review("real_account_only_after_pass_and_funding", False)
+
+    def test_signed_review_trader_profit_changed(self):
+        self._deny_amended_signed_review("profit_share_trader_pct", 60)
+
+    def test_signed_review_firm_profit_changed(self):
+        self._deny_amended_signed_review("profit_share_company_pct", 40)
+
+    def test_signed_review_owner_profile_exclusion_removed(self):
+        self._deny_amended_signed_review("owner_personal_social_accounts_excluded", False)
+
+    def test_signed_review_social_law_condition_removed(self):
+        self._deny_amended_signed_review("social_posting_is_conditional_on_law", False)
+
+    def test_signed_review_social_post_count_increased(self):
+        self._deny_amended_signed_review("social_posts_per_platform", 2)
+
+    def test_signed_review_wrong_native_trx_quote(self):
+        self._deny_amended_signed_review("native_fee_sun", 29_999_999)
+
+    def test_signed_review_not_plan1(self):
+        self._deny_amended_signed_review("sku", "MOJPROP-STARTER30")
+
+    def test_signed_review_wrong_legal_terms(self):
+        self._deny_amended_signed_review("contract_version", "v1.1")
+
+    def test_signed_proof_missing_buyer_identity(self):
+        self._deny_amended_signed_proof("buyer_identity_proof_sha256", "")
+
+    def test_signed_proof_invalid_age_country_digest(self):
+        self._deny_amended_signed_proof("buyer_age_country_proof_sha256", "x"*64)
+
+    def test_signed_proof_missing_kyc_review(self):
+        self._deny_amended_signed_proof("kyc_review_sha256", "")
+
+    def test_signed_proof_missing_buyer_signature(self):
+        self._deny_amended_signed_proof("buyer_signature_proof_sha256", "")
+
+    def test_signed_proof_wrong_contract_pdf(self):
+        self._deny_amended_signed_proof("contract_pdf_sha256", "f"*64)
+
+    def test_signed_proof_missing_real_capital_reserve(self):
+        self._deny_amended_signed_proof("capital_reserve_proof_sha256", "")
+
+    def test_signed_proof_missing_broker_authorization(self):
+        self._deny_amended_signed_proof("broker_authorization_sha256", "")
+
+    def test_signed_proof_missing_refund_disclosure(self):
+        self._deny_amended_signed_proof("refund_rights_disclosure_sha256", "")
+
+    def test_consent_and_reviewer_signer_must_be_different(self):
+        data, _ = self.fixture()
+        data["consent_key"] = data["trusted_reviewer_key"]
+        with self.assertRaises(Plan1OrderGateClosed):
+            self.run_review(data)
+
+    def test_reviewer_and_intake_signer_must_be_different(self):
+        data, _ = self.fixture()
+        data["trusted_reviewer_key"] = data["trusted_intake_key"]
+        with self.assertRaises(Plan1OrderGateClosed):
+            self.run_review(data)
+
+    def test_bogus_document_reference_does_not_authorize_enrollment(self):
+        data, _ = self.fixture()
+        data["trusted_documents"]["trusted_funding_reserve_sha256"] = "f"*64
+        with self.assertRaises(Plan1OrderGateClosed):
+            self.run_review(data)
+
+
 from django.test import TestCase
 from prop_firm.lead_models import PropInterest
 from test_prop_plan1_canonical_interest_bridge import sign as consent_sign
