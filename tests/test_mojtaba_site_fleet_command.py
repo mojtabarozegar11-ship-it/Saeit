@@ -60,6 +60,27 @@ class CanonicalSiteFleetCommandTests(SimpleTestCase):
             self.assertEqual(len(ledger.call_args.kwargs["cycle_id"]), 32)
         self.assertTrue(json.loads(output.getvalue())["durable_receipt"]["written"])
 
+    def test_private_collection_requires_explicit_recorded_public_cycle(self):
+        from django.core.management.base import CommandError
+        with patch("core.management.commands.mojtaba_site_fleet_cycle.collect_private_mpw_as_canonical_bot") as collector:
+            with self.assertRaises(CommandError):
+                call_command("mojtaba_site_fleet_cycle", collect_private_mpw=True)
+            collector.assert_not_called()
+
+    def test_legacy_private_worker_is_invoked_only_after_explicit_receipt(self):
+        output = io.StringIO()
+        sample = {"canonical_bot": "mojtaba.bot.ai", "public_checks_count": 14}
+        with patch("core.management.commands.mojtaba_site_fleet_cycle.Agent.objects.filter") as agent, \
+             patch("core.management.commands.mojtaba_site_fleet_cycle.run_one_bot_public_cycle", return_value=sample), \
+             patch("core.management.commands.mojtaba_site_fleet_cycle.record_public_cycle", return_value={"written": True}), \
+             patch("core.management.commands.mojtaba_site_fleet_cycle.collect_private_mpw_as_canonical_bot", return_value={"tenant": "mojplaywin"}) as collector:
+            agent.return_value.count.return_value = 1
+            call_command("mojtaba_site_fleet_cycle", observe_public=True,
+                         record_receipt=True, collect_private_mpw=True,
+                         stdout=output)
+            collector.assert_called_once_with()
+        self.assertEqual(json.loads(output.getvalue())["private_mpw_history"]["tenant"], "mojplaywin")
+
     def test_wrong_bot_identity_refuses_output(self):
         from django.core.management.base import CommandError
         output = io.StringIO()
