@@ -273,17 +273,90 @@ def check_sitemap() -> tuple[Check, int]:
     return check, len(urls)
 
 
+class GuestCheckoutForm(HTMLParser):
+    """Only inspect tags/attributes; NEVER record or output live CSRF values."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.forms = []
+        self.current = None
+        self.gateway_marker = False
+        self.saw_html = False
+        self.saw_body = False
+
+    def handle_starttag(self, tag, attrs):
+        raw = dict(attrs)
+        if tag == "html":
+            self.saw_html = True
+        elif tag == "body":
+            self.saw_body = True
+        elif tag == "section" and raw.get("data-gateway") == "trx-public-v1":
+            self.gateway_marker = True
+        elif tag == "form":
+            if self.current is not None:
+                return
+            self.current = {
+                "method": raw.get("method", "get").lower(),
+                "action": raw.get("action"),
+                "email": False,
+                "csrf": False,
+            }
+        elif tag == "input" and self.current is not None:
+            if (raw.get("name") == "email"
+                    and raw.get("type", "").lower() == "email"
+                    and "required" in raw
+                    and raw.get("maxlength") == "254"):
+                self.current["email"] = True
+            if (raw.get("name") == "csrfmiddlewaretoken"
+                    and raw.get("type", "").lower() == "hidden"
+                    and bool(raw.get("value"))):
+                self.current["csrf"] = True
+
+    def handle_endtag(self, tag):
+        if tag == "form" and self.current is not None:
+            self.forms.append(self.current)
+            self.current = None
+
+
 def check_authentication_gate(product_id: int) -> Check:
+    """Either exact login redirect OR real email+CSRF guarded guest checkout.
+
+    Anonymous 200 alone is NEVER proof of sale or payment readiness.
+    """
     path = f"/store/product/{product_id}/checkout/"
-    check, _ = get(ORIGIN + path)
+    check, body = get(ORIGIN + path)
     landing = urllib.parse.urlsplit(check.effective)
-    if check.status != 200 or landing.scheme != "https" or landing.netloc != "mojplaywin.com":
-        raise RuntimeError(f"Checkout {product_id} resolved outside store: {check.effective}")
-    if landing.path != "/accounts/login/":
-        raise RuntimeError(f"Checkout {product_id} bypassed login: {check.effective}")
-    params = urllib.parse.parse_qs(landing.query, keep_blank_values=True)
-    if params != {"next": [path]}:
-        raise RuntimeError(f"Checkout {product_id} lost its exact post-login return path")
+    if (check.status != 200 or landing.scheme != "https"
+            or landing.netloc != "mojplaywin.com" or landing.fragment):
+        raise RuntimeError("Checkout resolved outside the exact HTTPS store")
+    if landing.path == "/accounts/login/":
+        params = urllib.parse.parse_qs(landing.query, keep_blank_values=True)
+        if params != {"next": [path]}:
+            raise RuntimeError("Checkout lost its exact post-login return path")
+        return check
+
+    # The owner-approved walletless TRX route can intentionally sell to a
+    # guest with email and CSRF; do not classify that as an auth bypass.
+    if landing.path != path or landing.query:
+        raise RuntimeError("Checkout points to an unknown public route")
+    if len(body) < 600 or len(body) > 950000:
+        raise RuntimeError("Incomplete guest checkout HTML")
+    parsed = GuestCheckoutForm()
+    parsed.feed(body.decode("utf-8", "replace"))
+    expected_action = f"/commerce/trx-easy/start/{product_id}/"
+    validated = (
+        parsed.saw_html and parsed.saw_body and parsed.gateway_marker
+        and len(parsed.forms) == 1
+        and parsed.forms[0]["method"] == "post"
+        and parsed.forms[0]["action"] == expected_action
+        and parsed.forms[0]["email"] is True
+        and parsed.forms[0]["csrf"] is True
+        and b"mpw_trx_easy_enabled" not in body
+        and b"wallet secret phrase" not in body.lower()
+    )
+    if not validated:
+        raise RuntimeError(
+            "Anonymous checkout lacks exact email, CSRF or server-owned TRX form"
+        )
     return check
 
 
