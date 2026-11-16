@@ -25,6 +25,7 @@ from django.views.decorators.csrf import csrf_protect
 from .models import MojPropRequest
 from .mojprop_catalog_contract import public_service_catalog
 from .mojprop_receipts import make_receipt_token, verify_receipt_token, public_status_text
+from .mojprop_accessible_intake import request_form, created_receipt
 
 ROUTES = {choice[0] for choice in MojPropRequest.ROUTE_CHOICES}
 HORIZONS = {choice[0] for choice in MojPropRequest.HORIZON_CHOICES}
@@ -209,7 +210,36 @@ def _json(data, status=200):
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def mojprop_intake(request):
-    """Return a CSRF token or create one manual-review request."""
+    """Maintain the original JSON API and expose a native HTML fallback."""
+    modes = request.GET.getlist("format")
+    if modes and modes != ["html"]:
+        return _json({"ok": False, "detail": "Unsupported intake format."}, status=400)
+    if modes == ["html"]:
+        if request.method == "GET":
+            return request_form(request)
+        content_type = str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].lower()
+        if content_type != "application/x-www-form-urlencoded":
+            return request_form(request, error="Use the standard request form.", status=400)
+        api_response = _mojprop_intake_api(request)
+        # The existing validated, idempotent CRM route remains authoritative.
+        # Only server-generated response fields are presented in the HTML.
+        try:
+            result = json.loads(api_response.content.decode("utf-8"))
+        except (UnicodeError, ValueError):
+            return request_form(request, error="Request unavailable.", status=503)
+        if result.get("ok") is True and api_response.status_code in (200, 201):
+            return created_receipt(result)
+        detail = result.get("detail")
+        detail = detail if type(detail) is str and len(detail) <= 200 else "Request unavailable."
+        response = request_form(request, error=detail, status=api_response.status_code)
+        if api_response.has_header("Retry-After"):
+            response["Retry-After"] = api_response["Retry-After"]
+        return response
+    return _mojprop_intake_api(request)
+
+
+def _mojprop_intake_api(request):
+    """Original bounded validation, CRM persistence and signed receipts."""
     if request.method == "GET":
         return _json({"ok": True, "csrf_token": get_token(request), "service": "moj-prop-intake",
                       "service_catalog": public_service_catalog()})
