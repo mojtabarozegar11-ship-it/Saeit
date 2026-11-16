@@ -1,0 +1,47 @@
+name: Factory full scheduler and worker read-only matrix 2026-11-16
+on:
+  push:
+    branches: [ops/verified-disk-reclaim-20261116]
+    paths: [".github/workflows/owner-factory-scheduler-matrix-readonly-20261116.yml"]
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/ops/verified-disk-reclaim-20261116' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify only pinned read-only evidence collector
+        shell: bash
+        run: |
+          set -euo pipefail
+          f=scripts/owner_factory_scheduler_matrix_readonly_20261116.py
+          test ! -L "$f"
+          test "$(git hash-object -- "$f")" = "cdd67e7c1cb1c6fb5d7004d0545cc286ac14a23a"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("scripts/owner_factory_scheduler_matrix_readonly_20261116.py").read_text())'
+          echo FACTORY_MATRIX_SOURCE_PINNED=PASS
+      - name: Read cron systemd and existing worker liveness on factory VPS only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${VPS_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/factory-scheduler-matrix-20261116"
+          install -d -m 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test -s "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo PINNED_VPS_SSH=VERIFIED
+          timeout 90s ssh -T -i "$work/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ForwardAgent=no -o RequestTTY=no githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < scripts/owner_factory_scheduler_matrix_readonly_20261116.py |
+            PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import json,sys; s=sys.stdin.read(7000); p="FACTORY_SCHEDULER_MATRIX="; q=[x for x in s.splitlines() if x.startswith(p)]; assert len(q)==1,"MISSING_FACTORY_MATRIX"; d=json.loads(q[0][len(p):]); assert d["schema"]=="owner.factory.scheduler_matrix.readonly.v1" and d["deletion_allowed"] is False and d["cron_modified"] is False and d["services_changed"] is False and d["logs_modified"] is False and d["backups_modified"] is False; print(q[0])'
+          echo FACTORY_MATRIX_READONLY=PASS
