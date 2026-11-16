@@ -6,14 +6,20 @@ contract signatures before issuing a real invoice. This module cannot mark paid.
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
-import re
+import unicodedata
 
-SKU = "MOJPROP-STARTER30"
-AMOUNT_SUN = 30_000_000
-NETWORK = "tron-mainnet"
-MAX_TTL = timedelta(days=7)
-_HEX = re.compile(r"^[0-9a-f]{64}$")
-_ORDER = re.compile(r"^[A-Z0-9][A-Z0-9_-]{7,41}$")
+from services.mojprop_starter30_tron_settlement import (
+    PRODUCT as SKU,
+    NATIVE_AMOUNT_SUN as AMOUNT_SUN,
+    NETWORK,
+    MERCHANT_DOMAIN,
+    MERCHANT_ID,
+    REFERENCE as _ORDER,
+)
+
+# The canonical persisted TRON order contract permits MAX 86400 seconds.
+# A longer private preview must not later masquerade as a valid live invoice.
+MAX_TTL = timedelta(hours=24)
 
 
 @dataclass(frozen=True)
@@ -21,6 +27,8 @@ class PrivateInvoicePreview:
     order_ref: str
     sku: str
     network: str
+    merchant_domain: str
+    merchant_id: str
     amount_sun: int
     issued_at: str
     expires_at: str
@@ -33,13 +41,22 @@ class PrivateInvoicePreview:
 
 
 def _digest(value: str, field: str) -> str:
-    if not isinstance(value, str) or not value.strip():
+    if type(value) is not str or not 1 <= len(value.strip()) <= 2048:
         raise ValueError(f"{field} evidence required")
+    # Refuse control characters and bidi formatting that can alter apparent
+    # consent/contract text. Neither a digest nor the supplied flags prove
+    # the original signature was independently authenticated.
+    if any(
+        unicodedata.category(char) in ("Cc", "Cf", "Cs", "Zl", "Zp")
+        for char in value
+    ):
+        raise ValueError(f"{field} contains unsafe evidence characters")
     return sha256(value.encode("utf-8")).hexdigest()
 
 
 def _timestamp(value: datetime, field: str) -> datetime:
-    if not isinstance(value, datetime) or value.tzinfo is None:
+    if (type(value) is not datetime or value.tzinfo is None
+            or value.utcoffset() is None):
         raise ValueError(f"{field} must be timezone-aware")
     return value.astimezone(timezone.utc)
 
@@ -56,16 +73,19 @@ def prepare_private_invoice(
     The flags must be supplied by an independently audited verification process;
     this function is not itself identity or signature verification.
     """
-    if not isinstance(order_ref, str) or not _ORDER.fullmatch(order_ref):
+    if type(order_ref) is not str or not _ORDER.fullmatch(order_ref):
         raise ValueError("invalid unique order reference")
-    if not all((verified_merchant, verified_buyer, consent_confirmed, signatures_verified)):
-        raise ValueError("independent identity, consent and signature verification required")
+    gates = (verified_merchant, verified_buyer, consent_confirmed, signatures_verified)
+    if not all(type(gate) is bool and gate is True for gate in gates):
+        raise ValueError("explicit boolean identity, consent and signature evidence required")
     issued = _timestamp(issued_at, "issued_at")
     expires = _timestamp(expires_at, "expires_at")
     if not issued < expires <= issued + MAX_TTL:
-        raise ValueError("expiry must be after issue and within seven days")
+        raise ValueError("expiry must be after issue and within 24 hours")
     return PrivateInvoicePreview(
-        order_ref=order_ref, sku=SKU, network=NETWORK, amount_sun=AMOUNT_SUN,
+        order_ref=order_ref, sku=SKU, network=NETWORK,
+        merchant_domain=MERCHANT_DOMAIN, merchant_id=MERCHANT_ID,
+        amount_sun=AMOUNT_SUN,
         issued_at=issued.isoformat(), expires_at=expires.isoformat(),
         buyer_reference_digest=_digest(buyer_reference, "buyer_reference"),
         consent_evidence_digest=_digest(consent_evidence, "consent_evidence"),
