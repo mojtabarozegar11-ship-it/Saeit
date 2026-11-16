@@ -139,8 +139,8 @@ def evaluate_simulated_phase(
     first_breach = None
     last_equity = policy.starting_equity
     digest = bytes(32)
-    worst_daily_loss = Decimal(0)
-    worst_overall_loss = Decimal(0)
+    worst_daily_loss_bps = Decimal(0)
+    worst_overall_loss_bps = Decimal(0)
     target = (policy.phase1_profit_target_bps if phase == 1
               else policy.phase2_profit_target_bps)
 
@@ -164,8 +164,12 @@ def evaluate_simulated_phase(
             )
             daily_loss = max(Decimal(0), day_open - effective)
             overall_loss = max(Decimal(0), overall_reference - effective)
-            worst_daily_loss = max(worst_daily_loss, daily_loss)
-            worst_overall_loss = max(worst_overall_loss, overall_loss)
+            # Different days have different opening bases; compare risk in
+            # basis points of that day and the selected overall reference.
+            worst_daily_loss_bps = max(worst_daily_loss_bps, daily_loss / day_open * BPS)
+            worst_overall_loss_bps = max(
+                worst_overall_loss_bps, overall_loss / overall_reference * BPS,
+            )
             daily_floor = day_open * (BPS - policy.max_daily_loss_bps) / BPS
             total_floor = overall_reference * (BPS - policy.max_overall_loss_bps) / BPS
             if first_breach is None and effective < total_floor:
@@ -211,8 +215,8 @@ def evaluate_simulated_phase(
             "target_equity": format(target_equity, "f"),
             "latest_observed_equity": format(last_equity, "f"),
             "profit_target_observed": target_met,
-            "worst_observed_daily_loss_bps": _percent_bps(worst_daily_loss, policy.starting_equity),
-            "worst_observed_overall_loss_bps": _percent_bps(worst_overall_loss, policy.starting_equity),
+            "worst_observed_daily_loss_bps": format(worst_daily_loss_bps.quantize(Decimal("0.01")), "f"),
+            "worst_observed_overall_loss_bps": format(worst_overall_loss_bps.quantize(Decimal("0.01")), "f"),
             "observations_sha256": digest.hex(),
             "daily_reference_definition": "previous_day_last_observed_equity_utc",
             "overall_reference_definition": policy.overall_drawdown_mode,
