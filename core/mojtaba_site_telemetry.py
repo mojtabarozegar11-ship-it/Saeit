@@ -76,3 +76,58 @@ def normalize_mpw_telemetry(snapshot, *, now=None):
         "migration_or_legacy_cleanup_approved": False,
         "customer_data_imported": False,
     }
+
+
+
+def normalize_zomorod_registry(registry, *, captured_at_utc, now=None):
+    """Normalize cPanel's immutable SQLite aggregate WITHOUT copying its DB.
+
+    Existing site's deploy/mojtaba_live_topology_readonly.py produces this
+    redacted shape. It cannot prove that 11 processes ran or generated output.
+    """
+    now = now or datetime.now(timezone.utc)
+    if not isinstance(registry, dict) or registry.get("state") != "source_registry_snapshot_only":
+        raise SiteFleetError("ZM_PRIVATE_REGISTRY_SOURCE_MISSING")
+    if registry.get("read_only_immutable") is not True:
+        raise SiteFleetError("ZM_REGISTRY_NOT_READ_ONLY")
+    if registry.get("database_state_proves_live_workers") is not False:
+        raise SiteFleetError("ZM_LIVE_WORKER_STATUS_UNTRUSTED")
+    try:
+        at = datetime.fromisoformat(captured_at_utc.replace("Z", "+00:00"))
+        if at.tzinfo is None or not timedelta(0) <= now - at <= timedelta(minutes=20):
+            raise ValueError("stale or future")
+    except (ValueError, TypeError, AttributeError):
+        raise SiteFleetError("ZM_REGISTRY_TIMESTAMP_INVALID")
+    rows = registry.get("agent_roles")
+    if not isinstance(rows, list) or len(rows) > len(ZM_ROUTES):
+        raise SiteFleetError("ZM_AGENT_ROWS_UNSAFE")
+    known, enabled = set(), 0
+    for row in rows:
+        if not isinstance(row, dict) or row.get("code") not in ZM_ROUTES:
+            raise SiteFleetError("ZM_UNEXPECTED_SITE_ROLE")
+        if row["code"] in known or type(row.get("enabled")) is not bool:
+            raise SiteFleetError("ZM_DUPLICATE_OR_INVALID_ROLE")
+        known.add(row["code"])
+        enabled += int(row["enabled"])
+    if registry.get("known_roles_found") != len(known):
+        raise SiteFleetError("ZM_ROLE_COUNT_MISMATCH")
+    if type(registry.get("unknown_code_records")) is not int or registry["unknown_code_records"] < 0:
+        raise SiteFleetError("ZM_UNKNOWN_ROLE_COUNT_MISSING")
+    raw = json.dumps(registry, ensure_ascii=False, sort_keys=True,
+                     separators=(",", ":"), allow_nan=False).encode("utf-8")
+    if len(raw) > 50_000:
+        raise SiteFleetError("ZM_REGISTRY_TOO_LARGE")
+    return {
+        "canonical_bot": CANONICAL_BOT, "tenant": "zomorodmelal",
+        "known_roles_observed": len(known),
+        "declared_roles": len(ZM_ROUTES),
+        "enabled_role_records": enabled,
+        "other_legacy_codes": registry["unknown_code_records"],
+        "registry_complete": len(known) == len(ZM_ROUTES)
+                              and registry["unknown_code_records"] == 0,
+        "source_snapshot_sha256": sha256(raw).hexdigest(),
+        "source_is_cryptographically_authenticated": False,
+        "actual_worker_executions_verified_by_import": 0,
+        "legacy_retirement_approved": False,
+        "historical_database_deleted": False,
+    }
