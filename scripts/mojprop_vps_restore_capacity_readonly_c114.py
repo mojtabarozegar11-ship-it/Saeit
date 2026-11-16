@@ -11,10 +11,91 @@ restore, service startup, deletion, customer payment, or deployment.
 import json
 import os
 import pwd
+import re
 import stat
 from pathlib import Path
 
-from scripts.mpw_vps_mount_capacity_readonly_20261105 import inspect
+# This probe is streamed to the authenticated factory VPS over pinned SSH.
+# It must remain standalone: the VPS might not contain a Saeit checkout.
+# Equivalent local-mount filtering was validated by the existing
+# mpw_vps_mount_capacity_readonly_20261105.py regression suite.
+LOCAL_TYPES = frozenset(("ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs"))
+MAX_MOUNTS = 4096
+_OCTAL = re.compile(r"\\([0-7]{3})")
+
+
+def decode_mount_path(escaped):
+    return _OCTAL.sub(lambda m: chr(int(m.group(1), 8)), escaped)
+
+
+def parse_local_mounts(lines):
+    paths = []
+    for line in lines:
+        left, sep, right = line.partition(" - ")
+        if not sep:
+            continue
+        fields, source = left.split(), right.split()
+        if len(fields) < 5 or not source or source[0] not in LOCAL_TYPES:
+            continue
+        mountpoint = decode_mount_path(fields[4])
+        if mountpoint.startswith("/"):
+            paths.append(mountpoint)
+    return paths
+
+
+def _device_record(path):
+    if os.path.islink(path):
+        return None
+    owner = os.stat(path)
+    space = os.statvfs(path)
+    return {
+        "device": owner.st_dev,
+        "free_bytes": max(0, space.f_bavail * space.f_frsize),
+        "writable_hint": bool(os.access(path, os.W_OK | os.X_OK)),
+    }
+
+
+def inspect(home):
+    """Read kernel metadata only; never print paths or mount device IDs."""
+    home_record = _device_record(home)
+    if home_record is None:
+        raise ValueError("untrusted home root")
+    lines = []
+    truncated = False
+    with open("/proc/self/mountinfo", encoding="utf-8", errors="replace") as stream:
+        for index, line in enumerate(stream):
+            if index >= MAX_MOUNTS:
+                truncated = True
+                break
+            lines.append(line)
+    unique = {}
+    unreadable = 0
+    for path in parse_local_mounts(lines):
+        try:
+            item = _device_record(path)
+        except (OSError, ValueError):
+            unreadable += 1
+            continue
+        if item is None or item["device"] == home_record["device"]:
+            continue
+        disk_id = item["device"]
+        if disk_id not in unique:
+            unique[disk_id] = item
+        else:
+            unique[disk_id]["writable_hint"] |= item["writable_hint"]
+    disks = list(unique.values())
+    largest = max((x["free_bytes"] for x in disks), default=0)
+    threshold = 40 * (1024 ** 3)
+    return {
+        "classification": "READ_ONLY_MPW_VPS_DISTINCT_LOCAL_MOUNTS",
+        "home_free_bytes": home_record["free_bytes"],
+        "largest_independent_free_bytes": largest,
+        "independent_local_device_count": len(disks),
+        "independent_devices_with_write_hint_and_size_floor": sum(
+            x["free_bytes"] >= threshold and x["writable_hint"] for x in disks
+        ),
+        "inventory_complete": not truncated and not unreadable,
+    }
 
 GIB = 1024 ** 3
 MIB = 1024 ** 2
