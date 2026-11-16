@@ -88,7 +88,9 @@ def bind_canonical_interest_to_private_inquiry(
             or type(canonical_interest["id"]) is not int
             or canonical_interest["plan_code"] != SKU
             or canonical_interest["consent_version"] != _CONSENT_VERSION
+            or type(canonical_interest["source_language"]) is not str
             or canonical_interest["source_language"] not in _LANG
+            or type(canonical_interest["status"]) is not str
             or canonical_interest["status"] != "new"):
         raise Plan1OrderGateClosed("canonical consent row ineligible or withdrawn")
     if (type(trusted_consent_key) is not bytes or len(trusted_consent_key) < 32
