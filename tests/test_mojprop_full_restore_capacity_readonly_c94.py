@@ -176,7 +176,8 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
     def test_cpanel_uapi_fixed_read_only_method(self):
         text = (ROOT / "scripts/mojprop_full_restore_capacity_readonly_c94.py").read_text()
         self.assertIn('"Quota", "get_quota_info"', text)
-        self.assertIn('"/usr/local/cpanel/bin/uapi"', text)
+        self.assertIn('"/usr/bin/uapi"', text)
+        self.assertNotIn('binary = "/usr/local/cpanel/bin/uapi"', text)
         self.assertIn('check=True, timeout=12', text)
         self.assertNotIn('"set_quota"', text)
         self.assertNotIn('"create"', text)
@@ -207,6 +208,10 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
                              ["--user=" + ACCOUNT, "Quota", "get_quota_info"])
             self.assertEqual(run.call_args_list[1].args[0][-2:],
                              ["Quota", "get_quota_info"])
+            self.assertEqual(
+                [call.args[0][0] for call in run.call_args_list],
+                ["/usr/bin/uapi", "/usr/bin/uapi"],
+            )
 
 
     def test_cpanel_uapi_owner_cli_receives_minimal_exact_owner_environment(self):
@@ -350,6 +355,60 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
         self.assertNotIn('out["quota_raw_output"]', source)
         self.assertNotIn('out["stdout"]', source)
 
+
+
+    def test_real_cpanel_c111_string_quota_flags_and_inodes_are_accepted(self):
+        from scripts.mojprop_full_restore_capacity_readonly_c94 import _cpanel_quota_data_adequate
+        result = {"result": {"status": 1, "data": {
+            "under_quota_overall": "1", "under_megabyte_limit": "1",
+            "under_inode_limit": "1", "megabyte_limit": "1000",
+            "megabytes_remain": "500", "inode_limit": "0",
+            "inodes_remain": "0",
+        }}}
+        allowed, reason = _cpanel_quota_data_adequate(result, 200_000_000)
+        self.assertTrue(allowed)
+        self.assertEqual(reason, "cpanel_uapi_quota_verified")
+
+    def test_real_cpanel_string_quota_flag_zero_denies_capacity(self):
+        from scripts.mojprop_full_restore_capacity_readonly_c94 import _cpanel_quota_data_adequate
+        valid = {"under_quota_overall": "1", "under_megabyte_limit": "1",
+                 "under_inode_limit": "1", "megabyte_limit": "1000",
+                 "megabytes_remain": "500", "inode_limit": "0",
+                 "inodes_remain": "0"}
+        for key in ("under_quota_overall", "under_megabyte_limit", "under_inode_limit"):
+            for bad in ("0", 0, "01", "true", True, None):
+                with self.subTest(key=key, bad=bad):
+                    row = dict(valid, **{key: bad})
+                    accept, _ = _cpanel_quota_data_adequate(
+                        {"result": {"status": 1, "data": row}}, 200_000_000)
+                    self.assertFalse(accept)
+
+    def test_cpanel_string_inode_cannot_bypass_limits(self):
+        from scripts.mojprop_full_restore_capacity_readonly_c94 import _cpanel_quota_data_adequate
+        values = {"under_quota_overall": "1", "under_megabyte_limit": "1",
+                  "under_inode_limit": "1", "megabyte_limit": "1000",
+                  "megabytes_remain": "500", "inode_limit": "100",
+                  "inodes_remain": "31"}
+        allowed, reason = _cpanel_quota_data_adequate(
+            {"result": {"status": 1, "data": values}}, 200_000_000)
+        self.assertFalse(allowed)
+        self.assertEqual(reason, "cpanel_uapi_quota_inodes_insufficient")
+        for bad in ("01", "-1", "1.0", "1 ", "1e5", "99999999999999999999", True):
+            row = dict(values, **{"inodes_remain": bad})
+            allowed, _ = _cpanel_quota_data_adequate(
+                {"result": {"status": 1, "data": row}}, 200_000_000)
+            self.assertFalse(allowed)
+
+    def test_true_cpanel_string_flags_do_not_override_bytes_shortfall(self):
+        from scripts.mojprop_full_restore_capacity_readonly_c94 import _cpanel_quota_data_adequate
+        values = {"under_quota_overall": "1", "under_megabyte_limit": "1",
+                  "under_inode_limit": "1", "megabyte_limit": "500",
+                  "megabytes_remain": "10", "inode_limit": "0",
+                  "inodes_remain": "0"}
+        allowed, reason = _cpanel_quota_data_adequate(
+            {"result": {"status": 1, "data": values}}, 200_000_000)
+        self.assertFalse(allowed)
+        self.assertEqual(reason, "cpanel_uapi_quota_bytes_insufficient")
 
 
 if __name__ == "__main__":

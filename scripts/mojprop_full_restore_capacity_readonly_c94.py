@@ -172,9 +172,16 @@ def _cpanel_quota_data_adequate(document, needed_bytes):
             or type(document["result"].get("data")) is not dict):
         return False, "cpanel_uapi_invalid_response"
     data = document["result"]["data"]
-    if any(type(data.get(k)) is not int or data[k] != 1
-           for k in ("under_quota_overall", "under_megabyte_limit",
-                     "under_inode_limit")):
+    # The *actual* owner cPanel UAPI (C111) returns these three flags
+    # as canonical strings "1", not Python integers. Accept exactly 1
+    # or "1"; deny bool, "01", "true", zero and missing values.
+    def under_limit(key):
+        value = data.get(key)
+        return (type(value) is int and value == 1
+                or type(value) is str and value == "1")
+    if any(not under_limit(k) for k in
+           ("under_quota_overall", "under_megabyte_limit",
+            "under_inode_limit")):
         return False, "cpanel_uapi_limit_exceeded_or_unknown"
     try:
         def number(field):
@@ -187,11 +194,19 @@ def _cpanel_quota_data_adequate(document, needed_bytes):
             return out
         limit_mb = number("megabyte_limit")
         remain_mb = number("megabytes_remain")
-        inode_limit = data["inode_limit"]
-        inodes_remain = data["inodes_remain"]
-        if (type(inode_limit) is not int or inode_limit < 0
-                or type(inodes_remain) is not int or inodes_remain < 0):
+        # cPanel UAPI may serialize inode counters as canonical decimal
+        # strings too; reject bool, signs, decimals, spaces, leading zeros
+        # and unbounded numbers rather than coercing arbitrary values.
+        def inode_number(key):
+            value = data[key]
+            if type(value) is int and 0 <= value <= 10**15:
+                return value
+            if (type(value) is str and
+                    re.fullmatch(r"(?:0|[1-9][0-9]{0,14})", value)):
+                return int(value)
             raise ValueError("inode")
+        inode_limit = inode_number("inode_limit")
+        inodes_remain = inode_number("inodes_remain")
     except (KeyError, ValueError, InvalidOperation, TypeError):
         return False, "cpanel_uapi_invalid_quantities"
     if limit_mb == 0:
@@ -207,7 +222,9 @@ def _cpanel_quota_data_adequate(document, needed_bytes):
 def _cpanel_uapi_quota_result(needed_bytes):
     """Official owner-only read-only UAPI: explicit user, then same-user CLI."""
     import subprocess
-    binary = "/usr/local/cpanel/bin/uapi"
+    # C111 owner-only cPanel probe: /usr/bin/uapi is a real regular executable;
+    # the conventional /usr/local/cpanel/bin/uapi is absent in this SSH view.
+    binary = "/usr/bin/uapi"
     variants = (
         [binary, "--output=json", "--user=" + ACCOUNT,
          "Quota", "get_quota_info"],
