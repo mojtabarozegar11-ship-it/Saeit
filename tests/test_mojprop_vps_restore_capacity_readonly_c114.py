@@ -130,7 +130,47 @@ class MojPropVpsRestoreCapacityTests(unittest.TestCase):
                           ".write_bytes(", ".write_text(", "execute_sql",
                           "mariadb-dump", "mysqldump", "sendrawtransaction"):
             self.assertNotIn(forbidden, source)
-        self.assertIn("from scripts.mpw_vps_mount_capacity_readonly_20261105 import inspect", source)
+        self.assertIn("def inspect(home):", source)
+        self.assertIn('open("/proc/self/mountinfo"', source)
+        self.assertIn("MAX_MOUNTS = 4096", source)
+
+
+    def test_17_mountinfo_parser_filters_virtual_and_network_mounts(self):
+        data = [
+            "101 100 8:1 / / rw - ext4 /dev/root rw",
+            "102 100 8:2 / /mnt/safe rw - xfs /dev/vdb rw",
+            "103 100 0:1 / /tmp rw - tmpfs tmpfs rw",
+            "104 100 0:2 / /mnt/network rw - nfs4 server:/data rw",
+        ]
+        self.assertEqual(guard.parse_local_mounts(data), ["/", "/mnt/safe"])
+
+    def test_18_mount_octals_are_decoded_only_in_memory(self):
+        self.assertEqual(guard.decode_mount_path("/mnt/with\\040space"),
+                         "/mnt/with space")
+
+    def test_19_separate_bind_mounts_do_not_double_count_capacity(self):
+        import io
+        lines = (
+            "101 100 8:1 / / rw - ext4 /dev/root rw\n"
+            "102 100 8:2 / /mnt/volume rw - xfs /dev/mapper/private rw\n"
+            "103 100 8:2 / /srv/bind rw - xfs /dev/mapper/private rw\n"
+        )
+        devices = {
+            "/home/githubops": (1, 2 * guard.GIB, True),
+            "/": (1, 2 * guard.GIB, True),
+            "/mnt/volume": (2, 45 * guard.GIB, True),
+            "/srv/bind": (2, 45 * guard.GIB, True),
+        }
+        def record(path):
+            device, free, writable = devices[str(path)]
+            return {"device": device, "free_bytes": free,
+                    "writable_hint": writable}
+        with patch("builtins.open", return_value=io.StringIO(lines)), patch.object(
+                guard, "_device_record", side_effect=record):
+            r = guard.inspect(Path("/home/githubops"))
+        self.assertEqual(r["independent_local_device_count"], 1)
+        self.assertEqual(r["independent_devices_with_write_hint_and_size_floor"], 1)
+        self.assertTrue(r["inventory_complete"])
 
 
 if __name__ == "__main__":
