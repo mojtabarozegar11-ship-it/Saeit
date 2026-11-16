@@ -12,7 +12,7 @@ from scripts.mojprop_cpanel_horizon_parity_readonly_c125 import classify, EXPECT
 
 ROOT = b'<select id="horizon">'
 END = b'</select>'
-OPTION = re.compile(rb'<option value="([^"<>]{1,64})">([^<>]{1,90})</option>')
+OPTION = re.compile(rb'<option value="([^"<>]{0,64})">([^<>]{1,90})</option>')
 MAX_SIZE = 512_000
 
 
