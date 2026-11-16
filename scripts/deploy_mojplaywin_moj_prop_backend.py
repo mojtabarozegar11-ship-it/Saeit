@@ -30,6 +30,9 @@ from scripts.mojprop_db_release_evidence import verify_database_restore_evidence
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
 DOCROOT = Path("/home/zomorod2/mojplaywin.com")
+# Observed in actual owner-only cPanel read-only C118, workflow 43874140514.
+# Source SHA is NOT a guarantee that a live Passenger worker has loaded it.
+REVIEWED_PASSENGER_SHA256 = "83a5309b8712aed5139dc7630724ac150edfb32db852af347d0444506fab2581"
 BACKUP_ROOT = Path("/home/zomorod2/.mojplaywin-moj-prop-backups")
 INDEPENDENT_DB_EVIDENCE_ROOT = Path("/home/zomorod2/.mojprop-private-db-restore-evidence")
 URLCONF = Path("config/urls.py")
