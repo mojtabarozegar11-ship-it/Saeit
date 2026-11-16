@@ -97,7 +97,7 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         # A stale four-file pin returned misleading "drift" after current-main
         # source was actually merged. Public HTML must be audited as well.
         self.assertEqual(EXPECTED["core/mojprop_views.py"],
-                         "5722fdfbf7e88be96bd87a8df1311d9a8b415d6d")
+                         "12ee5e408f2a50e0571d5e6d91a760644ec210a9")
         self.assertEqual(EXPECTED["core/mojprop_receipts.py"],
                          "9fe6eb1ad13857143440517b14b3f2ebcfef6db3")
         self.assertEqual(EXPECTED["core/mojprop_accessible_intake.py"],
