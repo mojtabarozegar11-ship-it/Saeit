@@ -240,6 +240,81 @@ class CompletedPhaseOneChronologyTests(TestCase):
         self.assertIsNone(prior.challenge_enrollment_id)
 
 
+    def test_30_passed_flag_without_reconciled_trades_is_not_prior_pass(self):
+        PropExecution.objects.filter(account=self.phase1).delete()
+        self.assertFalse(self.accepted())
+
+    def test_31_six_day_goal_shortfall_denies_prior_even_when_flag_passed(self):
+        PropExecution.objects.filter(account=self.phase1).update(
+            gross_realized_usd=Decimal("1.50")
+        )
+        self.assertFalse(self.accepted())
+
+    def test_32_missing_day_open_equity_denies_prior_verified_pass(self):
+        PropEquityObservation.objects.filter(
+            account=self.phase1, external_event_id="c141-open-3"
+        ).delete()
+        self.assertFalse(self.accepted())
+
+    def test_33_pending_trade_cannot_complete_six_day_prior_assessment(self):
+        PropExecution.objects.filter(
+            account=self.phase1, external_event_id="c141-trade-5"
+        ).update(reconciliation_status="pending")
+        self.assertFalse(self.accepted())
+
+    def test_34_single_profitable_day_over_32_percent_denies_prior(self):
+        # 6.00 + 5*(0.72) == 9.60 but day one represents 62.5% of profit.
+        PropExecution.objects.filter(
+            account=self.phase1, external_event_id="c141-trade-0"
+        ).update(gross_realized_usd=Decimal("6.00"))
+        PropExecution.objects.filter(account=self.phase1).exclude(
+            external_event_id="c141-trade-0"
+        ).update(gross_realized_usd=Decimal("0.72"))
+        self.assertFalse(self.accepted())
+
+    def _stage_two_projection(self):
+        from prop_firm.portal import account_projection
+        at = self.phase2.opened_at
+        PropEquityObservation.objects.create(
+            account=self.phase2, external_event_id="c141-stage2-open",
+            data_source="CI-NOT-BROKER", observed_at=at,
+            equity_usd=Decimal("100"), is_session_open=True,
+            reconciliation_status="verified",
+        )
+        PropExecution.objects.create(
+            account=self.phase2, external_event_id="c141-stage2-trade",
+            external_position_id="c141-stage2-position",
+            data_source="CI-NOT-BROKER", symbol="XAUUSD",
+            execution_origin="bot", closed_at=at + timedelta(hours=1),
+            gross_realized_usd=Decimal("1"), total_fees_usd=Decimal("0"),
+            reconciliation_status="verified",
+        )
+        PropEquityObservation.objects.create(
+            account=self.phase2, external_event_id="c141-stage2-close",
+            data_source="CI-NOT-BROKER", observed_at=at + timedelta(hours=2),
+            equity_usd=Decimal("101"), reconciliation_status="verified",
+            is_session_open=False,
+        )
+        return account_projection(self.phase2)
+
+    def test_35_stage_two_receives_proven_prior_not_status_only(self):
+        projected = self._stage_two_projection()
+        self.assertTrue(projected["purchase_window_valid"])
+        self.assertIsNotNone(projected["assessment"])
+        self.assertNotIn("phase_one_pass_required", projected["assessment"].reasons)
+        # Still not passed: one simulated day cannot satisfy stage-two terms.
+        self.assertFalse(projected["assessment"].passed)
+
+    def test_36_stage_two_rejects_flagged_prior_without_9_6_percent_proof(self):
+        PropExecution.objects.filter(account=self.phase1).update(
+            gross_realized_usd=Decimal("0.50")
+        )
+        projected = self._stage_two_projection()
+        self.assertIsNotNone(projected["assessment"])
+        self.assertIn("phase_one_pass_required", projected["assessment"].reasons)
+        self.assertFalse(projected["assessment"].passed)
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()
