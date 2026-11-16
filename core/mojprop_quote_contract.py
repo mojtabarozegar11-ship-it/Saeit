@@ -39,7 +39,7 @@ def _text(value, name, minimum, maximum):
                 or ord(ch) in range(0x202A, 0x202F)
                 or ord(ch) in range(0x2066, 0x206A)):
             raise QuoteContractError("unsafe invisible quote formatting in " + name)
-    if name == "title" and any(ch in value for ch in ("\n", "\t", "\u2028", "\u2029")):
+    if name == "title" and any(ch in value for ch in ("\n", "\t", "\u0085", "\u2028", "\u2029")):
         raise QuoteContractError("title must not inject a second proposal line")
     return value.strip()
 
