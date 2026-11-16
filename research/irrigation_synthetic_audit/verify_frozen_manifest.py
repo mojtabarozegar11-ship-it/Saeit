@@ -90,6 +90,8 @@ def verify(manifest_path):
                 return ["manifest changed during read"]
         if len(raw) > MAX_MANIFEST_BYTES:
             return ["manifest exceeds size limit"]
+        if len(raw) != before.st_size:
+            return ["manifest short read; snapshot incomplete"]
         def reject_duplicate_keys(pairs):
             obj = {}
             for key, value in pairs:
