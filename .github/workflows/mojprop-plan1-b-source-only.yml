@@ -30,6 +30,7 @@ on:
       - feature/prop-firm-policy-v11-20261114
     paths:
       - 'prop_firm/order_readiness.py'
+      - 'prop_firm/funded_delivery_obligation.py'
       - 'prop_firm/buyer_order_review.py'
       - 'prop_firm/buyer_interest_form.py'
       - 'prop_firm/buyer_precontract_chain.py'
