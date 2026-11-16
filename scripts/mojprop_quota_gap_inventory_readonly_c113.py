@@ -66,7 +66,8 @@ def category_usage(path, *, runner=subprocess.run):
     if not _safe_root(path):
         return "unavailable", "unknown"
     try:
-        r = runner([DU, "-sk", "--", str(path)], timeout=25,
+        r = runner([DU, "-sk", "--", str(path)],
+                   timeout=45 if path == HOME / "virtualenv" else 25,
                    check=True, capture_output=True, text=True, env=dict(ENV))
         if len(r.stdout) > 1024:
             return "unavailable", "unknown"
@@ -126,7 +127,9 @@ def _quota_bytes():
             raise ValueError("quota status not confirmed")
     def num(key):
         value = data[key]
-        if type(value) not in (int, str):
+        # Match the already proven C94 Quota numeric parser: UAPI may
+        # serialize MB values as canonical JSON floats as well as ints/str.
+        if type(value) not in (int, float, str):
             raise ValueError("quota numeric contract")
         item = Decimal(str(value))
         if not item.is_finite() or item < 0:
@@ -164,14 +167,18 @@ def main():
         return
     result["app_root_owner_verified"] = True
     try:
+        result["probe_stage"] = "django"
         os.chdir(APP)
         sys.path.insert(0, str(APP))
         os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
         import django
         django.setup()
+        result["probe_stage"] = "db_metadata"
         db = _db_estimate()
         needed = 2 * db + HEADROOM
+        result["probe_stage"] = "uapi_quota"
         free = _quota_bytes()
+        result["probe_stage"] = "completed"
         result["db_estimate_bucket_mib"] = bucket_bytes(db)
         result["quota_free_bucket_mib"] = bucket_bytes(free)
         result["required_two_db_plus_headroom_bucket_mib"] = bucket_bytes(needed)
