@@ -160,3 +160,89 @@ class AccessibleCurrentMainLeadTests(TestCase):
         html = (Path(__file__).resolve().parents[1] /
                 "templates/moj-prop-v4/index.html").read_text(encoding="utf-8")
         self.assertIn("<noscript>", html)
+
+
+    def _status_token(self):
+        receipt = self.post()
+        self.assertEqual(receipt.status_code, 201)
+        return unescape(re.search(
+            r'<pre id="private-receipt">([^<]+)</pre>',
+            receipt.content.decode()
+        ).group(1))
+
+    def test_21_status_form_is_native_html(self):
+        response = self.client.get("/moj-prop-status/?format=html")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'method="post"', response.content)
+        self.assertIn(b'name="receipt_token"', response.content)
+        self.assertIn("no-store", response["Cache-Control"])
+
+    def test_22_private_status_post_returns_only_stage(self):
+        token = self._status_token()
+        response = self.client.post(
+            "/moj-prop-status/?format=html",
+            {"receipt_token": token, "csrfmiddlewaretoken": self.csrf},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Review status", response.content)
+        self.assertNotIn(b"buyer@example.org", response.content)
+        self.assertNotIn(token.encode(), response.content)
+
+    def test_23_invalid_status_token_does_not_disclose_identity(self):
+        response = self.client.post(
+            "/moj-prop-status/?format=html",
+            {"receipt_token": "invalid", "csrfmiddlewaretoken": self.csrf},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn(b"buyer@example.org", response.content)
+
+    def test_24_bearer_token_in_html_get_is_never_accepted(self):
+        token = self._status_token()
+        response = self.client.get("/moj-prop-status/?format=html&receipt_token=" + token)
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn(token.encode(), response.content)
+
+    def test_25_private_status_requires_csrf(self):
+        fresh = Client(enforce_csrf_checks=True)
+        response = fresh.post(
+            "/moj-prop-status/?format=html", {"receipt_token": "invalid"}
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_26_ambiguous_duplicate_status_tokens_are_denied(self):
+        response = self.client.post(
+            "/moj-prop-status/?format=html",
+            data=urlencode({
+                "csrfmiddlewaretoken": self.csrf,
+                "receipt_token": ["a", "b"],
+            }, doseq=True),
+            content_type="application/x-www-form-urlencoded",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_27_duplicated_format_parameters_do_not_bypass_validation(self):
+        response = self.client.get("/moj-prop-status/?format=html&format=html")
+        self.assertEqual(response.status_code, 400)
+
+    def test_28_original_json_receipt_lookup_remains_functional(self):
+        token = self._status_token()
+        response = self.client.post(
+            "/moj-prop-status/",
+            data=json.dumps({"receipt_token": token}),
+            content_type="application/json", HTTP_X_CSRFTOKEN=self.csrf,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["payment_status"], "not_collected_by_this_service")
+
+    def test_29_json_post_to_html_status_form_is_rejected(self):
+        response = self.client.post(
+            "/moj-prop-status/?format=html",
+            data=json.dumps({"receipt_token": "wrong"}),
+            content_type="application/json", HTTP_X_CSRFTOKEN=self.csrf,
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_30_status_html_never_has_external_asset_or_script(self):
+        html = self.client.get("/moj-prop-status/?format=html").content.decode()
+        self.assertNotIn("<script", html)
+        self.assertNotIn('src="https:', html)
