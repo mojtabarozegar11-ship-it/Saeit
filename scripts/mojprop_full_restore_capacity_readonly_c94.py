@@ -204,10 +204,34 @@ def _cpanel_quota_data_adequate(document, needed_bytes):
     return True, "cpanel_uapi_quota_verified"
 
 
+def _trusted_owner_uapi_binary():
+    """Use only observed cPanel CLI locations; never PATH-search or follow symlinks.
+
+    C111 live read-only evidence: /usr/bin/uapi is an executable regular file,
+    whereas /usr/local/cpanel/bin/uapi is unavailable for this cPanel user.
+    The caller still permits only Quota.get_quota_info, never mutation.
+    """
+    for raw in ("/usr/local/cpanel/bin/uapi", "/usr/bin/uapi",
+                "/usr/local/bin/uapi"):
+        candidate = Path(raw)
+        try:
+            metadata = candidate.lstat()
+            if (stat.S_ISREG(metadata.st_mode)
+                    and not stat.S_ISLNK(metadata.st_mode)
+                    and not (metadata.st_mode & 0o022)
+                    and os.access(candidate, os.X_OK)):
+                return raw
+        except OSError:
+            continue
+    return None
+
+
 def _cpanel_uapi_quota_result(needed_bytes):
     """Official owner-only read-only UAPI: explicit user, then same-user CLI."""
     import subprocess
-    binary = "/usr/local/cpanel/bin/uapi"
+    binary = _trusted_owner_uapi_binary()
+    if binary is None:
+        return False, "cpanel_uapi_program_unavailable"
     variants = (
         [binary, "--output=json", "--user=" + ACCOUNT,
          "Quota", "get_quota_info"],
