@@ -1,0 +1,77 @@
+name: Moj Prop Plan1 C first-lead consent compatibility (source-only)
+on:
+  pull_request:
+    branches:
+      - feature/prop-firm-policy-v11-20261114
+    paths:
+      - 'tests/test_moj_prop_site.py'
+      - 'tests/test_moj_prop_interest_intake.py'
+      - 'core/templates/mojplaywin/moj_prop.html'
+      - 'core/templates/mojplaywin/moj_prop_interest_form_d.html'
+      - 'core/moj_prop_views.py'
+      - '.github/workflows/mojprop-plan1-first-lead-consent-c20261117.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-plan1-first-lead-c-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  first-lead-consent-only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      DEBUG: 'false'
+      SECRET_KEY: 'ci-only-consent-form-no-production-key'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com,zomorodmelal.ir'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONNOUSERSITE: '1'
+    steps:
+      - name: Check out exact immutable same-owner PR commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Assert exact SHA and ignore untrusted symlinked template
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          for p in tests/test_moj_prop_site.py core/templates/mojplaywin/moj_prop.html core/templates/mojplaywin/moj_prop_interest_form_d.html; do
+            test -f "$p"
+            test ! -L "$p"
+          done
+      - name: Use isolated Python virtual environment, never production
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          .venv/bin/python -m pip install -q -r requirements.txt
+          .venv/bin/python manage.py check
+      - name: Run lead form, 20-language landing and public opt-in guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          .venv/bin/python manage.py test \
+            tests.test_moj_prop_site \
+            tests.test_moj_prop_interest_intake \
+            tests.test_prop_order_readiness \
+            --verbosity 1
+      - name: Report NO financial activity
+        if: always()
+        shell: bash
+        run: |
+          echo "PLAN1=MOJ-PROP-01"
+          echo "LIVE_CHECKOUT=DISABLED"
+          echo "CUSTOMER_BILLING=NOT_PERFORMED"
+          echo "PRODUCTION_EMAIL=NOT_SENT"
+          echo "REAL_REVENUE=NOT_EVIDENCED"
