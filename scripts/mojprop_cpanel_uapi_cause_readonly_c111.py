@@ -60,6 +60,41 @@ def _public_error_class(body: object) -> str:
     return "other" if cleaned else "unknown"
 
 
+def _quota_flag_class(value):
+    if value is True or value is False:
+        return "boolean"
+    if type(value) is int:
+        return "int_1" if value == 1 else ("int_0" if value == 0 else "int_other")
+    if type(value) is str:
+        return "string_1" if value == "1" else ("string_0" if value == "0" else "string_other")
+    return "other"
+
+
+def _quota_number_class(value):
+    from decimal import Decimal, InvalidOperation
+    if type(value) not in (int, float, str):
+        return "invalid"
+    try:
+        number = Decimal(str(value))
+        if not number.is_finite():
+            return "invalid"
+        return "negative" if number < 0 else ("zero" if number == 0 else "positive")
+    except (InvalidOperation, ValueError):
+        return "invalid"
+
+
+def _quota_shapes(data):
+    # ONLY fixed type/threshold classes. No amounts, emails or raw API fields.
+    names = ("under_quota_overall", "under_megabyte_limit", "under_inode_limit")
+    quantities = ("megabyte_limit", "megabytes_remain", "inode_limit", "inodes_remain")
+    return {
+        "flags": {name: (_quota_flag_class(data[name]) if name in data else "missing")
+                  for name in names},
+        "quantities": {name: (_quota_number_class(data[name]) if name in data else "missing")
+                       for name in quantities},
+    }
+
+
 def classify(argv: tuple[str, ...], *, runner=subprocess.run) -> dict:
     """Only bounded status fields; output payloads remain private."""
     result = {"outcome": "not_run", "exit_nonzero": None,
@@ -96,6 +131,8 @@ def classify(argv: tuple[str, ...], *, runner=subprocess.run) -> dict:
     inner = body["result"]
     result["uapi_status_ok"] = inner.get("status") == 1
     result["data_object_present"] = type(inner.get("data")) is dict
+    if result["data_object_present"]:
+        result["quota_shape"] = _quota_shapes(inner["data"])
     if result["exit_nonzero"]:
         result["outcome"] = "nonzero_json"
     elif not result["uapi_status_ok"]:
