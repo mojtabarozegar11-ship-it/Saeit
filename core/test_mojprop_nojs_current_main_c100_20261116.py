@@ -125,7 +125,8 @@ class AccessibleCurrentMainLeadTests(TestCase):
 
     def test_14_html_disallows_json_body(self):
         result = self.client.post(URL, data=json.dumps(self.data),
-                                  content_type="application/json")
+                                  content_type="application/json",
+                                  HTTP_X_CSRFTOKEN=self.csrf)
         self.assertEqual(result.status_code, 400)
         self.assertEqual(MojPropRequest.objects.count(), 0)
 
