@@ -31,6 +31,10 @@ REQUIRED = (
     "immutable_contract_storage_ready",
     "two_phase_evidence_source_ready",
     "customer_support_ready",
+    "full_real_capital_per_earned_tier_contractually_committed",
+    "funding_delivery_deadline_bound_in_signed_contract",
+    "company_delay_and_remedy_terms_disclosed",
+    "funded_continuation_and_final_tier_terms_disclosed",
 )
 
 @dataclass(frozen=True)
@@ -73,5 +77,13 @@ PREPURCHASE_DISCLOSURES = (
     "where legally permissible, with clear advertising disclosure and no personal "
     "account scraping or forced access.",
     "Eligibility, KYC, geographic restrictions and fair refund terms apply.",
+    "After verified qualification, the company commits 100% of the real funded "
+    "capital promised for the earned tier; a simulated evaluation account is not funding.",
+    "The signed contract must define the deadline for actual broker-capital allocation "
+    "and lawful remedies if the company delays; firm shortfall is not trader failure.",
+    "The 28-day evaluation period is not automatic expiry of an eligible funded "
+    "account; trading can continue through the final tier while contractual rules hold.",
+    "No trader profit is guaranteed, and future tier increases require verified "
+    "performance, broker access and real funding.",
     "No payable invoice or challenge activation is offered until all gates pass.",
 )
