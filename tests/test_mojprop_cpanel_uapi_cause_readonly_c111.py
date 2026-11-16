@@ -159,5 +159,47 @@ class MojPropUapiCauseReadOnlyTests(unittest.TestCase):
         self.assertIn('"db_restore_executed": False', source)
 
 
+    def test_21_quota_boolean_and_string_flag_are_not_int_evidence(self):
+        self.assertEqual(probe._quota_flag_class(True), "boolean")
+        self.assertEqual(probe._quota_flag_class("1"), "string_1")
+        self.assertEqual(probe._quota_flag_class(0), "int_0")
+        self.assertEqual(probe._quota_flag_class(1), "int_1")
+
+    def test_22_quota_report_discloses_only_bounded_state(self):
+        response = {"result": {"status": 1, "data": {
+            "under_quota_overall": 1,
+            "under_megabyte_limit": "1",
+            "under_inode_limit": 0,
+            "megabyte_limit": 123456,
+            "megabytes_remain": 12345,
+            "inode_limit": 50000,
+            "inodes_remain": 45000,
+            "customer_email": "buyer@private.example",
+        }}}
+        result = self.run_case(json.dumps(response))
+        shape = result["quota_shape"]
+        self.assertEqual(shape["flags"]["under_quota_overall"], "int_1")
+        self.assertEqual(shape["flags"]["under_megabyte_limit"], "string_1")
+        self.assertEqual(shape["flags"]["under_inode_limit"], "int_0")
+        self.assertEqual(shape["quantities"]["megabyte_limit"], "positive")
+        for value in ("123456", "12345", "50000", "45000", "buyer@private.example"):
+            self.assertNotIn(value, json.dumps(result))
+
+    def test_23_missing_quota_fields_never_look_like_under_limit(self):
+        result = self.run_case('{"result":{"status":1,"data":{}}}')
+        self.assertTrue(all(v == "missing" for v in result["quota_shape"]["flags"].values()))
+        self.assertTrue(all(v == "missing" for v in result["quota_shape"]["quantities"].values()))
+
+    def test_24_untrusted_values_remain_scalar_classes(self):
+        result = self.run_case('{"result":{"status":1,"data":{'
+                               '"under_inode_limit":{"secret":"x"},'
+                               '"megabyte_limit":"NaN",'
+                               '"inodes_remain":-1}}}')
+        self.assertEqual(result["quota_shape"]["flags"]["under_inode_limit"], "other")
+        self.assertEqual(result["quota_shape"]["quantities"]["megabyte_limit"], "invalid")
+        self.assertEqual(result["quota_shape"]["quantities"]["inodes_remain"], "negative")
+        self.assertNotIn('"secret"', json.dumps(result))
+
+
 if __name__ == "__main__":
     unittest.main()
