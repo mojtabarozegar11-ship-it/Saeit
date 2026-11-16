@@ -345,15 +345,22 @@ class PropChallengeEnrollment(models.Model):
             raise ValidationError({"plan_code": "Unknown challenge plan"}) from exc
         if self.pk:
             previous = type(self).objects.filter(pk=self.pk).values(
-                "plan_code", "verified_invoice_ref", "confirmed_at", "trader_id"
+                "plan_code", "verified_invoice_ref", "confirmed_at", "trader_id",
+                "settlement_verified", "terms_version",
             ).first()
             if previous and (
                 previous["plan_code"] != self.plan_code
                 or previous["verified_invoice_ref"] != self.verified_invoice_ref
                 or previous["confirmed_at"] != self.confirmed_at
                 or previous["trader_id"] != self.trader_id
+                # The source-only ledger must not let a generic Model.save()
+                # flip pending->paid or rewrite disclosed contract terms.
+                # A real paid enrollment must be inserted once by the
+                # independently reconciled private gateway adapter.
+                or previous["settlement_verified"] != self.settlement_verified
+                or previous["terms_version"] != self.terms_version
             ):
-                raise ValidationError("Confirmed purchase and plan are immutable")
+                raise ValidationError("Confirmed purchase, settlement and terms are immutable")
         if self.trader_id and self.trader.user.is_active is not True:
             raise ValidationError("Inactive buyer cannot enter a funded challenge")
         import re
