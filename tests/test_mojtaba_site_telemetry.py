@@ -1,22 +1,9 @@
 """MojPlayWin telemetry registry migration is read-only and fail-closed."""
-import importlib.util
 from datetime import datetime, timezone
-from pathlib import Path
-import sys
-import types
 import unittest
 
-BASE = Path(__file__).resolve().parents[1] / "core"
-core = sys.modules.setdefault("core", types.ModuleType("core"))
-core.__path__ = [str(BASE)]
-for name in ("mojtaba_site_fleet", "mojtaba_site_telemetry"):
-    sp = importlib.util.spec_from_file_location("core." + name, BASE / (name + ".py"))
-    md = importlib.util.module_from_spec(sp)
-    sys.modules["core." + name] = md
-    sp.loader.exec_module(md)
-fleet = sys.modules["core.mojtaba_site_fleet"]
-telemetry = sys.modules["core.mojtaba_site_telemetry"]
-
+from core import mojtaba_site_fleet as fleet
+from core import mojtaba_site_telemetry as telemetry
 
 def fixture():
     items = []
