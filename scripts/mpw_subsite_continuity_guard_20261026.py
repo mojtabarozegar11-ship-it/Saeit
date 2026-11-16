@@ -18,6 +18,10 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
+
+from scripts.mpw_retired_subsite_policy import (
+    assert_no_retired_routes, assert_retired_picm_manifest,
+)
 from html.parser import HTMLParser
 
 
@@ -52,10 +56,9 @@ REQUIRED_PATHS = (
     "/saman/",
     "/taniya/",
     "/studio.Roham/",
-    "/zahra$$/",
-    "/picm/",
+    "/zahra$/",
 ) + PERSONAL_PATHS
-PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$$/", "/picm/")
+PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$/")
 SITEMAP_URLS = (
     "/knowledge/",
     "/research/",
@@ -69,7 +72,7 @@ CHECKOUT_PATHS = frozenset(f"/store/product/{pk}/checkout/" for pk in PROTECTED_
 # fetched through a redirect. Never follow a redirect to an unknown app,
 # a different host, or an HTTP URL during a read-only audit.
 REDIRECT_PATHS = frozenset(REQUIRED_PATHS) | frozenset({
-    "/sitemap.xml", "/picm/login/", "/accounts/login/",
+    "/sitemap.xml", "/accounts/login/",
     *CHECKOUT_PATHS,
 })
 
@@ -200,7 +203,7 @@ def get(url: str, *, max_bytes: int = 950000, attempts: int = 3) -> tuple[Check,
 
 def check_site_page(path: str) -> Check:
     check, data = get(ORIGIN + path)
-    expected_final = ORIGIN + ("/picm/login/" if path == "/picm/" else path)
+    expected_final = ORIGIN + path
     parsed_final = urllib.parse.urlsplit(check.effective)
     # Optional query params added by the application are allowed. A route that
     # silently resolves to / or to an unrelated app is not considered healthy.
@@ -282,13 +285,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
+    assert_retired_picm_manifest()
+    assert_no_retired_routes(REQUIRED_PATHS + PROTECTED_CHILDREN + tuple(REDIRECT_PATHS))
     if args.selftest:
-        assert len(PROTECTED_CHILDREN) == 6
+        assert len(PROTECTED_CHILDREN) == 5
         assert set(PROTECTED_CHILDREN).issubset(REQUIRED_PATHS)
         assert {"/studio.Roham/", "/zahra$$/"}.issubset(REQUIRED_PATHS)
         assert len(PERSONAL_PATHS) == 11
         assert PERSONAL_PATHS[0] in REQUIRED_PATHS
-        assert "/picm/" in REQUIRED_PATHS
+        assert "/picm/" not in REQUIRED_PATHS
         assert len(set(REQUIRED_PATHS)) == len(REQUIRED_PATHS)
         assert all(path.startswith("/") for path in REQUIRED_PATHS)
         print("READ_ONLY_CONTINUITY_SELFTEST_OK")
@@ -302,6 +307,7 @@ def main() -> int:
         "sitemap": {**asdict(sitemap), "unique_urls": sitemap_count},
         "anonymous_checkout_gates": [asdict(check) for check in auth_checks],
         "protected_children": list(PROTECTED_CHILDREN),
+        "retired_picm_excluded_from_owner_active_queue": True,
         "protected_personal_site": list(PERSONAL_PATHS),
         "read_only": True,
     }
@@ -312,6 +318,7 @@ def main() -> int:
             summary.write("## MojPlayWin protected subsite continuity\n\n")
             summary.write(f"- Main and child GET pages: {len(checks)} passed\n")
             summary.write(f"- Protected child apps: {', '.join(PROTECTED_CHILDREN)}\n")
+            summary.write("- Owner-retired PICM excluded by verified E7 policy; not a working-site claim\\n")
             summary.write(f"- Owner's personal website: {len(PERSONAL_PATHS)} pages unchanged and accessible\n")
             summary.write(f"- Unique sitemap entries: {sitemap_count}\n")
             summary.write("- Anonymous product checkout guards: 3 passed\n")
