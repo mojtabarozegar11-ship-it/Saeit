@@ -1,0 +1,47 @@
+name: Owner factory redacted cron and error rootcause read only
+on:
+  push:
+    branches: [ops/verified-disk-reclaim-20261116]
+    paths: [".github/workflows/owner-factory-rootcause-readonly-20261116.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/ops/verified-disk-reclaim-20261116' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          f=scripts/owner_factory_rootcause_redacted_readonly_20261116.py
+          test ! -L "$f"
+          test "$(git hash-object -- "$f")" = "23666548845a81b2701b7bf1677eca3b401eadf1"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("scripts/owner_factory_rootcause_redacted_readonly_20261116.py").read_text())'
+          echo ROOTCAUSE_SOURCE_PINNED=PASS
+      - name: Sanitized cron and old master log metadata through pinned VPS local SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${VPS_KEY:?}"
+          umask 077
+          w="$RUNNER_TEMP/factory-rootcause-only-20261116"
+          install -d -m 700 "$w"
+          trap 'rm -rf -- "$w"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$w/key"
+          chmod 600 "$w/key"
+          ssh-keygen -y -P '' -f "$w/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$w/known" 2>/dev/null
+          test -s "$w/known"
+          test "$(ssh-keygen -lf "$w/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo ROOTCAUSE_VPS_SSH_PINNED=PASS
+          timeout 85s ssh -T -i "$w/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$w/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ForwardAgent=no -o RequestTTY=no githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < scripts/owner_factory_rootcause_redacted_readonly_20261116.py |
+            PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import json,sys; s=sys.stdin.read(5000); p="FACTORY_ROOTCAUSE_METADATA="; q=[x for x in s.splitlines() if x.startswith(p)]; assert len(q)==1,"MISSING_ROOTCAUSE"; d=json.loads(q[0][len(p):]); assert d["schema"]=="owner.factory.rootcause.redacted.readonly.v1" and d["cron_edited"] is False and d["log_edited"] is False and d["service_started"] is False and d["backups_touched"] is False; print(q[0])'
+          echo FACTORY_ROOTCAUSE_READONLY=PASS
