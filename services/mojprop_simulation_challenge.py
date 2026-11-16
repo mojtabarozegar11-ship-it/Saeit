@@ -73,6 +73,25 @@ class ChallengePolicy:
             raise ChallengeInputError("invalid_drawdown_mode")
 
 
+def reviewed_rule_fingerprint(policy: ChallengePolicy) -> str:
+    """Content-address policy terms; SHA is NOT seller approval or signature."""
+    if type(policy) is not ChallengePolicy:
+        raise ChallengeInputError("unreviewed_policy")
+    policy.validate()
+    terms = {
+        "schema": "mojprop.simulated.rules.v1",
+        "starting_equity": format(policy.starting_equity, "f"),
+        "phase1_profit_target_bps": policy.phase1_profit_target_bps,
+        "phase2_profit_target_bps": policy.phase2_profit_target_bps,
+        "max_daily_loss_bps": policy.max_daily_loss_bps,
+        "max_overall_loss_bps": policy.max_overall_loss_bps,
+        "minimum_trading_days": policy.minimum_trading_days,
+        "overall_drawdown_mode": policy.overall_drawdown_mode,
+    }
+    raw = json.dumps(terms, sort_keys=True, separators=(",", ":")).encode("ascii")
+    return hashlib.sha256(raw).hexdigest()
+
+
 @dataclass(frozen=True)
 class EquitySnapshot:
     """One unverified simulation observation; NOT a broker attestation."""
