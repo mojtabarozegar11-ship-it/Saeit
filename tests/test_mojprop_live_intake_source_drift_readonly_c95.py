@@ -3,6 +3,7 @@ import hashlib
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from scripts.mojprop_live_intake_source_drift_readonly_c95 import (
     EXPECTED, MAX_SOURCE, exact_git_blob, safe_source_state
@@ -40,12 +41,25 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
             target.write_bytes(b"unreviewed changes\n")
             self.assertEqual(safe_source_state(root, "core/mojprop_views.py", ref), "drifted")
 
-    def test_missing_source_is_unavailable_not_implicitly_matching(self):
+    def test_missing_source_is_explicitly_missing_not_implicitly_matching(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual(
                 safe_source_state(Path(d), "core/nonexistent.py", "0" * 40),
-                "unavailable"
+                "missing"
             )
+
+    def test_unreadable_existing_source_is_not_classified_as_missing(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            target = root / "existing.py"
+            target.write_bytes(b"present but unreadable")
+            target.chmod(0o600)
+            with patch.object(Path, "open", side_effect=PermissionError):
+                self.assertEqual(
+                    safe_source_state(root, "existing.py",
+                                      exact_git_blob(b"present but unreadable")),
+                    "unavailable"
+                )
 
     def test_nested_symlink_is_denied_without_following_content(self):
         with tempfile.TemporaryDirectory() as d:
@@ -75,10 +89,19 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         self.assertEqual(set(EXPECTED), {
             "core/mojprop_views.py",
             "core/mojprop_receipts.py",
+            "core/mojprop_accessible_intake.py",
             "config/urls.py",
             "core/management/commands/mojprop_sales_action_queue.py",
         })
         self.assertTrue(all(len(value) == 40 for value in EXPECTED.values()))
+        # A stale four-file pin returned misleading "drift" after current-main
+        # source was actually merged. Public HTML must be audited as well.
+        self.assertEqual(EXPECTED["core/mojprop_views.py"],
+                         "c608780d7957eb9fc9a4e019912be8c72ca2553f")
+        self.assertEqual(EXPECTED["core/mojprop_receipts.py"],
+                         "9fe6eb1ad13857143440517b14b3f2ebcfef6db3")
+        self.assertEqual(EXPECTED["core/mojprop_accessible_intake.py"],
+                         "48f3920958f0a17249fb3ae854647352baadf545")
 
 
 if __name__ == "__main__":
