@@ -89,9 +89,11 @@ def classify(data: bytes, http_digest: str) -> dict:
     result["option_labels_exact_reviewed"] = tuple(p.labels) == LABELS
     result["horizon_values_canonical"] = tuple(p.values) == EXPECTED
     values_bounded = all(
-        type(x) is str and re.fullmatch(r"[a-z][a-z_]{0,30}", x) is not None
+        type(x) is str and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 _./-]{0,63}", x) is not None
         for x in p.values
     ) and len(set(p.values)) == 4
+    result["option_values_safe_ascii_bounded"] = values_bounded
+    result["option_values_distinct"] = len(set(p.values)) == 4
     result["surgical_value_only_candidate"] = (
         result["public_http_matches_disk"] and result["four_options_found"]
         and result["option_labels_exact_reviewed"] and values_bounded
