@@ -725,18 +725,27 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         raise
 
 
+def staged_cli_root(argument: str) -> Path:
+    # Path.resolve() silently dereferences symlinks and hides the original
+    # caller-supplied staging root from the subsequent symlink security gate.
+    path = Path(os.path.abspath(argument))
+    if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
+        raise RuntimeError("symlinked staged command path is forbidden")
+    return path
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         raise SystemExit("usage: script.py selftest [repo_root] | deploy RUN_ID COMMIT STAGED_ROOT | rollback RUN_ID")
     action = argv[1]
     if action == "selftest":
-        selftest(Path(argv[2]).resolve() if len(argv) > 2 else Path.cwd())
+        selftest(staged_cli_root(argv[2]) if len(argv) > 2 else Path.cwd())
         return 0
     if action == "verify-db-restore" and len(argv) == 5:
-        require_independent_db_restore(argv[2], argv[3], Path(argv[4]).resolve())
+        require_independent_db_restore(argv[2], argv[3], staged_cli_root(argv[4]))
         return 0
     if action == "deploy" and len(argv) == 5:
-        deploy(argv[2], argv[3], Path(argv[4]).resolve())
+        deploy(argv[2], argv[3], staged_cli_root(argv[4]))
         return 0
     if action == "rollback" and len(argv) == 3:
         restore(BACKUP_ROOT / validate_run_id(argv[2]))
