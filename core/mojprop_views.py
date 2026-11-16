@@ -25,6 +25,9 @@ from django.views.decorators.csrf import csrf_protect
 from .models import MojPropRequest
 from .mojprop_catalog_contract import public_service_catalog
 from .mojprop_receipts import make_receipt_token, verify_receipt_token, public_status_text
+from .mojprop_accessible_intake import (
+    request_form, created_receipt, status_form, status_result,
+)
 
 ROUTES = {choice[0] for choice in MojPropRequest.ROUTE_CHOICES}
 HORIZONS = {choice[0] for choice in MojPropRequest.HORIZON_CHOICES}
@@ -209,23 +212,47 @@ def _json(data, status=200):
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def mojprop_intake(request):
-    """Return a CSRF token or create one manual-review request."""
+    """JSON API plus secure no-JS HTML path to the SAME validated CRM writer."""
+    modes = request.GET.getlist("format")
+    if modes and modes != ["html"]:
+        return _json({"ok": False, "detail": "Unsupported form mode."}, status=400)
+    html_mode = modes == ["html"]
     if request.method == "GET":
+        if html_mode:
+            return request_form(request)
         return _json({"ok": True, "csrf_token": get_token(request), "service": "moj-prop-intake",
                       "service_catalog": public_service_catalog()})
+
+    if html_mode and str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].lower() != "application/x-www-form-urlencoded":
+        return request_form(request, error="Submit the secure HTML form.", status=400)
+
+    def respond(data, status=200):
+        if html_mode:
+            # No customer PII or bearer secrets from an unsuccessful POST.
+            return request_form(request, error=data.get("detail", "Request unavailable."),
+                                status=status)
+        return _json(data, status=status)
+
+    def respond_success(row, *, reused):
+        if html_mode:
+            return created_receipt({
+                "ok": True, "request_id": row.request_id,
+                "receipt_token": make_receipt_token(row.request_id),
+            }, reused=reused)
+        return _intake_success(row, reused=reused)
 
     try:
         payload = _payload(request)
     except OverflowError:
-        return _json({"ok": False, "detail": "Request exceeds safe intake size."}, status=413)
+        return respond({"ok": False, "detail": "Request exceeds safe intake size."}, status=413)
     if payload is None:
-        return _json({"ok": False, "detail": "Use valid JSON or a single-valued HTML form."}, status=400)
+        return respond({"ok": False, "detail": "Use valid JSON or a single-valued HTML form."}, status=400)
 
     # Type-check JSON values; Python stringification must not turn arrays,
     # objects or integers into fabricated buyer names/addresses.
     for field in ("name", "email", "service", "horizon", "notes", "website", "idempotency_key"):
         if field in payload and not isinstance(payload[field], str):
-            return _json({"ok": False, "detail": "Invalid field types."}, status=400)
+            return respond({"ok": False, "detail": "Invalid field types."}, status=400)
     product_id = payload.get("product_id")
     content_type = str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].lower()
     # Browser forms send scalar strings; JSON clients must send a real int.
@@ -238,7 +265,7 @@ def mojprop_intake(request):
     # QueryDict subclasses dict, but ordinary form checkbox values are
     # strings ("on"/"1"), not JSON booleans. Keep the formats distinct.
     if is_json_payload and type(consent_value) is not bool:
-        return _json({"ok": False, "detail": "Consent must be an explicit choice."}, status=400)
+        return respond({"ok": False, "detail": "Consent must be an explicit choice."}, status=400)
 
     # Reject rather than silently truncate buyer identity or requested scope.
     # Truncation can convert two distinct contacts into the same CRM address,
@@ -250,16 +277,16 @@ def mojprop_intake(request):
                  for key, maximum in limits.items()
                  if len(payload.get(key, "")) > maximum}
     if oversized:
-        return _json({"ok": False, "detail": "Request fields are too long.",
+        return respond({"ok": False, "detail": "Request fields are too long.",
                       "fields": oversized}, status=400)
 
     # Honeypot field: real forms never display or populate this value.
     try:
         honeypot = _text(payload, "website", 120)
     except ValueError:
-        return _json({"ok": False, "detail": "Malformed request fields."}, status=400)
+        return respond({"ok": False, "detail": "Malformed request fields."}, status=400)
     if honeypot:
-        return _json({"ok": False, "detail": "Request rejected."}, status=400)
+        return respond({"ok": False, "detail": "Request rejected."}, status=400)
 
     try:
         name = _text(payload, "name", 200)
@@ -268,7 +295,7 @@ def mojprop_intake(request):
         horizon = _text(payload, "horizon", 20)
         notes = _text(payload, "notes", 5000)
     except ValueError:
-        return _json({"ok": False, "detail": "Malformed customer fields."}, status=400)
+        return respond({"ok": False, "detail": "Malformed customer fields."}, status=400)
     consent = consent_value is True or (
         not is_json_payload and isinstance(consent_value, str)
         and consent_value.lower() in {"1", "true", "on"}
@@ -302,7 +329,7 @@ def mojprop_intake(request):
     if not consent:
         errors["consent"] = "Consent is required for a manual-review request."
     if errors:
-        return _json({"ok": False, "detail": "Please correct the highlighted fields.", "fields": errors}, status=400)
+        return respond({"ok": False, "detail": "Please correct the highlighted fields.", "fields": errors}, status=400)
 
     product_scope = product_id if route == "digital" else None
     keyed_id = None
@@ -310,7 +337,7 @@ def mojprop_intake(request):
         try:
             keyed_id = _keyed_request_id(payload["idempotency_key"])
         except ValueError:
-            return _json({"ok": False, "detail": "Invalid idempotency key."}, status=400)
+            return respond({"ok": False, "detail": "Invalid idempotency key."}, status=400)
 
     def existing_keyed_response(row):
         if not _matches_keyed_retry(
@@ -318,8 +345,8 @@ def mojprop_intake(request):
             horizon=horizon, notes=notes, product_id=product_scope,
         ):
             # Never disclose the record, account or receipt on key reuse.
-            return _json({"ok": False, "detail": "Request key conflict."}, status=409)
-        return _intake_success(row, reused=True)
+            return respond({"ok": False, "detail": "Request key conflict."}, status=409)
+        return respond_success(row, reused=True)
 
     # Reconnect before throttling: an already persisted, identical retry must
     # recover the receipt instead of creating a sixth lead or a second quote.
@@ -330,7 +357,7 @@ def mojprop_intake(request):
 
     ip_hash = _ip_hash(request)
     if _rate_limited(email, ip_hash):
-        response = _json(
+        response = respond(
             {"ok": False, "detail": "Too many requests. Please try again later.", "retry_after": 600},
             status=429,
         )
@@ -363,46 +390,68 @@ def mojprop_intake(request):
                 prior = MojPropRequest.objects.filter(request_id=keyed_id).first()
                 if prior is not None:
                     return existing_keyed_response(prior)
-                return _json({"ok": False, "detail": "Request state unavailable."}, status=503)
+                return respond({"ok": False, "detail": "Request state unavailable."}, status=503)
     if request_obj is None:
-        return _json({"ok": False, "detail": "Could not allocate a request ID. Please retry."}, status=503)
+        return respond({"ok": False, "detail": "Could not allocate a request ID. Please retry."}, status=503)
 
-    return _intake_success(request_obj, reused=False)
+    return respond_success(request_obj, reused=False)
 
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def mojprop_receipt_status(request):
-    """Read only the public stage when holding the signed private receipt."""
-    # A bearer receipt must be unambiguous: reject duplicate query parameters.
-    # QueryDict.get() silently selects the last value otherwise.
+    """Private signed receipt review, JSON-compatible and optional no-JS HTML."""
+    modes = request.GET.getlist("format")
+    if modes and modes != ["html"]:
+        return _json({"ok": False, "detail": "Unsupported status mode."}, status=400)
+    html_mode = modes == ["html"]
+    if html_mode and request.method == "GET":
+        return status_form(request)
+
+    def deny(message, status):
+        if html_mode:
+            return status_form(request, error=message, status=status)
+        return _json({"ok": False, "detail": message}, status=status)
+
     if request.method == "POST":
-        if str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].lower() != "application/json":
-            return _json({"ok": False, "detail": "JSON receipt proof required."}, status=400)
-        try:
+        content_type = str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].lower()
+        if html_mode:
+            if content_type != "application/x-www-form-urlencoded":
+                return deny("Submit the secure status form.", 400)
             if len(request.body) > 1024:
-                return _json({"ok": False, "detail": "Receipt proof is too long."}, status=413)
-            body = json.loads(request.body.decode("utf-8"), object_pairs_hook=_unique_pairs)
-        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError):
-            return _json({"ok": False, "detail": "Invalid receipt proof."}, status=400)
-        token = body.get("receipt_token") if type(body) is dict and set(body) == {"receipt_token"} else ""
+                return deny("Receipt proof is too long.", 413)
+            if (set(request.POST) - {"receipt_token", "csrfmiddlewaretoken"}
+                    or any(len(request.POST.getlist(k)) != 1 for k in request.POST)):
+                return deny("Invalid status submission.", 400)
+            tokens = request.POST.getlist("receipt_token")
+            token = tokens[0] if len(tokens) == 1 else ""
+        else:
+            if content_type != "application/json":
+                return deny("JSON receipt proof required.", 400)
+            try:
+                if len(request.body) > 1024:
+                    return deny("Receipt proof is too long.", 413)
+                body = json.loads(request.body.decode("utf-8"), object_pairs_hook=_unique_pairs)
+            except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError):
+                return deny("Invalid receipt proof.", 400)
+            token = (body.get("receipt_token") if type(body) is dict
+                     and set(body) == {"receipt_token"} else "")
     else:
-        # Support old signed tokens in read-only GET for previously issued receipts.
+        # Old JSON GET tokens remain valid; HTML uses a POST-only bearer path.
         tokens = request.GET.getlist("receipt_token")
         token = tokens[0] if len(tokens) == 1 else ""
+    if type(token) is not str or not token or len(token) > 256:
+        return deny("Receipt invalid or expired.", 404)
     request_id = verify_receipt_token(token)
     if request_id is None:
-        return _json(
-            {"ok": False, "detail": "Receipt invalid or expired. Contact support using your original email."},
-            status=404,
-        )
+        return deny("Receipt invalid or expired.", 404)
     record = (MojPropRequest.objects.filter(request_id=request_id)
               .values_list("status", flat=True).first())
     if record is None:
-        return _json({"ok": False, "detail": "Receipt unavailable."}, status=404)
+        return deny("Receipt unavailable.", 404)
+    if html_mode:
+        return status_result(request_id, public_status_text(record))
     response = _json({
-        "ok": True,
-        "request_id": request_id,
-        "status": record,
+        "ok": True, "request_id": request_id, "status": record,
         "stage": public_status_text(record),
         "payment_status": "not_collected_by_this_service",
     })
