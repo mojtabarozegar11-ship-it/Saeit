@@ -15,7 +15,11 @@ class PurchasedPlanBindingTests(TestCase):
         User=get_user_model()
         cls.user=User.objects.create_user(username="plan_buyer_ci",password="ci-only")
         cls.other=User.objects.create_user(username="plan_foreign_ci",password="ci-only")
-        cls.profile=PropTrader.objects.create(user=cls.user)
+        # A FUNDED account requires synthetic KYC/eligibility evidence in
+        # fixtures; these are NOT real customer screening results.
+        cls.profile=PropTrader.objects.create(
+            user=cls.user, kyc_status="verified", eligibility_status="eligible"
+        )
         cls.other_profile=PropTrader.objects.create(user=cls.other)
 
     def purchase(self, plan_code="MOJ-PROP-06", invoice="ci-private-invoice-001"):
