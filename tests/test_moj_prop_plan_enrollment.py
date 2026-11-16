@@ -111,3 +111,54 @@ class PurchasedPlanBindingTests(TestCase):
         )
         self.assertEqual(trial.starting_capital_usd,Decimal("100"))
         self.assertEqual(trial.tier_index,0)
+
+    def test_c146_funded_account_rejects_unsettled_attached_purchase(self):
+        enrollment=self.purchase(plan_code=DEFAULT_PLAN_CODE)
+        PropChallengeEnrollment.objects.filter(pk=enrollment.pk).update(
+            settlement_verified=False
+        )
+        enrollment.refresh_from_db()
+        with self.assertRaises(ValidationError):
+            PropAccount.objects.create(
+                trader=self.profile, kind=PropAccount.Kind.FUNDED,
+                tier_index=0, starting_capital_usd=Decimal("100"),
+                reference="synthetic-no-broker-proof",
+                challenge_enrollment=enrollment,
+            )
+
+    def test_c146_funded_account_rejects_downgraded_terms(self):
+        enrollment=self.purchase(plan_code=DEFAULT_PLAN_CODE)
+        with self.assertRaises(ValidationError):
+            PropAccount.objects.create(
+                trader=self.profile, kind=PropAccount.Kind.FUNDED,
+                tier_index=0, starting_capital_usd=Decimal("100"),
+                reference="synthetic-no-broker-proof",
+                challenge_enrollment=enrollment,
+                policy_version="2026-11-14/v1.1",
+            )
+
+    def test_c146_tampered_existing_funded_purchase_blocks_model_validation(self):
+        enrollment=self.purchase(plan_code=DEFAULT_PLAN_CODE)
+        funded=PropAccount.objects.create(
+            trader=self.profile, kind=PropAccount.Kind.FUNDED,
+            tier_index=0, starting_capital_usd=Decimal("100"),
+            reference="synthetic-no-broker-proof",
+            challenge_enrollment=enrollment,
+        )
+        PropChallengeEnrollment.objects.filter(pk=enrollment.pk).update(
+            settlement_verified=False
+        )
+        funded.refresh_from_db()
+        with self.assertRaises(ValidationError):
+            funded.full_clean()
+
+    def test_c146_match_paid_funded_contract_still_passes_model_validation(self):
+        enrollment=self.purchase(plan_code=DEFAULT_PLAN_CODE)
+        funded=PropAccount.objects.create(
+            trader=self.profile, kind=PropAccount.Kind.FUNDED,
+            tier_index=0, starting_capital_usd=Decimal("100"),
+            reference="synthetic-no-broker-proof",
+            challenge_enrollment=enrollment,
+        )
+        funded.full_clean()
+        self.assertEqual(funded.policy_version, enrollment.terms_version)
