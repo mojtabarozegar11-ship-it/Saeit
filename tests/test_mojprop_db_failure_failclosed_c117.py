@@ -92,9 +92,11 @@ class MojPropCrmOutageC117Tests(TestCase):
             return real_filter(*args, **kwargs)
 
         with patch.object(MojPropRequest.objects, "filter", side_effect=mocked_filter):
-            with patch.object(MojPropRequest.objects, "create",
-                              side_effect=IntegrityError("duplicate key")):
-                response = self.request(keyed=True)
+            with patch("core.mojprop_views._rate_limited", return_value=False):
+                with patch.object(MojPropRequest.objects, "create",
+                                  side_effect=IntegrityError("duplicate key")):
+                    response = self.request(keyed=True)
+        self.assertEqual(visits["count"], 2)  # initial and post-conflict lookup
         self.assert_no_receipt(response)
         self.assertEqual(MojPropRequest.objects.count(), 0)
 
