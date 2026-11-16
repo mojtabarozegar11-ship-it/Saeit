@@ -15,6 +15,7 @@ from scripts import update_mojplaywin_moj_prop_catalog as release
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE_SOURCE = ROOT / "templates/moj-prop-v4"
+LEGACY_HOME = ROOT / "tests/fixtures/mojprop-starter30-home-before-plan1-20261117.html"
 
 
 class MojPropCatalogSamplesContractTests(unittest.TestCase):
@@ -56,7 +57,12 @@ class MojPropCatalogSamplesContractTests(unittest.TestCase):
                 self.assertIn(item, release.FILES)
                 self.assertTrue((SITE_SOURCE / item).is_file())
         self.assertEqual(len(release.FILES), len(set(release.FILES)))
-        home = (SITE_SOURCE / "index.html").read_text("utf-8")
+        # The legacy publisher remains a protected educational-only tool.
+        # Exercise its published Starter30 contract on a pinned historical
+        # input; the new public Plan 1 source intentionally has NO Starter30.
+        home = LEGACY_HOME.read_text("utf-8")
+        self.assertIn("MOJ-PROP-01", (SITE_SOURCE / "index.html").read_text("utf-8"))
+        self.assertNotIn("MOJPROP-STARTER30", (SITE_SOURCE / "index.html").read_text("utf-8"))
         catalog = (SITE_SOURCE / "catalog/index.html").read_text("utf-8")
         self.assertIn('href="/moj-prop/starter-30-trx/"', home)
         self.assertIn('href="/moj-prop/starter-30-trx/"', catalog)
@@ -142,6 +148,9 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
             target = stage / path
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
+        # Isolated legacy install/rollback tests use the *historical*
+        # Starter30 homepage; NEVER modify the actual proposed Plan 1 page.
+        shutil.copy2(LEGACY_HOME, stage / "index.html")
         for before, current in (("baselines/index-v4.html", "index.html"),
                                 ("baselines/catalog-index-v4.html", "catalog/index.html")):
             source = SITE_SOURCE / before
@@ -160,6 +169,16 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         self.stage = stage
+
+    def test_legacy_installer_refuses_new_plan1_without_any_public_writes(self):
+        # New Plan 1 must never be silently shipped through old Starter30
+        # publisher even when its other rollback tests pass on legacy data.
+        old_home = (self.route / "index.html").read_bytes()
+        shutil.copy2(SITE_SOURCE / "index.html", self.stage / "index.html")
+        with self.assertRaisesRegex(RuntimeError, "Starter30 package is not discoverable"):
+            release.deploy("123", "a" * 40)
+        self.assertEqual((self.route / "index.html").read_bytes(), old_home)
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
 
     def test_updater_delivers_both_samples_and_retains_reversible_catalog(self):
         old_index = (self.route / "index.html").read_bytes()
