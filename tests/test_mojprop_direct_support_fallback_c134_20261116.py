@@ -125,6 +125,17 @@ class CanonicalMojPropContactFallback(unittest.TestCase):
         } <= paths)
         self.assertIn('PRESERVED_LIVE_FILES = (Path("signals/index.html"),)', script)
 
+    def test_public_observer_includes_both_manual_contact_routes(self):
+        workflow = (
+            ROOT / ".github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml"
+        ).read_text("utf-8")
+        self.assertEqual(workflow.count(
+            "mojprop_contact|https://mojplaywin.com/moj-prop/contact/"), 1)
+        self.assertEqual(workflow.count(
+            "mpw_contact|https://mojplaywin.com/contact/"), 1)
+        self.assertIn("GET_ONLY_", workflow)
+        self.assertIn("NO_POST_NO_PAYMENT_NO_RELEASE=true", workflow)
+
     def test_owner_backup_and_manual_deploy_gates_not_bypassed(self):
         workflow = WORKFLOW.read_text("utf-8")
         for guard in (
