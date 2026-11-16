@@ -125,15 +125,23 @@ class CommercialBackendClosureTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "conflicting core migration"):
             check_schema_closure(self.live, SOURCE)
 
-    def test_production_migration_targets_only_mojprop_core_0046(self):
+    def test_production_migration_targets_exact_reviewed_core_head(self):
+        """Guard migration target against current graph without stale literals."""
         body = (SOURCE / "scripts/deploy_mojplaywin_moj_prop_backend.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn('"core", "0046_signal_free_subscription", "--noinput"', body)
+        target = MIGRATIONS[-1]
+        self.assertIn(f'migration_target = "{target}"', body)
+        self.assertIn('"core", migration_target, "--noinput"', body)
+        self.assertIn('closure["source_chain"][-1] != migration_target', body)
         self.assertNotIn('["manage.py", "migrate", "--noinput"]', body)
         self.assertLess(
             body.index("check_schema_closure(ROOT, staged_root)"),
-            body.index('"0046_signal_free_subscription", "--noinput"'),
+            body.index(f'migration_target = "{target}"'),
+        )
+        self.assertLess(
+            body.index('closure["source_chain"][-1] != migration_target'),
+            body.index("backup = BACKUP_ROOT / run_id"),
         )
 
     def test_missing_staged_migration_causes_preflight_failure(self):
