@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import pwd
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -18,6 +19,15 @@ from pathlib import Path
 ACCOUNT = "zomorod2"
 HOME = Path("/home/zomorod2")
 UAPI = Path("/usr/local/cpanel/bin/uapi")
+# The login shell might expose a user-safe uapi wrapper outside cPanel's
+# conventional binary location (e.g. a hosting cage). No arbitrary PATH
+# command is executed: only this explicit allowlist of regular executables.
+BINARY_CANDIDATES = (
+    ("cpanel_standard", UAPI),
+    ("usr_local_bin", Path("/usr/local/bin/uapi")),
+    ("usr_bin", Path("/usr/bin/uapi")),
+    ("bin", Path("/bin/uapi")),
+)
 ENV = {"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin",
        "HOME": str(HOME), "USER": ACCOUNT, "LOGNAME": ACCOUNT}
 COMMANDS = (
@@ -97,18 +107,31 @@ def classify(argv: tuple[str, ...], *, runner=subprocess.run) -> dict:
     return result
 
 
+def _trusted_candidate(path: Path) -> tuple[bool, bool]:
+    try:
+        meta = path.lstat()
+        regular = stat.S_ISREG(meta.st_mode) and not stat.S_ISLNK(meta.st_mode)
+        return regular, bool(regular and os.access(path, os.X_OK))
+    except OSError:
+        return False, False
+
+
 def main() -> None:
     try:
         owner_ok = pwd.getpwuid(os.geteuid()).pw_name == ACCOUNT
     except (KeyError, OSError):
         owner_ok = False
-    try:
-        meta = UAPI.lstat()
-        uapi_regular = stat.S_ISREG(meta.st_mode) and not stat.S_ISLNK(meta.st_mode)
-        uapi_executable = uapi_regular and os.access(UAPI, os.X_OK)
-    except OSError:
-        uapi_regular = False
-        uapi_executable = False
+    binary_status = {
+        code: _trusted_candidate(path) for code, path in BINARY_CANDIDATES
+    }
+    uapi_regular, uapi_executable = binary_status["cpanel_standard"]
+    available = [code for code, _ in BINARY_CANDIDATES if binary_status[code][1]]
+    login_path_hit = shutil.which("uapi")
+    login_path_code = next(
+        (code for code, path in BINARY_CANDIDATES
+         if login_path_hit and str(path) == login_path_hit),
+        "other" if login_path_hit else "none",
+    )
     try:
         home_meta = HOME.lstat()
         home_trusted = (stat.S_ISDIR(home_meta.st_mode)
@@ -117,8 +140,18 @@ def main() -> None:
     except OSError:
         home_trusted = False
     probes = []
-    if owner_ok and home_trusted and uapi_regular and uapi_executable:
-        probes = [classify(command) for command in COMMANDS]
+    selected = next(
+        ((code, path) for code, path in BINARY_CANDIDATES
+         if binary_status[code][1]),
+        None,
+    )
+    if owner_ok and home_trusted and selected:
+        # Fixed UAPI operations; the only substitution is a reviewed
+        # executable path from BINARY_CANDIDATES.
+        probes = [
+            classify((str(selected[1]),) + command[1:])
+            for command in COMMANDS
+        ]
     report = {
         "schema": "mojprop.cpanel.uapi_cause.readonly.v1",
         "read_only": True,
@@ -126,6 +159,9 @@ def main() -> None:
         "home_owner_verified": home_trusted,
         "uapi_regular_file": uapi_regular,
         "uapi_executable": uapi_executable,
+        "available_binary_ids": available,
+        "login_path_binary_id": login_path_code,
+        "selected_binary_id": selected[0] if selected else "none",
         "probes": probes,
         "capacity_confirmed": False,
         "db_restore_executed": False,
