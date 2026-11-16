@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from collections import Counter
 
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+
 
 QUEUE_STATUSES = ("new", "reviewing", "offer_sent", "approved")
 
@@ -19,16 +22,40 @@ def _iso(value: object) -> str:
     return str(method()) if callable(method) else str(value)
 
 
+def _valid_contact_for_draft(lead: object) -> bool:
+    """Never turn None, malformed addresses, or forged headers into buyer contacts."""
+    name = getattr(lead, "name", None)
+    email = getattr(lead, "email", None)
+    if type(name) is not str or type(email) is not str:
+        return False
+    if not 2 <= len(name.strip()) <= 200 or not 3 <= len(email) <= 254:
+        return False
+    if email != email.strip() or any(
+        ord(ch) < 32 or ord(ch) == 127 or 0xD800 <= ord(ch) <= 0xDFFF
+        for ch in name + email
+    ):
+        return False
+    try:
+        validate_email(email)
+    except ValidationError:
+        return False
+    domain = email.rsplit("@", 1)[-1].lower().rstrip(".")
+    return domain not in {"localhost", "example.invalid"} and not domain.endswith(
+        (".invalid", ".localhost", ".local", ".test")
+    )
+
+
 def offer_draft_eligible(lead: object) -> bool:
-    """Return whether the existing unsent-offer command may inspect a lead."""
+    """Only reviewed, consented leads with valid contact and bounded scope qualify."""
+    notes = getattr(lead, "notes", None)
     return bool(
         getattr(lead, "pk", None)
         and getattr(lead, "status", None) == "reviewing"
         and getattr(lead, "consent", None) is True
         and str(getattr(lead, "request_id", "")).startswith("MOJPROP-")
-        and len(str(getattr(lead, "name", "")).strip()) >= 2
-        and bool(str(getattr(lead, "email", "")).strip())
-        and len(str(getattr(lead, "notes", "")).strip()) >= 20
+        and _valid_contact_for_draft(lead)
+        and type(notes) is str
+        and 20 <= len(notes.strip()) <= 5000
     )
 
 
