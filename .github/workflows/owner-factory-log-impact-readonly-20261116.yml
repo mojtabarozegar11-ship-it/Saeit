@@ -1,0 +1,49 @@
+name: Owner factory loop and historical log impact evidence read only
+on:
+  push:
+    branches: [ops/verified-disk-reclaim-20261116]
+    paths: [".github/workflows/owner-factory-log-impact-readonly-20261116.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/ops/verified-disk-reclaim-20261116' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - name: Checkout exact branch head and verify script
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Validate pinned source syntax and byte hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=scripts/owner_factory_loop_log_recovery_audit_readonly_20261116.py
+          test ! -L "$file"
+          test "$(git hash-object -- "$file")" = "e94712eb8617ce00a0d90bfde76738b85558de08"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import ast,pathlib; ast.parse(pathlib.Path("scripts/owner_factory_loop_log_recovery_audit_readonly_20261116.py").read_text(encoding="utf-8"))'
+          echo FACTORY_LOG_SOURCE_VERIFIED=PASS
+      - name: Verify live factory loop and missing-log impact without writing
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${VPS_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/owner-factory-log-audit-20261116"
+          install -d -m 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test -s "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo FACTORY_LOG_SSH_KEY_PINNED=VERIFIED
+          timeout 75s ssh -T -i "$work/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ForwardAgent=no -o RequestTTY=no githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < scripts/owner_factory_loop_log_recovery_audit_readonly_20261116.py |
+            PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import json,sys; s=sys.stdin.read(5000); p="FACTORY_LOOP_LOG_READONLY="; q=[x for x in s.splitlines() if x.startswith(p)]; assert len(q)==1,"MISSING_FACTORY_LOG_PROOF"; d=json.loads(q[0][len(p):]); assert d["schema"]=="owner.factory.loop_log_safety.readonly.v1" and d["files_modified"] is False and d["repair_applied"] is False and d["service_restarted"] is False; print(q[0])'
+          echo FACTORY_LOG_RISK_AUDIT=COMPLETE_READ_ONLY
