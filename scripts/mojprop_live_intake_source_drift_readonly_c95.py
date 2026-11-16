@@ -20,8 +20,11 @@ ROOT = Path("/home/zomorod2/Saeit-staging")
 WEBROOT = Path("/home/zomorod2/mojplaywin.com")
 APP_USER = "zomorod2"
 EXPECTED = {
-    "core/mojprop_views.py": "006cb5ed399f403a75d1f3a1dabc6c48dc26ff8d",
-    "core/mojprop_receipts.py": "fd6f792f08b66a85e360ef0c8fb76093d85fa1e9",
+    # Pinned to GitHub's reviewed main source at the branch base commit;
+    # this can establish source identity only, not a live Passenger release.
+    "core/mojprop_views.py": "c608780d7957eb9fc9a4e019912be8c72ca2553f",
+    "core/mojprop_receipts.py": "9fe6eb1ad13857143440517b14b3f2ebcfef6db3",
+    "core/mojprop_accessible_intake.py": "48f3920958f0a17249fb3ae854647352baadf545",
     "config/urls.py": "07c2b6e10a7ec77ed6225f55d30ed655d61a37b3",
     "core/management/commands/mojprop_sales_action_queue.py":
         "095dcf51e005694f4cb24df1e39ce8a4f6a0cf08",
