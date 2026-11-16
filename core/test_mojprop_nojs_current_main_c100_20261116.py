@@ -224,7 +224,8 @@ class AccessibleCurrentMainLeadTests(TestCase):
         token = self._status_token()
         response = self.client.post(
             "/moj-prop-status/?format=html",
-            {"receipt_token": token, "csrfmiddlewaretoken": self.csrf},
+            data=urlencode({"receipt_token": token, "csrfmiddlewaretoken": self.csrf}),
+            content_type="application/x-www-form-urlencoded",
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Review status", response.content)
@@ -234,7 +235,8 @@ class AccessibleCurrentMainLeadTests(TestCase):
     def test_23_invalid_status_token_does_not_disclose_identity(self):
         response = self.client.post(
             "/moj-prop-status/?format=html",
-            {"receipt_token": "invalid", "csrfmiddlewaretoken": self.csrf},
+            data=urlencode({"receipt_token": "invalid", "csrfmiddlewaretoken": self.csrf}),
+            content_type="application/x-www-form-urlencoded",
         )
         self.assertEqual(response.status_code, 404)
         self.assertNotIn(b"buyer@example.org", response.content)
@@ -289,3 +291,14 @@ class AccessibleCurrentMainLeadTests(TestCase):
         html = self.client.get("/moj-prop-status/?format=html").content.decode()
         self.assertNotIn("<script", html)
         self.assertNotIn('src="https:', html)
+
+    def test_31_multipart_status_submission_is_rejected_without_status_disclosure(self):
+        # Browser status form uses urlencoded: never broaden to accept multipart.
+        token = self._status_token()
+        response = self.client.post(
+            "/moj-prop-status/?format=html",
+            {"receipt_token": token, "csrfmiddlewaretoken": self.csrf},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn(token.encode(), response.content)
+        self.assertNotIn(b"buyer@example.org", response.content)
