@@ -216,3 +216,40 @@ else:
         def test_unknown_language_404(self):
             result = self.client.get("/moj-prop/xx/", HTTP_HOST="mojplaywin.com")
             self.assertEqual(result.status_code, 404)
+
+        def test_root_wsgi_first_lead_form_is_reachable_without_payment(self):
+            result = self.client.get(
+                "/moj-prop-interest/form/",
+                HTTP_HOST="mojplaywin.com", secure=True,
+            )
+            self.assertEqual(result.status_code, 200)
+            self.assertContains(result, 'action="/moj-prop-interest/"')
+            self.assertContains(result, 'name="contact_consent" value="yes" required')
+            self.assertContains(result, 'name="plan_code" value="MOJ-PROP-01"')
+            self.assertContains(result, 'name="email" type="email"')
+            self.assertContains(result, "csrfmiddlewaretoken")
+            self.assertEqual(result["X-Robots-Tag"], "noindex, nofollow")
+            self.assertIn("no-store", result["Cache-Control"])
+            self.assertIn("form-action 'self'", result["Content-Security-Policy"])
+            self.assertNotContains(result, 'name="txid"')
+
+        def test_root_interest_form_is_limited_to_secure_brand_origin(self):
+            plain = self.client.get(
+                "/moj-prop-interest/form/",
+                HTTP_HOST="mojplaywin.com", secure=False,
+            )
+            self.assertEqual(plain.status_code, 404)
+            other = self.client.get(
+                "/moj-prop-interest/form/",
+                HTTP_HOST="zomorodmelal.ir", secure=True,
+            )
+            self.assertEqual(other.status_code, 404)
+
+        def test_root_interest_form_never_accepts_purchase_post(self):
+            result = self.client.post(
+                "/moj-prop-interest/form/",
+                data={"plan_code": "MOJ-PROP-01", "payment": "yes"},
+                HTTP_HOST="mojplaywin.com", secure=True,
+            )
+            self.assertEqual(result.status_code, 405)
+            self.assertIn("GET", result["Allow"])
