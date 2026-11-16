@@ -31,7 +31,7 @@ jobs:
           python3 -B -m py_compile scripts/mojprop_live_intake_source_drift_readonly_c95.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_live_intake_source_drift_readonly_c95 -q
           test ! -L scripts/mojprop_live_intake_source_drift_readonly_c95.py
-          test "$(git hash-object -- scripts/mojprop_live_intake_source_drift_readonly_c95.py)" = "bb8ac66ee3d4d572f960930467f11311c3491787"
+          test "$(git hash-object -- scripts/mojprop_live_intake_source_drift_readonly_c95.py)" = "f0d23919fcf419f2805e7ef8c8b446f0ee720bb4"
       - name: Connect only through pinned factory runner to the existing cPanel
         shell: bash
         env:
@@ -58,7 +58,7 @@ jobs:
           timeout 80s ssh -T -F "$work/config" cpanel \
             'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
             < scripts/mojprop_live_intake_source_drift_readonly_c95.py \
-            | python3 -c 'import json,sys; data=sys.stdin.read(6000); prefix="MOJPROP_C95_LIVE_INTAKE_SOURCE_READONLY="; lines=[x for x in data.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_QUEUE"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.intake.live_source_drift.readonly.v1" and d["read_only"] is True and d["customer_data_accessed"] is False and d["customer_lead_created"] is False and d["production_release_permitted"] is False; assert isinstance(d["source_identity"],dict) and len(d["source_identity"])==5; assert all(v in ("matches","drifted","unsafe","unavailable") for v in d["source_identity"].values()); print(lines[0])'
+            | python3 -c 'import json,sys; data=sys.stdin.read(6000); prefix="MOJPROP_C95_LIVE_INTAKE_SOURCE_READONLY="; lines=[x for x in data.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_QUEUE"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.intake.live_source_drift.readonly.v1" and d["read_only"] is True and d["customer_data_accessed"] is False and d["customer_lead_created"] is False and d["production_release_permitted"] is False; assert isinstance(d["source_identity"],dict) and len(d["source_identity"])==5; assert all(v in ("matches","drifted","missing","unsafe","unavailable") for v in d["source_identity"].values()); print(lines[0])'
           echo 'LIVE_MOJPROP_INTAKE_SOURCE_DIAGNOSTIC=PASS'
           echo 'No POST, customer data, payment, database migration or site release; this scan only identifies version and routing.' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove ephemeral SSH authentication material
