@@ -37,9 +37,43 @@ def _private_html(title, body, *, status=200):
     return response
 
 
-def _options(choices):
+def _safe_service_prefill(request):
+    """Only accept known service codes and the one canonical Starter30 scope.
+
+    Query strings are untrusted navigation hints, never prices, accepted
+    contract terms, a customer identity, payment proof or persisted records.
+    """
+    if request.method != "GET":
+        return None, ""
+    services = request.GET.getlist("service")
+    packages = request.GET.getlist("package")
+    if len(services) > 1 or len(packages) > 1:
+        return None, ""
+    service = services[0] if services else None
+    routes = {code for code, _ in MojPropRequest.ROUTE_CHOICES if code != "digital"}
+    if service not in routes:
+        return None, ""
+    if packages:
+        if service != "blueprint" or packages != ["starter-30-trx"]:
+            return None, ""
+        # This is still a buyer-editable, unverified request. The existing
+        # offer-draft classifier recognises the exact leading product line;
+        # it never authorises an invoice or a paid entitlement.
+        return service, (
+            "Requested canonical product: MOJPROP-STARTER30 "
+            "(one-time indicative 30 native TRX; written terms and verified "
+            "lawful invoice required; NOT paid)\n"
+            "Please send written terms for the ten-session simulated journal "
+            "assessment and individual educational feedback. This is not a "
+            "funded account, live trade, payment or profit guarantee."
+        )
+    return service, ""
+
+
+def _options(choices, *, selected=None):
     return "".join(
-        '<option value="' + escape(value, quote=True) + '">' +
+        '<option value="' + escape(value, quote=True) + '"' +
+        (' selected' if value == selected else '') + '>' +
         escape(title) + '</option>'
         for value, title in choices if value != 'digital'
     )
@@ -48,7 +82,11 @@ def _options(choices):
 def request_form(request, *, error=None, status=200):
     """Always provide a fresh CSRF-protected form; never echo PII on errors."""
     csrf = escape(get_token(request), quote=True)
+    selected, prefill_notes = _safe_service_prefill(request)
     message = ('<p role="alert">' + escape(error) + '</p>') if error else ''
+    if prefill_notes:
+        message += ('<p>Starter30 is a <strong>request for written terms only</strong>; '
+                    'no payment, challenge or funded trading account is available.</p>')
     form = (
         '<p>Request a written, manually reviewed service proposal. '
         'No payment, live account or return is promised.</p>'
@@ -62,13 +100,14 @@ def request_form(request, *, error=None, status=200):
         'autocomplete="email" required maxlength="254"></label></p>'
         '<p><label>Service <select name="service" required>'
         + _options(tuple(choice for choice in MojPropRequest.ROUTE_CHOICES
-                         if choice[0] != "digital")) + '</select></label></p>'
+                         if choice[0] != "digital"), selected=selected) + '</select></label></p>'
         '<p>For downloadable products, use the verified store checkout; this '
         'form creates only an unpaid manual-review request.</p>'
         '<p><label>Time horizon <select name="horizon" required>'
         + _options(MojPropRequest.HORIZON_CHOICES) + '</select></label></p>'
         '<p><label>Objectives and deliverables <textarea name="notes" '
-        'required minlength="20" maxlength="5000" rows="7"></textarea>'
+        'required minlength="20" maxlength="5000" rows="7">' +
+        escape(prefill_notes) + '</textarea>'
         '</label></p>'
         '<input type="hidden" name="website" value="">'
         '<input type="hidden" name="idempotency_key" value="' +
