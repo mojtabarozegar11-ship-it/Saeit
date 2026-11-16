@@ -53,7 +53,7 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
         self.assertGreaterEqual(self.page.count('/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01'), 3)
         self.assertNotIn('/moj-prop-interest/form/', self.page)
         self.assertNotIn('/moj-prop/?service=blueprint&amp;package=moj-prop-01#request', self.page)
-        self.assertIn('prefilled accessible Plan 1 request', self.page)
+        self.assertIn('MOJ-PROP-01 prefilled accessible request (manual review, not enrolment)', self.page)
 
     def test_no_js_plan1_fallback_exists_in_current_main_backend(self):
         backend = (ROOT / "core/mojprop_accessible_intake.py").read_text(encoding="utf-8")
