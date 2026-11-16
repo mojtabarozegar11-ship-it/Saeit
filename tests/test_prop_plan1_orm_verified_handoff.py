@@ -279,6 +279,26 @@ class Plan1VerifiedOrmHandoffTests(SimpleTestCase):
             self.run_review(data)
 
 
+    def test_staff_with_permission_but_not_superuser_is_denied(self):
+        data, _ = self.fixture()
+        data["actor"].is_superuser = False
+        with self.assertRaises(Plan1OrderGateClosed):
+            self.run_review(data)
+
+    def test_expiry_is_rechecked_after_potentially_slow_canonical_lookup(self):
+        data, row = self.fixture()
+        clock_at_start = datetime.fromtimestamp(NOW, timezone.utc)
+        clock_after_lock = datetime.fromtimestamp(NOW + 3600, timezone.utc)
+        with patch("prop_firm.plan1_orm_consent_review.timezone.now",
+                   side_effect=[clock_at_start, clock_after_lock]), \
+             patch("prop_firm.plan1_orm_consent_review.transaction.atomic",
+                   return_value=nullcontext()), \
+             patch("prop_firm.plan1_orm_consent_review.PropInterest") as model:
+            model.objects.select_for_update.return_value.filter.return_value.values.return_value.first.return_value = row
+            with self.assertRaises(Plan1OrderGateClosed):
+                review_verified_precontract_for_interest(**data)
+
+
 from django.test import TestCase
 from prop_firm.lead_models import PropInterest
 from test_prop_plan1_canonical_interest_bridge import sign as consent_sign
@@ -337,22 +357,3 @@ class Plan1PersistedConsentReviewTests(TestCase):
         from prop_firm.models import PropChallengeEnrollment
         self._review()
         self.assertEqual(PropChallengeEnrollment.objects.count(), 0)
-
-    def test_staff_with_permission_but_not_superuser_is_denied(self):
-        data, _ = self.fixture()
-        data["actor"].is_superuser = False
-        with self.assertRaises(Plan1OrderGateClosed):
-            self.run_review(data)
-
-    def test_expiry_is_rechecked_after_potentially_slow_canonical_lookup(self):
-        data, row = self.fixture()
-        clock_at_start = datetime.fromtimestamp(NOW, timezone.utc)
-        clock_after_lock = datetime.fromtimestamp(NOW + 3600, timezone.utc)
-        with patch("prop_firm.plan1_orm_consent_review.timezone.now",
-                   side_effect=[clock_at_start, clock_after_lock]), \
-             patch("prop_firm.plan1_orm_consent_review.transaction.atomic",
-                   return_value=nullcontext()), \
-             patch("prop_firm.plan1_orm_consent_review.PropInterest") as model:
-            model.objects.select_for_update.return_value.filter.return_value.values.return_value.first.return_value = row
-            with self.assertRaises(Plan1OrderGateClosed):
-                review_verified_precontract_for_interest(**data)
