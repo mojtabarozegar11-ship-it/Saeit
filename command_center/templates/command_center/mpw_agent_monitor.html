@@ -30,6 +30,10 @@ h3{font-size:15px;overflow-wrap:anywhere}
 <div><a href="/staff/command-center/">بازگشت به پنل</a>　<button id="reload" type="button">به‌روزرسانی</button></div></header>
 <section id="intro" aria-live="polite"><p>در حال دریافت وضعیت واقعی...</p></section>
 <section class="stats" id="stats" aria-label="خلاصه سامانه"></section>
+<section class="card" id="canonical" aria-live="polite" aria-label="پایش ربات یکپارچه Mojtaba.bot.ai">
+ <h2>ربات واحد Mojtaba.bot.ai — شواهد مستقل</h2>
+ <p class="muted">در انتظار نخستین رسید اجرایی از ربات واحد. اجرای ماژول‌های خصوصی یا انتقال کامل هنوز تأیید نشده است.</p>
+</section>
 <div class="controls"><label for="kind">نوع:</label><select id="kind">
 <option value="all">همه</option><option value="master">مستر ایجنت</option>
 <option value="agent">ایجنت‌ها و نقش‌ها</option><option value="robot">ربات‌ها</option>
@@ -113,8 +117,20 @@ async function load(){
    " نسل مدیریتی، "+c.other_worker_slots+" کارگر دیگر. تعداد فرایندهای مستقل تأییدشده: نامشخص.":
    " | تعداد فرایندهای مستقل قابل تأیید نیست.";
   txt($("intro"),detail+composition+" | زمان بررسی: "+(data.captured_at||"نامشخص"));
+  const canonical=data.canonical_public_monitor||{};
+  const panel=$("canonical");panel.replaceChildren();
+  panel.append(element("h2","","Mojtaba.bot.ai — ربات واحد، شواهد پایش"));
+  const count=Number.isInteger(canonical.successful_public_observation_receipts_24h)?
+   canonical.successful_public_observation_receipts_24h:0;
+  panel.append(element("p","",
+   "رسیدهای مسیر عمومی MojPlayWin در ۲۴ ساعت: "+count+
+   " | دو اجرای مجزا: "+(canonical.two_distinct_spaced_cycles===true?"تأیید شده":"تأیید نشده")));
+  panel.append(element("p","muted",
+   "انتقال کامل Workerهای خصوصی و ۷۷ ماژول: تأیید نشده | "+ 
+   "حذف Collector قدیمی: "+(canonical.legacy_collector_retirement_authorized===true?
+    "نیازمند بازبینی مستقل":"مجاز نیست")));
   paint();
- }catch(e){rows=[];txt($("intro"),"خطا در دریافت داده؛ سلامت هیچ جزء تأیید نشده است.");$("cards").replaceChildren();$("stats").replaceChildren();}
+ }catch(e){rows=[];txt($("intro"),"خطا در دریافت داده؛ سلامت هیچ جزء تأیید نشده است.");$("cards").replaceChildren();$("stats").replaceChildren();$("canonical").replaceChildren(element("p","muted","داده ربات واحد در دسترس نیست؛ هیچ انتقالی تأیید نشده است."));}
 }
 $("reload").addEventListener("click",load);
 $("kind").addEventListener("change",paint);$("status").addEventListener("change",paint);
