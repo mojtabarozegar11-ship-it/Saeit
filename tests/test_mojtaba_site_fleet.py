@@ -1,13 +1,8 @@
 """Offline safety regressions for the canonical site-native capabilities."""
-import importlib.util
 from datetime import datetime, timezone
-from pathlib import Path
 import unittest
 
-PATH = Path(__file__).resolve().parents[1] / "core" / "mojtaba_site_fleet.py"
-spec = importlib.util.spec_from_file_location("site_fleet", PATH)
-fleet = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(fleet)
+from core import mojtaba_site_fleet as fleet
 
 
 class SiteFleetTests(unittest.TestCase):
