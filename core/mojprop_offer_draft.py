@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 
 from .mojprop_catalog_contract import public_service_catalog
+from .mojprop_sales_queue import offer_draft_eligible
 
 
 def _normalise_line_breaks(value: object) -> str:
@@ -105,8 +106,8 @@ def _starter30_selection(lead) -> str:
 
 def build_offer_draft(lead) -> str:
     """Render a traceable customer-specific written-scope draft; never charge."""
-    if not lead.pk or lead.status != "reviewing" or lead.consent is not True:
-        raise ValueError("real_consent_and_operator_review_required")
+    if not offer_draft_eligible(lead):
+        raise ValueError("real_consented_reviewed_contact_and_scope_required")
     offers = {item["route"]: item for item in public_service_catalog()}
     service = offers.get(lead.route)
     if service is None:
