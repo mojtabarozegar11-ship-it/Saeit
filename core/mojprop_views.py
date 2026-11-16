@@ -486,8 +486,11 @@ def mojprop_receipt_status(request):
             {"ok": False, "detail": "Receipt invalid or expired. Contact support using your original email."},
             status=404,
         )
-    record = (MojPropRequest.objects.filter(request_id=request_id)
-              .values_list("status", flat=True).first())
+    try:
+        record = (MojPropRequest.objects.filter(request_id=request_id)
+                  .values_list("status", flat=True).first())
+    except DatabaseError:
+        return _crm_storage_unavailable()
     if record is None:
         return _json({"ok": False, "detail": "Receipt unavailable."}, status=404)
     response = _json({
