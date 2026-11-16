@@ -42,6 +42,8 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
             "https://mojplaywin.com:8443/saman/",
             "https://mojplaywin.com@evil.example/saman/",
             "https://mojplaywin.com/admin/",
+            guard.ORIGIN + "/picm/login/",
+            guard.ORIGIN + "/picm/",
             "https://mojplaywin.com/commerce/trx-easy/purchases/",
             "https://mojplaywin.com/%61dmin/",
             "https://mojplaywin.com/saman/#fragment",
@@ -56,7 +58,6 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
     def test_login_redirect_and_known_child_are_allowed(self):
         for url in (
             guard.ORIGIN + "/accounts/login/?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F",
-            guard.ORIGIN + "/picm/login/",
             guard.ORIGIN + "/studio.Roham/",
             guard.ORIGIN + "/zahra$$/",
         ):
@@ -132,6 +133,9 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
         ))
         self.assertEqual(len(guard.REQUIRED_PATHS), len(set(guard.REQUIRED_PATHS)))
         self.assertEqual(len(guard.PERSONAL_PATHS), 11)
+        self.assertEqual(len(guard.PROTECTED_CHILDREN), 5)
+        self.assertNotIn("/picm/", guard.REQUIRED_PATHS)
+        self.assertNotIn("/picm/login/", guard.REDIRECT_PATHS)
 
     def test_get_uses_scoped_opener_and_anonymous_get(self):
         calls = []
