@@ -53,6 +53,22 @@ class OwnerStaticHorizonTests(unittest.TestCase):
         x = classify(bad, SHA(bad))
         self.assertFalse(x["surgical_value_only_candidate"])
 
+    def test_09_safe_legacy_values_can_be_labels_or_digit_hyphen_codes(self):
+        variants = [
+            (b"immediate", b"Today / urgent"),
+            (b"seven_days", b"This week"),
+            (b"thirty_days", b"This month"),
+            (b"explore", b"Initial review only"),
+        ]
+        legacy = VALID
+        for original, replacement in variants:
+            legacy = legacy.replace(b'value="' + original + b'"',
+                                    b'value="' + replacement + b'"')
+        data = classify(legacy, SHA(legacy))
+        self.assertTrue(data["option_values_safe_ascii_bounded"])
+        self.assertTrue(data["option_values_distinct"])
+        self.assertTrue(data["surgical_value_only_candidate"])
+
     def test_08_true_if_all_acceptance_and_no_customer_writes(self):
         x = classify(VALID, SHA(VALID))
         self.assertFalse(x["writes_or_customer_records_accessed"])
