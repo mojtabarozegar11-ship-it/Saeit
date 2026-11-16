@@ -38,6 +38,12 @@ def completed_paid_phase_one_before_stage_two(account, *, as_of=None):
             or not account.pk or account.opened_at is None
             or account.opened_at.tzinfo is None):
         return False
+    # A v1.2 paid enrollment must never be relabelled as a legacy v1.1
+    # trial to bypass the 50-position, 28-day and social-contract gates.
+    # Legacy trials without any purchase retain their historical behaviour.
+    if (account.challenge_enrollment_id is not None
+            and account.policy_version != NEW_CONTRACT_VERSION):
+        return False
     cutoff = as_of
     if cutoff is not None and (
             cutoff.tzinfo is None or cutoff.utcoffset() is None
@@ -195,10 +201,15 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
     promotion_stats = None
     social_decision = None
     challenge_trade_count = None
-    purchase_window_valid = True
     purchase = account.challenge_enrollment if account.kind in (
         PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO
     ) else None
+    # Fail closed when a paid enrollment is downgraded to the legacy contract.
+    # Without this guard the v1.1 assessment path omits v1.2 trade/social
+    # conditions and can mark an already paid challenge as eligible.
+    purchase_window_valid = not (
+        purchase is not None and account.policy_version != purchase.terms_version
+    )
     selected_plan = None
     if purchase is not None:
         try:
