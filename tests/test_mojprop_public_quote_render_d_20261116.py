@@ -175,5 +175,31 @@ class PublicQuoteRenderTests(unittest.TestCase):
             render_checked_quote(quote)
 
 
+    def test_normalizes_valid_integer_and_tenth_decimal_amounts(self):
+        from datetime import datetime, timedelta, timezone
+        from decimal import Decimal
+        from types import SimpleNamespace
+        from core.mojprop_quote_contract import make_quote_snapshot
+
+        now = datetime(2026, 11, 16, 12, tzinfo=timezone.utc)
+        for value in (Decimal("125"), Decimal("125.0"), Decimal("125.00")):
+            with self.subTest(value=str(value)):
+                proposal = checked_quote()
+                offer = SimpleNamespace(
+                    lead=SimpleNamespace(request_id=proposal["reference"]),
+                    status="issued", version=1, title=proposal["title"],
+                    scope=proposal["scope"], exclusions=proposal["exclusions"],
+                    amount=value, currency="USD", delivery_days=7,
+                    issued_at=now - timedelta(hours=1),
+                    reviewed_at=now - timedelta(hours=2),
+                    expires_at=now + timedelta(days=3),
+                    accepted_at=None, acceptance_reference="",
+                )
+                snapshot = make_quote_snapshot(offer, now=now)
+                self.assertEqual(snapshot["amount"], "125.00")
+                text = render_checked_quote(snapshot)
+                self.assertIn("Quoted amount: 125.00 USD", text)
+
+
 if __name__ == "__main__":
     unittest.main()
