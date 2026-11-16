@@ -172,9 +172,18 @@ def _cpanel_quota_data_adequate(document, needed_bytes):
             or type(document["result"].get("data")) is not dict):
         return False, "cpanel_uapi_invalid_response"
     data = document["result"]["data"]
-    if any(type(data.get(k)) is not int or data[k] != 1
-           for k in ("under_quota_overall", "under_megabyte_limit",
-                     "under_inode_limit")):
+    # The owner cPanel UAPI returned exact ASCII "1" strings for all three
+    # flags (C111 run 43815041785), while some versions emit integer 1.
+    # Accept ONLY these exact affirmative forms; bool, "true", whitespace,
+    # absent keys and numeric strings other than "1" remain fail-closed.
+    def exactly_under_limit(key):
+        value = data.get(key)
+        return ((type(value) is int and value == 1)
+                or (type(value) is str and value == "1"))
+
+    if not all(exactly_under_limit(k) for k in (
+            "under_quota_overall", "under_megabyte_limit",
+            "under_inode_limit")):
         return False, "cpanel_uapi_limit_exceeded_or_unknown"
     try:
         def number(field):
