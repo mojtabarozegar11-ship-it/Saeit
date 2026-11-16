@@ -199,6 +199,57 @@ class FutureEvidenceQualificationTests(TestCase):
         self.assertFalse(result["social_posting"].satisfied)
 
 
+    def test_12_future_purchase_claim_cannot_trigger_social_or_qualification(self):
+        now = django_timezone.now()
+        _, phase2 = self._purchased_cohort(paid_at=now-timedelta(days=3))
+        PropChallengeEnrollment.objects.filter(
+            pk=phase2.challenge_enrollment_id
+        ).update(confirmed_at=now+timedelta(days=2))
+        result = account_projection(phase2)
+        self.assertFalse(result["purchase_window_valid"])
+        self.assertIsNone(result["social_posting"])
+
+    def test_13_as_of_before_purchase_cannot_evaluate_paid_challenge(self):
+        now = django_timezone.now()
+        _, phase2 = self._purchased_cohort(paid_at=now-timedelta(days=1))
+        result = account_projection(phase2, as_of=now-timedelta(days=2))
+        self.assertFalse(result["purchase_window_valid"])
+        self.assertIsNone(result["challenge_trade_count"])
+
+    def test_14_past_purchased_challenge_remains_within_window(self):
+        now = django_timezone.now()
+        _, phase2 = self._purchased_cohort(paid_at=now-timedelta(days=3))
+        result = account_projection(phase2, as_of=now-timedelta(days=1))
+        self.assertTrue(result["purchase_window_valid"])
+        self.assertIsNotNone(result["social_posting"])
+
+    def test_15_naive_confirmed_at_on_fetched_model_is_not_trusted(self):
+        now = django_timezone.now()
+        _, phase2 = self._purchased_cohort(paid_at=now-timedelta(days=3))
+        purchase = phase2.challenge_enrollment
+        purchase.confirmed_at = datetime(2026, 11, 16)
+        result = account_projection(phase2)
+        self.assertFalse(result["purchase_window_valid"])
+
+    def test_16_future_as_of_cannot_override_future_purchase(self):
+        now = django_timezone.now()
+        _, phase2 = self._purchased_cohort(paid_at=now-timedelta(days=3))
+        PropChallengeEnrollment.objects.filter(
+            pk=phase2.challenge_enrollment_id
+        ).update(confirmed_at=now+timedelta(days=1))
+        result = account_projection(phase2, as_of=now+timedelta(days=35))
+        self.assertFalse(result["purchase_window_valid"])
+
+    def test_17_evidence_cutoff_before_paid_enrollment_is_not_a_sale(self):
+        now = django_timezone.now()
+        _, phase2 = self._purchased_cohort(paid_at=now-timedelta(days=2))
+        result = account_projection(
+            phase2, evidence_cutoff=now-timedelta(days=3)
+        )
+        self.assertFalse(result["purchase_window_valid"])
+        self.assertIsNone(result["challenge_trade_count"])
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()
