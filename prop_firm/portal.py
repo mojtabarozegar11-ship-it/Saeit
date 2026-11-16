@@ -4,6 +4,7 @@ No financial mutation. Every verified observation is checked for historical
 breaches; missing session-open data and incomplete reconciliation fail closed.
 """
 from collections import defaultdict
+from django.db.models import F
 from datetime import timedelta
 from datetime import timezone as utc_timezone
 from django.utils import timezone as django_timezone
@@ -23,6 +24,59 @@ ZERO = Decimal("0")
 
 def _day(value):
     return value.astimezone(utc_timezone.utc).date()
+
+
+def completed_paid_phase_one_before_stage_two(account, *, as_of=None):
+    """Only an earlier, independently reconciled same-contract phase qualifies.
+
+    Do not allow a PASSED flag written after stage two began, a different
+    purchase, or a phase opened before its settled purchase to unlock stage 2.
+    This is eligibility evidence ONLY: it neither starts trading nor funds.
+    """
+    if (not isinstance(account, PropAccount)
+            or account.kind != PropAccount.Kind.PHASE_TWO
+            or not account.pk or account.opened_at is None
+            or account.opened_at.tzinfo is None):
+        return False
+    cutoff = as_of
+    if cutoff is not None and (
+            cutoff.tzinfo is None or cutoff.utcoffset() is None
+            or account.opened_at > cutoff):
+        return False
+    q = account.trader.accounts.filter(
+        kind=PropAccount.Kind.PHASE_ONE,
+        status=PropAccount.Status.PASSED,
+        reconciled_by_operator=True,
+        policy_version=account.policy_version,
+        opened_at__isnull=False,
+        closed_at__isnull=False,
+        opened_at__lte=F("closed_at"),
+        closed_at__lte=account.opened_at,
+    ).exclude(pk=account.pk)
+    if cutoff is not None:
+        q = q.filter(closed_at__lte=cutoff)
+    if account.policy_version == NEW_CONTRACT_VERSION:
+        purchase = account.challenge_enrollment
+        if (purchase is None or purchase.trader_id != account.trader_id
+                or purchase.settlement_verified is not True
+                or purchase.terms_version != NEW_CONTRACT_VERSION):
+            return False
+        try:
+            start = purchase.confirmed_at
+            end = start + timedelta(days=POLICY.completion_deadline_days)
+        except (ValueError, TypeError, OverflowError):
+            return False
+        if (start is None or start.tzinfo is None or start.utcoffset() is None
+                or not start <= account.opened_at < end):
+            return False
+        q = q.filter(
+            challenge_enrollment=purchase,
+            starting_capital_usd=account.starting_capital_usd,
+            tier_index=account.tier_index,
+            opened_at__gte=start,
+            closed_at__lt=end,
+        )
+    return q.exists()
 
 
 def account_projection(account, *, as_of=None, evidence_cutoff=None):
@@ -187,15 +241,9 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
         # by both simulated phases. An absent purchase never creates readiness.
     if risk is not None:
         if account.kind in (PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO):
-            prior = account.trader.accounts.filter(
-                kind=PropAccount.Kind.PHASE_ONE,
-                status=PropAccount.Status.PASSED,
-                reconciled_by_operator=True,
-                policy_version=account.policy_version,
+            prior = completed_paid_phase_one_before_stage_two(
+                account, as_of=evidence_cutoff
             )
-            if account.policy_version == NEW_CONTRACT_VERSION:
-                prior = prior.filter(challenge_enrollment=purchase)
-            prior = prior.exclude(pk=account.pk).exists()
             assessment = assess_challenge(
                 phase=1 if account.kind == PropAccount.Kind.PHASE_ONE else 2,
                 account_capital=account.starting_capital_usd,
