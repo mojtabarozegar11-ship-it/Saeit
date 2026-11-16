@@ -67,7 +67,7 @@ def _hex_recipient(address: str) -> str:
     return raw[:21].hex()
 
 
-def validate_persisted_order(invoice: Plan1PersistedInvoice) -> None:
+def validate_persisted_order(invoice: Plan1PersistedInvoice, *, expected_precontract_sha256: str | None = None) -> None:
     """Reject forged/mis-scoped order snapshots before chain matching."""
     if type(invoice) is not Plan1PersistedInvoice:
         raise NativeTRXMatchRejected("expected server-persisted invoice snapshot")
@@ -99,6 +99,13 @@ def validate_persisted_order(invoice: Plan1PersistedInvoice) -> None:
             or HEX64.fullmatch(invoice.precontract_sha256) is None
             or invoice.precontract_sha256 == "0" * 64):
         raise NativeTRXMatchRejected("missing exact v1.2 signed-disclosure claim")
+    # Caller MUST independently obtain the buyer-accepted exact-version FA+EN
+    # digest from a trusted, signed contract repository. Supplying only the
+    # untrusted invoice digest is never sufficient to match a customer's terms.
+    if (type(expected_precontract_sha256) is not str
+            or HEX64.fullmatch(expected_precontract_sha256) is None
+            or expected_precontract_sha256 != invoice.precontract_sha256):
+        raise NativeTRXMatchRejected("customer disclosure not bound to trusted terms")
     try:
         _hex_recipient(invoice.recipient)
         # A syntactically valid Base58Check address can belong to a STRANGER.
@@ -124,6 +131,7 @@ def assess_solidified_native_transfer(
     receipt_endpoint: str,
     trusted_node_network: str,
     already_assigned_txids: frozenset[str],
+    expected_precontract_sha256: str,
 ) -> dict:
     """Pure, fail-closed *candidate* matching. Never marks a ledger payment.
 
@@ -135,7 +143,7 @@ def assess_solidified_native_transfer(
     ALL products and an atomic compare-and-set; SKU-specific ledger tables
     and buyer-submitted txids alone are not reliable payment proof.
     """
-    validate_persisted_order(invoice)
+    validate_persisted_order(invoice, expected_precontract_sha256=expected_precontract_sha256)
     if (type(txid) is not str or HEX64.fullmatch(txid) is None
             or type(body_endpoint) is not str or body_endpoint != _SOLIDIFIED_BODY
             or type(receipt_endpoint) is not str or receipt_endpoint != _SOLIDIFIED_RECEIPT
@@ -206,6 +214,8 @@ def assess_solidified_native_transfer(
         "network": NETWORK,
         "candidate_matches_persisted_order": True,
         "requires_atomic_unique_ledger_assignment": True,
+        "global_cross_product_txid_uniqueness_not_proven_by_this_module": True,
+        "trusted_signed_buyer_terms_verified_by_this_module": False,
         "buyer_entitlement_granted": False,
         "receipt_sent": False,
         "revenue_booked": False,
