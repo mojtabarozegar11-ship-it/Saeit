@@ -27,7 +27,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           html=Path('templates/moj-prop-v4/index.html').read_text(encoding='utf8')
-          assert html.count('/moj-prop-interest/form/') >= 3
+          assert html.count('/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01') >= 3\n          assert '/moj-prop-interest/form/' not in html\n          assert 'if packages == ["moj-prop-01"]:' in Path('core/mojprop_accessible_intake.py').read_text(encoding='utf8')
           assert '/moj-prop/?service=blueprint&amp;package=moj-prop-01#request' not in html
           assert 'MOJPROP-STARTER30' not in html
           assert 'No wallet or payment collection now.' in html
