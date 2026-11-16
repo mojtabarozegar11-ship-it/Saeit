@@ -25,7 +25,7 @@ class Starter30UnreleasedMigrationGuardTests(unittest.TestCase):
         self.assertEqual(result["source_chain"][-1], "0047_mpw_guest_email_recovery")
 
     def test_02_live_preflight_still_rejects_unreleased_0048(self):
-        with self.assertRaisesRegex(RuntimeError, "unreviewed later"):
+        with self.assertRaisesRegex(RuntimeError, "unreviewed staged core migration"):
             check_schema_closure(ROOT, ROOT)
 
     def test_03_selftest_must_use_one_real_repository(self):
