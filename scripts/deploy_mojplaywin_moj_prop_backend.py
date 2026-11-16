@@ -90,6 +90,16 @@ def assert_regular(path: Path, label: str) -> None:
 
 
 def assert_safe_parent(path: Path, root: Path) -> None:
+    # Path.parent alone can encounter a lexical root/../outside escape after
+    # apparently reaching root; never accept path traversal or alien roots.
+    if not path.is_absolute() or not root.is_absolute():
+        raise RuntimeError(f"unsafe relative source path: {path}")
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        raise RuntimeError(f"source path escapes reviewed root: {path}") from None
+    if ".." in relative.parts or not relative.parts:
+        raise RuntimeError(f"source path traversal refused: {path}")
     current = path.parent
     while current != root:
         if current == Path("/"):
