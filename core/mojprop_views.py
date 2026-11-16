@@ -370,12 +370,19 @@ def _mojprop_intake_api(request):
     # Reconnect before throttling: an already persisted, identical retry must
     # recover the receipt instead of creating a sixth lead or a second quote.
     if keyed_id:
-        prior = MojPropRequest.objects.filter(request_id=keyed_id).first()
+        try:
+            prior = MojPropRequest.objects.filter(request_id=keyed_id).first()
+        except DatabaseError:
+            return _crm_storage_unavailable()
         if prior is not None:
             return existing_keyed_response(prior)
 
     ip_hash = _ip_hash(request)
-    if _rate_limited(email, ip_hash):
+    try:
+        blocked = _rate_limited(email, ip_hash)
+    except DatabaseError:
+        return _crm_storage_unavailable()
+    if blocked:
         response = _json(
             {"ok": False, "detail": "Too many requests. Please try again later.", "retry_after": 600},
             status=429,
