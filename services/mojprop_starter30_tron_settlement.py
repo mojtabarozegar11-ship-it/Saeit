@@ -153,7 +153,7 @@ def assess_solidified_native_transfer(
             or not isinstance(ret[0], Mapping)
             or ret[0].get("contractRet") != "SUCCESS"):
         raise NativeTRXMatchRejected("native transaction did not complete successfully")
-    if (solidity_receipt.get("result") in ("FAILED", "FAILURE")
+    if (solidity_receipt.get("result") not in (None, "SUCCESS")
             or not isinstance(solidity_receipt.get("receipt"), Mapping)
             or solidity_receipt["receipt"].get("result") not in (None, "SUCCESS")):
         raise NativeTRXMatchRejected("failed solidified execution")

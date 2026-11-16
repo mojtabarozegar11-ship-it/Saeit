@@ -239,6 +239,14 @@ class Starter30TRXContractTests(unittest.TestCase):
         with self.assertRaises(NativeTRXMatchRejected):
             self.match(solidity_receipt=other)
 
+    def test_unrecognized_top_level_receipt_outcome_refused(self):
+        for outcome in ("REVERT", "OUT_OF_ENERGY", "PENDING", "ERROR", "", True, 1):
+            with self.subTest(outcome=outcome):
+                other = copy.deepcopy(self.receipt)
+                other["result"] = outcome
+                with self.assertRaises(NativeTRXMatchRejected):
+                    self.match(solidity_receipt=other)
+
     def test_pre_invoice_block_timestamp_refused(self):
         other = copy.deepcopy(self.receipt)
         other["blockTimeStamp"] = (START-1) * 1000
