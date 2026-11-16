@@ -1,0 +1,103 @@
+name: Moj Prop C130 direct cPanel source parity — read-only, no factory VPS
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mojprop-cpanel-direct-source-parity-readonly-c130.yml"
+      - "scripts/mojprop_live_cpanel_source_parity_readonly_c130.py"
+      - "tests/test_mojprop_live_cpanel_source_parity_c130_20261116.py"
+permissions:
+  contents: read
+jobs:
+  direct_cpanel_source_evidence_only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Verify byte-pinned audited read-only script and offline tests
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_live_cpanel_source_parity_readonly_c130.py
+          test "$(git hash-object -- scripts/mojprop_live_cpanel_source_parity_readonly_c130.py)" = "0b9a7f30eb16c343fce64e2c0cba9adbcc745634"
+          python3 -B -m unittest discover -s tests -p 'test_mojprop_live_cpanel_source_parity_c130_20261116.py' -q
+          echo "C130_FIXED_SCRIPT_TESTS=PASS"
+      - name: SSH owner cPanel direct from hosted runner for bounded source metadata only
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          WORK="$RUNNER_TEMP/c130-owner-only"
+          install -d -m 700 "$WORK"
+          trap 'rm -f "$WORK/key" "$WORK/known" "$WORK/out"; rmdir "$WORK" 2>/dev/null || true' EXIT
+          if test -z "$HOST_KEY"; then
+            echo "C130_DIRECT_CPANEL=NO_KEY"
+            echo "C130_LIVE_SOURCE_PARITY_PROVEN=false"
+            exit 0
+          fi
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$WORK/key"
+          chmod 600 "$WORK/key"
+          ssh-keygen -y -P '' -f "$WORK/key" >/dev/null 2>&1
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$WORK/known"
+          test "$(ssh-keygen -lf "$WORK/known" -E sha256 | awk '{print $2}')" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          set +e
+          timeout 40s ssh -q -T -p 1396 -i "$WORK/key" \
+            -o UserKnownHostsFile="$WORK/known" \
+            -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o ConnectTimeout=12 -o ConnectionAttempts=1 \
+            -o ForwardAgent=no -o ClearAllForwardings=yes -o RequestTTY=no \
+            zomorod2@178.239.147.125 'python3 -B -' \
+            < scripts/mojprop_live_cpanel_source_parity_readonly_c130.py \
+            > "$WORK/out" 2>/dev/null
+          rc=$?
+          set -e
+          if test "$rc" -ne 0; then
+            echo "C130_DIRECT_CPANEL=UNREACHABLE_OR_TIMEOUT"
+            echo "C130_LIVE_SOURCE_PARITY_PROVEN=false"
+            exit 0
+          fi
+          python3 - "$WORK/out" <<'PY'
+          import json,sys
+          from pathlib import Path
+          raw=Path(sys.argv[1]).read_text(encoding="utf-8")
+          lines=[s for s in raw.splitlines() if s.startswith("MOJPROP_C130_SOURCE_PARITY=")]
+          if len(lines)!=1 or len(raw)>6000:
+              raise SystemExit("C130 malformed remote response")
+          report=json.loads(lines[0].split("=",1)[1])
+          fixed={"schema","read_only","owner_shell_verified","expected_sources",
+                 "source_status","reviewed_source_exact_match_count",
+                 "active_mojprop_routes_present","intake_status_handlers_present",
+                 "passenger_wsgi_staging_reference_present",
+                 "effective_passenger_runtime_verified","tenant_quota_verified",
+                 "database_restore_executed","media_backup_verified",
+                 "production_deploy_authorized","customer_post_or_payment_sent"}
+          safe={"match","drift","missing","unsafe","unreadable","oversized"}
+          if (set(report)!=fixed or report["schema"]!="mojprop.cpanel.source_parity.readonly.v1"
+                  or report["read_only"] is not True or report["expected_sources"]!=9
+                  or type(report["source_status"]) is not dict
+                  or len(report["source_status"])!=9
+                  or set(report["source_status"].values())-safe
+                  or any(report[field] is not False for field in (
+                       "effective_passenger_runtime_verified","tenant_quota_verified",
+                       "database_restore_executed","media_backup_verified",
+                       "production_deploy_authorized","customer_post_or_payment_sent"))):
+              raise SystemExit("C130 fail-closed report validation")
+          parity=(report["owner_shell_verified"] is True and
+                  report["reviewed_source_exact_match_count"]==9 and
+                  report["active_mojprop_routes_present"] is True and
+                  report["intake_status_handlers_present"] is True and
+                  report["passenger_wsgi_staging_reference_present"] is True)
+          print("C130_DIRECT_CPANEL=CONNECTED")
+          print("C130_LIVE_SOURCE_PARITY_PROVEN="+("true" if parity else "false"))
+          print("C130_SANITIZED_SOURCE_STATUS="+json.dumps(report,sort_keys=True))
+          PY
+          echo "C130 has no writes and never authorizes database restore, deploy, checkout, or trading." >> "$GITHUB_STEP_SUMMARY"
