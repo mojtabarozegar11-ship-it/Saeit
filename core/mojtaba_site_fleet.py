@@ -175,8 +175,39 @@ def retirement_decision(attestations, *, now=None):
     return decision
 
 
+
+def run_one_bot_public_cycle(*, transport=None):
+    """Observe the 14 known public routes in ONE process, no site workers.
+
+    Site-local PHP/cron can be considered for retirement only after a separate
+    verified cutover; this never replaces private editorial/quality workers.
+    """
+    observations = []
+    for tenant in TENANTS:
+        for role in ROUTES[tenant]:
+            observations.append(probe(tenant, role, transport=transport))
+    return {
+        "canonical_bot": CANONICAL_BOT,
+        "single_process_route_monitor": True,
+        "public_checks_count": len(observations),
+        "http_ok_count": sum(x["state"] == "http_probe_ok" for x in observations),
+        "observations": observations,
+        "private_robots_or_modules_executed": 0,
+        "products_generated": 0,
+        "payments_collected": 0,
+        "automatic_site_cleanup": False,
+    }
+
+
 def main():
-    print(json.dumps(inventory(), ensure_ascii=False, sort_keys=True))
+    import sys
+    if sys.argv[1:] == ["--observe-public"]:
+        result = run_one_bot_public_cycle()
+    elif len(sys.argv) == 1:
+        result = inventory()
+    else:
+        raise SystemExit("usage: python -m core.mojtaba_site_fleet [--observe-public]")
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
 
 
 if __name__ == "__main__":
