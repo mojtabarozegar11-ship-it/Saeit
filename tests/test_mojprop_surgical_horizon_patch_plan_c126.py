@@ -75,6 +75,19 @@ class ExactByteHorizonPatchPlan(unittest.TestCase):
         self.assertFalse(info["production_write_authorized"])
         self.assertIn(b'<option value="urgent">Today / urgent</option>', candidate)
 
+    def test_11_missing_all_value_attributes_fixed_by_exact_synthetic_plan(self):
+        bare = OLD
+        for code in (b"now", b"7-days", b"30-days", b"initial"):
+            bare = bare.replace(b' value="' + code + b'"', b"")
+        proposed, summary = plan(bare, H(bare))
+        self.assertTrue(summary["candidate_generated"])
+        self.assertEqual(summary["replacement_count"], 4)
+        self.assertIn(b'<option value="urgent">Today / urgent</option>', proposed)
+        self.assertIn(b'<option value="week">This week</option>', proposed)
+        self.assertIn(b'<option value="month">This month</option>', proposed)
+        self.assertIn(b'<option value="review">Initial review only</option>', proposed)
+        self.assertFalse(summary["production_write_authorized"])
+
     def test_09_never_attest_backup_or_server_or_payment(self):
         candidate, info = plan(OLD, H(OLD))
         self.assertFalse(info["independent_file_backup_verified"])
