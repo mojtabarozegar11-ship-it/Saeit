@@ -269,7 +269,13 @@ def install_migration(source: Path, target: Path) -> None:
             # later revision, including a concurrent migration above 0045.
             continue
         candidates.append((int(match.group(1)), item.stem))
-    parent = max(candidates, key=lambda value: (value[0], value[1]))[1] if candidates else "0001_initial"
+    if not candidates:
+        raise RuntimeError("reviewed core migration parent is missing")
+    highest = max(number for number, _ in candidates)
+    heads = [name for number, name in candidates if number == highest]
+    if len(heads) != 1:
+        raise RuntimeError("ambiguous core migration parent, refusing automatic selection")
+    parent = heads[0]
     text = source.read_text(encoding="utf-8")
     baseline_markers = (
         '("core", "0040_commercefunnelevent")',
