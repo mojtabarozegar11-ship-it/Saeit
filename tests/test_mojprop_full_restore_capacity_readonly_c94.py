@@ -209,6 +209,52 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
                              ["Quota", "get_quota_info"])
 
 
+    def test_cpanel_uapi_owner_cli_receives_minimal_exact_owner_environment(self):
+        import json
+        import subprocess
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+
+        good = {"result": {"status": 1, "data": {
+            "under_quota_overall": 1, "under_megabyte_limit": 1,
+            "under_inode_limit": 1, "megabyte_limit": 900,
+            "megabytes_remain": 500, "inode_limit": 0,
+            "inodes_remain": 0,
+        }}}
+        with patch.dict(mod.os.environ, {"CPANEL_API_TOKEN": "DO-NOT-LEAK"},
+                        clear=False):
+            with patch("subprocess.run", side_effect=[
+                subprocess.CalledProcessError(1, "uapi"),
+                SimpleNamespace(stdout=json.dumps(good)),
+            ]) as run:
+                valid, reason = mod._cpanel_uapi_quota_result(200_000_000)
+        self.assertTrue(valid)
+        self.assertEqual(reason, "cpanel_uapi_quota_verified")
+        self.assertEqual(run.call_count, 2)
+        expected_env = {
+            "LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin",
+            "HOME": str(mod.HOME), "USER": mod.ACCOUNT,
+            "LOGNAME": mod.ACCOUNT,
+        }
+        for call in run.call_args_list:
+            self.assertEqual(call.kwargs["env"], expected_env)
+            self.assertTrue(call.kwargs["capture_output"])
+            self.assertTrue(call.kwargs["check"])
+            self.assertEqual(call.kwargs["timeout"], 12)
+            self.assertNotIn("CPANEL_API_TOKEN", call.kwargs["env"])
+
+    def test_owner_environment_does_not_make_failed_quota_authorized(self):
+        import subprocess
+        from unittest.mock import patch
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+        with patch("subprocess.run", side_effect=subprocess.CalledProcessError(
+                1, "uapi")) as run:
+            valid, reason = mod._cpanel_uapi_quota_result(100_000_000)
+        self.assertFalse(valid)
+        self.assertEqual(reason, "cpanel_uapi_both_owner_modes_failed")
+        self.assertEqual(run.call_count, 2)
+
     def test_quota_cli_decimal_and_binary_units_are_handled_conservatively(self):
         from scripts.mojprop_full_restore_capacity_readonly_c94 import _parse_quota_bytes
         self.assertEqual(_parse_quota_bytes("123", consumed=False), 123 * 1024)
