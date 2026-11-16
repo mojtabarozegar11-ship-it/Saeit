@@ -240,6 +240,62 @@ def _db_metadata_profile():
     return classify_table_storage(rows, model_ownership=ownership)
 
 
+
+
+def _backup_inventory_readonly():
+    """Inspect only the cPanel account-visible backup INDEX, never backup data.
+
+    An empty Backup::list_backups response does NOT establish that provider-
+    managed / JetBackup archives do not exist outside the account home.
+    """
+    outcome = {
+        "source": "cpanel_uapi_backup_list_backups",
+        "status": "unavailable",
+        "count_band": "unknown",
+        "provider_managed_backups_verified": False,
+        "backup_file_contents_accessed": False,
+        "independent_restore_verified": False,
+        "release_authorized": False,
+    }
+    try:
+        process = subprocess.run(
+            [UAPI, "--output=json", "Backup", "list_backups"],
+            timeout=20, check=True, capture_output=True, text=True,
+            env=dict(ENV),
+        )
+        if len(process.stdout) > 65536:
+            outcome["status"] = "response_too_large"
+            return outcome
+        parsed = json.loads(process.stdout)
+        if type(parsed) is not dict:
+            outcome["status"] = "invalid_response"
+            return outcome
+        payload = parsed.get("result")
+        if type(payload) is not dict or payload.get("status") != 1:
+            outcome["status"] = "feature_unavailable_or_api_failed"
+            return outcome
+        entries = payload.get("data")
+        if type(entries) is not list or len(entries) > 500 or any(
+                type(item) is not dict for item in entries):
+            outcome["status"] = "invalid_index"
+            return outcome
+        count = len(entries)
+        outcome["status"] = (
+            "user_list_nonempty_unverified" if count
+            else "empty_list_not_host_backup_proof"
+        )
+        outcome["count_band"] = (
+            "0" if count == 0 else "1-10" if count <= 10 else
+            "11-50" if count <= 50 else "51-500"
+        )
+    except subprocess.TimeoutExpired:
+        outcome["status"] = "timeout"
+    except (OSError, subprocess.SubprocessError):
+        outcome["status"] = "api_unavailable"
+    except (TypeError, ValueError):
+        outcome["status"] = "invalid_json"
+    return outcome
+
 def _quota_bytes():
     r = subprocess.run(
         [UAPI, "--output=json", "Quota", "get_quota_info"],
@@ -333,6 +389,7 @@ def main():
     for label, path in CANDIDATES:
         state, size = category_usage(path)
         result["category_usage"][label] = {"state": state, "mib_bucket": size}
+    result["backup_inventory"] = _backup_inventory_readonly()
     print("MOJPROP_C113_QUOTA_GAP=" + json.dumps(result, sort_keys=True))
 
 
