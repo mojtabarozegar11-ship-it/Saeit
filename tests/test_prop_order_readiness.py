@@ -8,11 +8,11 @@ from prop_firm.order_readiness import (
 )
 
 class ReadinessTests(unittest.TestCase):
-    def test_missing_all_twenty_independent_gates(self):
+    def test_missing_all_twenty_four_independent_gates(self):
         result = assess_plan_one({})
         self.assertFalse(result.eligible)
         self.assertEqual(result.missing, REQUIRED)
-        self.assertEqual(len(REQUIRED), 20)
+        self.assertEqual(len(REQUIRED), 24)
 
     def test_each_gate_individually_blocks(self):
         for key in REQUIRED:
@@ -36,11 +36,39 @@ class ReadinessTests(unittest.TestCase):
         self.assertIn("native_trx_price", assess_plan_one(evidence, fee_trx=30).missing)
         self.assertIn("versioned_contract", assess_plan_one(evidence, contract_version="v1.1").missing)
 
+    def test_owner_real_funding_promise_gates_cannot_be_skipped(self):
+        for key in (
+            "full_real_capital_per_earned_tier_contractually_committed",
+            "funding_delivery_deadline_bound_in_signed_contract",
+            "company_delay_and_remedy_terms_disclosed",
+            "funded_continuation_and_final_tier_terms_disclosed",
+        ):
+            with self.subTest(key=key):
+                evidence = dict.fromkeys(REQUIRED, True)
+                evidence[key] = "true"
+                result = assess_plan_one(evidence)
+                self.assertFalse(result.eligible)
+                self.assertEqual(result.missing, (key,))
+
+    def test_owner_funding_declaration_is_not_separate_signed_term_evidence(self):
+        legacy = dict.fromkeys(REQUIRED, True)
+        for key in (
+            "full_real_capital_per_earned_tier_contractually_committed",
+            "funding_delivery_deadline_bound_in_signed_contract",
+            "company_delay_and_remedy_terms_disclosed",
+            "funded_continuation_and_final_tier_terms_disclosed",
+        ):
+            legacy[key] = False
+        result = assess_plan_one(legacy)
+        self.assertFalse(result.eligible)
+        self.assertEqual(len(result.missing), 4)
+
     def test_prepurchase_copy_contains_critical_disclosures(self):
         copy = " ".join(PREPURCHASE_DISCLOSURES).lower()
         for required in ("simulated", "30 native trx", "28 days", "50 verified",
                          "six verified", "usd 100", "70%", "instagram",
-                         "facebook", "refund", "invoice"):
+                         "facebook", "refund", "invoice", "100%",
+                         "final tier", "company delays", "no trader profit"):
             self.assertIn(required, copy)
 
 if __name__ == "__main__":
