@@ -4,6 +4,7 @@ Every test uses only Django test DB and mocked storage faults; no real lead,
 customer record, web request, mail, TRON payment or production action.
 """
 import json
+from urllib.parse import urlencode
 from unittest.mock import patch
 
 from django.db import DatabaseError, IntegrityError
@@ -158,7 +159,8 @@ class MojPropCrmOutageC117Tests(TestCase):
             )
             html_response = self.browser.post(
                 "/moj-prop-status/?format=html",
-                data={"receipt_token": "bad"}, HTTP_X_CSRFTOKEN=self.csrf,
+                data=urlencode({"receipt_token": "bad"}),
+                content_type="application/x-www-form-urlencoded", HTTP_X_CSRFTOKEN=self.csrf,
             )
         self.assertEqual(json_response.status_code, 404)
         self.assertEqual(html_response.status_code, 404)
@@ -197,7 +199,7 @@ class MojPropCrmOutageC117Tests(TestCase):
                    side_effect=DatabaseError("private auth SQL details")):
             response = self.browser.post(
                 "/moj-prop-intake/?format=html",
-                data={
+                data=urlencode({
                     "name": "Native HTML customer",
                     "email": "buyer@example.com",
                     "service": "blueprint",
@@ -205,7 +207,8 @@ class MojPropCrmOutageC117Tests(TestCase):
                     "notes": "Please prepare written educational terms for review.",
                     "consent": "on",
                     "website": "",
-                },
+                }),
+                content_type="application/x-www-form-urlencoded",
                 HTTP_X_CSRFTOKEN=self.csrf,
             )
         self.assertEqual(response.status_code, 503)
@@ -223,7 +226,8 @@ class MojPropCrmOutageC117Tests(TestCase):
                           side_effect=DatabaseError("private SQL failure")):
             result = self.browser.post(
                 "/moj-prop-status/?format=html",
-                data={"receipt_token": token}, HTTP_X_CSRFTOKEN=self.csrf,
+                data=urlencode({"receipt_token": token}),
+                content_type="application/x-www-form-urlencoded", HTTP_X_CSRFTOKEN=self.csrf,
             )
         self.assertEqual(result.status_code, 503)
         self.assertIn(b"temporarily unavailable", result.content)
