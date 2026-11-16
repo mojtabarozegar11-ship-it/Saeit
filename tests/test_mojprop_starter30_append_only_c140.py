@@ -92,6 +92,25 @@ class Starter30AppendOnlyORMTests(unittest.TestCase):
         claim._state.adding = False
         self._denied(claim)
 
+    def _delete_denied(self, instance):
+        with patch.object(models.Model, "delete",
+                          side_effect=AssertionError("DB deletion attempted")) as deleted:
+            with self.assertRaises(ValidationError):
+                instance.delete()
+        deleted.assert_not_called()
+
+    def test_17_existing_order_cannot_be_deleted(self):
+        self._delete_denied(MojPropStarter30Order(id=64))
+
+    def test_18_existing_claim_cannot_be_deleted_to_free_txid(self):
+        self._delete_denied(MojPropStarter30TxClaim(id=65, txid="a"*64))
+
+    def test_19_unsaved_order_delete_is_explicitly_denied(self):
+        self._delete_denied(MojPropStarter30Order())
+
+    def test_20_unsaved_claim_delete_is_explicitly_denied(self):
+        self._delete_denied(MojPropStarter30TxClaim())
+
 
 if __name__ == "__main__":
     unittest.main()
