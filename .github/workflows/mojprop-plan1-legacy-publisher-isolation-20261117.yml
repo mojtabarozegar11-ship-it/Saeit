@@ -1,0 +1,42 @@
+name: MOJ PROP real Plan1 versus legacy educational publisher isolation
+on:
+  push:
+    branches: [fix/mojprop-legacy-release-fixture-isolation-20261117]
+    paths:
+      - 'tests/fixtures/mojprop-starter30-home-before-plan1-20261117.html'
+      - 'tests/test_mojprop_commercial_samples_release.py'
+      - '.github/workflows/mojprop-plan1-legacy-publisher-isolation-20261117.yml'
+  pull_request:
+    branches: [fix/mojprop-main-prelaunch-real-plan1-20261116]
+    paths:
+      - 'tests/fixtures/mojprop-starter30-home-before-plan1-20261117.html'
+      - 'tests/test_mojprop_commercial_samples_release.py'
+      - '.github/workflows/mojprop-plan1-legacy-publisher-isolation-20261117.yml'
+permissions:
+  contents: read
+jobs:
+  verify-legacy-fixture-and-plan1-block:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test 39+ historic publisher, full rollback and explicit Plan 1 denial
+        run: python3 -B -m unittest -v tests.test_mojprop_commercial_samples_release
+      - name: Verify real Plan1 remains the only featured page (NO release)
+        run: python3 -B -m unittest -v tests.test_mojprop_plan1_static_prelaunch
+      - name: Guard source-only and nonpayable
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('templates/moj-prop-v4/index.html').read_text('utf-8')
+          old=Path('tests/fixtures/mojprop-starter30-home-before-plan1-20261117.html').read_text('utf-8')
+          assert 'MOJ-PROP-01' in src and 'MOJPROP-STARTER30' not in src
+          assert 'MOJPROP-STARTER30' in old and 'MOJ-PROP-01' not in old
+          assert 'Send 30 TRX' not in src
+          print('PRELAUNCH_ONLY_STALE_PUBLISHER_DENIED')
+          PY
