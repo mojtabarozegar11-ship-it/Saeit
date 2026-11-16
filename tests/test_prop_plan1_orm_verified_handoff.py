@@ -277,3 +277,63 @@ class Plan1VerifiedOrmHandoffTests(SimpleTestCase):
         data["inquiry"] = replace(data["inquiry"], declared_country="FR")
         with self.assertRaises(Plan1OrderGateClosed):
             self.run_review(data)
+
+
+from django.test import TestCase
+from prop_firm.lead_models import PropInterest
+from test_prop_plan1_canonical_interest_bridge import sign as consent_sign
+
+
+class Plan1PersistedConsentReviewTests(TestCase):
+    """Real isolated Django database; no external service, payout or billing."""
+
+    def setUp(self):
+        self.interest = PropInterest.objects.create(
+            email="private-consent-cycle-b@example.invalid",
+            plan_code="MOJ-PROP-01",
+            consent_version="moj-prop-interest-v1",
+            source_language="en",
+            status="new",
+        )
+
+    def _review(self):
+        data = Plan1VerifiedOrmHandoffTests().fixture()[0]
+        data["interest_pk"] = self.interest.pk
+        attestation = dict(data["consent_attestation"])
+        attestation["interest_pk"] = self.interest.pk
+        data["consent_attestation"] = attestation
+        data["consent_tag_hex"] = consent_sign(attestation)
+        with patch("prop_firm.plan1_orm_consent_review.timezone.now",
+                   return_value=datetime.fromtimestamp(NOW, timezone.utc)):
+            return review_verified_precontract_for_interest(**data)
+
+    def test_persisted_optin_can_be_bound_without_any_customer_mutation(self):
+        before = PropInterest.objects.get(pk=self.interest.pk)
+        result = self._review()
+        after = PropInterest.objects.get(pk=self.interest.pk)
+        self.assertEqual(result.interest_pk, self.interest.pk)
+        self.assertEqual((before.email, before.status, before.updated_at),
+                         (after.email, after.status, after.updated_at))
+        self.assertFalse(result.payable_invoice_created)
+        self.assertFalse(result.enrollment_created)
+
+    def test_actual_withdrawn_consent_blocks_review_without_reactivation(self):
+        self.interest.status = "withdrawn"
+        self.interest.save()
+        with self.assertRaises(Plan1OrderGateClosed):
+            self._review()
+        self.assertEqual(PropInterest.objects.get(pk=self.interest.pk).status,
+                         "withdrawn")
+
+    def test_actual_contacted_record_not_reused_as_new_optin(self):
+        self.interest.status = "contacted"
+        self.interest.save()
+        with self.assertRaises(Plan1OrderGateClosed):
+            self._review()
+        self.assertEqual(PropInterest.objects.get(pk=self.interest.pk).status,
+                         "contacted")
+
+    def test_no_enrollment_rows_from_consent_review(self):
+        from prop_firm.models import PropChallengeEnrollment
+        self._review()
+        self.assertEqual(PropChallengeEnrollment.objects.count(), 0)
