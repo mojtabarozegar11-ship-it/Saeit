@@ -36,6 +36,19 @@ class SiteFleetTests(unittest.TestCase):
         self.assertFalse(a["payment_verified"])
         self.assertFalse(b["publication_verified"])
 
+    def test_one_process_observes_all_public_routes_only(self):
+        def safe(url):
+            self.assertTrue(url.startswith(("https://zomorodmelal.ir/", "https://mojplaywin.com/")))
+            return 200, "text/html", b"<html>" + b"x" * 100 + b"</html>"
+        report = fleet.run_one_bot_public_cycle(transport=safe)
+        self.assertEqual(report["canonical_bot"], "mojtaba.bot.ai")
+        self.assertTrue(report["single_process_route_monitor"])
+        self.assertEqual(report["public_checks_count"], 14)
+        self.assertEqual(report["http_ok_count"], 14)
+        self.assertEqual(report["private_robots_or_modules_executed"], 0)
+        self.assertEqual(report["payments_collected"], 0)
+        self.assertFalse(report["automatic_site_cleanup"])
+
     def test_reject_arbitrary_ssrf_targets(self):
         for tenant, role in (
             ("evil", "content"), ("zomorodmelal", "https://evil"),
