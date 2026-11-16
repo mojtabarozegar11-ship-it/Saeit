@@ -19,7 +19,43 @@ class CapacityGateTests(unittest.TestCase):
             owner_authorized=True,
             measured_at_epoch=10000,
             now_epoch=10001,
+            tenant_quota_free_bytes=40_000_000_000,
+            tenant_quota_total_bytes=50_000_000_000,
+            destination_free_inodes=500_000,
+            required_restore_inodes=100_000,
         )
+
+    def test_rejects_missing_quota_evidence(self):
+        with self.assertRaises(CapacityAdmissionDenied):
+            require_restore_capacity(replace(self.e, tenant_quota_free_bytes=None))
+
+    def test_rejects_quota_smaller_than_filesystem(self):
+        with self.assertRaises(CapacityAdmissionDenied):
+            require_restore_capacity(replace(self.e, tenant_quota_free_bytes=4_000_000_000))
+
+    def test_rejects_impossible_tenant_quota(self):
+        with self.assertRaises(CapacityAdmissionDenied):
+            require_restore_capacity(replace(self.e, tenant_quota_free_bytes=60_000_000_000))
+
+    def test_rejects_unknown_inode_budget(self):
+        with self.assertRaises(CapacityAdmissionDenied):
+            require_restore_capacity(replace(self.e, destination_free_inodes=None))
+
+    def test_rejects_insufficient_inode_budget(self):
+        with self.assertRaises(CapacityAdmissionDenied):
+            require_restore_capacity(replace(self.e, destination_free_inodes=99_999))
+
+    def test_rejects_zero_required_inodes(self):
+        with self.assertRaises(CapacityAdmissionDenied):
+            require_restore_capacity(replace(self.e, required_restore_inodes=0))
+
+    def test_rejects_boolean_quota(self):
+        with self.assertRaises(CapacityAdmissionDenied):
+            require_restore_capacity(replace(self.e, tenant_quota_free_bytes=True))
+
+    def test_rejects_boolean_inodes(self):
+        with self.assertRaises(CapacityAdmissionDenied):
+            require_restore_capacity(replace(self.e, destination_free_inodes=True))
 
     def test_accepts_independent_fresh_capacity(self):
         self.assertEqual(require_restore_capacity(self.e), 22_500_000_000)
