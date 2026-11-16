@@ -40,17 +40,17 @@ def _value(value, field):
     if d.adjusted() >= 14:
         raise EvidenceRejected(f"{field}: amount exceeds ledger capacity")
     parts = d.as_tuple()
+    digits = list(parts.digits)
     effective_exponent = parts.exponent
+    # Remove only insignificant coefficient zeros. This canonicalizes an
+    # exact value for Django DecimalField validation without quantize(),
+    # rounding, decimal context changes or an arithmetic overflow.
+    while len(digits) > 1 and digits[-1] == 0:
+        digits.pop()
+        effective_exponent += 1
     if effective_exponent < -4:
-        # Ignore only insignificant *stored* trailing zeros, without doing
-        # context-dependent arithmetic or rounding away actual evidence.
-        for digit in reversed(parts.digits):
-            if digit:
-                break
-            effective_exponent += 1
-        if effective_exponent < -4:
-            raise EvidenceRejected(f"{field}: precision exceeds ledger")
-    return d
+        raise EvidenceRejected(f"{field}: precision exceeds ledger")
+    return Decimal((parts.sign, tuple(digits), effective_exponent))
 
 
 def _id(value, field, max_length=160):
