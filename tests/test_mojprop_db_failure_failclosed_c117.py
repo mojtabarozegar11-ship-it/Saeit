@@ -107,6 +107,47 @@ class MojPropCrmOutageC117Tests(TestCase):
         self.assertTrue(response.json()["receipt_token"])
         self.assertEqual(MojPropRequest.objects.count(), 1)
 
+    def test_11_invalid_consent_is_rejected_before_crm_database_access(self):
+        with patch.object(MojPropRequest.objects, "filter",
+                          side_effect=DatabaseError("unreachable")):
+            response = self.browser.post(
+                "/moj-prop-intake/",
+                data=json.dumps({
+                    "name": "Name",
+                    "email": "buyer@example.com",
+                    "service": "blueprint",
+                    "horizon": "week",
+                    "notes": "Please prepare written educational terms for review.",
+                    "consent": False,
+                    "website": "",
+                }),
+                content_type="application/json", HTTP_X_CSRFTOKEN=self.csrf,
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn("receipt_token", response.json())
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_12_invalid_uuid_is_rejected_before_crm_database_access(self):
+        with patch.object(MojPropRequest.objects, "filter",
+                          side_effect=DatabaseError("unreachable")):
+            result = self.browser.post(
+                "/moj-prop-intake/",
+                data=json.dumps({
+                    "name": "Name",
+                    "email": "buyer@example.com",
+                    "service": "blueprint",
+                    "horizon": "week",
+                    "notes": "Please prepare written educational terms for review.",
+                    "consent": True,
+                    "website": "",
+                    "idempotency_key": "not-an-uuid",
+                }),
+                content_type="application/json", HTTP_X_CSRFTOKEN=self.csrf,
+            )
+        self.assertEqual(result.status_code, 400)
+        self.assertNotIn("receipt_token", result.json())
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
     def test_07_json_receipt_status_db_failure_is_private_503(self):
         created = self.request(keyed=True)
         token = created.json()["receipt_token"]
