@@ -44,9 +44,11 @@ class PostMigrationRollbackHoldTests(unittest.TestCase):
                   / "scripts/deploy_mojplaywin_moj_prop_backend.py").read_text()
         self.assertIn("schema_migration_attempted = False", source)
         start = source.index("def deploy(")
+        marker = source.index("mark_schema_migration_started(backup)", start)
         phase = source.index("schema_migration_attempted = True", start)
         migrate = source.index('run_checked([str(python), "manage.py", "migrate"', start)
         failure = source.index("recover_failed_deploy(", migrate)
+        self.assertLess(marker, phase)
         self.assertLess(phase, migrate)
         self.assertLess(migrate, failure)
         self.assertIn(
