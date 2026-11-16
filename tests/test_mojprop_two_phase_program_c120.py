@@ -17,7 +17,9 @@ POLICY = ChallengePolicy(
 )
 
 
-def rows(phase, *, amount="11000.00", offset=0):
+def rows(phase, *, amount="11000.00", offset=None):
+    if offset is None:
+        offset = 31 if phase == 2 else 0  # stage two begins the next month
     return [
         EquitySnapshot(
             event_id=f"phase{phase}-event-{i:04d}",
