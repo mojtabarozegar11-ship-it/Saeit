@@ -219,7 +219,13 @@ def _cpanel_uapi_quota_result(needed_bytes):
             proc = subprocess.run(
                 fixed_args, check=True, timeout=12, capture_output=True,
                 text=True, env={"LC_ALL": "C",
-                                "PATH": "/usr/bin:/bin:/usr/local/bin"},
+                                "PATH": "/usr/bin:/bin:/usr/local/bin",
+                                # cPanel CLI resolves account context from
+                                # HOME/USER; a stripped environment can fail
+                                # both read-only UAPI variants spuriously.
+                                # These are fixed verified owner values only.
+                                "HOME": str(HOME), "USER": ACCOUNT,
+                                "LOGNAME": ACCOUNT},
             )
             break
         except FileNotFoundError:
