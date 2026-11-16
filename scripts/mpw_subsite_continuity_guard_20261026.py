@@ -200,6 +200,13 @@ def get(url: str, *, max_bytes: int = 950000, attempts: int = 3) -> tuple[Check,
                           round(time.monotonic() - start, 2)),
                     data,
                 )
+        except UnsafeRedirect:
+            # Only the originally approved public route may enter diagnostics:
+            # never print an untrusted redirect Location, query or secret.
+            approved_path = urllib.parse.urlsplit(url).path
+            raise UnsafeRedirect(
+                f"Redirect refused while checking approved path {approved_path}"
+            ) from None
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
             last_error = error
             if attempt < attempts - 1:
