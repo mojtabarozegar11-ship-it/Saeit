@@ -171,7 +171,11 @@ def audit(root: Path, passenger: Path, *, owner_ok: bool) -> dict:
 def main() -> None:
     try:
         user = pwd.getpwuid(os.geteuid()).pw_name
-        report = audit(ROOT, PASSENGER, owner_ok=(user == ACCOUNT))
+        if user != ACCOUNT:
+            report = audit(Path("/nonexistent/mojprop-c130"),
+                           Path("/nonexistent/mojprop-passenger"), owner_ok=False)
+        else:
+            report = audit(ROOT, PASSENGER, owner_ok=True)
     except (OSError, KeyError, ValueError, TypeError):
         report = audit(Path("/nonexistent/mojprop-c130"), Path("/nonexistent/mojprop-passenger"),
                        owner_ok=False)
