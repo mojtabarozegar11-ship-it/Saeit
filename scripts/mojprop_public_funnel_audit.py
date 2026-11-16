@@ -18,6 +18,8 @@ HOSTS = ("mojplaywin.com", "www.mojplaywin.com")
 TARGETS = {
     "plan1": "https://mojplaywin.com/moj-prop/",
     "intake": "https://mojplaywin.com/moj-prop-intake/",
+    "accessible_intake": "https://mojplaywin.com/moj-prop-intake/?format=html",
+    "accessible_plan1": "https://mojplaywin.com/moj-prop-intake/?format=html&service=blueprint&package=moj-prop-01",
     "www_plan1": "https://www.mojplaywin.com/moj-prop/",
 }
 MAX_BYTES = 120_000
@@ -44,8 +46,10 @@ def verify_target(url: str) -> None:
     p = urlparse(url)
     if (p.scheme != "https" or p.hostname not in HOSTS or p.port is not None
             or p.username is not None or p.password is not None
-            or p.query or p.fragment or p.path not in
-            {"/moj-prop/", "/moj-prop-intake/"}):
+            or p.fragment or p.path not in
+            {"/moj-prop/", "/moj-prop-intake/"}
+            or p.query not in ("", "format=html",
+                "format=html&service=blueprint&package=moj-prop-01")):
         raise ValueError("public first-party GET targets only")
 
 
@@ -71,6 +75,7 @@ def safe_result(status, content_type, raw=b"", final_url=""):
             closed_position_rule_visible="50" in html,
             six_days_rule_visible="6" in html,
             consent_word_visible="consent" in html,
+            csrf_field_visible="csrfmiddlewaretoken" in html,
             public_form_count=scan.forms,
             public_post_form_count=scan.post_forms,
             public_button_count=scan.buttons,
@@ -129,6 +134,17 @@ def audit():
     route_found = intake.get("reachable") is True and intake.get("http_status") not in {
         404, 500, 502, 503, 504,
     }
+    actual_form = paths["accessible_plan1"]
+    nojs_plan1_form_visible = bool(
+        actual_form.get("reachable") is True
+        and actual_form.get("http_status") == 200
+        and actual_form.get("html") is True
+        and actual_form.get("public_post_form_count", 0) > 0
+        and actual_form.get("csrf_field_visible") is True
+        and actual_form.get("consent_word_visible") is True
+        and actual_form.get("sku_moj_prop_01") is True
+        and actual_form.get("simulated_visible") is True
+    )
     return {
         "checked_utc": datetime.now(timezone.utc).isoformat(),
         "scope": "PUBLIC_GET_ONLY_NO_FORMS_SUBMITTED_NO_PAYMENT",
@@ -136,6 +152,7 @@ def audit():
         "pages": paths,
         "canonical_plan1_disclosure_visible": bool(page_visible),
         "intake_route_present": bool(route_found),
+        "nojs_plan1_form_visible": nojs_plan1_form_visible,
         "customer_submission_proven": False,
         "real_sale_or_revenue_proven": False,
         "verdict": "PUBLIC_SITE_READABLE" if page_visible else "PUBLIC_SITE_NOT_CONFIRMED",
