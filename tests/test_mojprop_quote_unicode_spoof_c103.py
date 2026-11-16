@@ -23,6 +23,7 @@ class QuoteTextSecurityTests(unittest.TestCase):
     def test_scope_line_breaks_remain_supported(self):
         value = "Scope details for a written quote with multiple lines.\nExclusions documented."
         self.assertEqual(_text(value, "scope", 50, 10000), value)
+
     def test_persian_half_space_between_letters_is_valid_in_terms(self):
         for field, minimum, maximum in (("title", 3, 180),
                                         ("scope", 50, 10000),
@@ -40,7 +41,8 @@ class QuoteTextSecurityTests(unittest.TestCase):
                                         ("exclusions", 10, 5000)):
             for sample in invalid:
                 with self.subTest(field=field, sample=repr(sample)):
-                    value = "الف" * minimum + sample + "ب"
+                    # Whitespace on both sides keeps boundary ZWNJ unsafe.
+                    value = "الف" * minimum + " " + sample + " ب"
                     with self.assertRaises(QuoteContractError):
                         _text(value, field, minimum, maximum)
 
