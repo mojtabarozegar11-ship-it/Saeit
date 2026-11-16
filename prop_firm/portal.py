@@ -52,11 +52,13 @@ def _day(value):
 
 
 def completed_paid_phase_one_before_stage_two(account, *, as_of=None):
-    """Only an earlier, independently reconciled same-contract phase qualifies.
+    """Require an earlier, proven qualifying v1.2 phase, not just a PASSED flag.
 
-    Do not allow a PASSED flag written after stage two began, a different
-    purchase, or a phase opened before its settled purchase to unlock stage 2.
-    This is eligibility evidence ONLY: it neither starts trading nor funds.
+    A status and operator checkbox prove neither six days of actual execution
+    nor the 9.6% net-profit and 32% consistency requirements. For a paid v1.2
+    stage, re-evaluate the earlier stage from reconciled broker/equity evidence
+    strictly before stage two opens. Historical unpurchased v1.1 trials keep
+    their legacy chronology-only contract. Read-only; never starts trading.
     """
     if (not isinstance(account, PropAccount)
             or account.kind != PropAccount.Kind.PHASE_TWO
@@ -108,7 +110,22 @@ def completed_paid_phase_one_before_stage_two(account, *, as_of=None):
             opened_at__gte=start,
             closed_at__lt=end,
         )
-    return q.exists()
+    if account.policy_version != NEW_CONTRACT_VERSION:
+        return q.exists()
+
+    # A v1.2 PASSED flag is not proof of a passed challenge. Re-evaluate all
+    # candidate stage-one ledgers at the stage-two opening snapshot; future
+    # evidence or a subsequently edited PASSED flag cannot donate a pass.
+    # account_projection on PHASE_ONE never recurses into this branch.
+    for first in q.order_by("closed_at", "pk"):
+        projection = account_projection(
+            first, as_of=account.opened_at, evidence_cutoff=account.opened_at
+        )
+        decision = projection["assessment"]
+        if (projection["verified"] and projection["purchase_window_valid"]
+                and decision is not None and decision.passed):
+            return True
+    return False
 
 
 def account_projection(account, *, as_of=None, evidence_cutoff=None):
