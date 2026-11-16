@@ -160,16 +160,12 @@ def _read_reviewed_stage_file(stage: Path, name: str) -> bytes:
 
 def _stage_bytes(run_id: str) -> dict[str, bytes]:
     stage = _stage(run_id)
-    if stage.is_symlink() or not stage.is_dir():
+    _check_ancestors(HOME, stage)
+    if not stage.is_dir() or stage.is_symlink():
         raise RuntimeError("missing staged product")
     out: dict[str, bytes] = {}
     for item in FILES:
-        p = stage / item
-        if p.is_symlink() or not p.is_file():
-            raise RuntimeError("missing staged deliverable: " + item)
-        if p.stat().st_size < 10 or p.stat().st_size > 90_000:
-            raise RuntimeError("invalid staged asset size")
-        out[item] = p.read_bytes()
+        out[item] = _read_reviewed_stage_file(stage, item)
     page = out["index.html"].decode("utf-8")
     if ('MOJPROP-STARTER30' not in page or 'Payment not enabled' not in page
             or 'noindex,follow' not in page or 'Do not send TRX' not in page
