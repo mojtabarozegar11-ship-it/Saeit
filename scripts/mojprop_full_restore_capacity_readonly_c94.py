@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import pwd
+import re
 import stat
 import sys
 from pathlib import Path
@@ -75,6 +76,36 @@ def _select_db_estimate():
     return int(value)
 
 
+def _parse_quota_bytes(raw: str, *, consumed: bool):
+    """Conservative byte bound for human-unit disk blocks from quota CLI.
+
+    Linux quota's unqualified numbers represent KiB; K/M/G/T suffixes
+    represent powers of 1024. Human-readable numbers are rounded, so
+    consumed size is raised and the limit lowered by one display step.
+    Unknown formats, starred over-quota marks and huge integers fail.
+    """
+    from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR
+    if type(raw) is not str:
+        return None
+    match = re.fullmatch(r"([0-9]{1,15})(?:\.([0-9]{1,3}))?([KMGTP]?)", raw)
+    if match is None or (match.group(2) is not None and not match.group(3)):
+        return None
+    digits, fraction, unit = match.groups()
+    factor = 1024 ** (("KMGTP".index(unit) + 1) if unit else 1)
+    try:
+        value = Decimal(digits + ("." + fraction if fraction else "")) * factor
+        if unit:
+            resolution = Decimal(factor) / (10 ** len(fraction) if fraction else 1)
+            value = value + resolution if consumed else max(Decimal(0), value - resolution)
+        if value > (2 ** 63 - 1):
+            return None
+        return int(value.to_integral_value(
+            rounding=ROUND_CEILING if consumed else ROUND_FLOOR
+        ))
+    except (InvalidOperation, ValueError, OverflowError):
+        return None
+
+
 def _quota_result(needed_bytes):
     """Return only a bounded outcome code; never expose raw quota or paths."""
     import subprocess
@@ -106,12 +137,16 @@ def _quota_result(needed_bytes):
         fields = line.split()
         if not fields or not fields[0].startswith("/dev/"):
             continue
-        if len(fields) != 7 or any(not x.isdecimal() for x in fields[1:]):
+        if len(fields) != 7 or any(not x.isdecimal() for x in fields[4:]):
             return False, "quota_format_unrecognized"
-        used_kib, soft_kib, hard_kib, inode_used, inode_soft, inode_hard = (
-            int(x) for x in fields[1:]
-        )
-        used, soft, hard = used_kib * 1024, soft_kib * 1024, hard_kib * 1024
+        used = _parse_quota_bytes(fields[1], consumed=True)
+        soft = _parse_quota_bytes(fields[2], consumed=False)
+        hard = _parse_quota_bytes(fields[3], consumed=False)
+        if any(x is None for x in (used, soft, hard)):
+            return False, "quota_format_unrecognized"
+        inode_used, inode_soft, inode_hard = (int(x) for x in fields[4:])
+        if soft == 0 and hard == 0:
+            return False, "quota_unbounded_not_verified"
         if any(limit and limit - used < needed_bytes + 64 * 1024 * 1024
                for limit in (soft, hard)):
             return False, "quota_blocks_insufficient"
@@ -238,7 +273,8 @@ def main():
                          (False, "connected_db_estimate_unavailable"))
         if (requirement and not quota and reason in (
                 "quota_program_unavailable", "quota_program_failed",
-                "quota_volume_not_reported", "quota_format_unrecognized")):
+                "quota_volume_not_reported", "quota_format_unrecognized",
+                "quota_unbounded_not_verified")):
             quota, reason = _cpanel_uapi_quota_result(requirement)
         out["quota_probe_available"] = quota is True
         out["quota_outcome"] = reason
