@@ -1,14 +1,21 @@
 name: MojPlayWin production guest TRX checkout release
 on:
-  issue_comment:
-    types: [created]
   workflow_dispatch:
     inputs:
-      source_ref:
-        description: "Reviewed recovery branch to release"
+      release_sha:
+        description: "Exact owner-reviewed main commit SHA"
         required: true
-        default: feature/mpw-recovery-01-20261105
         type: string
+      recovery_sha:
+        description: "Exact independently reviewed guest-repair source commit; no mutable branch"
+        required: true
+        type: string
+      owner_approval:
+        description: "Owner-only one-shot legacy recovery after independently verified rollback"
+        required: true
+        type: choice
+        options: ['NO', 'OWNER_APPROVED']
+        default: 'NO'
 permissions:
   contents: read
 concurrency:
@@ -16,32 +23,42 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
-    # Owner-only release: legacy exact comment or an explicitly selected recovery branch.
+    # Historical issue comment and arbitrary workflow dispatcher are NOT a
+    # production repair authorization. Never release a mutable recovery ref.
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.triggering_actor == 'mojtabarozegar11-ship-it' &&
+      github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
-      (
-        (
-          github.event_name == 'workflow_dispatch' &&
-          github.event.inputs.source_ref == 'feature/mpw-recovery-01-20261105'
-        ) ||
-        (
-          github.event_name == 'issue_comment' &&
-          github.actor == 'mojtabarozegar11-ship-it' &&
-          github.event.issue.number == 1600 &&
-          !github.event.issue.pull_request &&
-          github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
-          github.event.comment.author_association == 'OWNER' &&
-          github.event.comment.body == 'MPW-PURCHASES-404-ONEFILE-RELEASE-20261102'
-        )
-      )
+      inputs.owner_approval == 'OWNER_APPROVED' &&
+      inputs.release_sha == github.sha &&
+      vars.MPW_LEGACY_RELEASE_ALLOWED == 'true' &&
+      vars.MPW_APPROVED_MAIN_SHA == github.sha &&
+      vars.MPW_APPROVED_RECOVERY_SHA == inputs.recovery_sha &&
+      vars.MPW_BACKUP_RESTORE_VERIFIED == 'true' &&
+      vars.MPW_ROLLBACK_VERIFIED == 'true' &&
+      vars.MPW_TENANT_ISOLATION_VERIFIED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_ref || github.ref }}
+          ref: ${{ inputs.recovery_sha }}
+      - name: Verify both immutable release SHAs before accessing host secrets
+        env:
+          REQUESTED_MAIN_SHA: ${{ inputs.release_sha }}
+          REVIEWED_RECOVERY_SHA: ${{ inputs.recovery_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$REQUESTED_MAIN_SHA" == "$GITHUB_SHA" ]]
+          [[ "$REVIEWED_RECOVERY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$REVIEWED_RECOVERY_SHA" ]]
       - name: Compile reviewed release files
         run: |
           set -euo pipefail
