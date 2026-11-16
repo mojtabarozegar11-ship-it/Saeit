@@ -659,11 +659,19 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
     closure = check_schema_closure(ROOT, staged_root)
     print("MOJ_PROP_SCHEMA_CLOSURE=PASS; MIGRATIONS=" + ",".join(closure["source_chain"]))
     print("MOJ_PROP_DB_RESTORE_EVIDENCE=INDEPENDENTLY_REQUIRED")
-    # Source 0047 was merged after this installer pinned migration 0046.
-    # Do not write files or run a partial migration sequence. A separately
-    # reviewed DB-restorable installer must align this target and prove restore.
-    migration_target = "0046_signal_free_subscription"
-    if closure["source_chain"][-1] != migration_target:
+    # The reviewed commercial chain includes 0047 guest email recovery.
+    # A source-only check NEVER substitutes for an isolated MariaDB restore.
+    # Refuse an unknown later migration before backing up or writing files.
+    migration_target = "0047_mpw_guest_email_recovery"
+    if (closure["source_chain"][-1] != migration_target
+            or closure["source_chain"] != [
+                "0041_mojprop_request", "0042_mojprop_offer",
+                "0043_mojprop_digital_inquiry",
+                "0044_mojprop_acceptance_evidence",
+                "0045_mojprop_delivery_evidence",
+                "0046_signal_free_subscription",
+                migration_target,
+            ]):
         raise RuntimeError("Moj Prop backend installer schema target is stale; release denied")
 
     backup = BACKUP_ROOT / run_id
@@ -703,7 +711,7 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         # unreviewed pending DDL on the commercial production database.
         # Schema closure rejected any unknown core migration >=0041.
         run_checked([str(python), "manage.py", "migrate",
-                     "core", "0046_signal_free_subscription", "--noinput"], ROOT)
+                     "core", migration_target, "--noinput"], ROOT)
         run_checked([str(python), "manage.py", "collectstatic", "--noinput"], ROOT)
 
         restart_passenger()
