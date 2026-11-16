@@ -1,0 +1,161 @@
+"""Django regression for the same CRM endpoint with an accessible HTML fallback.
+
+No live payments, customer communications, trading or production migration.
+"""
+import json
+import re
+from html import unescape
+from pathlib import Path
+from urllib.parse import urlencode
+from uuid import UUID
+
+from django.test import Client, TestCase, override_settings
+
+from core.models import MojPropRequest
+
+
+URL = "/moj-prop-intake/?format=html"
+
+
+@override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com"])
+class AccessibleCurrentMainLeadTests(TestCase):
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=True)
+        self.first = self.client.get(URL)
+        html = self.first.content.decode("utf-8")
+        self.csrf = unescape(re.search(
+            r'name="csrfmiddlewaretoken" value="([^"]+)"', html
+        ).group(1))
+        self.idempotency_key = re.search(
+            r'name="idempotency_key" value="([^"]+)"', html
+        ).group(1)
+        self.data = {
+            "csrfmiddlewaretoken": self.csrf,
+            "idempotency_key": self.idempotency_key,
+            "name": "Current Main Customer",
+            "email": "buyer@example.org",
+            "service": "brief",
+            "horizon": "week",
+            "notes": "I need a written research brief on production economics.",
+            "consent": "on",
+            "website": "",
+        }
+
+    def post(self, fields=None, url=URL):
+        data = self.data if fields is None else fields
+        return self.client.post(url, data=urlencode(data, doseq=True),
+                                content_type="application/x-www-form-urlencoded")
+
+    def test_01_html_get_returns_native_form(self):
+        self.assertEqual(self.first.status_code, 200)
+        self.assertTrue(self.first["Content-Type"].startswith("text/html"))
+        self.assertIn(b'method="post"', self.first.content)
+        self.assertIn(b'name="email"', self.first.content)
+
+    def test_02_form_is_no_script_and_no_external_assets(self):
+        html = self.first.content.decode()
+        self.assertNotIn("<script", html)
+        self.assertNotIn('<link rel="stylesheet"', html)
+        self.assertNotIn('src="https:', html)
+
+    def test_03_native_csrf_session_is_present(self):
+        self.assertIn("csrftoken", self.client.cookies)
+        self.assertIn(b'name="csrfmiddlewaretoken"', self.first.content)
+
+    def test_04_idempotency_key_is_canonical_uuid4(self):
+        self.assertEqual(UUID(self.idempotency_key).version, 4)
+        self.assertEqual(str(UUID(self.idempotency_key)), self.idempotency_key)
+
+    def test_05_sensitive_response_headers(self):
+        self.assertIn("no-store", self.first["Cache-Control"])
+        self.assertEqual(self.first["Referrer-Policy"], "no-referrer")
+        self.assertEqual(self.first["X-Frame-Options"], "DENY")
+        self.assertEqual(self.first["X-Robots-Tag"], "noindex, nofollow")
+
+    def test_06_success_persists_one_real_crm_request(self):
+        result = self.post()
+        self.assertEqual(result.status_code, 201)
+        self.assertIn(b"Request received", result.content)
+        self.assertIn(b"private-receipt", result.content)
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+        self.assertEqual(MojPropRequest.objects.first().email, "buyer@example.org")
+
+    def test_07_repeated_post_same_key_is_one_request(self):
+        first = self.post()
+        second = self.post()
+        self.assertEqual((first.status_code, second.status_code), (201, 200))
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+
+    def test_08_reuse_key_with_changed_identity_is_denied(self):
+        self.assertEqual(self.post().status_code, 201)
+        changed = dict(self.data, email="different@example.org")
+        response = self.post(changed)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+
+    def test_09_missing_consent_denies_lead(self):
+        data = dict(self.data)
+        data.pop("consent")
+        result = self.post(data)
+        self.assertEqual(result.status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_10_malformed_email_is_never_echoed(self):
+        bad = dict(self.data, email="invalid@email<unsafe>")
+        response = self.post(bad)
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn(b"invalid@email", response.content)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_11_duplicate_email_fields_fail_closed(self):
+        data = dict(self.data, email=["first@example.org", "second@example.org"])
+        response = self.post(data)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_12_invalid_format_never_writes(self):
+        result = self.post(url="/moj-prop-intake/?format=html&format=html")
+        self.assertEqual(result.status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_13_json_get_api_unchanged(self):
+        result = self.client.get("/moj-prop-intake/")
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.json()["service"], "moj-prop-intake")
+
+    def test_14_html_disallows_json_body(self):
+        result = self.client.post(URL, data=json.dumps(self.data),
+                                  content_type="application/json")
+        self.assertEqual(result.status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_15_missing_csrf_is_denied(self):
+        fresh = Client(enforce_csrf_checks=True)
+        result = fresh.post(URL, self.data)
+        self.assertEqual(result.status_code, 403)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_16_native_fallback_link_is_on_public_moj_prop_page(self):
+        html = (Path(__file__).resolve().parents[1] /
+                "templates/moj-prop-v4/index.html").read_text(encoding="utf-8")
+        self.assertIn('href="/moj-prop-intake/?format=html"', html)
+
+    def test_17_unfulfillable_digital_product_option_is_hidden(self):
+        html = self.first.content.decode()
+        self.assertNotIn('<option value="digital">', html)
+
+    def test_18_response_is_not_a_purchase_or_payment(self):
+        receipt = self.post().content.decode()
+        self.assertIn("No payment was taken", receipt)
+        self.assertNotIn("Send TRX", receipt)
+        self.assertNotIn("Guaranteed return", receipt)
+
+    def test_19_unknown_field_does_not_create_lead(self):
+        result = self.post(dict(self.data, admin_override="1"))
+        self.assertEqual(result.status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_20_landing_page_no_javascript_message_exists(self):
+        html = (Path(__file__).resolve().parents[1] /
+                "templates/moj-prop-v4/index.html").read_text(encoding="utf-8")
+        self.assertIn("<noscript>", html)
