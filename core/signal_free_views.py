@@ -186,9 +186,13 @@ def signal_free_subscribe(request):
         return _answer({"ok": False, "detail": "Valid email and independent consent are required."}, 400)
     now = timezone.now()
     ip_key = _ip_hash(request)
-    if MojSignalFreeSubscription.objects.filter(
-        ip_hash=ip_key, confirmation_sent_at__gte=now - timedelta(hours=1)
-    ).count() >= _HOURLY_IP_LIMIT:
+    try:
+        reached_ip_limit = MojSignalFreeSubscription.objects.filter(
+            ip_hash=ip_key, confirmation_sent_at__gte=now - timedelta(hours=1)
+        ).count() >= _HOURLY_IP_LIMIT
+    except DatabaseError:
+        return _consent_storage_unavailable()
+    if reached_ip_limit:
         return _answer({"ok": False, "detail": "Too many registration requests. Please try later."}, 429)
     # Uniform success body prevents active/unsubscribed account enumeration.
     accepted = {"ok": True, "status": "verification_if_eligible",
