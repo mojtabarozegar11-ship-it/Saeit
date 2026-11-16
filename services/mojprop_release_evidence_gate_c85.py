@@ -10,6 +10,7 @@ import argparse
 import datetime as dt
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -21,6 +22,11 @@ REQUIRED = (
     "email_ownership", "owner_merge_approval", "owner_deploy_approval",
 )
 NO_DEPLOY = "NO_DEPLOY"
+
+
+def _unsafe_evidence_text(value: str) -> bool:
+    """Reject invisible format/control characters that can spoof audit references."""
+    return any(unicodedata.category(char) in {"Cc", "Cf", "Cs"} for char in value)
 
 
 def validate_evidence(document: object, expected_sha: str, now: dt.datetime | None = None) -> list[str]:
@@ -50,7 +56,7 @@ def validate_evidence(document: object, expected_sha: str, now: dt.datetime | No
         if not isinstance(uri, str) or not uri.strip():
             errors.append(f"{key}: missing artifact reference")
         elif (uri.strip().lower() in {"none", "n/a", "unknown", "pending", "todo"}
-              or any(ord(ch) < 32 or ord(ch) == 127 for ch in uri)
+              or _unsafe_evidence_text(uri)
               or uri != uri.strip()):
             errors.append(f"{key}: invalid artifact reference")
         elif uri in artifact_refs:
@@ -61,8 +67,7 @@ def validate_evidence(document: object, expected_sha: str, now: dt.datetime | No
         if (not isinstance(reviewer, str) or not reviewer.strip()
             or reviewer != reviewer.strip()
             or reviewer.casefold() in {"none", "n/a", "unknown", "pending", "todo", "tbd", "test"}
-            or any(ord(ch) < 32 or ord(ch) == 127 or 0x202A <= ord(ch) <= 0x202E
-                   or 0x2066 <= ord(ch) <= 0x2069 for ch in reviewer)):
+            or _unsafe_evidence_text(reviewer)):
             errors.append(f"{key}: missing or invalid reviewer")
         try:
             stamp = dt.datetime.fromisoformat(item["verified_at"].replace("Z", "+00:00"))
