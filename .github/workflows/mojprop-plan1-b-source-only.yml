@@ -12,11 +12,13 @@ on:
       - 'prop_firm/buyer_interest_form.py'
       - 'prop_firm/buyer_precontract_chain.py'
       - 'prop_firm/plan1_private_order_draft.py'
+      - 'prop_firm/plan1_intake_provenance.py'
       - 'tests/test_prop_order_readiness.py'
       - 'tests/test_prop_buyer_order_review.py'
       - 'tests/test_prop_buyer_interest_form.py'
       - 'tests/test_prop_buyer_precontract_chain.py'
       - 'tests/test_prop_plan1_private_order_draft.py'
+      - 'tests/test_prop_plan1_intake_provenance.py'
       - '.github/workflows/mojprop-plan1-b-source-only.yml'
 
 permissions:
@@ -51,11 +53,13 @@ jobs:
             prop_firm/buyer_interest_form.py \
             prop_firm/buyer_precontract_chain.py \
             prop_firm/plan1_private_order_draft.py \
+            prop_firm/plan1_intake_provenance.py \
             tests/test_prop_order_readiness.py \
             tests/test_prop_buyer_order_review.py \
             tests/test_prop_buyer_interest_form.py \
             tests/test_prop_buyer_precontract_chain.py \
-            tests/test_prop_plan1_private_order_draft.py
+            tests/test_prop_plan1_private_order_draft.py \
+            tests/test_prop_plan1_intake_provenance.py
 
       - name: Read-only Plan 1 B contract / identity / consent tests
         run: |
@@ -65,3 +69,4 @@ jobs:
           python3 -B -m unittest discover -s tests -p 'test_prop_buyer_interest_form.py' -v
           python3 -B -m unittest discover -s tests -p 'test_prop_buyer_precontract_chain.py' -v
           python3 -B -m unittest discover -s tests -p 'test_prop_plan1_private_order_draft.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_intake_provenance.py' -v
