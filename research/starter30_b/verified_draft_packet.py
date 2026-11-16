@@ -48,6 +48,7 @@ class EvidenceGateClosed(ValueError):
 @dataclass(frozen=True)
 class ReviewedNonPayableDraft:
     order_ref: str
+    attestation_ref: str
     sku: str
     merchant_id: str
     network: str
@@ -159,7 +160,8 @@ def prepare_reviewed_nonpayable_draft(
              "consent is stale for this educational inquiry")
 
     return ReviewedNonPayableDraft(
-        order_ref=expected_order_ref, sku=SKU, merchant_id=MERCHANT,
+        order_ref=expected_order_ref, attestation_ref=payload["attestation_ref"],
+        sku=SKU, merchant_id=MERCHANT,
         network=NETWORK, amount_sun=AMOUNT_SUN, scope=SCOPE,
         issued_at_sec=issued, expires_at_sec=expiry,
         evidence_packet_sha256=hashlib.sha256(body).hexdigest(),
