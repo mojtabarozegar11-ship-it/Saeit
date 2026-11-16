@@ -123,8 +123,7 @@ def verify(manifest_path):
         if not check(isinstance(item, dict), tag + " must be object"):
             continue
         role = item.get("role")
-        if check(isinstance(role, str) and role in ROLES, tag + " invalid role"):
-            roles.add(role)
+        role_valid = check(isinstance(role, str) and role in ROLES, tag + " invalid role")
         path = item.get("path")
         if not check(isinstance(path, str) and bool(path) and "\x00" not in path,
                      tag + " invalid path"):
@@ -146,7 +145,8 @@ def verify(manifest_path):
             continue
         try:
             digest = _digest_anchored(root, path.split("/"), size)
-            check(digest == expected, tag + " SHA-256 mismatch")
+            if check(digest == expected, tag + " SHA-256 mismatch") and role_valid:
+                roles.add(role)
         except (OSError, ValueError) as exc:
             errors.append(tag + " inaccessible or invalid artifact: " + str(exc))
     for role in ("input", "generator", "config", "output"):
