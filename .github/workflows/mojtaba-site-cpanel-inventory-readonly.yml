@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "scripts/mojtaba_site_legacy_cpanel_inventory.py"
+      - "scripts/mojtaba_zomorod_history_parity_readonly.py"
+      - "tests/test_mojtaba_zomorod_history_parity_readonly.py"
       - "tests/test_mojtaba_site_legacy_cpanel_inventory.py"
       - ".github/workflows/mojtaba-site-cpanel-inventory-readonly.yml"
 permissions:
@@ -22,7 +24,8 @@ jobs:
           persist-credentials: false
       - name: Validate read-only inventory with fixtures
         run: |
-          python3 -m py_compile scripts/mojtaba_site_legacy_cpanel_inventory.py
+          python3 -m py_compile scripts/mojtaba_site_legacy_cpanel_inventory.py scripts/mojtaba_zomorod_history_parity_readonly.py
+          python3 -m unittest discover -s tests -p test_mojtaba_zomorod_history_parity_readonly.py -v
           python3 -m unittest discover -s tests -p test_mojtaba_site_legacy_cpanel_inventory.py -v
   live-cpanel:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
@@ -73,4 +76,38 @@ jobs:
           assert x["crontab_modified"] is False
           assert x["safe_to_delete"] is False
           print(json.dumps(x, ensure_ascii=False, sort_keys=True))
+          PY
+          # A separate read-only, immutable history digest; private row bodies
+          # never leave cPanel. A WAL journal or schema mismatch is UNKNOWN,
+          # never a zero-row clean-history certificate.
+          timeout 70s ssh -T \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/known_hosts" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o ForwardAgent=no \
+            -o ConnectTimeout=9 \
+            -i "$d/key" -p 1396 \
+            zomorod2@178.239.147.125 'exec python3 -' \
+            < scripts/mojtaba_zomorod_history_parity_readonly.py \
+            > "$d/history.json" 2>"$d/history.stderr"
+          python3 - "$d/history.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=Path(sys.argv[1])
+          if not p.is_file() or not 0 < p.stat().st_size < 3000:
+              raise SystemExit("SITE_HISTORY_MANIFEST_UNAVAILABLE")
+          x=json.loads(p.read_text(encoding="utf-8"))
+          assert x["schema"] == "mojtaba.bot.ai.zomorod-legacy-history-lineage.v1"
+          assert x["database_modified"] is False
+          assert x["history_deleted"] is False
+          assert x["retirement_authorized"] is False
+          assert x["rows_exported"] is False
+          print("ZM_HISTORY_READONLY_STATE="+x["state"])
+          print("ZM_HISTORY_MANIFEST_COMPLETE="+str(x["manifest_complete"]).lower())
+          if x["manifest_complete"]:
+              print("ZM_HISTORY_TABLES="+str(x["table_count"]))
+              print("ZM_HISTORY_ROWS="+str(x["table_total_rows"]))
+              print("ZM_HISTORY_LINEAGE_SHA256="+x["lineage_sha256"])
+          print("HOST_CLEANUP_AUTHORIZED=false")
           PY
