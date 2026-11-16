@@ -1,0 +1,79 @@
+name: Owner post-cleanup live safety and cache-usage audit (strict read-only)
+on:
+  push:
+    branches: [ops/verified-disk-reclaim-20261116]
+    paths: [".github/workflows/owner-postcleanup-safety-readonly-20261116.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: saeit-owner-postcleanup-readonly-20261116
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/ops/verified-disk-reclaim-20261116' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 9
+    steps:
+      - name: Checkout exactly audited branch without persistent Git credential
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify source is fixed and imports are syntactically valid
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/owner_storage_postcleanup_readonly_20261116.py
+          test "$(git hash-object -- scripts/owner_storage_postcleanup_readonly_20261116.py)" = "34c7b80427d17e4ced32fcedcd3935751394b4da"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import ast,pathlib; ast.parse(pathlib.Path("scripts/owner_storage_postcleanup_readonly_20261116.py").read_text(encoding="utf-8"))'
+          echo AUDIT_SOURCE_PINNED=PASS
+      - name: Verify public company pages BEFORE inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /agents/; do
+            code="$(curl -sS --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path")"
+            echo "SAFE_PRE_HEALTH=$path:$code"
+            test "$code" = 200
+          done
+      - name: Inventory cPanel cache occupancy and factory log health without changing either host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${VPS_KEY:?}"
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/owner-storage-check-20261116"
+          install -d -m 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/cpanel.key"
+          chmod 600 "$work/"*.key
+          ssh-keygen -y -P '' -f "$work/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$work/cpanel.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/vps.known" 2>/dev/null
+          test -s "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$work/cpanel.known" 2>/dev/null
+          test -s "$work/cpanel.known"
+          test "$(ssh-keygen -lf "$work/cpanel.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo STORAGE_SSH_HOST_FINGERPRINTS=VERIFIED
+          timeout 105s ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ForwardAgent=no -o RequestTTY=no githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -B - vps' < scripts/owner_storage_postcleanup_readonly_20261116.py |
+            PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import json,sys; s=sys.stdin.read(5000).splitlines(); p="OWNER_STORAGE_READONLY_EVIDENCE="; q=[x for x in s if x.startswith(p)]; assert len(q)==1,"VPS_READONLY_EVIDENCE_MISSING"; d=json.loads(q[0][len(p):]); assert d["schema"]=="owner.storage.vps.readonly.v2" and d["read_only"] is True and d["delete_permitted"] is False and d["protected_apps_or_backups_touched"] is False; print(q[0])'
+          timeout 120s ssh -T -i "$work/cpanel.key" -p 1396 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/cpanel.known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ForwardAgent=no -o RequestTTY=no zomorod2@178.239.147.125 'PYTHONDONTWRITEBYTECODE=1 python3 -B - cpanel' < scripts/owner_storage_postcleanup_readonly_20261116.py |
+            PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import json,sys; s=sys.stdin.read(5000).splitlines(); p="OWNER_STORAGE_READONLY_EVIDENCE="; q=[x for x in s if x.startswith(p)]; assert len(q)==1,"CPANEL_READONLY_EVIDENCE_MISSING"; d=json.loads(q[0][len(p):]); assert d["schema"]=="owner.storage.cp.readonly.v2" and d["read_only"] is True and d["delete_permitted"] is False and d["protected_apps_or_backups_touched"] is False; print(q[0])'
+          echo STORAGE_INSPECTION=COMPLETE_READ_ONLY
+      - name: Verify public company pages AFTER inventory
+        shell: bash
+        if: always()
+        run: |
+          set -euo pipefail
+          for path in / /agents/; do
+            code="$(curl -sS --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path")"
+            echo "SAFE_POST_HEALTH=$path:$code"
+            test "$code" = 200
+          done
