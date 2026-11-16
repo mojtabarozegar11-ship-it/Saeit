@@ -481,3 +481,6 @@ class PropSocialEvidence(models.Model):
 
     def __str__(self):
         return f"social-review:{self.enrollment_id}:{self.platform}"
+
+# Contact-only inquiries never imply TRX settlement or funded challenges.
+from .lead_models import PropInterest

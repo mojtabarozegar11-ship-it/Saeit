@@ -128,8 +128,9 @@ from core.blog_views import blog_home, blog_page
 urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/", blog_page, name="blog_page")]
 
 # Moj Prop is a MojPlayWin-only informational division. Checkout and broker execution are disabled.
-from core.moj_prop_views import moj_prop_landing, moj_prop_dashboard
+from core.moj_prop_views import moj_prop_landing, moj_prop_dashboard, moj_prop_interest
 urlpatterns += [
+    path("moj-prop-interest/", moj_prop_interest, name="moj_prop_interest"),
     path("moj-prop/", moj_prop_landing, name="moj_prop_landing"),
     path("moj-prop/dashboard/", moj_prop_dashboard, name="moj_prop_dashboard"),
     path("moj-prop/<str:lang>/dashboard/", moj_prop_dashboard, name="moj_prop_language_dashboard"),
