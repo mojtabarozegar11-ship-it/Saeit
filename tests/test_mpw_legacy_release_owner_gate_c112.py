@@ -14,6 +14,7 @@ FILENAMES = (
     "mpw-legacy-checkout-fintech-v2-live-20261021.yml",
     "mpw-two-books-checkout-links-live-20261019.yml",
     "mpw-checkout-return-path-repair-20261024.yml",
+    "mpw-guest-checkout-live-release.yml",
 )
 
 class LegacyBuyerCheckoutManualOnlyTests(unittest.TestCase):
@@ -22,8 +23,8 @@ class LegacyBuyerCheckoutManualOnlyTests(unittest.TestCase):
         cls.files = {name: (ROOT / name).read_text(encoding="utf-8") for name in FILENAMES}
 
     def test_01_all_five_original_legacy_workflows_are_covered(self):
-        self.assertEqual(len(self.files), 5)
-        self.assertEqual(len(set(FILENAMES)), 5)
+        self.assertEqual(len(self.files), 6)
+        self.assertEqual(len(set(FILENAMES)), 6)
 
     def test_02_no_push_pull_request_schedule_or_issue_comment_can_deploy(self):
         for name, source in self.files.items():
@@ -96,6 +97,26 @@ class LegacyBuyerCheckoutManualOnlyTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIn("release_sha:", source.split("\njobs:\n", 1)[0])
                 self.assertNotIn("source_ref:", source.split("\njobs:\n", 1)[0])
+
+    def test_11_guest_checkout_never_starts_from_legacy_issue_comment(self):
+        source = self.files["mpw-guest-checkout-live-release.yml"]
+        self.assertNotIn("issue_comment:", source.split("\\njobs:\\n", 1)[0])
+        self.assertNotIn("MPW-PURCHASES-404-ONEFILE-RELEASE-20261102", source)
+
+    def test_12_guest_recovery_source_is_immutable_and_independently_approved(self):
+        source = self.files["mpw-guest-checkout-live-release.yml"]
+        self.assertIn("vars.MPW_APPROVED_RECOVERY_SHA == inputs.recovery_sha", source)
+        self.assertIn("ref: ${{ inputs.recovery_sha }}", source)
+        self.assertIn('[[ "$REVIEWED_RECOVERY_SHA" =~ ^[0-9a-f]{40}$ ]]', source)
+        self.assertIn('[[ "$(git rev-parse HEAD)" == "$REVIEWED_RECOVERY_SHA" ]]', source)
+        self.assertNotIn("feature/mpw-recovery-01-20261105", source)
+
+    def test_13_guest_checks_two_pins_before_ssh_secrets(self):
+        source = self.files["mpw-guest-checkout-live-release.yml"]
+        self.assertLess(source.index("Verify both immutable release SHAs"),
+                        source.index("secrets.VPS_SSH_PRIVATE_KEY"))
+        self.assertIn('[[ "$REQUESTED_MAIN_SHA" == "$GITHUB_SHA" ]]', source)
+
 
 
 if __name__ == "__main__":
