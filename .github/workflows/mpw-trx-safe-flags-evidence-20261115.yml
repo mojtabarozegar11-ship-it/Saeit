@@ -48,7 +48,7 @@ jobs:
           python3 -B -m unittest tests.test_mpw_trx_active_download_route_readonly_20261116 -q
           test -f scripts/mpw_trx_active_download_route_readonly_20261116.py
           test ! -L scripts/mpw_trx_active_download_route_readonly_20261116.py
-          test "$(git hash-object -- scripts/mpw_trx_active_download_route_readonly_20261116.py)" = "b6d816e48680fd8123ba86d5acbf6cd964084517"
+          test "$(git hash-object -- scripts/mpw_trx_active_download_route_readonly_20261116.py)" = "a4a928688dff01121f8242cb2d3d157a2a836c62"
           python3 -B -m py_compile scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py
           python3 -B -m unittest tests.test_mpw_existing_paid_buyer_entitlement_readonly_20261116 -q
           test -f scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py
