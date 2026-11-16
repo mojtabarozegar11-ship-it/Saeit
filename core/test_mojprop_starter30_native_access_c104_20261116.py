@@ -96,6 +96,7 @@ class MojPropStarter30NativeAccessTests(TestCase):
 
     def test_12_public_catalog_has_sku_bound_nojs_link(self):
         for relative in (
+            "templates/moj-prop-v4/index.html",
             "templates/moj-prop-v4/catalog/index.html",
             "templates/moj-prop-v4/starter-30-trx/index.html",
         ):
