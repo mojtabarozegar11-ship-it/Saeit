@@ -98,6 +98,13 @@ class PropAccount(models.Model):
                 enrollment = self.challenge_enrollment
                 if self.trader_id != enrollment.trader_id:
                     raise ValidationError("Funded plan belongs to a different trader")
+                # KYC/eligibility is required before even recording a funded
+                # compartment linked to a purchased challenge. A receipt,
+                # broker string, or assessment PASSED flag is not customer KYC.
+                if (self.trader.kyc_status != "verified"
+                        or self.trader.eligibility_status != "eligible"
+                        or self.trader.user.is_active is not True):
+                    raise ValidationError("Verified eligible active trader required for funded plan")
                 # Contract and payment identity must survive every promotion.
                 # A pending/forged enrollment cannot back a funded-account
                 # compartment, even with a syntactically valid broker reference.
