@@ -295,6 +295,16 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
         self.assertNotIn("subprocess.Popen(", src)
 
 
+    def test_cli_and_uapi_failure_codes_remain_separate_and_redacted(self):
+        source = (ROOT / "scripts/mojprop_full_restore_capacity_readonly_c94.py").read_text()
+        self.assertIn('out["quota_cli_outcome"] = reason', source)
+        self.assertIn('out["quota_uapi_outcome"] = reason', source)
+        self.assertIn('out["quota_fallback_used"] = False', source)
+        self.assertIn('out["quota_fallback_used"] = True', source)
+        self.assertNotIn('out["quota_raw_output"]', source)
+        self.assertNotIn('out["stdout"]', source)
+
+
 
 if __name__ == "__main__":
     unittest.main()
