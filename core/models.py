@@ -796,3 +796,144 @@ class MojPropDeliveryEvidence(T):
 
 # Independent consent/confirmation domain; distinct from MojPropRequest leads.
 from .signal_free_models import MojSignalFreeSubscription  # noqa: E402,F401
+
+
+class MojPropStarter30Order(T):
+    """Dedicated native-TRX educational order, separate from USD/IRR offers.
+
+    Not a funded trading challenge. No checkout or payment route uses this
+    table until the independent legal, restore and merchant release gates pass.
+    """
+
+    STATES = (
+        ("draft", "Prepared privately, not payable"),
+        ("issued", "Owner-authorized invoice issued"),
+        ("settled", "Independently confirmed native TRX settlement"),
+        ("delivered", "Educational deliverable acknowledged"),
+        ("cancelled", "Cancelled without automatic refund"),
+    )
+    lead = models.ForeignKey(
+        "MojPropRequest", on_delete=models.PROTECT, related_name="starter30_orders"
+    )
+    order_ref = models.CharField(max_length=42, unique=True)
+    product = models.CharField(max_length=32, default="MOJPROP-STARTER30")
+    merchant_domain = models.CharField(max_length=64, default="mojplaywin.com")
+    merchant_id = models.CharField(max_length=40, default="mojplaywin-store")
+    network = models.CharField(max_length=20, default="tron-mainnet")
+    recipient = models.CharField(max_length=34)
+    payer_hex41 = models.CharField(max_length=42)
+    amount_sun = models.PositiveBigIntegerField(default=30_000_000)
+    buyer_terms_acceptance = models.CharField(max_length=128)
+    issued_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    status = models.CharField(max_length=12, choices=STATES, default="draft")
+
+    class Meta:
+        default_permissions = ()
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(product="MOJPROP-STARTER30"),
+                name="mojprop30_fixed_product",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(amount_sun=30_000_000),
+                name="mojprop30_fixed_native_sun",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(network="tron-mainnet"),
+                name="mojprop30_fixed_mainnet",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(merchant_domain="mojplaywin.com")
+                & models.Q(merchant_id="mojplaywin-store"),
+                name="mojprop30_fixed_merchant",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=("draft", "issued", "settled", "delivered", "cancelled")),
+                name="mojprop30_known_order_state",
+            ),
+        ]
+
+    def clean(self):
+        from datetime import datetime, timezone
+        from services.mojprop_starter30_tron_settlement import (
+            Starter30PersistedInvoice, NativeTRXMatchRejected,
+            validate_persisted_order,
+        )
+        super().clean()
+        errors = {}
+        if self.issued_at is None or self.expires_at is None:
+            errors["expires_at"] = "Both invoice timestamps are required."
+        elif (
+            type(self.issued_at) is not datetime
+            or type(self.expires_at) is not datetime
+            or self.issued_at.tzinfo is None or self.issued_at.utcoffset() is None
+            or self.expires_at.tzinfo is None or self.expires_at.utcoffset() is None
+        ):
+            errors["expires_at"] = "Timezone-aware invoice times are required."
+        if self.lead_id is None:
+            errors["lead"] = "A persisted, consented customer inquiry is required."
+        if errors:
+            raise ValidationError(errors)
+        if not self.lead.consent:
+            raise ValidationError({"lead": "Buyer inquiry lacks consent."})
+        try:
+            invoice = Starter30PersistedInvoice(
+                product=self.product,
+                order_ref=self.order_ref,
+                merchant_domain=self.merchant_domain,
+                merchant_id=self.merchant_id,
+                network=self.network,
+                recipient=self.recipient,
+                amount_sun=self.amount_sun,
+                issued_at_sec=int(self.issued_at.astimezone(timezone.utc).timestamp()),
+                expires_at_sec=int(self.expires_at.astimezone(timezone.utc).timestamp()),
+                buyer_terms_acceptance=self.buyer_terms_acceptance,
+                payer_hex41=self.payer_hex41,
+            )
+            validate_persisted_order(invoice)
+        except (NativeTRXMatchRejected, ValueError, TypeError, OverflowError) as exc:
+            raise ValidationError({"order_ref": "Invalid Starter30 invoice contract."}) from exc
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+class MojPropStarter30TxClaim(T):
+    """Exclusive TXID claim; an UNVERIFIED claim never credits a buyer."""
+
+    order = models.OneToOneField(
+        "MojPropStarter30Order", on_delete=models.PROTECT,
+        related_name="tx_claim",
+    )
+    txid = models.CharField(max_length=64, unique=True)
+    network = models.CharField(max_length=20, default="tron-mainnet")
+    state = models.CharField(max_length=12, default="unverified")
+
+    class Meta:
+        default_permissions = ()
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(network="tron-mainnet"),
+                name="mojprop30_tx_mainnet_only",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(state="unverified"),
+                name="mojprop30_tx_never_auto_credit",
+            ),
+        ]
+
+    def clean(self):
+        import re
+        super().clean()
+        if type(self.txid) is not str or re.fullmatch(r"[0-9a-f]{64}", self.txid) is None:
+            raise ValidationError({"txid": "Canonical lower-case native TRON txID required."})
+        if self.order_id is None:
+            raise ValidationError({"order": "A persisted Starter30 invoice is required."})
+        if self.network != "tron-mainnet" or self.state != "unverified":
+            raise ValidationError({"state": "This source-only claim cannot prove settlement."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
