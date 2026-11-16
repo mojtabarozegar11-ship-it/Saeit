@@ -1,0 +1,62 @@
+# Source-only Plan 1 order compliance regression CI.
+# No production secrets, checkout, migration, deploy, wallet or outbound email.
+name: MOJ PROP Plan1 B Source-Only Checks
+
+on:
+  push:
+    branches:
+      - cycle-b-contract-gates-20261116
+    paths:
+      - 'prop_firm/order_readiness.py'
+      - 'prop_firm/buyer_order_review.py'
+      - 'prop_firm/buyer_interest_form.py'
+      - 'prop_firm/buyer_precontract_chain.py'
+      - 'tests/test_prop_order_readiness.py'
+      - 'tests/test_prop_buyer_order_review.py'
+      - 'tests/test_prop_buyer_interest_form.py'
+      - 'tests/test_prop_buyer_precontract_chain.py'
+      - '.github/workflows/mojprop-plan1-b-source-only.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-plan1-b-source-only-branch
+  cancel-in-progress: true
+
+jobs:
+  source-only:
+    name: Plan 1 private-intake regression tests (NO RELEASE)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: .
+    steps:
+      - name: Checkout exact triggering commit read-only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Python runtime
+        run: python3 --version
+
+      - name: Compile only Plan 1 B-owned Python files
+        run: |
+          python3 -B -m py_compile \
+            prop_firm/order_readiness.py \
+            prop_firm/buyer_order_review.py \
+            prop_firm/buyer_interest_form.py \
+            prop_firm/buyer_precontract_chain.py \
+            tests/test_prop_order_readiness.py \
+            tests/test_prop_buyer_order_review.py \
+            tests/test_prop_buyer_interest_form.py \
+            tests/test_prop_buyer_precontract_chain.py
+
+      - name: Read-only Plan 1 B contract / identity / consent tests
+        run: |
+          set -eu
+          python3 -B -m unittest discover -s tests -p 'test_prop_order_readiness.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_buyer_order_review.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_buyer_interest_form.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_buyer_precontract_chain.py' -v
