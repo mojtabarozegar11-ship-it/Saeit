@@ -53,3 +53,37 @@ jobs:
           print('MOJPROP_C131_LIVE_RELEASE_AUTHORIZED=false')
           PY
           node --check /tmp/mojprop-c131-static-syntax.js
+
+  django-consent-migration-and-ephemeral-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SECRET_KEY: c131-github-ci-synthetic-only-not-production
+      DEBUG: "true"
+      ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install same pinned project requirements as main Django CI
+        run: python -m pip install -r requirements.txt
+      - name: Verify Django config and canonical PropInterest migration consistency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python manage.py check
+          python manage.py makemigrations --check --dry-run prop_firm
+      - name: Prove synthetic consent POST storage, CSRF, withdrawal and no paid side effects
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Django test runner creates/destroys its OWN temporary test DB;
+          # this does not connect to the live MojPlayWin/cPanel database.
+          python manage.py test tests.test_moj_prop_interest_intake --verbosity 1
+          echo 'MOJPROP_C131_SYNTHETIC_DB_ONLY=true'
+          echo 'MOJPROP_C131_NO_PRODUCTION_POST_NO_PAYMENT_NO_DEPLOY=true'
