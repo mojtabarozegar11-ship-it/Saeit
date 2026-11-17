@@ -17,6 +17,9 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 
 from prop_firm.plan1_v141_virtual_tenant_models import PropV141VirtualBook
+from prop_firm.moj_prop_page import SUPPORTED_CODES
+from prop_firm.mojprop_v141_interest_i18n import interest_catalog
+from prop_firm.mojprop_v141_statement_i18n import statement_labels
 
 
 _ALLOWED_HOSTS = frozenset(("mojplaywin.com", "www.mojplaywin.com"))
@@ -81,8 +84,13 @@ def _allowed_statement_request(request, challenge_ref):
         raise Http404("Invalid host") from exc
     if host not in _ALLOWED_HOSTS or request.is_secure() is not True:
         raise Http404("MojPlayWin HTTPS only")
-    if request.META.get("QUERY_STRING", "") or _REF.fullmatch(challenge_ref) is None:
+    if _REF.fullmatch(challenge_ref) is None:
         raise Http404("Invalid private reference")
+    if request.META.get("QUERY_STRING", ""):
+        if (set(request.GET) != {"lang"}
+                or len(request.GET.getlist("lang")) != 1
+                or request.GET.get("lang") not in SUPPORTED_CODES):
+            raise Http404("Invalid private reference")
 
 
 @login_required
@@ -107,12 +115,24 @@ def moj_prop_v141_private_statement(request, challenge_ref):
         )[:_LIMIT]
     )
     language_header = request.headers.get("Accept-Language", "")
-    lang = "fa" if language_header.lower().startswith("fa") else _DEFAULT_LANGUAGE
+    lang = request.GET.get("lang", "")
+    if not lang:
+        for raw in language_header.split(","):
+            candidate = raw.split(";", 1)[0].strip().lower().split("-", 1)[0]
+            if candidate in SUPPORTED_CODES:
+                lang = candidate
+                break
+    if not lang:
+        lang = _DEFAULT_LANGUAGE
     deadline = book.evaluation_started_at + timedelta(days=28)
     response = render(request, "mojprop/v141-private-demo-statement.html", {
-        "labels": _LOCALIZED[lang],
+        "labels": statement_labels(lang, _LOCALIZED),
         "lang": lang,
-        "direction": "rtl" if lang == "fa" else "ltr",
+        "direction": "rtl" if lang in {"fa", "ar", "ur"} else "ltr",
+        "language_options": [
+            {"code": code, "name": interest_catalog()[code]["name"],
+             "active": code == lang} for code in SUPPORTED_CODES
+        ],
         "challenge_ref": book.state.challenge_ref,
         "stage": book.max_unlocked_stage,
         "event_count": book.last_sequence,
