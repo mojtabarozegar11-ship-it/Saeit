@@ -39,6 +39,8 @@ on:
       - "tests/test_mojprop_c157_offhost_stream_preflight_readonly.py"
       - "scripts/mojprop_c160_owner_plan1_source_parity_readonly.py"
       - "tests/test_mojprop_c160_owner_plan1_source_parity_readonly.py"
+      - "scripts/mojprop_c161_owner_effective_django_db_media_readonly.py"
+      - "tests/test_mojprop_c161_owner_effective_django_db_media_readonly.py"
 
 permissions:
   contents: read
@@ -145,6 +147,12 @@ jobs:
           test "$(git hash-object -- scripts/mojprop_c160_owner_plan1_source_parity_readonly.py)" = "9436b5a83bb8f5e9c8c7417836019b47bc9c07e2"
           test ! -L tests/test_mojprop_c160_owner_plan1_source_parity_readonly.py
           test "$(git hash-object -- tests/test_mojprop_c160_owner_plan1_source_parity_readonly.py)" = "da19eb8a0c5a499baaf099470a5753c34a195755"
+          python3 -B -m py_compile scripts/mojprop_c161_owner_effective_django_db_media_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c161_owner_effective_django_db_media_readonly -q
+          test ! -L scripts/mojprop_c161_owner_effective_django_db_media_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c161_owner_effective_django_db_media_readonly.py)" = "961fc3f8a0c0194ff4b13d5ec680aeadfa1c5f20"
+          test ! -L tests/test_mojprop_c161_owner_effective_django_db_media_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c161_owner_effective_django_db_media_readonly.py)" = "21885132edbca6518a0405a7dd16fe260a0561b5"
           test ! -L scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
           test "$(git hash-object -- scripts/mojprop_c146_live_plan1_runtime_source_readonly.py)" = "198d3c2b4f8de90504002f95148c370604716cb9"
           test ! -L tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py
@@ -394,6 +402,16 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(12000); prefix="MOJPROP_C160_FULL_SOURCE_PARITY_READONLY="; x=[line for line in raw.splitlines() if line.startswith(prefix)]; assert len(x)==1,"C160_MISSING_SANITIZED_REPORT"; d=json.loads(x[0][len(prefix):]); assert d["schema"]=="mojprop.owner.cpanel.source_bundle_parity.c160.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["comparison_completed"] is True; r=d["result"]; assert type(r["file_count"]) is int and 50<=r["file_count"]<=128; allowed={"matches","missing","drifted","unsafe","unavailable","withheld"}; assert set(r["total_counts"])==allowed and sum(r["total_counts"].values())==r["file_count"]; assert set(r["group_counts"])=={"config_reference","core_views","core_templates","prop_app","prop_migrations","excluded_secrets"}; assert all(set(x)==allowed for x in r["group_counts"].values()); assert r["total_counts"]["withheld"]==1; assert all(d[k] is False for k in ("account_quota_proven","independent_full_app_db_media_restore_proven","public_form_get_verified","customer_data_accessed","backup_contents_read","database_accessed","external_network_called","production_deployment_authorized","payment_created","cost_incurred")); assert all(r[k] is False for k in ("read_customer_or_database","server_source_contents_exposed","backup_or_restore_proven","production_deploy_authorized")); assert not set(d).intersection({"filename","path","customer","email","password","token","secret","wallet","sha256","raw_file","database_name"}); print(x[0])'
           rm -f "$RUNNER_TEMP/mojprop-c160-source-parity-ephemeral.py"
           echo 'C160_SOURCE_SHA256_PARITY_COMPLETED_NO_DEPLOY_OR_DB_ACCESS' >> "$GITHUB_STEP_SUMMARY"
+      - name: C161 effective Django configuration of DB engine and private media scope (owner read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c161_owner_effective_django_db_media_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(9000); prefix="MOJPROP_C161_EFFECTIVE_STAGING_DB_MEDIA_READONLY="; lines=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"C161_MISSING_SANITIZED_REPORT"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.cpanel.effective_django_db_media.readonly.c161.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; db=d["database"]; media=d["media"]; assert set(db)=={"configured","engine","name_configured","host_class","connection_opened","credentials_exposed"}; assert db["engine"] in ("unknown","mysql","postgresql","sqlite","oracle","other_or_unknown"); assert db["host_class"] in ("unknown","local_or_default","local_socket_or_path","remote_or_unknown"); assert db["connection_opened"] is False and db["credentials_exposed"] is False; assert set(media)=={"root_state","within_owner_home","within_staging","backend_kind","metadata","media_root_contents_opened","complete_media_inventory_proven"}; assert media["backend_kind"] in ("django_filesystem_storage","other_or_external_storage","unverified"); assert media["media_root_contents_opened"] is False and media["complete_media_inventory_proven"] is False; assert media["metadata"]["media_file_content_read"] is False and media["metadata"]["recursive_media_scope_proven"] is False; assert all(d[k] is False for k in ("db_connection_opened","db_dump_created","database_name_or_credentials_emitted","owner_secret_values_emitted","actual_live_passenger_worker_parity_proven","offhost_db_media_backup_verified","full_app_db_media_restore_verified","production_release_authorized","new_financial_commitment")); assert not set(d).intersection({"path","filename","customer","wallet","email","username","password","secret","token","database_name","db_host","url","db_password"}); print(lines[0])'
+          echo 'C161_EFFECTIVE_DJANGO_DB_BACKEND_AND_MEDIA_METADATA_ONLY_NO_BACKUP=COMPLETE' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
