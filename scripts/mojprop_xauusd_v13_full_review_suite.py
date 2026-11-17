@@ -31,10 +31,11 @@ REQUIRED_TEST_MODULES = (
     ("tests.test_plan1_v14_combined_qualification", 17),
     ("tests.test_plan1_v14_private_interest_review", 30),
     ("tests.test_plan1_v141_precontract_boundary", 33),
+    ("tests.test_mojprop_v141_prelaunch_copy", 25),
 )
 LEGACY_TEST_MODULE = "tests.test_prop_firm_policy"
 EXPECTED_V13_TESTS = 194
-EXPECTED_V14_TESTS = 114
+EXPECTED_V14_TESTS = 139
 EXPECTED_ALL_TESTS = EXPECTED_V13_TESTS + EXPECTED_V14_TESTS
 
 
@@ -62,13 +63,14 @@ def run_full_review() -> int:
     v13_modules = {name: count for name, count in observed.items()
                    if name.startswith("tests.test_xauusd_v13_")}
     v14_modules = {name: count for name, count in observed.items()
-                   if name.startswith("tests.test_plan1_v14")}
+                   if name.startswith("tests.test_plan1_v14")
+                   or name == "tests.test_mojprop_v141_prelaunch_copy"}
     if (sum(v13_modules.values()) != EXPECTED_V13_TESTS
             or sum(v14_modules.values()) != EXPECTED_V14_TESTS):
         print("Version-specific unit test inventory drift; fail closed", file=sys.stderr)
         return 2
     if sum(observed.values()) != EXPECTED_ALL_TESTS:
-        print("Unexpected v1.3 test count; fail closed", file=sys.stderr)
+        print("Unexpected v1.3/v1.4.1 combined test count; fail closed", file=sys.stderr)
         return 2
     historical = loader.loadTestsFromName(LEGACY_TEST_MODULE)
     if loader.errors or historical.countTestCases() == 0:
