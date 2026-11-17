@@ -53,8 +53,11 @@ class GoldQualificationPreviewTests(unittest.TestCase):
     def test_unique_contract_version(self):
         self.assertEqual(review().contract_version,DRAFT_CONTRACT_VERSION)
 
-    def test_never_requires_social_posts(self):
-        self.assertFalse(review().social_post_evidence_required)
+    def test_prospective_social_evidence_required_but_cannot_authorize_enrollment(self):
+        r=review()
+        self.assertTrue(r.social_post_evidence_required)
+        self.assertFalse(r.signed_customer_contract_proven)
+        self.assertFalse(r.paid_enrollment_authorized)
 
     def test_fifty_minus_one_fails(self):
         self.assertIn("minimum_50_unique_closed_positions_total_not_met",
