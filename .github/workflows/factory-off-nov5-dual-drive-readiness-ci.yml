@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'scripts/factory_cpanel_existing_nov5_two_drive.py'
+      - 'scripts/factory_cpanel_nov5_sqlite_integrity_readonly_20261118.py'
       - 'tests/test_factory_cpanel_existing_nov5_two_drive.py'
       - 'scripts/factory_rclone_dual_parts.py'
       - '.github/workflows/factory-off-nov5-dual-drive-readiness-ci.yml'
@@ -49,7 +50,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit' &&
       github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
     runs-on: [self-hosted, factory-vps]
-    timeout-minutes: 10
+    timeout-minutes: 24
     steps:
       - uses: actions/checkout@v4
         with:
@@ -105,6 +106,9 @@ jobs:
           test "$(ssh-keygen -lf "$work/cpanel.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive --mode probe --snapshot nov5-a --ssh-config "$work/config" --known-hosts "$work/cpanel.known"
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive --mode probe --snapshot nov5-b --ssh-config "$work/config" --known-hosts "$work/cpanel.known"
+          test "$(git hash-object scripts/factory_cpanel_nov5_sqlite_integrity_readonly_20261118.py)" = '639033cffcd9383a581746306673377113102a17'
+          timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec python3 -B -' < scripts/factory_cpanel_nov5_sqlite_integrity_readonly_20261118.py
+          echo FACTORY_CPANEL_NOV5_2_FILES_SHA_AND_FULL_SQLITE_INTEGRITY=true
           echo FACTORY_EXISTING_CPANEL_NOV5_SNAPSHOTS_METADATA_ONLY=true
           echo FACTORY_RUNNING_PROCESSES_STARTED=0
           echo FACTORY_BACKUPS_UPLOADED=0
