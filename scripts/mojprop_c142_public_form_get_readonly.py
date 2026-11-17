@@ -8,7 +8,7 @@ A 200 without the actual nonpayable, CSRF-backed form is NOT availability.
 from __future__ import annotations
 
 import json
-import re
+from html.parser import HTMLParser
 import socket
 import ssl
 from urllib.error import HTTPError, URLError
@@ -19,24 +19,96 @@ ENDPOINTS = (
     ("fa", "https://mojplaywin.com/moj-prop-interest/form/?lang=fa"),
 )
 MAX_BYTES = 65000
-REQUIRED = (
-    'action="/moj-prop-interest/"',
-    'method="post"',
-    'name="contact_consent"',
-    'name="email"',
-    'name="plan_code" value="MOJ-PROP-01"',
-    'name="csrfmiddlewaretoken"',
-    'noindex,nofollow',
-)
-
 
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, request, fp, code, msg, headers, newurl):
         return None
 
 
+# Exact set: arbitrary extra fields can be a forged checkout or data collection.
+EXPECTED_FIELDS = frozenset({
+    "csrfmiddlewaretoken", "plan_code", "consent_version",
+    "source_language", "email", "contact_consent",
+})
+
+
+class ConsentFormDocument(HTMLParser):
+    """Parse structural HTML; string markers inside comments cannot prove a form."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.html_attrs = []
+        self.in_head = False
+        self.robots = []
+        self.forms = []
+        self.active = None
+        self.bad_markup = False
+        self.unsafe_embeds = False
+
+    def handle_starttag(self, tag, pairs):
+        attrs = dict(pairs)
+        if tag == "html":
+            self.html_attrs.append(attrs)
+        elif tag == "head":
+            self.in_head = True
+        elif tag == "meta" and self.in_head and attrs.get("name", "").lower() == "robots":
+            self.robots.append(attrs.get("content", ""))
+        elif tag in ("script", "iframe", "object", "embed"):
+            self.unsafe_embeds = True
+        elif tag == "form":
+            if self.active is not None:
+                self.bad_markup = True
+            form = {"attrs": attrs, "inputs": [], "submit": False, "closed": False}
+            self.forms.append(form)
+            self.active = form
+        elif tag == "input" and self.active is not None:
+            self.active["inputs"].append(attrs)
+        elif tag == "button" and self.active is not None:
+            if attrs.get("type", "submit").lower() == "submit":
+                self.active["submit"] = True
+
+    def handle_endtag(self, tag):
+        if tag == "head":
+            self.in_head = False
+        elif tag == "form":
+            if self.active is None:
+                self.bad_markup = True
+            else:
+                self.active["closed"] = True
+                self.active = None
+
+
+def _has_exact_consent_fields(fields: list[dict], language: str) -> bool:
+    if len(fields) != len(EXPECTED_FIELDS):
+        return False
+    by_name = {item.get("name"): item for item in fields}
+    if set(by_name) != EXPECTED_FIELDS:
+        return False
+    # The CSRF and plan provenance fields must be genuine form inputs,
+    # not comments or unrelated text elsewhere in the document.
+    for name, value in (
+        ("plan_code", "MOJ-PROP-01"),
+        ("consent_version", "moj-prop-interest-v1"),
+        ("source_language", language),
+    ):
+        item = by_name[name]
+        if item.get("type") != "hidden" or item.get("value") != value:
+            return False
+    token = by_name["csrfmiddlewaretoken"]
+    if token.get("type") != "hidden" or not token.get("value", "").strip():
+        return False
+    email = by_name["email"]
+    if (email.get("type") != "email" or "required" not in email
+            or email.get("maxlength") != "254"):
+        return False
+    consent = by_name["contact_consent"]
+    return (consent.get("type") == "checkbox"
+            and consent.get("value") == "yes"
+            and "required" in consent)
+
+
 def evaluate_page(*, status: int, body: bytes, language: str) -> str:
-    """Classify only source shape; never return or print raw page or CSRF token."""
+    """No live customer proof: verify only a valid, nonpayable GET form structure."""
     if status != 200:
         return "http_" + str(status) if status in (403, 404, 429, 500, 502, 503, 504) else "unexpected_http_status"
     if type(body) is not bytes or len(body) < 350 or len(body) > MAX_BYTES:
@@ -45,14 +117,35 @@ def evaluate_page(*, status: int, body: bytes, language: str) -> str:
         page = body.decode("utf-8")
     except UnicodeDecodeError:
         return "invalid_utf8"
-    if any(marker not in page for marker in REQUIRED):
-        return "200_not_a_real_consent_form"
-    if re.search(r'<html\b[^>]*\blang="' + re.escape(language) + r'"', page) is None:
-        return "wrong_locale"
-    if language == "fa" and re.search(r'<html\b[^>]*\bdir="rtl"', page) is None:
-        return "farsi_not_rtl"
-    if any(x in page.lower() for x in ('tronweb.trx.sendtransaction', 'walletconnect', 'name="private_key"')):
+    # Block executable payment/credential capture even when outside the form.
+    if any(x in page.lower() for x in (
+        "tronweb.trx.sendtransaction", "walletconnect", 'name="private_key"'
+    )):
         return "forbidden_payment_or_key_field"
+    doc = ConsentFormDocument()
+    try:
+        doc.feed(page)
+        doc.close()
+    except (ValueError, AssertionError):
+        return "200_not_a_real_consent_form"
+    if len(doc.html_attrs) != 1 or doc.html_attrs[0].get("lang") != language:
+        return "wrong_locale"
+    if language == "fa" and doc.html_attrs[0].get("dir") != "rtl":
+        return "farsi_not_rtl"
+    if not any({"noindex", "nofollow"} <=
+               {flag.strip().lower() for flag in policy.split(",")}
+               for policy in doc.robots):
+        return "200_not_a_real_consent_form"
+    if (doc.bad_markup or doc.unsafe_embeds or doc.active is not None
+            or len(doc.forms) != 1):
+        return "200_not_a_real_consent_form"
+    form = doc.forms[0]
+    attrs = form["attrs"]
+    if (attrs.get("method", "").lower() != "post"
+            or attrs.get("action") != "/moj-prop-interest/"
+            or not form["closed"] or not form["submit"]
+            or not _has_exact_consent_fields(form["inputs"], language)):
+        return "200_not_a_real_consent_form"
     return "verified_get_form_no_payment_claim"
 
 
