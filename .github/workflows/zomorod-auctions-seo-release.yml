@@ -42,10 +42,19 @@ jobs:
           python3 -m py_compile scripts/zomorod_auctions_rfq_intake_deploy_20261117.py
           python3 -m pip install --quiet --disable-pip-version-check -r requirements.txt
           python3 -m pytest -q tests/test_zomorod_auction_directory_artifacts.py tests/test_zomorod_auctions_72_publication.py tests/test_zomorod_auctions_72_seo.py tests/test_zomorod_auction_proposal_intake.py
+          python3 - <<'PY' > "$RUNNER_TEMP/zomorod-rfq-all.js"
+          import pathlib,re
+          for n in range(350,422):
+              src=pathlib.Path(f"public/auctions/{n}/index.html").read_text(encoding="utf-8")
+              match=re.search(r'<script>\s*(\(function \(\) \{[\s\S]*?\}\)\(\);)\s*</script>',src)
+              assert match,f"RFQ JavaScript missing for {n}"
+              print(match.group(1))
+          PY
+          node --check "$RUNNER_TEMP/zomorod-rfq-all.js"
           echo AUCTIONS_RFQ_SOURCE_QA=passed
 
   seo-publish:
-    name: Publish only revised SEO assets via verified cPanel route
+    name: Publish 72 supplier-offer forms through verified cPanel route
     needs: seo-check
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit' }}
     runs-on: [self-hosted, factory-vps]
@@ -129,7 +138,7 @@ jobs:
           script="/home/zomorod2/.zm-auctions-rfq-intake-stage-$GITHUB_SHA/scripts/zomorod_auctions_rfq_intake_deploy_20261117.py"
           ssh -T -F "$d/config" saeit-cpanel "python3 '$script' apply '$GITHUB_SHA'"
 
-      - name: Verify live canonical, robots, breadcrumbs, related links, 72 routes and originals
+      - name: Verify all 72 form pages, original notices, sitemap and SEO
         shell: bash
         run: |
           set -euo pipefail
