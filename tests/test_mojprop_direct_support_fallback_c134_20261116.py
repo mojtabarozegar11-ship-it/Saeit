@@ -89,13 +89,19 @@ class CanonicalMojPropContactFallback(unittest.TestCase):
                 self.assertNotIn('form action="mailto:', data)
                 self.assertNotIn("fetch('mailto:", data)
 
-    def test_native_intake_not_replaced_with_fallible_email_transport(self):
-        for page in PUBLIC:
+    def test_plan1_native_consent_and_separate_legacy_intake_remain_available(self):
+        home = PUBLIC[0].read_text("utf-8")
+        home_links = links(home)
+        self.assertIn("/moj-prop-interest/form/", home_links)
+        self.assertIn("/moj-prop-interest/form/?lang=fa", home_links)
+        # Generic educational/other-service lead paths are not funded Plan 1.
+        self.assertNotIn("/moj-prop-intake/?format=html", home_links)
+        for page in PUBLIC[1:]:
             with self.subTest(page=page):
                 self.assertIn("/moj-prop-intake/?format=html", page.read_text("utf-8"))
-        home = PUBLIC[0].read_text("utf-8")
         self.assertIn('id="request-form"', home)
         self.assertIn('id="status-form"', home)
+        self.assertIn("No payment was taken", home)
 
     def test_starter30_fallback_never_asks_for_payment_or_credentials(self):
         detail = PUBLIC[2].read_text("utf-8")
