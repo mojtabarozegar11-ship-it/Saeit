@@ -13,6 +13,8 @@ from django.test import Client, TestCase, override_settings
 from prop_firm.models import (
     PropAccount, PropChallengeEnrollment, PropInterest, PropV141Interest,
 )
+from prop_firm.moj_prop_page import SUPPORTED_CODES
+from prop_firm.mojprop_v141_interest_i18n import interest_catalog
 from prop_firm.plan1_v141_lead_models import CONSENT_VERSION
 
 PATH = "/moj-prop-v141-interest/"
@@ -49,8 +51,11 @@ class V141LeadIntakeTests(TestCase):
             self.assertEqual(self.post().status_code, 404)
         self.assertFalse(PropV141Interest.objects.exists())
 
-    def test_get_rendered_is_bilingual_no_store_and_owner_domain(self):
-        for lang in ("en", "fa"):
+    def test_get_rendered_has_all_twenty_languages_no_store_and_owner_domain(self):
+        catalog = interest_catalog()
+        self.assertEqual(set(catalog), set(SUPPORTED_CODES))
+        self.assertEqual(len(catalog), 20)
+        for lang in SUPPORTED_CODES:
             with self.subTest(lang=lang):
                 response = self.client.get(
                     PATH + "?lang=" + lang, secure=True, HTTP_HOST=HOST)
@@ -62,10 +67,12 @@ class V141LeadIntakeTests(TestCase):
                 self.assertIn("no-store", response["Cache-Control"])
                 self.assertIn("Cookie", response.get("Vary", ""))
                 self.assertIn("frame-ancestors 'none'", response["Content-Security-Policy"])
-                if lang == "fa":
-                    self.assertContains(response, 'dir="rtl"')
-                else:
-                    self.assertContains(response, 'dir="ltr"')
+                self.assertContains(response, f'lang="{lang}" dir="{catalog[lang]["dir"]}"')
+                self.assertContains(response, catalog[lang]["title"])
+                self.assertContains(response, 'name="language" value="' + lang + '"')
+                self.assertEqual(response.content.decode("utf-8").count('class="lang-nav"'), 1)
+                for language in SUPPORTED_CODES:
+                    self.assertContains(response, 'href="/moj-prop-v141-interest/?lang=' + language + '"')
 
     def test_head_sends_no_form_body(self):
         response = self.client.head(PATH, secure=True, HTTP_HOST=HOST)
@@ -130,7 +137,7 @@ class V141LeadIntakeTests(TestCase):
             ("contact_consent", "no"),
             ("contact_consent", ""),
             ("email", "invalid-address"),
-            ("language", "ar"),
+            ("language", "zz"),
         ):
             with self.subTest(field=field, value=value):
                 self.assertEqual(
