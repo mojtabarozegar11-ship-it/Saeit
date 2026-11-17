@@ -94,9 +94,10 @@ class MojPropStarter30NativeAccessTests(TestCase):
         self.assertNotIn('<option value="digital">', html)
         self.assertNotIn('value="digital" selected', html)
 
-    def test_12_public_catalog_has_sku_bound_nojs_link(self):
+    def test_12_archived_educational_pages_retain_sku_bound_nojs_link(self):
+        # Do not advertise the educational SKU in the funded Plan1 homepage.
+        # Its separate catalog/detail remain addressable and SKU-scoped.
         for relative in (
-            "templates/moj-prop-v4/index.html",
             "templates/moj-prop-v4/catalog/index.html",
             "templates/moj-prop-v4/starter-30-trx/index.html",
         ):
@@ -106,6 +107,15 @@ class MojPropStarter30NativeAccessTests(TestCase):
                     '/moj-prop-intake/?format=html&amp;service=blueprint'
                     '&amp;package=starter-30-trx', html,
                 )
+                # Only the catalog links to the educational detail page.
+                if relative.endswith("catalog/index.html"):
+                    self.assertIn('href="/moj-prop/starter-30-trx/"', html)
+        home = (ROOT / "templates/moj-prop-v4/index.html").read_text("utf-8")
+        self.assertIn("MOJ-PROP-01", home)
+        self.assertNotIn('href="/moj-prop-interest/form/"', home)
+        self.assertIn('Dedicated Plan 1 form not live', home)
+        self.assertNotIn("MOJPROP-STARTER30", home)
+        self.assertNotIn("package=starter-30-trx", home)
 
     def _submit_from_real_rendered_form(self):
         page = self.fetch(STARTER_URL)

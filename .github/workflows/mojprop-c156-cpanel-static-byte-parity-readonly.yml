@@ -1,0 +1,65 @@
+name: MOJ PROP C156 owner cPanel exact public source identity - GET/DISK READ ONLY
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/mojprop_c156_cpanel_static_source_bytes_readonly.py'
+      - 'tests/test_mojprop_c156_cpanel_static_source_bytes_readonly.py'
+      - '.github/workflows/mojprop-c156-cpanel-static-byte-parity-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  owner-only-cpanel-static-source:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Pin exact reviewed read-only script and run synthetic protections
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_c156_cpanel_static_source_bytes_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c156_cpanel_static_source_bytes_readonly.py)" = "ecffdad46ef794c4df96f5d8154e2477404345c6"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_c156_cpanel_static_source_bytes_readonly
+      - name: Install existing pinned cPanel SSH identity (never log key)
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/mojprop-c156-cpanel"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+      - name: Compare two fixed owner static files; log only allowlisted classifications
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-c156-cpanel"
+          timeout 60s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c156_cpanel_static_source_bytes_readonly.py \
+            | python3 -c 'import sys,json; raw=sys.stdin.read(4000); prefix="MOJPROP_C156_CPANEL_STATIC_SOURCE_READONLY="; lines=[l for l in raw.splitlines() if l.startswith(prefix)]; assert len(lines)==1,"MISSING_AGGREGATE"; r=json.loads(lines[0][len(prefix):]); assert r["schema"]=="mojprop.cpanel.static.exact_source.readonly.c156.v2" and r["read_only"] is True and r["release_authorized"] is False and r["database_or_media_read"] is False and r["customer_records_accessed"] is False; assert set(r["pages"])=={"home","contact"}; permitted={"known_current_main","known_legacy_v4","approved_plan1_source","unreviewed_or_unavailable"}; assert all(z in permitted for z in r["pages"].values()); assert set(r["read_status"])=={"home","contact"}; allowed_reasons={"blocked_unsafe_root","blocked_unsafe_parent","blocked_unreadable_or_race","blocked_unsafe_file_metadata","missing_file","read_known_source","read_unreviewed_source"}; assert all(v in allowed_reasons for v in r["read_status"].values()); assert not set(r).intersection({"path","filename","sha","digest","source","customer","password"}); print(lines[0])'
+          echo 'C156_REAL_CPANEL_STATIC_BYTES_READ_ONLY=true'
+          echo 'C156_NO_DB_MEDIA_BUYER_POST_RELEASE_OR_PAYMENT=true'
+      - name: Wipe ephemeral SSH authentication material
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/mojprop-c156-cpanel"
+          if test -d "$work"; then rm -f "$work/host.key" "$work/known" "$work/config"; rmdir "$work" || true; fi

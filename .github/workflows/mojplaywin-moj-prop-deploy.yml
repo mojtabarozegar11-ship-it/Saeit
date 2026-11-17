@@ -7,6 +7,7 @@ on:
       - "scripts/update_mojplaywin_moj_prop_catalog.py"
       - "scripts/deploy_mojplaywin_moj_prop.py"
       - "templates/moj-prop-v4/**"
+      - "templates/moj-prop/contact/**"
       - "config/urls.py"
       - "core/admin.py"
       - "core/models.py"
@@ -26,6 +27,7 @@ on:
       - "scripts/update_mojplaywin_moj_prop_catalog.py"
       - "scripts/deploy_mojplaywin_moj_prop.py"
       - "templates/moj-prop-v4/**"
+      - "templates/moj-prop/contact/**"
       - "config/urls.py"
       - "core/admin.py"
       - "core/models.py"
@@ -78,7 +80,7 @@ jobs:
               Check().feed(html)
           home = (root / "index.html").read_text(encoding="utf-8")
           catalog = (root / "catalog/index.html").read_text(encoding="utf-8")
-          home_required = ["<title>Moj Prop", 'href="/moj-prop/catalog/"', '/moj-prop-intake/', "See service prices", "Send request for review"]
+          home_required = ["<title>Moj Prop", 'href="/moj-prop/catalog/"', '/moj-prop-intake/', "SOLE CURRENT PRODUCT", "MOJ-PROP-01", "Send request for review"]
           catalog_required = ["<title>Moj Prop Catalog", "From US$149", "From US$249"] + ["/moj-prop/samples/" + slug + "/" for slug in ("prop-blueprint", "gold-market-brief", "educational-signal", "commercial-gate-audit")]
           missing = [item for item in home_required + catalog_required if item not in home + catalog]
           if missing:
@@ -293,7 +295,8 @@ jobs:
           catalog = Path(sys.argv[2]).read_text(encoding="utf-8")
           assert "<title>Moj Prop" in home
           assert 'href="/moj-prop/catalog/"' in home
-          assert "See service prices" in home
+          assert "SOLE CURRENT PRODUCT" in home
+          assert "MOJ-PROP-01" in home
           assert "/moj-prop-intake/" in home
           assert "Send request for review" in home
           assert "<title>Moj Prop Catalog" in catalog

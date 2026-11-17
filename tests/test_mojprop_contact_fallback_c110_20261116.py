@@ -30,8 +30,12 @@ class MojPropManualSupportFallbackTests(unittest.TestCase):
         self.assertIn("/contact/", links.links)
         self.assertNotIn(MAILTO, links.links)
         self.assertNotIn("mailto:", page.lower())
-        self.assertIn("/moj-prop-intake/?format=html", links.links)
+        self.assertNotIn("/moj-prop-interest/form/", links.links)
+        self.assertNotIn("/moj-prop-interest/form/?lang=fa", links.links)
+        # An educational/general intake must not be the Plan 1 CTA.
+        self.assertNotIn("/moj-prop-intake/?format=html", links.links)
         self.assertIn("If the form is unavailable", page)
+        self.assertIn("Dedicated Plan 1 form not live", page)
         self.assertIn("No response time is guaranteed", page)
         self.assertNotIn("mojtaba.rozegar11@gmail.com", page)
         self.assertIn("never send passwords, wallet keys or payment", page)
@@ -42,9 +46,12 @@ class MojPropManualSupportFallbackTests(unittest.TestCase):
         links.feed(page)
         self.assertIn(MAILTO, links.links)
         self.assertNotIn("mojtaba.rozegar11@gmail.com", page)
-        self.assertIn("/moj-prop/#request", links.links)
+        self.assertNotIn("/moj-prop-interest/form/", links.links)
+        self.assertNotIn("/moj-prop/#request", links.links)
         self.assertIn("no payment details or private credentials", page)
-        self.assertIn("no response time is promised", page)
+        self.assertIn("Dedicated Plan 1 form not live", page)
+        self.assertIn("No guaranteed response time", page)
+        self.assertIn("not a verified CRM consent record", page)
 
     def test_main_push_cannot_auto_publish_updated_static_pages(self):
         workflow = (ROOT / ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text()

@@ -78,7 +78,18 @@ class MojPropV4ConversionTests(SimpleTestCase):
         self.assertIn("Requested educational plan: ", self.html)
         self.assertIn("selected-signal-plan", self.html)
 
+    def test_funded_plan1_contact_never_reuses_educational_billing_identity(self):
+        self.assertNotIn('href="/moj-prop-interest/form/"', self.html)
+        self.assertNotIn('href="/moj-prop-interest/form/?lang=fa"', self.html)
+        self.assertIn("MOJ-PROP-01", self.html)
+        self.assertIn("Dedicated Plan 1 form not live", self.html)
+        self.assertNotIn("MOJPROP-STARTER30", self.html)
+        self.assertNotIn('href="/moj-prop-intake/?format=html"', self.html)
+        self.assertIn("form not live", self.html.lower())
+        self.assertNotIn("tronweb.trx.sendtransaction", self.html.lower())
+
     def test_no_wallet_or_guaranteed_profit_path(self):
         self.assertIn("No payment was taken.", self.html)
-        self.assertIn("This form sends a request", self.html)
+        self.assertIn("request form and private receipt lookup have NOT been independently verified in production", self.html)
+        self.assertIn("do not assume a submitted request was saved", self.html)
         self.assertNotIn("localStorage.setItem('mojprop-last-request'", self.html)

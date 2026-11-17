@@ -55,8 +55,13 @@ class MojPropNoJsDbProofClosureTests(unittest.TestCase):
 
     def test_07_html_fallback_still_visible_on_main_commercial_landing(self):
         source = (ROOT / "templates/moj-prop-v4/index.html").read_text()
-        self.assertIn('href="/moj-prop-intake/?format=html"', source)
+        # The generic no-JS endpoint still has its own tests, but the
+        # advertised funded Plan 1 uses a distinct consent-only backend.
+        self.assertNotIn('href="/moj-prop-interest/form/"', source)
+        self.assertNotIn('href="/moj-prop-interest/form/?lang=fa"', source)
+        self.assertNotIn('href="/moj-prop-intake/?format=html"', source)
         self.assertIn("<noscript>", source)
+        self.assertIn("Dedicated Plan 1 form not live", source)
 
     def test_08_no_js_view_uses_real_existing_idempotent_crm_path(self):
         code = (ROOT / "core/mojprop_views.py").read_text()

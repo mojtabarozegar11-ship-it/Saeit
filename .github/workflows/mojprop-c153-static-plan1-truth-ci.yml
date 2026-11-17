@@ -1,0 +1,35 @@
+name: MOJ PROP C153 canonical prelaunch Plan1 static main source gate - NO DEPLOY
+on:
+  push:
+    branches: [fix/mojprop-c153-main-static-plan1-honest-unavailable-optin-20261117]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'templates/moj-prop-v4/index.html'
+      - 'templates/moj-prop/contact/index.html'
+      - '.github/workflows/mojplaywin-moj-prop-deploy.yml'
+      - 'tests/test_mojprop_c153_static_real_plan1_truth_20261117.py'
+      - '.github/workflows/mojprop-c153-static-plan1-truth-ci.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-c153-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  static-truth:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check Plan1 public product split, missing-form fallback and release hold
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_c153_static_real_plan1_truth_20261117
+          echo 'C153_STATIC_MAIN_SOURCE_PRELAUNCH_READY=true'
+          echo 'C153_MAIN_DEPLOYMENT_PAYMENT_OR_CUSTOMER_POST=false'

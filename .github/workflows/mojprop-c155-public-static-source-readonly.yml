@@ -1,0 +1,43 @@
+name: MOJ PROP C155 real public static byte identity (GET only - NO RELEASE)
+on:
+  push:
+    branches: [fix/mojprop-c153-main-static-plan1-honest-unavailable-optin-20261117]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/mojprop_c155_public_static_source_readonly.py'
+      - 'tests/test_mojprop_c155_public_static_source_readonly.py'
+      - '.github/workflows/mojprop-c155-public-static-source-readonly.yml'
+      - 'templates/moj-prop-v4/index.html'
+      - 'templates/moj-prop-v4/contact/index.html'
+      - 'templates/moj-prop-v4/baselines/**'
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-c155-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  known-static-bytes-only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify malicious and stale source variants using synthetic GETs
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_c155_public_static_source_readonly
+      - name: Check two exact public URLs, never send a form or payment
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_c155_public_static_source_readonly.py
+          echo 'C155_LIVE_STATIC_BYTES_MATCH_A_REVIEWED_SOURCE=true'
+          echo 'C155_FULL_DB_APP_MEDIA_RESTORE_AND_CUSTOMER_CONSENT_NOT_VERIFIED=true'
