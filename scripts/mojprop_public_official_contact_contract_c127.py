@@ -39,8 +39,39 @@ class _ContactDocument(HTMLParser):
         self.title_open = False
         self.title = ""
         self.words: list[str] = []
+        # Scriptless pages can still embed remote resources or fire JS events.
+        self.unsafe_features = 0
+        self.style_open = False
+        self.style_text: list[str] = []
 
     def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag in {
+            "iframe", "frame", "frameset", "img", "picture", "source",
+            "video", "audio", "object", "embed", "applet", "portal",
+            "svg", "math", "canvas", "template", "input", "button",
+            "select", "textarea", "base",
+        }:
+            self.unsafe_features += 1
+        # Event attributes, remote embeds and form submission can bypass
+        # basic <script>/<form> counting; reject them on this fallback.
+        if any(
+            name.startswith("on") or name in {
+                "src", "srcset", "data", "action", "formaction",
+                "integrity", "ping", "style", "background",
+            }
+            for name in attrs
+        ):
+            self.unsafe_features += 1
+        if tag == "meta" and "http-equiv" in attrs:
+            self.unsafe_features += 1
+        if tag == "link" and not (
+            attrs.get("rel", "").lower() == "canonical"
+            and attrs.get("href") == "https://mojplaywin.com/moj-prop/contact/"
+        ):
+            self.unsafe_features += 1
+        if tag == "style":
+            self.style_open = True
         if tag == "html":
             self.has_html = True
         if tag == "script":
@@ -53,13 +84,28 @@ class _ContactDocument(HTMLParser):
             self.links.append(dict(attrs).get("href", ""))
 
     def handle_endtag(self, tag):
+        if tag == "style":
+            self.style_open = False
         if tag == "title":
             self.title_open = False
 
     def handle_data(self, data):
+        if self.style_open:
+            self.style_text.append(data)
         self.words.append(data)
         if self.title_open:
             self.title += data
+
+
+def _passive_markup_only(page: _ContactDocument) -> bool:
+    """Only approved static HTML/CSS; no active embed, event or remote style."""
+    css = "".join(page.style_text).lower()
+    # The reviewed CSS needs none of these. Reject escaped CSS as well.
+    unsafe_css = any(part in css for part in (
+        "@import", "url(", "expression(", "behavior:", "-moz-binding",
+        "@font-face", "javascript:", "\\",
+    ))
+    return page.unsafe_features == 0 and not unsafe_css
 
 
 def _safe_contact_href(href: str) -> bool:
@@ -99,6 +145,7 @@ def classify_contact(raw: bytes) -> bool:
         parsed.has_html
         and parsed.scripts == 0
         and parsed.forms == 0
+        and _passive_markup_only(parsed)
         and "moj prop plan 1" in parsed.title.lower()
         and safe_links
         and _PLAN1_MAILTO in parsed.links
