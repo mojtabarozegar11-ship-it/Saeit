@@ -18,7 +18,7 @@ from core.procurement_notices import get_public_procurement_notices
 
 def ordered_notice_keys():
     grouped, _ = get_public_procurement_notices()
-    return [notice["id"] for i in range(36) for notice in (grouped["supply"][i], grouped["equipment"][i])]
+    return [notice["id"] for kind in ("supply", "equipment") for notice in grouped[kind]]
 
 
 class Command(BaseCommand):
