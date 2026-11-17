@@ -227,5 +227,28 @@ class SignedManifestTests(unittest.TestCase):
         self.assertFalse(x.checkout_authorized)
 
 
+    def test_31_fresh_signature_does_not_refresh_stale_simulator_snapshot(self):
+        doc=payload()
+        doc["snapshot"]["as_of"]=encode(NOW-timedelta(minutes=11))
+        raw,sig=build(doc)
+        with self.assertRaises(LedgerManifestRejected):
+            ingest(raw=raw,signature=sig)
+
+    def test_32_exact_ten_minute_simulator_age_boundary_allowed(self):
+        doc=payload()
+        doc["snapshot"]["as_of"]=encode(NOW-timedelta(minutes=10))
+        raw,sig=build(doc)
+        x=ingest(raw=raw,signature=sig)
+        self.assertEqual(x.sequence,1)
+        self.assertEqual(x.calculation.combined_unique_closed_positions,50)
+
+    def test_33_one_second_over_ten_minute_simulator_age_rejected(self):
+        doc=payload()
+        doc["snapshot"]["as_of"]=encode(NOW-timedelta(minutes=10,seconds=1))
+        raw,sig=build(doc)
+        with self.assertRaises(LedgerManifestRejected):
+            ingest(raw=raw,signature=sig)
+
+
 if __name__=="__main__":
     unittest.main()
