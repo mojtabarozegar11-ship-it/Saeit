@@ -20,7 +20,7 @@ class PropInterest(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=("status", "-created_at"), name="mp_interest_status")]
-    
+
     def _check_withdrawal_lock(self):
         # Never rewrite the email/provenance that an original consent covers:
         # otherwise withdrawal could be hidden by changing the old identity.
