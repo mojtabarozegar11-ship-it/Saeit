@@ -2,6 +2,8 @@ name: MOJ PROP C136 reconcile main and prop safely in DEVELOPMENT only
 on:
   push:
     branches: [ops/mojprop-c136-safe-main-canonical-merge-20261117]
+  pull_request:
+    branches: [feature/prop-firm-policy-v11-20261114]
 permissions:
   contents: write
 concurrency:
@@ -12,13 +14,15 @@ jobs:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
       github.actor == 'mojtabarozegar11-ship-it' &&
-      github.event_name == 'push'
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'ops/mojprop-c136-safe-main-canonical-merge-20261117'
     runs-on: ubuntu-latest
     timeout-minutes: 18
     env:
       C136_MAIN_SHA: '85f6c9e07d4dfd4bd634ffa8dd5162772b5c7310'
       C136_EXPECTED_PARENT_SHA: '1143cfbed5ab44cc15cb935a9f2325ecd03ccfab'
-      C136_PROP_SHA: ${{ github.sha }}
+      C136_PROP_SHA: ${{ github.event.pull_request.head.sha }}
       DEBUG: 'true'
       SECRET_KEY: 'c136-ephemeral-merge-testing-not-production'
       ALLOWED_HOSTS: 'localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com'
@@ -30,6 +34,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Fetch and pin two reviewed branch heads
         shell: bash
         run: |
