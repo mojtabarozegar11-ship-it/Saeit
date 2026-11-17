@@ -10,9 +10,8 @@ advertisement numbers; they are merely stable keys into this reservation ledger.
 """
 from django.core.management.base import BaseCommand, CommandError
 from django.db import IntegrityError, transaction
-from django.db.models import Max
 
-from command_center.models import PrivateAuction, PublicProcurementNumber
+from command_center.models import PublicProcurementNumber
 from core.procurement_notices import get_public_procurement_notices
 
 
@@ -58,13 +57,13 @@ class Command(BaseCommand):
                         )
                         return
                     raise CommandError("Partial previous reservation detected. Refusing to renumber or create duplicates.")
-                legacy_max = PrivateAuction.objects.aggregate(max_id=Max("id"))["max_id"] or 0
                 registered_max = max((item.serial_number for item in registrations), default=0)
-                start = max(highwater, legacy_max, registered_max) + 1
+                # Django row primary keys are NOT published auction serial numbers.
+                start = max(highwater, registered_max) + 1
                 end = start + len(keys) - 1
                 self.stdout.write(
-                    f"Verified operator high-watermark: {highwater}; private auction max PK: {legacy_max}; "
-                    f"reserved max: {registered_max}; proposed public range: {start}..{end}."
+                    f"Verified public-ad high-watermark: {highwater}; "
+                    f"reserved public-ad max: {registered_max}; proposed official range: {start}..{end}."
                 )
                 if not options["apply"]:
                     self.stdout.write("DRY RUN ONLY. No numbers have been reserved.")
