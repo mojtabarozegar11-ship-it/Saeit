@@ -40,6 +40,8 @@ class World20HTTPTests(SimpleTestCase):
                 self.assertIn(escape(metadata["headline"]), text)
                 self.assertIn(escape(metadata["intro"]), text)
                 self.assertIn(escape(metadata["payment_notice"]), text)
+                self.assertIn(escape(metadata["contact_label"]), text)
+                self.assertIn("mailto:mojplaywin@gmail.com?subject=MOJ-PROP-01%20information%20request", text)
                 self.assertIn(escape(metadata["fallback_notice"]), text)
                 self.assertIn('rel="canonical" href="https://mojplaywin.com/world/' + code + '/"', text)
                 self.assertEqual(text.count('rel="alternate" hreflang='), 22)
