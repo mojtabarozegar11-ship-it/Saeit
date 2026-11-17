@@ -11,6 +11,7 @@ from prop_firm.plan1_v141_native_checkout import (
     issue_private_foreign_invoice, confirm_native_trx_and_deliver,
     CheckoutRejected, RECEIVER, _addr_hex, _solidity_base_urls,
 )
+from prop_firm.plan1_v141_native_watcher import reconcile_pending_invoices, _candidates
 from prop_firm.plan1_v141_native_payment_models import (
     PropV141NativeOrder, PropV141NativeReceipt, PropGlobalTRXSettlement,
 )
@@ -309,3 +310,162 @@ class RealNativePaymentStorageTests(TestCase):
             with override_settings(MOJPROP_V141_TRON_SOLIDITY_PROVIDERS=sources):
                 with self.assertRaises(CheckoutRejected):
                     _solidity_base_urls()
+
+    def indexed_transfer(self, order, txid=TX_A, **changes):
+        body, receipt = self.proof(order, txid=txid)
+        row = dict(body, block_timestamp=receipt["blockTimeStamp"])
+        if "amount" in changes:
+            row["raw_data"]["contract"][0]["parameter"]["value"]["amount"] = changes["amount"]
+        if "recipient" in changes:
+            row["raw_data"]["contract"][0]["parameter"]["value"]["to_address"] = changes["recipient"]
+        return row
+
+    def test_watcher_discovers_and_delivers_with_two_solidified_nodes(self):
+        i = self.invoice()
+        body, receipt = self.proof(i)
+        row = dict(body, block_timestamp=receipt["blockTimeStamp"])
+        with patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
+                   return_value=("https://api.trongrid.io", "")), \\
+             patch("prop_firm.plan1_v141_native_watcher._get_page",
+                   return_value=([row], {})), \\
+             patch("prop_firm.plan1_v141_native_checkout._query_solidified",
+                   side_effect=self.mock_sources(body, receipt)), \\
+             patch("prop_firm.plan1_v141_native_checkout.timezone.now",
+                   return_value=i.issued_at + timedelta(seconds=10)):
+            result = reconcile_pending_invoices()
+        self.assertEqual(result["settled"], 1)
+        self.assertEqual(result["pending"], 0)
+        self.assertEqual(PropV141NativeReceipt.objects.count(), 1)
+        self.assertEqual(PropV141VirtualBook.objects.get().owner_id, self.buyer.pk)
+
+    def test_watcher_dry_run_is_nonpayable(self):
+        i = self.invoice()
+        body, receipt = self.proof(i)
+        row = dict(body, block_timestamp=receipt["blockTimeStamp"])
+        with patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
+                   return_value=("https://api.trongrid.io", "")), \\
+             patch("prop_firm.plan1_v141_native_watcher._get_page",
+                   return_value=([row], {})), \\
+             patch("prop_firm.plan1_v141_native_checkout._query_solidified") as verify:
+            result = reconcile_pending_invoices(dry_run=True)
+        self.assertEqual(result["candidate_txids"], 1)
+        self.assertEqual(result["settled"], 0)
+        self.assertEqual(result["pending"], 1)
+        verify.assert_not_called()
+        self.assertEqual(PropGlobalTRXSettlement.objects.count(), 0)
+
+    def test_watcher_ambiguous_invoice_from_same_wallet_never_credits(self):
+        i1 = self.invoice()
+        i2 = self.invoice()
+        row = self.indexed_transfer(i1)
+        with patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
+                   return_value=("https://api.trongrid.io", "")), \\
+             patch("prop_firm.plan1_v141_native_watcher._get_page",
+                   return_value=([row], {})):
+            result = reconcile_pending_invoices()
+        self.assertEqual(result["ambiguous"], 1)
+        self.assertEqual(result["settled"], 0)
+        self.assertEqual(PropV141NativeReceipt.objects.count(), 0)
+
+    def test_watcher_wrong_recipient_never_credits(self):
+        i = self.invoice()
+        row = self.indexed_transfer(i, recipient="41" + "b0" * 20)
+        with patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
+                   return_value=("https://api.trongrid.io", "")), \\
+             patch("prop_firm.plan1_v141_native_watcher._get_page",
+                   return_value=([row], {})):
+            result = reconcile_pending_invoices()
+        self.assertEqual(result["candidate_txids"], 0)
+        self.assertEqual(PropGlobalTRXSettlement.objects.count(), 0)
+
+    def test_watcher_wrong_native_trx_amount_never_credits(self):
+        i = self.invoice()
+        row = self.indexed_transfer(i, amount=30_000_001)
+        with patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
+                   return_value=("https://api.trongrid.io", "")), \\
+             patch("prop_firm.plan1_v141_native_watcher._get_page",
+                   return_value=([row], {})):
+            result = reconcile_pending_invoices()
+        self.assertEqual(result["settled"], 0)
+
+    def test_watcher_missing_full_page_cursor_fails_closed(self):
+        i = self.invoice()
+        row = self.indexed_transfer(i)
+        with patch("prop_firm.plan1_v141_native_watcher.PAGE_LIMIT", 1), \\
+             patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
+                   return_value=("https://api.trongrid.io", "")), \\
+             patch("prop_firm.plan1_v141_native_watcher._get_page",
+                   return_value=([row], {})):
+            with self.assertRaises(CheckoutRejected):
+                reconcile_pending_invoices()
+        self.assertEqual(PropV141NativeReceipt.objects.count(), 0)
+
+    def test_watcher_repeated_cursor_fails_closed(self):
+        i = self.invoice()
+        row = self.indexed_transfer(i)
+        with patch("prop_firm.plan1_v141_native_watcher.PAGE_LIMIT", 1), \\
+             patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
+                   return_value=("https://api.trongrid.io", "")), \\
+             patch("prop_firm.plan1_v141_native_watcher._get_page",
+                   return_value=([row], {"fingerprint": "abcabcabcabc"})):
+            with self.assertRaises(CheckoutRejected):
+                reconcile_pending_invoices()
+        self.assertEqual(PropV141NativeReceipt.objects.count(), 0)
+
+    def test_watcher_release_off_never_queries_indexer(self):
+        self.invoice()
+        with override_settings(MOJPROP_TRX_GLOBAL_LEDGER_RECONCILED=False), \\
+             patch("prop_firm.plan1_v141_native_watcher._get_page") as network:
+            with self.assertRaises(CheckoutRejected):
+                reconcile_pending_invoices()
+        network.assert_not_called()
+
+    @override_settings(ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "testserver"])
+    def test_private_invoice_only_current_authenticated_buyer(self):
+        i = self.invoice()
+        page = "/moj-prop-v141/payment/" + i.reference + "/"
+        self.client.force_login(self.buyer)
+        response = self.client.get(page, secure=True, HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "30.000000 TRX")
+        self.assertContains(response, RECEIVER)
+        self.assertContains(response, i.reference)
+        self.assertEqual(response.headers["X-Robots-Tag"], "noindex, nofollow, noarchive")
+        self.assertEqual(response.headers["Cache-Control"], "private, no-store, max-age=0")
+        self.client.force_login(self.operator)
+        self.assertEqual(self.client.get(page, secure=True,
+                                        HTTP_HOST="mojplaywin.com").status_code, 404)
+        self.client.force_login(self.buyer)
+        self.assertEqual(self.client.get(page, secure=False,
+                                        HTTP_HOST="mojplaywin.com").status_code, 404)
+        self.assertEqual(self.client.get(page + "?token=secret", secure=True,
+                                        HTTP_HOST="mojplaywin.com").status_code, 404)
+        self.assertEqual(self.client.post(page, secure=True,
+                                         HTTP_HOST="mojplaywin.com").status_code, 405)
+
+    @override_settings(ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "testserver"])
+    def test_private_invoice_no_wallet_if_release_off(self):
+        i = self.invoice()
+        self.client.force_login(self.buyer)
+        with override_settings(MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED=False):
+            response = self.client.get(
+                "/moj-prop-v141/payment/" + i.reference + "/",
+                secure=True, HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, RECEIVER)
+        self.assertNotContains(response, "30.000000 TRX")
+        self.assertContains(response, "Payment not available")
+
+    @override_settings(ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "testserver"])
+    def test_private_receipt_displays_only_verified_txid(self):
+        i = self.invoice()
+        body, receipt = self.proof(i)
+        self.checked_confirm(i, TX_A, body, receipt)
+        self.client.force_login(self.buyer)
+        response = self.client.get(
+            "/moj-prop-v141/payment/" + i.reference + "/",
+            secure=True, HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Payment confirmed")
+        self.assertContains(response, TX_A)
+        self.assertNotContains(response, RECEIVER)
