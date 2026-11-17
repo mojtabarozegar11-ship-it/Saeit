@@ -1,0 +1,29 @@
+name: MOJ PROP XAUUSD v1.3 offline risk tests
+
+on:
+  pull_request:
+    paths:
+      - 'prop_firm/xauusd_v13_preflight.py'
+      - 'tests/test_xauusd_v13_preflight.py'
+      - '.github/workflows/mojprop-xauusd-v13-offline-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-risk-only:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read-only checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Exact new v1.3 math and legacy v1.2 policy unit tests
+        run: python -m unittest tests.test_xauusd_v13_preflight tests.test_prop_firm_policy -v
