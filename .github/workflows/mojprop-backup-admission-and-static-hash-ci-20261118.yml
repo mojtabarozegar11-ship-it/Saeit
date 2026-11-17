@@ -6,6 +6,8 @@ on:
       - scripts/mojprop_backup_release_admission_readonly_20261118.py
       - tests/test_mojprop_backup_release_admission_readonly_20261118.py
       - .github/workflows/mojprop-backup-admission-and-static-hash-ci-20261118.yml
+      - scripts/mojprop_public_live_static_exact_guard_20261118.py
+      - tests/test_mojprop_public_live_static_exact_guard_20261118.py
   pull_request:
     branches: [fix/mojprop-main-first-prospect-truthful-contact-20261118]
 permissions: {contents: read}
@@ -52,6 +54,44 @@ jobs:
               'existing_private_backups_modified':False,
           },sort_keys=True))
           print('MOJPROP_10GIB_BACKUP_ADMISSION_SOURCE_CONTRACT=PASS')
+          PY
+      - name: Verify 24 immutable public static SHA and no payment release regressions
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
+            tests.test_mojprop_public_live_static_exact_guard_20261118
+      - name: Compare current HTTPS public GET bytes with authenticated historical cPanel original
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B - <<'PY'
+          import json
+          from urllib.request import Request,build_opener,HTTPRedirectHandler
+          from scripts.mojprop_public_live_static_exact_guard_20261118 import (
+              PUBLIC, classify, MAX_HTML_BYTES)
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          request=Request(PUBLIC,method='GET',headers={
+              'User-Agent':'MOJPROP-public-static-hash-owner-preflight/1.0',
+              'Accept':'text/html','Cache-Control':'no-cache'})
+          with build_opener(NoRedirect).open(request,timeout=18) as response:
+              status=response.status
+              content_type=response.headers.get('Content-Type','').split(';')[0].lower()
+              old=response.read(MAX_HTML_BYTES+1)
+          assert status==200 and content_type=='text/html', 'PUBLIC_SITE_UNEXPECTED_STATUS_OR_TYPE'
+          from pathlib import Path
+          candidate=Path('templates/moj-prop-v4/index.html').read_bytes()
+          report=classify(old,candidate)
+          print('MOJPROP_LIVE_PUBLIC_SHA_MATCH_AND_PROPOSED_SOURCE='+json.dumps({
+              'public_200_html':True,
+              'current_matches_prior_pinned_cpanel_sha':True,
+              'new_matches_exact_mainline_source_sha':True,
+              'old_bytes':report['old_public_html_verified_bytes'],
+              'new_bytes':report['new_repo_candidate_bytes'],
+              'live_deployment_approved':False,
+              'fresh_backup_restored':False,
+              'post_sent':False,
+              'sales_started':False
+          },sort_keys=True))
           PY
       - name: Declare no production mutations
         if: always()
