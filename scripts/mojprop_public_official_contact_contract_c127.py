@@ -146,7 +146,12 @@ def main(argv: list[str]) -> int:
     body = read_strict(Path(argv[1]), _MAX_HTML_BYTES)
     evidence = read_strict(Path(argv[2]), _MAX_TRANSPORT_BYTES)
     html_ok = bool(body is not None and classify_contact(body))
-    transport = parse_transport(evidence.decode("utf-8")) if evidence is not None else None
+    # Malformed byte streams are never usable HTTP proof; never surface raw
+    # response data, crash a scheduled audit, or claim delivery on decode error.
+    try:
+        transport = parse_transport(evidence.decode("utf-8")) if evidence is not None else None
+    except UnicodeError:
+        transport = None
     transport_ok = classify_transport(transport)
     gate = "GET_ONLY_SUPPORT_PAGE_PRESENT_NOT_DELIVERY" if html_ok and transport_ok else "BLOCKED"
     print("PUBLIC_MOJPROP_OFFICIAL_CONTACT_HTML_CONTRACT=" + ("PASS" if html_ok else "FAIL"))
