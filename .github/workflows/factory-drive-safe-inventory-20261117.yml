@@ -230,6 +230,50 @@ jobs:
                       except (OSError,ValueError):continue
               return {'status':'complete','records':sorted(rows,key=lambda v:v['path_hash'])}
           data['stale_file_safety']=stale_file_safety(backup)
+          # One bounded read-only SQLite consistency check for the lone valid October legacy snapshot.
+          # Never open a zero-prefix/sidecar-bearing candidate with SQLite.
+          def check_legacy_snapshot(base):
+              results=[]
+              child='''import sqlite3,sys
+p=sys.argv[1]
+c=sqlite3.connect("file:"+p+"?mode=ro&immutable=1",uri=True,timeout=5)
+try:
+    c.execute("PRAGMA query_only=ON")
+    row=c.execute("PRAGMA quick_check").fetchone()
+    print("ok" if row and row[0]=="ok" else "failed",flush=True)
+finally:c.close()
+'''
+              for d,dirs,names in os.walk(base,followlinks=False):
+                  if len(pathlib.Path(d).relative_to(base).parts)>4:dirs[:]=[];continue
+                  dirs[:]=[n for n in dirs if not (pathlib.Path(d)/n).is_symlink()]
+                  for name in names:
+                      if not name.endswith('.sqlite3'):continue
+                      p=pathlib.Path(d)/name
+                      try:
+                          pre=p.lstat()
+                          if not stat.S_ISREG(pre.st_mode) or pre.st_nlink!=1:continue
+                          if pre.st_mtime>datetime.datetime(2026,10,29,tzinfo=datetime.timezone.utc).timestamp():continue
+                          short=hashlib.sha256(p.relative_to(base).as_posix().encode()).hexdigest()[:16]
+                          with p.open('rb') as src:
+                              if src.read(16)!=b'SQLite format 3'+bytes([0]):
+                                  results.append({'path_hash':short,'result':'not_sqlite_magic','bytes':pre.st_size})
+                                  continue
+                          if any(pathlib.Path(str(p)+ext).exists() for ext in ('-wal','-shm','-journal')):
+                              results.append({'path_hash':short,'result':'sidecars_present','bytes':pre.st_size})
+                              continue
+                          try:
+                              cp=subprocess.run(['nice','-n','19','python3','-B','-c',child,p.as_posix()],
+                                                capture_output=True,text=True,timeout=90,check=False,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
+                              result='quick_check_ok' if cp.returncode==0 and cp.stdout.strip()=='ok' else 'quick_check_failed_or_error'
+                          except subprocess.TimeoutExpired:
+                              result='quick_check_timeout'
+                          after=p.lstat()
+                          if (pre.st_ino,pre.st_size,pre.st_mtime_ns)!=(after.st_ino,after.st_size,after.st_mtime_ns):
+                              result='changed_during_check'
+                          results.append({'path_hash':short,'result':result,'bytes':pre.st_size})
+                      except OSError:continue
+              return {'read_only':True,'records':results}
+          data['october_sqlite_checks']=check_legacy_snapshot(backup)
           print('MOJ_FACTORY_BACKUP_INVENTORY='+json.dumps(data,sort_keys=True))
           PY
           echo MOJ_FACTORY_READONLY_AUDIT_COMPLETE=true
