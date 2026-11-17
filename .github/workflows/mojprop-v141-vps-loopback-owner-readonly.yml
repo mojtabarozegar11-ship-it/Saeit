@@ -38,7 +38,7 @@ jobs:
             -o BatchMode=yes -o IdentitiesOnly=yes -o ForwardAgent=no \
             -o ConnectTimeout=7 githubops@127.0.0.1 \
             'test "$(id -un)" = githubops && PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'PY'
-          import json,os,re,stat
+          import json,os,re,stat,time
           from pathlib import Path
           h=Path.home();root=h/'.private-mojplaywin-offhost-backups'
           key=h/'.config'/'mojplaywin-backup-recovery'/'recovery-key.bin'
@@ -60,9 +60,54 @@ jobs:
                   complete=count<=3000
               except OSError:pass
           expected={('mysql','gpg'),('files','gpg'),('mysql','manifest.json'),('files','manifest.json')}
+          manifest_pairs=[]
+          expected={('mysql','gpg'),('files','gpg'),('mysql','manifest.json'),('files','manifest.json')}
+          for stem,parts in sets.items():
+              if not expected<=parts:continue
+              verified=True
+              total_cipher=0
+              oldest=time.time()
+              for kind in ('mysql','files'):
+                  archive=root/(stem+'_'+kind+'_gpgv2.gpg')
+                  manifest=root/(stem+'_'+kind+'_gpgv2.manifest.json')
+                  if not private(archive) or not private(manifest):
+                      verified=False;break
+                  try:
+                      if manifest.stat().st_size>32768:
+                          verified=False;break
+                      record=json.loads(manifest.read_text(encoding='utf-8'))
+                      maxbytes=48*1024**3 if kind=='mysql' else 12*1024**3
+                      if not all((
+                          record.get('kind')==kind,
+                          record.get('format')=='OpenPGP-AES256-GPGv2',
+                          record.get('backup_set_stem')==stem,
+                          record.get('explicit_backup_set_id') is True,
+                          record.get('source_completion_footer_verified') is True,
+                          record.get('ciphertext_roundtrip_integrity_verified') is True,
+                          record.get('archive_name')==archive.name,
+                          record.get('encrypted_bytes')==archive.stat().st_size,
+                          type(record.get('plaintext_bytes')) is int,
+                          1024<=record.get('plaintext_bytes',0)<=maxbytes,
+                          isinstance(record.get('plaintext_sha256'),str),
+                          re.fullmatch('[0-9a-f]{64}',record.get('plaintext_sha256','')) is not None,
+                          record.get('release_permitted') is False
+                      )):
+                          verified=False;break
+                      total_cipher+=archive.stat().st_size
+                      oldest=min(oldest,archive.stat().st_mtime,manifest.stat().st_mtime)
+                  except (OSError,ValueError,TypeError):
+                      verified=False;break
+              if verified:
+                  manifest_pairs.append({'age_hours':round(max(0,time.time()-oldest)/3600,2),
+                                         'total_cipher_bytes':total_cipher})
+          fresh=sum(0<=x['age_hours']<=72 for x in manifest_pairs)
           print('MOJPROP_PRIVATE_VPS_BACKUP_METADATA='+json.dumps({
             'private_root_accessible':private(root,True),'inventory_complete':complete,
             'file_sets_with_four_parts':sum(expected<=x for x in sets.values()),
+            'manifest_consistent_sql_and_files_pair_count':len(manifest_pairs),
+            'fresh_manifest_consistent_pair_count_last72h':fresh,
+            'newest_valid_pair_age_hours':min((x['age_hours'] for x in manifest_pairs),default=None),
+            'maximum_valid_pair_total_encrypted_bytes':max((x['total_cipher_bytes'] for x in manifest_pairs),default=None),
             'candidate_set_count':len(sets),'partial_files_count':partial,
             'private_32byte_recovery_key_metadata':private(key) and key.stat().st_size==32 if private(key) else False,
             'backup_content_or_key_bytes_read':False,'isolated_restore_proven':False,
