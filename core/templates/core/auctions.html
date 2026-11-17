@@ -1,23 +1,52 @@
 {% extends "base.html" %}
-{% load static %}
-{% block title %}مزایدات شرکت — Zomorodmelal{% endblock %}
-{% block meta_description %}اطلاعیه مزایدات شرکت کشت و صنعت زمرد ملل؛ فرصت‌ها تنها پس از ثبت و انتشار رسمی در این صفحه نمایش داده می‌شوند.{% endblock %}
+{% block title %}۷۲ فراخوان تأمین و تجهیزات صنعتی — زمرد ملل{% endblock %}
+{% block meta_description %}۳۶ فراخوان تأمین کالا و ۳۶ فراخوان خرید تجهیزات صنعتی، با کد مستقل و بدون مهلت ثابت.{% endblock %}
 {% block body_class %}page-auctions commerce-page{% endblock %}
 {% block content %}
-<div class="commerce-page auctions-page">
-  <section class="auctions-hero"><span>COMPANY AUCTIONS · OFFICIAL NOTICES</span><h1>مزایدات شرکت</h1><p>فرصت‌های مزایده فقط پس از ثبت و انتشار رسمی در این بخش نمایش داده می‌شوند.</p></section>
-  <section class="auctions-list" aria-labelledby="auctions-title">
-    <header><span>OFFICIAL OPPORTUNITIES</span><h2 id="auctions-title">فرصت‌های منتشرشده</h2></header>
-    {% if auctions %}<div class="auction-grid">{% for auction in auctions %}<article><h3>{{ auction.title }}</h3></article>{% endfor %}</div>
-    {% else %}
-      <div class="auction-empty" role="status">
-        <h3>در حال حاضر اطلاعیهٔ مزایدهٔ عمومی و فعال نداریم</h3>
-        <p>این صفحه فقط فرصت‌هایی را نمایش می‌دهد که رسماً برای عموم منتشر شده باشند. پرونده‌ها یا معاملات خصوصی در این ویترین عمومی نمایش داده نمی‌شوند.</p>
-        <p>برای استعلام شرایط همکاری یا ثبت درخواست دریافت اطلاعات دربارهٔ فرصت‌های آتی، موضوع و مشخصات خود را از مسیر رسمی بفرستید.</p>
-        <a class="auction-inquiry" href="/contact/">ثبت درخواست استعلام ↗</a>
-      </div>
-    {% endif %}
+<style>
+.zm-procurement{max-width:1220px;margin:0 auto;padding:clamp(1rem,3vw,2rem);line-height:1.95}
+.zm-procurement h1,.zm-procurement h2,.zm-procurement h3{line-height:1.5}
+.zm-proc-hero,.zm-proc-terms,.zm-proc-section{margin-block:1.1rem;padding:clamp(1rem,2vw,1.8rem);border:1px solid #aa935c;border-radius:14px}
+.zm-proc-nav{display:flex;flex-wrap:wrap;gap:.7rem;margin-block:1rem}
+.zm-proc-nav a{display:inline-block;padding:.55rem .9rem;border:1px solid #aa935c;border-radius:8px;color:inherit}
+.zm-proc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:1rem;margin-block:1rem}
+.zm-proc-card{padding:1.1rem;border:1px solid #9c9c9c;border-radius:12px;overflow-wrap:anywhere}
+.zm-proc-card-head{display:flex;gap:.5rem;justify-content:space-between;flex-wrap:wrap}
+.zm-proc-code{font-family:monospace;direction:ltr;unicode-bidi:isolate;font-weight:700}
+.zm-proc-status{font-size:.85em;opacity:.85}
+.zm-proc-card summary{cursor:pointer;font-weight:700}
+.zm-proc-card ul,.zm-proc-terms ul{padding-inline-start:1.3rem}
+.zm-proc-card .auction-inquiry{display:inline-block;margin-top:.4rem}
+</style>
+<div class="zm-procurement" dir="rtl">
+  <header class="zm-proc-hero">
+    <span>شرکت کشت و صنعت زمرد ملل · فراخوان دریافت پیشنهاد</span>
+    <h1>۷۲ فراخوان تأمین کالا و خرید تجهیزات تولیدی</h1>
+    <p>۳۶ فراخوان برای شناسایی تأمین‌کنندگان محصولات و ۳۶ فراخوان برای دریافت پیشنهاد خرید ماشین‌آلات صنعتی مرتبط با همان گروه‌ها.</p>
+    <p><strong>توضیح حقوقی:</strong> این آگهی‌ها مزایده فروش نیستند؛ فراخوان تأمین، استعلام بها و درخواست پیشنهاد فنی و مالی خرید هستند. هیچ تاریخ یا مهلت ثابت برای ارائه پیشنهاد تعیین نشده است.</p>
+    <nav class="zm-proc-nav" aria-label="دسترسی سریع"><a href="#proc-supply">۳۶ آگهی تأمین کالا</a><a href="#proc-equipment">۳۶ آگهی خرید تجهیزات صنعتی</a><a href="#proc-terms">شرایط شرکت</a></nav>
+  </header>
+  <section class="zm-proc-terms" id="proc-terms" aria-labelledby="proc-terms-heading">
+    <h2 id="proc-terms-heading">شرایط عمومی فراخوان‌ها</h2>
+    <p>{{ procurement_policy.public_terms }}</p>
+    <p>در هر پیشنهاد، کد مستقل آگهی ذکر شود. دعوت به ارائه پیشنهاد تا اطلاع ثانوی برقرار است و شرکت می‌تواند پس از اطلاع‌رسانی دریافت پیشنهاد را متوقف کند.</p>
+    <details><summary>مدارک پیشنهادی تأمین کالا</summary><ul>{% for requirement in procurement_policy.common_supply_documents %}<li>{{ requirement }}</li>{% endfor %}</ul><p>معیارهای ارزیابی: {% for item in procurement_policy.evaluation_supply %}{{ item }}{% if not forloop.last %}؛ {% endif %}{% endfor %}</p></details>
+    <details><summary>مدارک پیشنهادی تجهیزات صنعتی</summary><ul>{% for requirement in procurement_policy.common_equipment_documents %}<li>{{ requirement }}</li>{% endfor %}</ul><p>معیارهای ارزیابی: {% for item in procurement_policy.evaluation_equipment %}{{ item }}{% if not forloop.last %}؛ {% endif %}{% endfor %}</p></details>
   </section>
+  <section class="zm-proc-section" id="proc-supply" aria-labelledby="proc-supply-heading">
+    <h2 id="proc-supply-heading">۳۶ فراخوان تأمین مستقیم کالا و محصولات</h2>
+    <p>تولیدکنندگان، کشاورزان، کارخانه‌ها و تأمین‌کنندگان واجد شرایط می‌توانند ظرفیت تأمین و پیشنهاد فنی و مالی خود را معرفی کنند.</p>
+    <div class="zm-proc-grid">{% for notice in supply_notices %}{% include "core/includes/procurement_notice_card.html" %}{% empty %}<p>فراخوانی برای این بخش ثبت نشده است.</p>{% endfor %}</div>
+  </section>
+  <section class="zm-proc-section" id="proc-equipment" aria-labelledby="proc-equipment-heading">
+    <h2 id="proc-equipment-heading">۳۶ فراخوان خرید ماشین‌آلات و تجهیز کارگاه‌ها</h2>
+    <p>تولیدکنندگان و نمایندگان معتبر ماشین‌آلات می‌توانند پیشنهاد فنی و مالی ارائه دهند. ظرفیت، مقدار خرید، جانمایی و محل نصب پس از ارزیابی و صرفاً در قرارداد مشخص می‌شود.</p>
+    <div class="zm-proc-grid">{% for notice in equipment_notices %}{% include "core/includes/procurement_notice_card.html" %}{% empty %}<p>فراخوانی برای این بخش ثبت نشده است.</p>{% endfor %}</div>
+  </section>
+  <footer class="zm-proc-terms">
+    <p><strong>بدون تعهد مالی:</strong> انتشار فراخوان به معنای ثبت سفارش یا پرداخت نیست؛ تصمیم نهایی مستلزم ارزیابی، مجوزهای لازم و قرارداد مکتوب است. پرونده‌های خصوصی مزایده به این صفحه منتقل نشده‌اند.</p>
+    <a class="auction-inquiry" href="{{ procurement_policy.channel }}">ارتباط رسمی با شرکت برای ارسال پیشنهاد</a>
+  </footer>
 </div>
 {% include "core/includes/zomorod_editorial_20261016.html" %}
 {% endblock %}
