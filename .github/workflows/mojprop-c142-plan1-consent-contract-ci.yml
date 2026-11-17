@@ -1,0 +1,63 @@
+name: MOJ PROP C142 exact Plan1 consent vs legacy intake regression (NO RELEASE)
+on:
+  push:
+    branches: [fix/mojprop-c142-plan1-consent-regression-parity-20261117]
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+    paths:
+      - '.github/workflows/mojprop-c142-plan1-consent-contract-ci.yml'
+      - 'core/test_mojprop_nojs_current_main_c100_20261116.py'
+      - 'tests/test_mojprop_contact_fallback_c110_20261116.py'
+      - 'tests/test_mojprop_direct_support_fallback_c134_20261116.py'
+      - 'tests/test_mojprop_nojs_signed_db_reconciliation_c102.py'
+      - 'tests/test_moj_prop_site.py'
+      - 'tests/test_mojprop_v4_buyer_funnel_20261115.py'
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-c142-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  prove-consent-only-no-purchase:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DEBUG: 'true'
+      SECRET_KEY: c142-synthetic-regression-only
+      ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install pinned project requirements
+        run: python3 -m pip install -r requirements.txt
+      - name: Fail closed on bad Django configuration or migration drift
+        run: |
+          set -euo pipefail
+          python3 manage.py check
+          python3 manage.py makemigrations --check --dry-run
+      - name: Build test-only hashed static template manifest
+        run: python3 manage.py collectstatic --noinput
+      - name: Run all six changed real Django and source tests
+        run: |
+          set -euo pipefail
+          python3 -m pytest -q \
+            core/test_mojprop_nojs_current_main_c100_20261116.py \
+            tests/test_mojprop_contact_fallback_c110_20261116.py \
+            tests/test_mojprop_direct_support_fallback_c134_20261116.py \
+            tests/test_mojprop_nojs_signed_db_reconciliation_c102.py \
+            tests/test_moj_prop_site.py \
+            tests/test_mojprop_v4_buyer_funnel_20261115.py
+          echo 'C142_EXACT_PLAN1_CONSENT_CSRF_AND_ZERO_PAID_SIDE_EFFECTS=true'
+          echo 'C142_NO_LIVE_CUSTOMER_OR_FUNDED_ACCOUNT_PROOF=true'
+          echo 'C142_PRODUCTION_DEPLOYMENT_AND_TRX_PAYMENT=false'
