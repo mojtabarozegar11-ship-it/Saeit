@@ -194,3 +194,21 @@ class V141LeadIntakeTests(TestCase):
         self.assertIn("class PropV141InterestAdmin(PropInterestAdmin)", source)
         self.assertIn("def has_add_permission", source)
         self.assertIn("def has_delete_permission", source)
+
+    def test_all_20_languages_are_accepted_with_separate_consent_provenance(self):
+        for code in SUPPORTED_CODES:
+            cache.clear()  # Each genuine prospect originates an independent visit.
+            with self.subTest(code=code):
+                address = "prospect-" + code + "@farmco.org"
+                result = self.post(dict(VALID, email=address, language=code))
+                self.assertEqual(result.status_code, 202)
+                self.assertIn(interest_catalog()[code]["received"],
+                              result.content.decode("utf-8"))
+                row = PropV141Interest.objects.get(email=address)
+                self.assertEqual(row.source_language, code)
+                self.assertEqual(row.consent_version, CONSENT_VERSION)
+        self.assertEqual(PropV141Interest.objects.count(), 20)
+        self.assertEqual(PropInterest.objects.count(), 0)
+        self.assertEqual(PropAccount.objects.count(), 0)
+        self.assertEqual(PropChallengeEnrollment.objects.count(), 0)
+        self.assertEqual(len(mail.outbox), 0)
