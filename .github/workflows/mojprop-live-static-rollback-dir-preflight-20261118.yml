@@ -100,17 +100,22 @@ jobs:
                        timeout=18,check=False)
                   if p.returncode==0 and 0<len(p.stdout)<20000:
                       j=json.loads(p.stdout.decode('utf-8'))
-                      data=j.get('result',{}).get('data')
-                      if type(data) is dict:
+                      response=j.get('result',{})
+                      data=response.get('data')
+                      if response.get('status') in (1,'1') and type(data) is dict:
                           def whole(v):
-                              if type(v) in (int,float) and 0<=v<10**14:return int(v)
+                              if type(v) is int and 0<=v<10**14:return v
+                              if type(v) is str and v.isdigit():return int(v)
                               return None
-                          # Source UAPI schema might differ: keep unproven instead of guessing.
-                          quota['uapi_parse_success']=True
-                          for key,name in [('total_bytes','owner_quota_bytes'),
-                                           ('used_bytes','owner_used_bytes'),
-                                           ('remaining_bytes','owner_remaining_bytes')]:
-                              quota[name]=whole(data.get(key))
+                          # Verified cPanel Quota API fields on previous live run:
+                          # data.bytes_used and data.byte_limit (NOT used_bytes/total_bytes).
+                          quota['owner_quota_bytes']=whole(data.get('byte_limit'))
+                          quota['owner_used_bytes']=whole(data.get('bytes_used'))
+                          limit=quota['owner_quota_bytes']
+                          used=quota['owner_used_bytes']
+                          if limit is not None and used is not None and 0<=used<=limit:
+                              quota['owner_remaining_bytes']=limit-used
+                              quota['uapi_parse_success']=True
           except (OSError,ValueError,UnicodeError,subprocess.TimeoutExpired):pass
           report={'schema':'MOJPROP_STATIC_CPANEL_ROLLBACK_READONLY_20261118',
               'owner_euid_authenticated':uid==os.stat(home).st_uid,
