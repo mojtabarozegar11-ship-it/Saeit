@@ -19,9 +19,11 @@ from .plan1_buyer_no_social_amendment import (
     buyer_no_social_post_amendment, current_plan1_buyer_copy,
 )
 from .plan1_orm_consent_review import VerifiedPrivateHandoff
+from .plan1_owner_account_buyer_copy import current_owner_account_buyer_copy
+from .plan1_owner_held_litefinance_policy import owner_held_real_account_policy, VERSION
 
-SCHEMA = "mojprop.plan1.waived-post-demo-buyer-contract-provenance.v1"
-PURPOSE = "buyer_specific_terms_and_no_social_demo_clarification_private"
+SCHEMA = "mojprop.plan1.waived-post-demo-existing-account-crypto-profit-contract.v2"
+PURPOSE = "buyer_specific_demo_and_existing_broker_account_crypto_profit_terms_private"
 PROOF = re.compile(r"[0-9a-f]{64}\Z")
 REVIEW_REF = re.compile(r"PROP1-REVIEW-[A-F0-9]{32}\Z")
 MIN_EPOCH = 1735689600
@@ -31,11 +33,24 @@ REQUIRED_FIELDS = frozenset((
     "seller_ref", "prior_review_ref", "sku", "historical_terms_version", "amendment_version",
     "prior_contract_pdf_sha256", "accepted_buyer_contract_pdf_sha256",
     "buyer_acceptance_proof_sha256", "current_copy_sha256",
-    "no_post_waiver_sha256", "fee_native_sun", "network",
+    "no_post_waiver_sha256", "prior_no_social_demo_copy_sha256",
+    "owner_account_amendment_version", "owner_account_amendment_sha256",
+    "fee_native_sun", "network",
     "demo_phase_count", "no_real_account_during_evaluation",
     "live_broker_only_after_both_verified_passes",
     "no_buyer_instagram_or_facebook_post", "posting_is_not_pass_condition",
-    "legal_purchase_screening_still_applies", "accepted_at_sec",
+    "legal_purchase_screening_still_applies",
+    "buyer_principal_transfer_forbidden",
+    "existing_owner_account_only",
+    "broker_must_authorize_delegated_trading",
+    "owner_credentials_not_shared",
+    "realized_net_period_profit_only",
+    "profits_split_70_trader_30_organizer",
+    "actual_crypto_transfer_fee_deducted_once",
+    "broker_to_buyer_direct_withdrawal_forbidden",
+    "treasury_to_buyer_verified_crypto_payment_separate",
+    "payout_kyc_sanctions_and_beneficiary_checks_required",
+    "accepted_at_sec",
     "expires_at_sec",
 ))
 
@@ -52,6 +67,7 @@ class RevisedBuyerTermsReview:
     revised_buyer_document_digest: str
     waiver_digest: str
     current_disclosure_digest: str
+    owner_broker_amendment_digest: str
     acceptance_reference_digest: str
     historical_terms_version: str = TERMS_VERSION
     status: str = "PRIVATE_BUYER_TERMS_PROVENANCE_REVIEW_ONLY"
@@ -77,7 +93,8 @@ def bind_revised_buyer_terms(
 
     Never construct a receipt/invoice from this output. Trusted proof digests
     must come from access-controlled real acceptance evidence, not user JSON.
-    No old 1-post/platform source clause can be passed as current acceptance.
+    Neither old 1-post/platform terms NOR promises of a buyer-owned real
+    brokerage account can be passed as current acceptance.
     """
     h = existing_private_handoff
     if (type(h) is not VerifiedPrivateHandoff
@@ -120,7 +137,9 @@ def bind_revised_buyer_terms(
             or type(acceptance_hmac_hex) is not str
             or PROOF.fullmatch(acceptance_hmac_hex) is None):
         raise Plan1OrderGateClosed("exact signed buyer-specific accepted terms required")
-    copy = current_plan1_buyer_copy()
+    prior_copy = current_plan1_buyer_copy()
+    copy = current_owner_account_buyer_copy()
+    owner_policy = owner_held_real_account_policy()
     waiver = buyer_no_social_post_amendment()
     expected = {
         "schema": SCHEMA, "purpose": PURPOSE,
@@ -128,18 +147,31 @@ def bind_revised_buyer_terms(
         "buyer_ref": h.buyer_ref, "seller_ref": h.seller_ref,
         "prior_review_ref": h.private_review_ref,
         "sku": SKU, "historical_terms_version": TERMS_VERSION,
-        "amendment_version": waiver.amendment_version,
+        "amendment_version": VERSION,
         "prior_contract_pdf_sha256": h.contract_pdf_sha256,
         "accepted_buyer_contract_pdf_sha256": expected_accepted_pdf_sha256,
         "buyer_acceptance_proof_sha256": expected_buyer_signature_proof_sha256,
         "current_copy_sha256": copy.digest_sha256,
         "no_post_waiver_sha256": waiver.digest_sha256,
+        "prior_no_social_demo_copy_sha256": prior_copy.digest_sha256,
+        "owner_account_amendment_version": VERSION,
+        "owner_account_amendment_sha256": owner_policy.digest_sha256,
         "fee_native_sun": 30_000_000, "network": "TRON-mainnet",
         "demo_phase_count": 2, "no_real_account_during_evaluation": True,
         "live_broker_only_after_both_verified_passes": True,
         "no_buyer_instagram_or_facebook_post": True,
         "posting_is_not_pass_condition": True,
         "legal_purchase_screening_still_applies": True,
+        "buyer_principal_transfer_forbidden": True,
+        "existing_owner_account_only": True,
+        "broker_must_authorize_delegated_trading": True,
+        "owner_credentials_not_shared": True,
+        "realized_net_period_profit_only": True,
+        "profits_split_70_trader_30_organizer": True,
+        "actual_crypto_transfer_fee_deducted_once": True,
+        "broker_to_buyer_direct_withdrawal_forbidden": True,
+        "treasury_to_buyer_verified_crypto_payment_separate": True,
+        "payout_kyc_sanctions_and_beneficiary_checks_required": True,
     }
     for field, value in expected.items():
         if (type(signed_acceptance_packet[field]) is not type(value)
@@ -167,5 +199,6 @@ def bind_revised_buyer_terms(
         revised_buyer_document_digest=expected_accepted_pdf_sha256,
         waiver_digest=waiver.digest_sha256,
         current_disclosure_digest=copy.digest_sha256,
+        owner_broker_amendment_digest=owner_policy.digest_sha256,
         acceptance_reference_digest=sha256(body).hexdigest(),
     )
