@@ -111,9 +111,9 @@ jobs:
           python3 -B -m py_compile scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly -q
           test ! -L scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py
-          test "$(git hash-object -- scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py)" = "bc5bb38039cc804a9b001241f613f01dbc05addc"
+          test "$(git hash-object -- scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py)" = "e219233ed6525e861bbcc5b3c0ef8d3109e77151"
           test ! -L tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py
-          test "$(git hash-object -- tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py)" = "a0aaf26a134e9374f5be7c102141c3934ec99836"
+          test "$(git hash-object -- tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py)" = "20a5f0a6cf4555780257d2f613f71d122fa04e90"
           test ! -L scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
           test "$(git hash-object -- scripts/mojprop_c146_live_plan1_runtime_source_readonly.py)" = "198d3c2b4f8de90504002f95148c370604716cb9"
           test ! -L tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py
