@@ -107,7 +107,9 @@ class MojPropStarter30NativeAccessTests(TestCase):
                     '/moj-prop-intake/?format=html&amp;service=blueprint'
                     '&amp;package=starter-30-trx', html,
                 )
-                self.assertIn('href="/moj-prop/starter-30-trx/"', html)
+                # Only the catalog links to the educational detail page.
+                if relative.endswith("catalog/index.html"):
+                    self.assertIn('href="/moj-prop/starter-30-trx/"', html)
         home = (ROOT / "templates/moj-prop-v4/index.html").read_text("utf-8")
         self.assertIn("MOJ-PROP-01", home)
         self.assertIn('href="/moj-prop-interest/form/"', home)
