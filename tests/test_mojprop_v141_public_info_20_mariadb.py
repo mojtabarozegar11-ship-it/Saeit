@@ -3,6 +3,7 @@
 Read-only, no identity collection, payment, checkout, or production deploy.
 """
 from django.test import TestCase, override_settings
+from django.utils.html import escape
 from prop_firm.moj_prop_page import SUPPORTED_CODES
 from prop_firm.mojprop_v141_info_i18n import info_catalog
 from prop_firm.mojprop_v141_interest_i18n import interest_catalog
@@ -31,9 +32,9 @@ class LocalizedPublicInfoTests(TestCase):
                 self.assertEqual(page.status_code, 200)
                 self.assertContains(page, 'lang="' + code + '" dir="' +
                                     interest_catalog()[code]["dir"] + '"')
-                self.assertContains(page, info_catalog()[code]["heading"])
+                self.assertContains(page, escape(info_catalog()[code]["heading"]))
                 for key in ("overview", "risk", "social", "funding", "legal"):
-                    self.assertContains(page, info_catalog()[code][key])
+                    self.assertContains(page, escape(info_catalog()[code][key]))
                 self.assertContains(page, 'href="/moj-prop-v141-interest/?lang=' + code + '"')
                 self.assertIn("no-store", page["Cache-Control"])
                 self.assertIn("frame-ancestors 'none'", page["Content-Security-Policy"])
@@ -56,7 +57,7 @@ class LocalizedPublicInfoTests(TestCase):
         with override_settings(MOJ_PROP_V141_INTEREST_ENABLED=False):
             page = self.client.get(PATH + "?lang=ur", secure=True, HTTP_HOST=HOST)
             self.assertEqual(page.status_code, 200)
-            self.assertContains(page, info_catalog()["ur"]["legal"])
+            self.assertContains(page, escape(info_catalog()["ur"]["legal"]))
             self.assertNotContains(page, 'href="/moj-prop-v141-interest/?lang=ur"')
 
     def test_bad_query_and_wrong_host_404_or_non_mutating_method(self):
