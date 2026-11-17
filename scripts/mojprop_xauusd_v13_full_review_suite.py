@@ -31,11 +31,22 @@ REQUIRED_TEST_MODULES = (
     ("tests.test_plan1_v14_combined_qualification", 17),
     ("tests.test_plan1_v14_private_interest_review", 30),
     ("tests.test_plan1_v141_precontract_boundary", 33),
-    ("tests.test_mojprop_v141_prelaunch_copy", 25),
+    ("tests.test_mojprop_v141_prelaunch_copy", 30),
+    ("tests.test_mojprop_v141_info_url_source", 20),
+    ("tests.test_mojprop_v141_private_portfolio_source", 20),
+    ("tests.test_plan1_v141_simulated_challenge_engine", 73),
+    ("tests.test_plan1_v141_demo_order_risk_review", 28),
+    ("tests.test_plan1_v141_signed_simulator_manifest", 40),
+    ("tests.test_plan1_v141_replay_journal_policy", 74),
+    ("tests.test_plan1_v141_django_journal_source", 32),
+    ("tests.test_plan1_v141_mariadb_readonly_preflight", 35),
+    ("tests.test_plan1_v141_shared_company_master_review", 30),
+    ("tests.test_plan1_v141_virtual_tenant_fill_ledger", 51),
+    ("tests.test_plan1_v141_virtual_tenant_django_source", 37),
 )
 LEGACY_TEST_MODULE = "tests.test_prop_firm_policy"
 EXPECTED_V13_TESTS = 194
-EXPECTED_V14_TESTS = 139
+EXPECTED_V14_TESTS = 584
 EXPECTED_ALL_TESTS = EXPECTED_V13_TESTS + EXPECTED_V14_TESTS
 
 
@@ -64,7 +75,9 @@ def run_full_review() -> int:
                    if name.startswith("tests.test_xauusd_v13_")}
     v14_modules = {name: count for name, count in observed.items()
                    if name.startswith("tests.test_plan1_v14")
-                   or name == "tests.test_mojprop_v141_prelaunch_copy"}
+                   or name in ("tests.test_mojprop_v141_prelaunch_copy",
+                               "tests.test_mojprop_v141_info_url_source",
+                               "tests.test_mojprop_v141_private_portfolio_source")}
     if (sum(v13_modules.values()) != EXPECTED_V13_TESTS
             or sum(v14_modules.values()) != EXPECTED_V14_TESTS):
         print("Version-specific unit test inventory drift; fail closed", file=sys.stderr)
