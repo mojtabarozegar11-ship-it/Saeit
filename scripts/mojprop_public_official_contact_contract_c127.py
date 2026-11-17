@@ -62,6 +62,21 @@ class _ContactDocument(HTMLParser):
             self.title += data
 
 
+def _safe_contact_href(href: str) -> bool:
+    """Disallow protocol-relative and backslash aliases for offsite URLs.
+
+    A URL beginning with //, /\\ or control characters is not an approved
+    first-party path even if it starts with a slash.
+    """
+    if type(href) is not str or any(ord(c) < 32 or ord(c) == 127 for c in href):
+        return False
+    if href in (_PLAN1_MAILTO, _GENERAL_MAILTO):
+        return True
+    if "\\" in href or href.startswith("//"):
+        return False
+    return href.startswith(("/", "#"))
+
+
 def classify_contact(raw: bytes) -> bool:
     """Require actual manual Plan1 support terms and no misleading buyer form.
 
@@ -79,11 +94,7 @@ def classify_contact(raw: bytes) -> bool:
     # Human-readable words may be split by <strong>/<em> and extra spacing.
     # Normalize HTMLParser text nodes, not the raw tagged markup.
     all_text = " ".join(" ".join(parsed.words).lower().split())
-    safe_links = all(
-        href.startswith(("/", "#"))
-        or href in (_PLAN1_MAILTO, _GENERAL_MAILTO)
-        for href in parsed.links
-    )
+    safe_links = all(_safe_contact_href(href) for href in parsed.links)
     return bool(
         parsed.has_html
         and parsed.scripts == 0
