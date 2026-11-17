@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 import pwd
 import select
 import stat
@@ -48,6 +48,13 @@ def _base():
         'live_passenger_worker_identity_proven': False,
         'live_database_identity_proven': False,
         'complete_media_scope_proven': False,
+        'registered_root_census_attempted': False,
+        'registered_root_secure_dirs': 0,
+        'registered_root_unverified_dirs': 0,
+        'registered_root_wsgi_metadata': 0,
+        'registered_root_manage_metadata': 0,
+        'registered_root_media_metadata': 0,
+        'registered_root_uploads_metadata': 0,
         'envvars_output': False, 'file_contents_read': False,
         'mysql_connected': False, 'current_backup_created': False,
         'production_modified': False,
@@ -132,6 +139,92 @@ def classify_uapi_json(raw: bytes) -> dict:
     return out
 
 
+def _safe_owner_root(raw, uid):
+    """Resolve only owner-relative registry roots and reject symlink ancestors."""
+    if _bucket_root(raw) not in ('staging','webroot','other_owner'):
+        return None
+    if raw.startswith('~/'):
+        absolute = str(HOME) + raw[1:]
+    elif raw.startswith('/'):
+        absolute = raw
+    else:
+        absolute = str(HOME) + '/' + raw
+    root = Path(absolute)
+    if len(root.parts) > 18:
+        return None
+    home = Path(HOME)
+    if root != home and home not in root.parents:
+        return None
+    current = root
+    try:
+        while True:
+            fs = current.lstat()
+            if (not stat.S_ISDIR(fs.st_mode) or fs.st_uid != uid or
+                    fs.st_mode & 0o022):
+                return None
+            if current == home:
+                break
+            current = current.parent
+        return root
+    except OSError:
+        return None
+
+
+def _safe_child(root, name, uid, *, directory):
+    """Single nonrecursive lstat only; no customer contents opened."""
+    try:
+        fs = (root / name).lstat()
+        if fs.st_uid != uid or fs.st_mode & 0o022:
+            return False
+        if directory:
+            return stat.S_ISDIR(fs.st_mode)
+        return stat.S_ISREG(fs.st_mode) and fs.st_nlink == 1
+    except OSError:
+        return False
+
+
+def _registered_root_metadata_census(raw, uid):
+    """Private cPanel filesystem metadata only; no paths or names returned."""
+    result = {
+        'registered_root_census_attempted': False,
+        'registered_root_secure_dirs': 0,
+        'registered_root_unverified_dirs': 0,
+        'registered_root_wsgi_metadata': 0,
+        'registered_root_manage_metadata': 0,
+        'registered_root_media_metadata': 0,
+        'registered_root_uploads_metadata': 0,
+    }
+    try:
+        payload = json.loads(raw.decode('utf-8'),object_pairs_hook=_pairs_no_dup)
+        obj = payload['result']
+        if type(obj) is not dict or type(obj.get('status')) is not int or obj['status'] != 1:
+            return result
+        apps = _app_list(obj.get('data'))
+        if apps is None or len(apps) > MAX_APPS or any(type(x) is not dict for x in apps):
+            return result
+        result['registered_root_census_attempted'] = True
+        for app in apps:
+            path = app.get('path')
+            if path is None:
+                path = app.get('app_root')
+            root = _safe_owner_root(path,uid)
+            if root is None:
+                result['registered_root_unverified_dirs'] += 1
+                continue
+            result['registered_root_secure_dirs'] += 1
+            result['registered_root_wsgi_metadata'] += int(
+                _safe_child(root,'passenger_wsgi.py',uid,directory=False))
+            result['registered_root_manage_metadata'] += int(
+                _safe_child(root,'manage.py',uid,directory=False))
+            result['registered_root_media_metadata'] += int(
+                _safe_child(root,'media',uid,directory=True))
+            result['registered_root_uploads_metadata'] += int(
+                _safe_child(root,'uploads',uid,directory=True))
+    except (UnicodeDecodeError,ValueError,KeyError,TypeError,RecursionError,OSError):
+        result['registered_root_census_attempted'] = False
+    return result
+
+
 def _bounded_run(argv=UAPI_ARGS, *, timeout=25) -> bytes:
     """Only the exact read-only UAPI allowlist; stderr discarded at source."""
     if argv != UAPI_ARGS:
@@ -185,6 +278,8 @@ def report() -> dict:
         raw = _bounded_run()
         classified = classify_uapi_json(raw)
         classified['owner_verified'] = True
+        if classified['uapi_query_completed']:
+            classified.update(_registered_root_metadata_census(raw,uid))
         return classified
     except TimeoutError:
         out['owner_verified'] = True
