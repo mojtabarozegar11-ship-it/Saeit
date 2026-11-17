@@ -102,12 +102,13 @@ def classify(*, status: int, raw: bytes, route: str) -> dict:
         if route == "prelaunch_moj_prop_01":
             needed = {"name","email","consent","idempotency_key",
                       "website","csrfmiddlewaretoken"}
-            if (not needed <= set(values) or
+            if (set(values) != needed or
                     form.get("action") != "/moj-prop-intake/?format=html" or
                     not values["idempotency_key"].get("value") or
                     values["email"].get("type") != "email" or
                     "required" not in values["consent"] or
-                    not doc.textareas or not doc.selects or not doc.has_submit):
+                    len(doc.textareas) != 1 or len(doc.selects) != 2
+                    or not doc.has_submit):
                 return flags
             flags["moj_prop_01_interest_prefill_present"] = (
                 "Prelaunch interest only: MOJ-PROP-01" in text
@@ -117,7 +118,7 @@ def classify(*, status: int, raw: bytes, route: str) -> dict:
                 "moj_prop_01_interest_prefill_present"]
         elif route == "manual_review_status":
             if (form.get("action") != "/moj-prop-status/?format=html" or
-                    "receipt_token" not in values or
+                    set(values) != {"csrfmiddlewaretoken", "receipt_token"} or
                     not doc.has_submit):
                 return flags
             flags["receipt_proof_present"] = True
