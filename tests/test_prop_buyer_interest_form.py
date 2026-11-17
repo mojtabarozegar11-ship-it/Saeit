@@ -150,5 +150,51 @@ class Plan1PrivateInterestFormTests(unittest.TestCase):
         self.assertEqual(x.request_ref,fixture()["request_ref"])
 
 
+    def test_current_no_buyer_social_post_ack_mandatory(self):
+        self.rejects("ack_no_buyer_social_posts_required", False)
+
+    def test_form_has_no_legacy_required_social_post_ack(self):
+        self.assertIn("ack_no_buyer_social_posts_required", _REQUIRED)
+        self.assertNotIn("ack_social_requirement_subject_to_local_law", _REQUIRED)
+
+    def test_legacy_social_ack_cannot_substitute_revised_waiver(self):
+        form=fixture()
+        form.pop("ack_no_buyer_social_posts_required")
+        form["ack_social_requirement_subject_to_local_law"]=True
+        with self.assertRaises(InterestFormBlocked):
+            apply(form)
+
+    def test_pre_purchase_legal_checks_are_distinct_from_live_broker_kyc(self):
+        self.assertIn("ack_legal_purchase_screening_if_required", _REQUIRED)
+        self.assertNotIn("ack_kyc_and_legal_country_check_required", _REQUIRED)
+        self.assertFalse(apply().kyc_verified)
+
+    def test_legacy_immediate_kyc_ack_cannot_substitute_lawful_checks(self):
+        form=fixture()
+        form.pop("ack_legal_purchase_screening_if_required")
+        form["ack_kyc_and_legal_country_check_required"]=True
+        with self.assertRaises(InterestFormBlocked):
+            apply(form)
+
+    def test_invalid_legal_purchase_screening_ack_denied(self):
+        self.rejects("ack_legal_purchase_screening_if_required", False)
+
+    def test_exact_revised_interest_requires_no_social_links_or_uploads(self):
+        form=fixture()
+        x=apply(form)
+        self.assertFalse(x.marketing_opt_in)
+        self.assertFalse(x.payment_allowed)
+        self.assertFalse(x.challenge_enrollment_allowed)
+
+    def test_legacy_both_acknowledgments_not_silently_upgraded(self):
+        form=fixture()
+        form.pop("ack_no_buyer_social_posts_required")
+        form.pop("ack_legal_purchase_screening_if_required")
+        form["ack_social_requirement_subject_to_local_law"]=True
+        form["ack_kyc_and_legal_country_check_required"]=True
+        with self.assertRaises(InterestFormBlocked):
+            apply(form)
+
+
 if __name__=="__main__":
     unittest.main()
