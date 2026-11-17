@@ -25,7 +25,7 @@ REQUIRED = frozenset((
 
 def evaluate(columns, indexes):
     """Use ONLY metadata; identify exact single-column unique request key."""
-    if type(columns) not in (tuple, list, set):
+    if type(columns) not in (tuple, list, set, frozenset):
         raise ValueError("Missing column metadata")
     columns_set = set(columns)
     if any(type(x) is not str or len(x) > 100 for x in columns_set):
