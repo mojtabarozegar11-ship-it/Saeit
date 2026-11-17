@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from .models import Product
+from .procurement_notices import get_public_procurement_notices
 
 
 def store_home(request):
@@ -11,4 +12,11 @@ def store_home(request):
 
 
 def auctions_home(request):
-    return render(request, "core/auctions.html", {"auctions": []})
+    # Public, non-binding purchase RFQs are separate from staff-only PrivateAuction records.
+    notices, policy = get_public_procurement_notices()
+    return render(request, "core/auctions.html", {
+        "auctions": [],
+        "supply_notices": notices["supply"],
+        "equipment_notices": notices["equipment"],
+        "procurement_policy": policy,
+    })
