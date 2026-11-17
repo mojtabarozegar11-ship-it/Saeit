@@ -56,6 +56,11 @@ jobs:
           transport_proof="$RUNNER_TEMP/mojprop-nojs-transport-decisions.txt"
           : > "$transport_proof"
           chmod 600 "$transport_proof"
+          # Separate fixed-key GET evidence for official fallback. Keep the
+          # private receipt/form readiness proof schema unchanged.
+          support_transport_proof="$RUNNER_TEMP/mojprop-support-transport-decisions.txt"
+          : > "$support_transport_proof"
+          chmod 600 "$support_transport_proof"
           unhealthy=0
           mojplaywin_unhealthy=0
           for item in "${targets[@]}"; do
@@ -96,6 +101,11 @@ jobs:
             echo "GET_ONLY_${name}_TLS_SECONDS=${tls_time:-unknown}"
             echo "GET_ONLY_${name}_TTFB_SECONDS=${ttfb:-unknown}"
             echo "GET_ONLY_${name}_REDIRECTS=$redirects"
+            if [[ "$name" == "mojprop_contact" ]]; then
+              printf 'GET_ONLY_mojprop_contact_HTTP=%s\n' "$code" >> "$support_transport_proof"
+              printf 'GET_ONLY_mojprop_contact_CURL_EXIT=%s\n' "$curl_exit" >> "$support_transport_proof"
+              printf 'GET_ONLY_mojprop_contact_REDIRECTS=%s\n' "$redirects" >> "$support_transport_proof"
+            fi
             if [[ "$name" == "mojprop_intake_html" || "$name" == "mojprop_status_html" ]]; then
               # Only fixed-key numeric outcomes. No URLs, headers, tokens or HTML.
               printf 'GET_ONLY_%s_HTTP=%s\n' "$name" "$code" >> "$transport_proof"
@@ -142,6 +152,13 @@ jobs:
           python3 -B scripts/mojprop_public_buyer_readiness_summary_20261117.py \
             "$RUNNER_TEMP/mojprop-nojs-sanitized-decisions.txt" \
             "$transport_proof" \
+            "$GITHUB_STEP_SUMMARY"
+          # The manually usable support fallback is a distinct path from
+          # unverified CRM intake. HTTP200 does not prove correct content,
+          # email deliverability, marketing consent or buyer acquisition.
+          python3 -B scripts/mojprop_public_official_contact_contract_c127.py \
+            "$check_dir/mojprop_contact.body" \
+            "$support_transport_proof" \
             "$GITHUB_STEP_SUMMARY"
           # Compare ONLY existing downloaded PUBLIC GET response; never submit
           # buyer details or echo HTML/CSRF. Current main may have fixed the
