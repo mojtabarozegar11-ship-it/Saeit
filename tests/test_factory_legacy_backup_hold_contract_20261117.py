@@ -73,5 +73,33 @@ class LegacyFactoryBackupSafetyContract(unittest.TestCase):
         self.assertIn('"ready_to_clean_live_database":False',text)
         self.assertIn('"files_created":0,"files_deleted":0',text)
 
+
+HISTORICAL_EXPORT_HOLDS = {
+    "zomorod-live-full-tables-archive-20261104.yml": {"backup"},
+    "zomorod-live-segmented-archive-20261104.yml":
+        {"schema", "chunks", "finalize"},
+    "zomorod-agenttask-part6-recovery-20261104.yml": {"chunks"},
+}
+
+class HistoricalSqlArchiveNoDuplicateExport(unittest.TestCase):
+    """All 3 legacy exporter workflows are read-only-inert until capacity exists."""
+    def test_historical_exporters_are_fail_closed_on_every_job(self):
+        for filename, expected_jobs in HISTORICAL_EXPORT_HOLDS.items():
+            with self.subTest(workflow=filename):
+                text=(ROOT/".github/workflows"/filename).read_text(encoding="utf-8")
+                self.assertIn("permissions:\n  contents: read",text)
+                self.assertIn("jobs:\n",text)
+                after=text.split("jobs:\n",1)[1]
+                split=re.split(r"(?m)^  ([a-zA-Z0-9_-]+):\s*\n",after)
+                # [preamble, name, body, name, body, ...]
+                found={split[i]:split[i+1] for i in range(1,len(split),2)}
+                self.assertEqual(set(found),expected_jobs)
+                for name,body in found.items():
+                    with self.subTest(job=name):
+                        self.assertRegex(body,r"(?m)^    if: false\s*$")
+                        self.assertIn("    runs-on:",body)
+                        self.assertLess(body.index("    if: false"),body.index("    runs-on:"))
+                        self.assertIn("FAIL-CLOSED",body)
+
 if __name__=="__main__":
     unittest.main()
