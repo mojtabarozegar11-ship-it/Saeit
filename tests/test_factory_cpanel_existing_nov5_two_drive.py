@@ -466,5 +466,18 @@ class FactoryCpanelOldBackupTransportTests(unittest.TestCase):
         self.assertEqual(seen,["/verified-local/rclone"])
 
 
+    def test_47_nonresponsive_cpanel_ssh_source_fails_closed_without_hanging(self):
+        # The source process deliberately emits no bytes. select() reports no
+        # activity; the code raises instead of hanging on .read(8 MiB).
+        with patch.object(m,"_ssh_command",return_value=[
+                sys.executable,"-c","import time;time.sleep(10)"]):
+            with m.VerifiedCpanelStream(Path("/na"),Path("/na"),"nov5-a") as source:
+                with patch.object(m.select,"select",return_value=([],[],[])):
+                    with self.assertRaisesRegex(
+                            m.TransferHold,"CPANEL_SOURCE_READ_IDLE_TIMEOUT"):
+                        source.read(4096)
+                self.assertFalse(source.verified)
+
+
 if __name__=="__main__":
     unittest.main()
