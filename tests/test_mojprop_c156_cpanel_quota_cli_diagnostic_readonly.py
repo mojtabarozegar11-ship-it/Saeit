@@ -174,6 +174,41 @@ class ActualCpanelQuotaFallbackTests(unittest.TestCase):
         runner.assert_not_called()
         self.assertEqual(result["diagnostic"],"binary_not_regular_or_executable")
 
+    def test_19_c120_previously_proven_owner_uapi_exact_path(self):
+        self.assertEqual(q.UAPI,"/usr/bin/uapi")
+        self.assertEqual(q.CALLS["uapi_statsbar"][2],"--user=zomorod2")
+        self.assertEqual(q.CALLS["uapi_statsbar"][-1],
+                         "display=diskusage|mysqldiskusage")
+
+    def test_20_owner_uapi_fallback_without_user_only_after_nonzero(self):
+        good=b'{"result":{"status":1,"data":[{"id":"diskusage","count":125,"max":100,"units":"MB"}]}}'
+        results=[SimpleNamespace(returncode=1,stdout=b"",stderr=b"safe-test"),
+                 SimpleNamespace(returncode=0,stdout=good,stderr=b"")]
+        with patch.object(q.os,"lstat",return_value=SimpleNamespace(
+                          st_mode=stat.S_IFREG | 0o755,st_uid=0)), \
+             patch.object(q.os,"access",return_value=True), \
+             patch.object(q.subprocess,"run",side_effect=results) as runner:
+            r=q._one("uapi_statsbar")
+        self.assertEqual(r["diagnostic"],"success_numeric_quota")
+        self.assertEqual(r["account_disk"]["percent_used"],125.0)
+        self.assertEqual(runner.call_count,2)
+        self.assertEqual(runner.call_args_list[0].args[0],q.CALLS["uapi_statsbar"])
+        self.assertEqual(runner.call_args_list[1].args[0],
+                         [q.UAPI,"--output=json","StatsBar","get_stats",
+                          "display="+q.DISPLAY])
+        self.assertEqual(runner.call_args_list[1].kwargs["env"]["LC_ALL"],"C")
+        self.assertEqual(runner.call_args_list[1].kwargs["env"]["LOGNAME"],q.OWNER)
+
+    def test_21_unrelated_legacy_api2_failure_has_no_additional_retry(self):
+        with patch.object(q.os,"lstat",return_value=SimpleNamespace(
+                          st_mode=stat.S_IFREG | 0o755,st_uid=0)), \
+             patch.object(q.os,"access",return_value=True), \
+             patch.object(q.subprocess,"run",return_value=SimpleNamespace(
+                           returncode=2,stdout=b"",stderr=b"unknown")) as runner:
+            r=q._one("cpapi2_statsbar")
+        self.assertEqual(r["diagnostic"],"process_failed")
+        self.assertEqual(runner.call_count,1)
+
     def test_16_no_valid_quota_does_not_authorize_backups(self):
         with patch.object(q.pwd,"getpwuid",
                           return_value=SimpleNamespace(pw_name="foreign")), \
