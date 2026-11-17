@@ -2,7 +2,7 @@
 
 **Status: DEV-ONLY / NO COMMERCIAL RELEASE / NO DATA UPLOADED.**
 
-This package is a complete, standalone Python encryption/read-back/isolated-decryption module and its 42 independent synthetic unit tests. It does **not** include Google Drive OAuth upload adapters, a production-compatible MySQL/MariaDB snapshot implementation, owner-held private key custody, cloud quota verification, a consistency proof, or an independently restored current factory database.
+This package is a complete, standalone Python encryption/read-back/isolated-decryption module and its 50 independent synthetic unit tests. It does **not** include Google Drive OAuth upload adapters, a production-compatible MySQL/MariaDB snapshot implementation, owner-held private key custody, cloud quota verification, a consistency proof, or an independently restored current factory database.
 
 It addresses one precisely observed deficiency in the legacy F-01 workflow: `scripts/f01_encrypted_stream_v1.py` accepts only a regular file no larger than 3 GiB, while the legacy GitHub workflow staged an entire compressed archive on a hosted runner before encrypting local chunks. The current cPanel MariaDB footprint is ~16.68 GB, and neither large on-host staging nor unapproved paid hosted runner execution is acceptable.
 
@@ -11,6 +11,9 @@ It addresses one precisely observed deficiency in the legacy F-01 workflow: `scr
 - Reads a **binary stream** (intended future source: a separately authenticated consistent `mariadb-dump` plus app/media archive piped through a verified compressor), with bounded buffer chunks of 4 MiB by default; no large plaintext filesystem file required by the encryptor.
 - Uses a newly generated AES-256-GCM session key and fresh nonce prefix per archive. Each chunk is authenticated with a run ID, monotonic chunk index, final flag and plaintext length as associated data.
 - Wraps the session key with the owner's **pre-approved RSA-3072+ public key** using OAEP-SHA256 and verifies a separately configured public-key SHA-256 fingerprint. The existing legacy F-01 public recipient can only be reused after its **matching private key and passphrase have been recovered and tested offline**. This package contains no actual keys.
+- Requires the caller to explicitly supply `max_source_bytes` as an admitted source-size ceiling; there is **no default 1 TiB transfer authorization**. The caller must first authenticate both provider quotas, determine ciphertext sizing, approve private keys, and confirm no billing. A declared ceiling is **not proof** of provider quota.
+- Offline restore checks filesystem free bytes against authenticated manifest plaintext size plus a configurable reserve (1 GiB default) before creating the output file. This is only a physical free-space safeguard, **not** a hosted account quota check or a full MariaDB import headroom estimate.
+- Receipt uses only pseudonymous store references, not raw Google account names/emails; provider identity is still not verified by this module.
 - Requires two distinct private store owner identities and independent upload/read-back callbacks. Each encrypted part must pass **read-back byte SHA-256 equality in both destinations** before proceeding. The authenticated manifest is uploaded last. A receipt is returned only if both stores verified every ciphertext part and the final manifest. Uploaded partial ciphertext may remain after interrupted transfer: no deletion is performed.
 - The public manifest contains no email identifiers (store identifiers are keyed pseudonyms), and explicitly records `source_consistency_external=false` and `restore_verified=false`.
 - Supports offline isolated decryption to a **new, owner-only-permission file**, validating the manifest HMAC and every chunk's SHA-256/AES-GCM authentication before linking the finished file into place. Never overwrites an existing destination.
@@ -30,12 +33,12 @@ It addresses one precisely observed deficiency in the legacy F-01 workflow: `scr
 PYTHONPATH=scripts python -B -m unittest -v tests.test_factory_dual_stream_v2
 ```
 
-At packaging time: **42/42 pass** with locally generated, ephemeral RSA keys and synthetic bytes (no real bank data). Correctness on a live MariaDB backup, Google Drive API and independent restore remains **unverified**.
+At packaging time: **50/50 pass** with locally generated, ephemeral RSA keys and synthetic bytes (no real bank data). Correctness on a live MariaDB backup, Google Drive API and independent restore remains **unverified**.
 
 ## Files
 
 - `scripts/factory_dual_stream_v2.py` — transport and offline restore source
-- `tests/test_factory_dual_stream_v2.py` — 42 negative/positive synthetic tests
+- `tests/test_factory_dual_stream_v2.py` — 50 negative/positive synthetic tests
 - `docs/factory_dual_stream_v2_DEVONLY.md` — actual scope and gates
 - For isolated execution install the existing open-source Python package `cryptography>=41` only if already available or separately approved
 

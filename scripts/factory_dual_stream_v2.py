@@ -44,8 +44,7 @@ class DualStoreReceipt:
     plaintext_bytes: int
     ciphertext_bytes: int
     parts: int
-    claimed_owner_a: str
-    claimed_owner_b: str
+    pseudonymous_store_refs: tuple[str, str]
     cipher_parts_mirrored_and_readback_verified: bool = True
     cloud_account_identity_verified_by_this_code: bool = False
     current_source_consistency_verified: bool = False
@@ -126,7 +125,7 @@ def encrypt_stream_to_dual_stores(
     owner_a: str, owner_b: str,
     upload_a: Callable[[str, bytes], object], upload_b: Callable[[str, bytes], object],
     read_a: Callable[[str], bytes], read_b: Callable[[str], bytes],
-    chunk_bytes: int = 4 * 1024 * 1024, max_source_bytes: int = MAX_SOURCE,
+    chunk_bytes: int = 4 * 1024 * 1024, max_source_bytes: int | None = None,
 ) -> DualStoreReceipt:
     """Bounded-memory crypto and authenticated two-provider byte read-back.
 
@@ -135,6 +134,9 @@ def encrypt_stream_to_dual_stores(
     Caller must externally enforce provider quota and full source consistency.
     """
     _assert_two_stores(owner_a, owner_b, upload_a, upload_b, read_a, read_b)
+    # No implied permission to upload up to 1 TiB from a live backup source.
+    # Caller must pre-admit an explicit, bounded source size after independently
+    # checking both provider quotas, confidentiality and permitted transfer.
     if (type(chunk_bytes) is not int or not MIN_CHUNK <= chunk_bytes <= MAX_CHUNK
             or type(max_source_bytes) is not int or
             not 1 <= max_source_bytes <= MAX_SOURCE):
@@ -201,13 +203,14 @@ def encrypt_stream_to_dual_stores(
     _upload_and_read_back(manifest_name, manifest_bytes, upload_a, read_a)
     _upload_and_read_back(manifest_name, manifest_bytes, upload_b, read_b)
     return DualStoreReceipt(_sha(manifest_bytes), plain_total, cipher_total,
-                            idx, owner_a, owner_b)
+                            idx, tuple(manifest['owner_refs']))
 
 
 def decrypt_to_isolated_file(
     manifest_bytes: bytes, *, read_chunk: Callable[[str], bytes],
     private_pem: bytes, private_password: bytes | None,
     expected_public_spki_sha256: str, output_path: str | Path,
+    minimum_free_reserve_bytes: int = 1 * 1024**3,
 ) -> int:
     """Offline-only restore into NEW file; nothing touches live services.
 
@@ -260,6 +263,18 @@ def decrypt_to_isolated_file(
     dst = Path(output_path)
     if dst.exists() or dst.is_symlink():
         raise FileExistsError('OUTPUT_EXISTS')
+    if (type(minimum_free_reserve_bytes) is not int or
+            not 0 <= minimum_free_reserve_bytes <= 1 << 50):
+        raise ValueError('INVALID_ISOLATED_RESTORE_RESERVE')
+    declared = manifest.get('plain_total')
+    if type(declared) is not int or not 1 <= declared <= MAX_SOURCE:
+        raise ValueError('INVALID_DECLARED_RESTORE_BYTES')
+    # This is a physical-filesystem safeguard, NOT a proven hosted-account
+    # quota, MariaDB import headroom, isolation proof or permission to restore
+    # a live server. Owner must attest those separately before any real restore.
+    fs = os.statvfs(dst.parent)
+    if fs.f_bavail * fs.f_frsize < declared + minimum_free_reserve_bytes:
+        raise ValueError('INSUFFICIENT_ISOLATED_RESTORE_FREE_BYTES')
     tmp = dst.with_name(dst.name+'.f01v2-temp-'+run_id.hex())
     flag = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os,'O_NOFOLLOW',0)
     written = 0

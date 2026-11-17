@@ -55,7 +55,8 @@ class TestDualEncryptedStreaming(unittest.TestCase):
                   public_pem=self.public, trusted_public_spki_sha256=self.fp,
                   owner_a='Drive-A',owner_b='Drive-B',
                   upload_a=self.a.upload,upload_b=self.b.upload,
-                  read_a=self.a.read,read_b=self.b.read,chunk_bytes=4096)
+                  read_a=self.a.read,read_b=self.b.read,chunk_bytes=4096,
+                  max_source_bytes=1_000_000)
         args.update(kwargs)
         return encrypt_stream_to_dual_stores(**args)
     def manifest(self):
@@ -242,8 +243,9 @@ class TestDualEncryptedStreaming(unittest.TestCase):
         self.assertFalse(json.loads(self.manifest())['restore_verified'])
     def test_40_dual_independence_is_not_provider_legal_proof(self):
         receipt=self.create()
-        self.assertEqual(receipt.claimed_owner_a,'Drive-A')
-        self.assertEqual(receipt.claimed_owner_b,'Drive-B')
+        self.assertEqual(len(receipt.pseudonymous_store_refs),2)
+        self.assertNotIn('Drive-A', repr(receipt))
+        self.assertNotIn('Drive-B', repr(receipt))
         self.assertNotIn(b'private-key',self.manifest())
 
     def test_41_never_report_verified_cloud_identity_without_oauth_adapter(self):
@@ -255,5 +257,53 @@ class TestDualEncryptedStreaming(unittest.TestCase):
         self.assertFalse(hasattr(receipt,'complete'))
         self.assertFalse(hasattr(receipt,'payable'))
         self.assertFalse(receipt.commercial_release_authorized)
+
+    def test_43_explicit_source_capacity_required_even_for_tiny_stream(self):
+        with self.assertRaisesRegex(ValueError, 'INVALID_STREAM_BOUNDS'):
+            self.create(max_source_bytes=None)
+        self.assertEqual(self.a.writes,0)
+    def test_44_owner_identifiers_never_in_receipt_even_with_email_addresses(self):
+        r=self.create(owner_a='owner.first@example.invalid', owner_b='owner.second@example.invalid')
+        self.assertEqual(len(r.pseudonymous_store_refs),2)
+        self.assertNotIn('owner.first',repr(r))
+        self.assertNotIn('owner.second',repr(r))
+    def test_45_restore_does_not_start_without_reported_disk_headroom(self):
+        self.create()
+        with tempfile.TemporaryDirectory() as d:
+            with patch('factory_dual_stream_v2.os.statvfs') as space:
+                space.return_value.f_bavail=0
+                space.return_value.f_frsize=4096
+                with self.assertRaisesRegex(ValueError, 'INSUFFICIENT_ISOLATED_RESTORE_FREE_BYTES'):
+                    self.restore(d)
+            self.assertFalse((Path(d)/'restored-backup.bin').exists())
+            self.assertFalse(list(Path(d).glob('*.f01v2-temp-*')))
+    def test_46_bool_restore_reserve_rejected(self):
+        self.create()
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaisesRegex(ValueError, 'INVALID_ISOLATED_RESTORE_RESERVE'):
+                self.restore(d,minimum_free_reserve_bytes=True)
+    def test_47_declared_restore_bytes_invalid_rejected_by_mac_first(self):
+        self.create()
+        x=json.loads(self.manifest());x['plain_total']=-1
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaisesRegex(ValueError, 'MANIFEST_AUTHENTICATION_FAILED'):
+                self.restore(d,manifest=_canonical(x))
+    def test_48_source_limit_is_checked_before_first_ciphertext_upload(self):
+        with self.assertRaisesRegex(ValueError, 'BACKUP_STREAM_EXCEEDS_ADMITTED_SOURCE_BYTES'):
+            self.create(max_source_bytes=500)
+        self.assertFalse(any(n.endswith('.enc') for n in self.a.items))
+    def test_49_restored_bytes_equal_source_with_capacity_guard_on(self):
+        self.create()
+        with tempfile.TemporaryDirectory() as d:
+            size=self.restore(d,minimum_free_reserve_bytes=1<<20)
+            self.assertEqual(size,len(self.raw))
+            self.assertEqual((Path(d)/'restored-backup.bin').read_bytes(),self.raw)
+    def test_50_restored_file_readable_only_after_all_gcm_tags_pass(self):
+        self.create()
+        name=next(n for n in self.a.items if n.endswith('.enc'))
+        self.a.items[name]=self.a.items[name][:-1]+b'!'
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(ValueError):self.restore(d)
+            self.assertFalse((Path(d)/'restored-backup.bin').exists())
 
 if __name__=='__main__':unittest.main()
