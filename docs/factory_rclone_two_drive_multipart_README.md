@@ -70,3 +70,41 @@ Google Drive**, and it does not replace official provider quota/consistency
 admission. Both `current-backups` parent folders have been created privately
 and independently: A folder `10CwlKyd_I3iaiCVbdH82IbzVJD_8z475`, B folder
 `1EXF8_gl5xZDQBjnrcOVxd_rdznLAj78j`; both verified empty at creation.
+
+
+## Enforced manifest-order admission (2026-11-17, hardening review)
+
+The transport callbacks now record the exact ciphertext SHA-256 and length of
+EVERY successful per-provider uploaded part and independently confirm its
+bounded provider readback. Even if an unrelated caller invokes the low-level
+callbacks outside the core's correct ordering, **neither provider is allowed to
+receive a completion manifest until both provider part sets are nonempty,
+identical, and every part has been independently read back**. A mismatched
+provider blob fails closed and is not credited. Different manifest object names
+are rejected; no ciphertext part may be appended once either manifest starts.
+These additional checks are defense in depth and do NOT cryptographically
+validate the manifest: the core's authenticated MAC and offline decrypt are still
+mandatory. Provider rcat does not implement atomic no-overwrite; the fresh
+one-time run namespace remains mandatory. Nine independent adversarial cases
+were added (55 total); source-only CI run must pass before treating the
+candidate as reviewed. No live backup or cloud credential change is authorized.
+
+
+## Terminal manifest inventory binding (additional hardening)
+
+The provider adapter now also checks the **canonical F01V2 JSON manifest** before
+issuing either remote terminal-object write. It rejects duplicate keys,
+noncanonical byte encodings, unexpected fields, invalid run and part names,
+noncontiguous part indexes, unaccounted objects, wrong per-part SHA256/length,
+incorrect ciphertext/plain totals, an invalid number of owner pseudonyms,
+claiming that restore/source consistency was already verified, and divergent
+A/B terminal manifests. Both provider **manifest readbacks** must also match
+exact submitted bytes. This is defense in depth for accidental low-level
+callback misuse; it never substitutes for the manifest's secret-key MAC,
+per-chunk AES-GCM authentication, or an isolated full current restore.
+
+All checks run without revealing OAuth tokens or filenames from the live
+factory. Neither side is marked as having a complete **current** backup merely
+because the structural manifest passed. The source is still staged in a Draft
+PR; production backups remain forbidden until source identity, owner OAuth,
+provider storage quotas and independent key recovery are proven.
