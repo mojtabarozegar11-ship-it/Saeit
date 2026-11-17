@@ -48,7 +48,7 @@ class QualificationPreview:
 
 
 def _phase_reasons(phase: PhaseProof, expected_phase: int, target: Decimal,
-                   minimum_days: int) -> tuple[str, ...]:
+                   minimum_days: int, best_day_share_pct: Decimal) -> tuple[str, ...]:
     if type(phase) is not PhaseProof or type(phase.phase) is not int or phase.phase != expected_phase:
         raise ValueError("phase identity mismatch")
     if type(phase.verified_trading_days) is not int or not 0 <= phase.verified_trading_days <= 28:
@@ -64,7 +64,7 @@ def _phase_reasons(phase: PhaseProof, expected_phase: int, target: Decimal,
         reasons.append(f"phase_{expected_phase}_minimum_trading_days_not_met")
     if profit < target:
         reasons.append(f"phase_{expected_phase}_profit_target_not_met")
-    if best > profit * Decimal("0.32"):
+    if best > profit * best_day_share_pct / Decimal("100"):
         reasons.append(f"phase_{expected_phase}_consistency_not_met")
     return tuple(reasons)
 
@@ -91,8 +91,10 @@ def review_xauusd_v13_qualification(*, first: PhaseProof, second: PhaseProof,
     if legal_terms_approved is not False:
         # A form/API boolean can never authorize a contract change.
         raise ValueError("legal review cannot be self-approved by this preview")
-    p1 = _phase_reasons(first, 1, Decimal("9.6"), draft.min_trading_days_per_stage)
-    p2 = _phase_reasons(second, 2, Decimal("6"), draft.min_trading_days_per_stage)
+    p1 = _phase_reasons(first, 1, draft.stage_one_profit_target_pct,
+                        draft.min_trading_days_per_stage, draft.max_profitable_day_share_pct)
+    p2 = _phase_reasons(second, 2, draft.stage_two_profit_target_pct,
+                        draft.min_trading_days_per_stage, draft.max_profitable_day_share_pct)
     counts = count_challenge_trades(
         reconciled_executions, paid_at=evaluation_started_at,
         required=draft.min_closed_trades_total,
