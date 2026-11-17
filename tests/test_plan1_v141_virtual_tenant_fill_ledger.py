@@ -465,6 +465,14 @@ class VirtualTenantLedgerUnitTests(unittest.TestCase):
                               executed_at_utc=later+timedelta(minutes=1)),
                 provisioned=(p,),server_now=later+timedelta(minutes=5))
 
+    def test_67_final_historical_fill_equal_to_acceptance_instant_allowed(self):
+        accepted=START+timedelta(minutes=2)
+        p=provision(stage_one_accepted_at_utc=accepted)
+        b=run(event(),event(seq=2,action="CLOSE",price="3002",
+                           executed_at_utc=accepted),
+              provisioned=(p,)).challenge_books[0]
+        self.assertEqual(b.fully_closed_positions_stage_one,1)
+
 
 if __name__=="__main__":
     unittest.main()
