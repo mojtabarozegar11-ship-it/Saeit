@@ -3,6 +3,9 @@ import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from decimal import Decimal
+from unittest.mock import patch
+from prop_firm.xauusd_v13_draft_terms import draft_gold_terms_v13
 from prop_firm.xauusd_v13_qualification_preview import (
     PhaseProof, review_xauusd_v13_qualification,
 )
@@ -113,6 +116,21 @@ class GoldQualificationPreviewTests(unittest.TestCase):
     def test_consistency_equal_thirty_two_percent_allows(self):
         r=review(p2=replace(P2,max_profitable_day_usd="1.92"))
         self.assertTrue(r.entire_challenge_math_pass)
+
+    def test_phase_consistency_bound_to_signed_draft_policy(self):
+        terms=draft_gold_terms_v13()
+        with patch("prop_firm.xauusd_v13_qualification_preview.draft_gold_terms_v13",
+                   return_value=replace(terms,max_profitable_day_share_pct=Decimal("40"))):
+            # Under 40% cap, a 33% day no longer violates the review math.
+            result=review(p2=replace(P2,max_profitable_day_usd="2.0"))
+            self.assertNotIn("phase_2_consistency_not_met",result.reasons)
+
+    def test_phase_profit_targets_bound_to_draft_policy(self):
+        terms=draft_gold_terms_v13()
+        with patch("prop_firm.xauusd_v13_qualification_preview.draft_gold_terms_v13",
+                   return_value=replace(terms,stage_two_profit_target_pct=Decimal("7"))):
+            result=review()
+            self.assertIn("phase_2_profit_target_not_met",result.reasons)
 
     def test_phase_one_unverified(self):
         self.assertIn("phase_1_independent_proof_absent",
