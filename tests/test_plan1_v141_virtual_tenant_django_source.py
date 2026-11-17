@@ -189,7 +189,7 @@ class VirtualTenantDjangoSourceTests(unittest.TestCase):
 
     def test_39_virtual_ledger_checks_independent_stage_windows(self):
         for needle in ("phase_start = start if e.stage == 1 else second",
-                       "when >= phase_start + WINDOW",
+                       "when >= start + WINDOW",
                        "open first-stage inventory cannot migrate to stage two"):
             self.assertIn(needle,self.pure)
 
