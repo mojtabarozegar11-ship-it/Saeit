@@ -201,6 +201,72 @@ class FirstPlanOneContactTests(unittest.TestCase):
         self.assertIn("شرایط استرداد", self.html)
         self.assertIn("لغو رضایت تماس", self.html)
 
+    def test_contact_points_to_dedicated_plan1_optin_candidate(self):
+        self.assertIn("/moj-prop-interest/form/?service=blueprint&amp;package=moj-prop-01", self.html)
+
+    def test_optin_link_not_claimed_production_ready(self):
+        self.assertIn("live availability not verified", self.html)
+
+    def test_candidate_requires_independent_deployment(self):
+        self.assertIn("independent live deployment", self.html)
+
+    def test_candidate_requires_server_receipt(self):
+        self.assertIn("server-persisted receipt", self.html)
+
+    def test_candidate_requires_crm_evidence(self):
+        self.assertIn("accepted CRM opt-in", self.html)
+
+    def test_missing_candidate_does_not_prompt_repeated_post(self):
+        self.assertIn("do not repeat submissions", self.html)
+
+    def test_contact_fallback_remains_after_candidate(self):
+        self.assertLess(self.html.index("/moj-prop-interest/form/"), self.html.index("Open email app — MOJ-PROP-01 enquiry"))
+
+    def test_candidate_is_not_checkout(self):
+        self.assertNotIn("/moj-prop/checkout/", self.html)
+
+    def test_candidate_is_not_payment_instruction(self):
+        self.assertIn("No payable 30 TRX challenge", self.html)
+
+    def test_candidate_exact_sku_not_starter30(self):
+        self.assertIn("package=moj-prop-01", self.html)
+        self.assertNotIn("package=starter30", self.html)
+
+    def test_candidate_does_not_autosubmit(self):
+        self.assertEqual(self.parsed.forms, [])
+        self.assertEqual(self.parsed.scripts, [])
+
+    def test_farsi_candidate_is_explicit(self):
+        self.assertIn("مشاهده فرم پیشنهادی رضایت طرح اول", self.html)
+
+    def test_farsi_candidate_is_unverified(self):
+        self.assertIn("فعال‌بودن در سایت زنده تأیید نشده", self.html)
+
+    def test_farsi_candidate_requires_real_consent(self):
+        self.assertIn("ذخیره رضایت", self.html)
+
+    def test_farsi_candidate_warns_against_repeated_sensitive_submissions(self):
+        self.assertIn("اطلاعات حساس را دوباره ارسال نکنید", self.html)
+
+    def test_candidate_link_is_first_party_relative(self):
+        for link in self.parsed.links:
+            if "moj-prop-interest" in link:
+                self.assertTrue(link.startswith("/moj-prop-interest/form/"))
+
+    def test_candidate_does_not_contain_personal_query_data(self):
+        link = next(x for x in self.parsed.links if "moj-prop-interest" in x)
+        for field in ("email=", "name=", "token=", "receipt=", "wallet="):
+            self.assertNotIn(field, link.lower())
+
+    def test_farsi_and_english_share_same_candidate(self):
+        self.assertEqual(self.html.count('href="/moj-prop-interest/form/?service=blueprint&amp;package=moj-prop-01"'), 2)
+
+    def test_contact_preserves_unpaid_support(self):
+        self.assertIn("not a verified Plan 1 lead", self.html)
+
+    def test_optin_is_not_automatic_marketing_consent(self):
+        self.assertIn("distinct recorded opt-in", self.html)
+
     def test_landing_reaches_published_first_party_contact(self):
         self.assertIn('href="/moj-prop/contact/"', self.landing)
         self.assertIn('id="first-contact"', self.landing)
