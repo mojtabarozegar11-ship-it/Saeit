@@ -60,6 +60,19 @@ class ProspectiveV14ContractTests(unittest.TestCase):
         self.assertIn("EITHER",d.en)
         self.assertIn("یا فیس‌بوک",d.fa)
 
+    def test_at_least_one_not_exactly_one_post_contract(self):
+        x=review_prospective_terms()
+        self.assertIn("at least ONE qualifying original post",x.en)
+        self.assertIn("حداقل یک پست اصلی واجد شرایط",x.fa)
+        self.assertNotIn("exactly ONE",x.en)
+        self.assertNotIn("دقیقاً یک پست",x.fa)
+
+    def test_social_and_demo_twenty_eight_day_clocks_are_distinct(self):
+        x=review_prospective_terms()
+        self.assertIn("SEPARATE clocks",x.en)
+        self.assertIn("مستقل هستند",x.fa)
+        self.assertIn("final social qualification must wait",x.en)
+
     def test_exact_28_day_hold(self):
         d=review_prospective_terms()
         self.assertEqual(d.public_post_hours,672)
