@@ -76,3 +76,24 @@ class ProcurementSerialRegistrationTests(TestCase):
         self.assertContains(after, "ZM-SUP-001")
         self.assertContains(after, "ZM-EQP-036")
         self.assertNotContains(after, "شماره‌گذاری نهایی آگهی‌ها در انتظار")
+
+    def test_partial_registry_never_publishes_partial_ad_numbers(self):
+        PublicProcurementNumber.objects.create(
+            notice_key="ZM-SUP-001",
+            serial_number=450,
+            baseline_evidence=self.EVIDENCE,
+        )
+        response = self.client.get("/auctions/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "شماره‌گذاری نهایی آگهی‌ها در انتظار")
+        self.assertNotContains(response, "شماره آگهی 450")
+
+    def test_out_of_order_registry_fails_closed(self):
+        self.register(last=800, apply=True)
+        first = PublicProcurementNumber.objects.get(notice_key="ZM-SUP-001")
+        first.serial_number = 950
+        first.save(update_fields=["serial_number"])
+        response = self.client.get("/auctions/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "شماره‌گذاری نهایی آگهی‌ها در انتظار")
+        self.assertNotContains(response, "شماره آگهی 950")
