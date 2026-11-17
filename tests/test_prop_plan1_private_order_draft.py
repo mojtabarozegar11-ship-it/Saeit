@@ -11,10 +11,10 @@ from prop_firm.plan1_private_order_draft import (
     _DOCUMENT_BINDINGS,
     build_plan1_private_review_draft,
 )
-from test_prop_buyer_precontract_chain import (
+from tests.test_prop_buyer_precontract_chain import (
     NOW, REF, BUYER, SELLER, KEY, new_inquiry, new_packet, sign,
 )
-from test_prop_plan1_intake_provenance import INTAKE_KEY, intake_tag
+from tests.test_prop_plan1_intake_provenance import INTAKE_KEY, intake_tag
 
 
 def inputs(inquiry=None, packet=None):
