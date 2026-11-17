@@ -14,7 +14,8 @@ import sys
 
 from scripts.mojprop_plan1_form_source_gate_c130 import (
     FORM, _canonical_links, _source_routes, _view_guards, _read as original_read,
-    _installed_prop_app, _model_exported, _migration_depends_on_previous,\n    evaluate, KEYS
+    _installed_prop_app, _model_exported, _migration_depends_on_previous,
+    evaluate, KEYS
 )
 
 ROOT = Path(__file__).resolve().parents[1]
