@@ -300,7 +300,7 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
         self.assertIn('اگر پاسخ یا رسید واقعی دریافت نشد', self.page)
 
     def test_persian_form_uncertainty_is_translated(self):
-        self.assertIn('مشاهده فرم پیش‌راه‌اندازی (فعال‌بودن تأیید نشده)', self.page)
+        self.assertIn('فرم اختصاصی علاقه‌مندی طرح اول (انتشار تأیید نشده)', self.page)
 
     def test_no_plan1_payment_collection_in_fallback(self):
         self.assertNotIn('action="/moj-prop/checkout/', self.page)
