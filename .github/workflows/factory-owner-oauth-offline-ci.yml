@@ -30,7 +30,7 @@ jobs:
           test ! -L scripts/factory_owner_drive_setup.py
           test ! -L tests/test_factory_owner_drive_setup.py
           test "$(git hash-object scripts/factory_owner_drive_setup.py)" = '03f20faf0cb763017e97dfbf32a5faf9081f21ec'
-          test "$(git hash-object tests/test_factory_owner_drive_setup.py)" = '6a6003acb4b7fe4505f4442237dc0fcad76b7827'
+          test "$(git hash-object tests/test_factory_owner_drive_setup.py)" = 'e9064eaf59692d74a46571ff4d2e9d4543d5aa72'
       - name: Run 18 offline fail-closed cases, NO GOOGLE OR SECRETS
         shell: bash
         env:
