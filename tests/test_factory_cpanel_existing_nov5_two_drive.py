@@ -293,5 +293,110 @@ class FactoryCpanelOldBackupTransportTests(unittest.TestCase):
         self.assertNotEqual(m.SOURCES["nov5-a"][1],m.SOURCES["nov5-b"][1])
 
 
+    def make_transport_shell(self):
+        from scripts import factory_rclone_dual_parts as adapter
+        o=object.__new__(adapter.RcloneDualStore)
+        o._admission=object()
+        o.remote_a="factory_a"
+        o.remote_b="factory_b"
+        o._callbacks_claimed=False
+        calls=[]
+        o._direct_child_names=lambda remote,directory: calls.append(("list",remote,directory)) or set()
+        o._run=lambda *cmd,**kwargs: calls.append(("run",)+cmd) or b""
+        return o,calls
+
+    def test_36_historical_destination_exact_private_folders(self):
+        store,calls=self.make_transport_shell()
+        callbacks=store.callbacks("factory-historical-"+"a"*32,destination_kind="historical-nov5")
+        self.assertEqual(len(callbacks),4)
+        self.assertEqual(sum(x[0]=="list" for x in calls),4)
+        self.assertTrue(all(
+            ("historical-nov5-snapshots" in str(x)) for x in calls))
+        self.assertFalse(any("current-backups" in str(x) for x in calls))
+
+    def test_37_legacy_current_mode_is_not_altered(self):
+        store,calls=self.make_transport_shell()
+        self.assertEqual(len(store.callbacks("factory-current-"+"b"*32)),4)
+        self.assertTrue(any("current-backups" in str(x) for x in calls))
+        self.assertFalse(any("historical-nov5-snapshots" in str(x) for x in calls))
+
+    def test_38_historical_mode_disallows_current_prefix(self):
+        store,_=self.make_transport_shell()
+        with self.assertRaisesRegex(m.TransferHold,"UNSAFE_RUN_PREFIX"):
+            store.callbacks("factory-current-"+"c"*32,destination_kind="historical-nov5")
+
+    def test_39_unknown_destination_kind_never_accepted(self):
+        store,_=self.make_transport_shell()
+        with self.assertRaisesRegex(m.TransferHold,"UNAPPROVED_BACKUP_AGE_OR_DESTINATION"):
+            store.callbacks("factory-historical-"+"d"*32,destination_kind="arbitrary")
+
+    def test_40_existing_remote_namespace_never_overwritten(self):
+        store,calls=self.make_transport_shell()
+        store._direct_child_names=lambda remote,folder: {"factory-historical-"+"e"*32}
+        with self.assertRaisesRegex(m.TransferHold,"BACKUP_RUN_NAMESPACE_ALREADY_EXISTS"):
+            store.callbacks("factory-historical-"+"e"*32,destination_kind="historical-nov5")
+        self.assertFalse(any(x[0]=="run" for x in calls))
+
+    def test_41_source_remote_script_never_starts_factory(self):
+        for forbidden in ("systemctl start","crontab","subprocess.Popen","DELETE FROM",
+                          "DROP TABLE","os.remove(","shutil.rmtree","tarfile.extract"):
+            self.assertNotIn(forbidden,m.REMOTE_PY)
+
+    def test_42_true_crypto_core_glue_still_cannot_delete_source(self):
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.backends import default_backend
+        key=rsa.generate_private_key(public_exponent=65537,key_size=3072,
+                                     backend=default_backend())
+        pub=key.public_key().public_bytes(
+            serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)
+        der=key.public_key().public_bytes(
+            serialization.Encoding.DER,serialization.PublicFormat.SubjectPublicKeyInfo)
+        fp=hashlib.sha256(der).hexdigest()
+        blob=(b"SQLite format 3\x00"+b"A"*12000)
+        stored={"a":{},"b":{}}
+        calls=[]
+        class MemoryRemote:
+            def __init__(self,*a,**kw): pass
+            def preflight(self): return SimpleNamespace(free_a_before=10000000)
+            def callbacks(self,namespace,*,destination_kind):
+                calls.append((namespace,destination_kind))
+                def up(k,n,p): stored[k][n]=p
+                return (lambda n,p:up("a",n,p),lambda n,p:up("b",n,p),
+                        lambda n:stored["a"][n],lambda n:stored["b"][n])
+        class FakeRead:
+            def __init__(self,*a,**kw):
+                self.payload=blob;self.pos=0;self.n=0;self.verified=False
+            def __enter__(self):return self
+            def read(self,n):
+                if self.pos>=len(self.payload):
+                    self.verified=True;return b""
+                chunk=self.payload[self.pos:self.pos+n]
+                self.pos+=len(chunk);self.n+=len(chunk);return chunk
+            def __exit__(self,*a):return False
+        args=SimpleNamespace(mode="transfer",snapshot="nov5-a",
+                ssh_config="/na",known_hosts="/na",public_pem="/na",
+                rclone_config="/na",rclone_exe="/usr/bin/rclone",
+                trusted_public_spki_sha256=fp)
+        with patch.object(m,"SOURCE_BYTES",len(blob)),patch.object(m,"CHUNK_BYTES",4096):
+            with patch.object(m.pwd,"getpwuid",return_value=SimpleNamespace(pw_name="githubops")):
+                with patch.object(m,"probe_source",return_value=self.fake_probe()):
+                    with patch.object(m,"_secure_file",return_value=pub):
+                        with patch.object(m,"RcloneDualStore",MemoryRemote):
+                            with patch.object(m,"VerifiedCpanelStream",FakeRead):
+                                result=m.run_export(args)
+        self.assertTrue(result["backup_uploaded"])
+        self.assertTrue(result["source_sha256_verified"])
+        self.assertFalse(result["source_deleted"])
+        self.assertFalse(result["safe_to_delete"])
+        self.assertFalse(result["new_current_factory_backup_created"])
+        self.assertEqual(result["source_bytes"],len(blob))
+        self.assertEqual(len(stored["a"]),len(stored["b"]))
+        self.assertTrue(all(stored["a"][name]==stored["b"][name] for name in stored["a"]))
+        self.assertEqual(len(calls),1)
+        self.assertEqual(calls[0][1],"historical-nov5")
+        self.assertTrue(calls[0][0].startswith("factory-historical-"))
+
+
 if __name__=="__main__":
     unittest.main()
