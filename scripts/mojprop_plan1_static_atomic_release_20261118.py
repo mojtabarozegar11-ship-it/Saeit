@@ -27,8 +27,12 @@ import tempfile
 
 ACCOUNT = "zomorod2"
 LIVE = Path("/home/zomorod2/mojplaywin.com/moj-prop/index.html")
-BACKUP = Path("/home/zomorod2/.backups/mojprop-pre-plan1-76918c5129ff-20261118.html")
-LOCK = Path("/home/zomorod2/.backups/.mojprop-prelaunch-static.lock")
+# The cPanel .backups DIRECTORY IS NOT OWNER-PRIVATE in the proven live audit.
+# Its permissions are NEVER changed; create only a dedicated 0700 child after
+# explicitly approved installation. Read-only preflight creates NOTHING.
+BACKUP_ROOT = Path("/home/zomorod2/.backups/mojprop-plan1-private-20261118")
+BACKUP = BACKUP_ROOT / "mojprop-pre-plan1-76918c5129ff-20261118.html"
+LOCK = BACKUP_ROOT / ".mojprop-prelaunch-static.lock"
 ORIGINAL_SHA = "76918c5129ff669ef02f82435a68f61a32d70141800712100d4a7fe9e8554895"
 ORIGINAL_SIZE = 23869
 CANDIDATE_SHA = "13bd45c1d6b62f03058428b3086e71b17de4f2776238e8ab85a49d648fce49b0"
@@ -97,14 +101,44 @@ def _regular_read(path: Path, uid: int) -> tuple[bytes, os.stat_result]:
         os.close(fd)
 
 
-def _directory_checks(live: Path, backup: Path, uid: int) -> None:
-    for folder in (live.parent, live.parent.parent, backup.parent):
-        s = folder.lstat()
-        if not stat.S_ISDIR(s.st_mode) or folder.is_symlink() or s.st_mode & 0o002:
-            raise ExactStaticReleaseDenied("UNSAFE_RELEASE_DIRECTORY")
-    bs = backup.parent.stat()
-    if bs.st_uid != uid or bs.st_mode & 0o077:
+def _private_rollback_dir(folder: Path, uid: int) -> bool:
+    try:
+        s=folder.lstat()
+    except FileNotFoundError:
+        return False
+    if (not stat.S_ISDIR(s.st_mode) or s.st_uid != uid or
+            s.st_mode & 0o077 or folder.is_symlink()):
         raise ExactStaticReleaseDenied("ROLLBACK_FOLDER_NOT_OWNER_PRIVATE")
+    return True
+
+
+def _directory_checks(live: Path, backup: Path, uid: int) -> bool:
+    # The existing cPanel .backups parent can be 0755; it is NOT modified.
+    # The dedicated CHILD, when it exists, must be strict owner-only 0700.
+    for folder in (live.parent, live.parent.parent, backup.parent.parent):
+        s = folder.lstat()
+        if (not stat.S_ISDIR(s.st_mode) or folder.is_symlink() or
+                s.st_mode & 0o002):
+            raise ExactStaticReleaseDenied("UNSAFE_RELEASE_DIRECTORY")
+    parent=backup.parent.parent.lstat()
+    if parent.st_uid != uid:
+        raise ExactStaticReleaseDenied("BACKUP_BASE_OWNER_MISMATCH")
+    return _private_rollback_dir(backup.parent, uid)
+
+
+def _create_owner_private_child_after_approval(folder: Path, uid: int) -> None:
+    # Never called during preflight. Refuse symlinks and collisions, and fsync
+    # the unmodified parent after creating the new dedicated PRIVATE child.
+    if _private_rollback_dir(folder, uid):
+        return
+    folder.mkdir(mode=0o700, exist_ok=False)
+    if not _private_rollback_dir(folder, uid):
+        raise ExactStaticReleaseDenied("NEW_PRIVATE_ROLLBACK_DIR_UNVERIFIED")
+    fd=os.open(str(folder.parent),os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def _validate_candidate(candidate: Path, uid: int, *, live: Path = LIVE,
@@ -192,7 +226,7 @@ def transact(mode: str, *, live: Path = LIVE, backup: Path = BACKUP,
     if mode not in ("preflight", "install", "rollback"):
         raise ExactStaticReleaseDenied("INVALID_OPERATION")
     uid = os.geteuid() if uid is None else uid
-    _directory_checks(live, backup, uid)
+    private_rollback_dir_exists = _directory_checks(live, backup, uid)
     if mode != "rollback" and candidate is None:
         raise ExactStaticReleaseDenied("NO_CANDIDATE_SOURCE")
     current, _ = _regular_read(live, uid)
@@ -204,6 +238,8 @@ def transact(mode: str, *, live: Path = LIVE, backup: Path = BACKUP,
         return {"status": "PINNED_SOURCE_PREFLIGHT_ONLY", "writes": False,
                 "old_size": ORIGINAL_SIZE, "new_size": CANDIDATE_SIZE,
                 "private_rollback_exists": backup.exists(),
+                "private_rollback_folder_exists": private_rollback_dir_exists,
+                "private_rollback_folder_requires_approved_creation": not private_rollback_dir_exists,
                 "fresh_restore_independently_proven": False,
                 "install_allowed_by_preflight": False}
 
@@ -217,6 +253,8 @@ def transact(mode: str, *, live: Path = LIVE, backup: Path = BACKUP,
     else:
         if owner_ack != OWNER_ROLLBACK_ACK:
             raise ExactStaticReleaseDenied("ROLLBACK_OWNER_APPROVAL_REQUIRED")
+        if not private_rollback_dir_exists:
+            raise ExactStaticReleaseDenied("PRIVATE_ROLLBACK_FOLDER_MISSING")
         exact(current, CANDIDATE_SHA, CANDIDATE_SIZE, "CURRENT_INSTALL")
         if not _backup_valid(backup, uid):
             raise ExactStaticReleaseDenied("VALID_PRIVATE_ROLLBACK_MISSING")
@@ -225,6 +263,8 @@ def transact(mode: str, *, live: Path = LIVE, backup: Path = BACKUP,
 
     if os.statvfs(live.parent).f_bavail * os.statvfs(live.parent).f_frsize < MIN_STATIC_FILESYSTEM_FREE:
         raise ExactStaticReleaseDenied("STATIC_TRANSACTION_LOCAL_HEADROOM_LOW")
+    if mode == "install" and not private_rollback_dir_exists:
+        _create_owner_private_child_after_approval(backup.parent, uid)
     lock = backup.parent / LOCK.name
     fd = os.open(str(lock), os.O_CREAT | os.O_RDWR | NOFOLLOW, 0o600)
     try:
