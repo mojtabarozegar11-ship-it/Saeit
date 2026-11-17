@@ -130,6 +130,7 @@ class ChallengeReplayDecision:
     phase_two_started_at_utc: str | None = None
     phase_two_completed_at_utc: str | None = None
     phase_one_frozen_evidence_sha256: str | None = None
+    phase_two_frozen_evidence_sha256: str | None = None
 
 
 def _utc(value, name):
@@ -474,6 +475,22 @@ def replay_simulated_challenge(*, snapshot: EngineSnapshot,
         phase_one_digest = sha256(json.dumps(
             frozen, sort_keys=True, separators=(",", ":"),
             ensure_ascii=True).encode("utf-8")).hexdigest()
+    # Phase-two acceptance freezes its FULL closed-fill/equity source evidence
+    # separately. A later social verification cannot rewrite trading records.
+    phase_two_digest = None
+    if final is not None:
+        frozen_two = dict(
+            domain="mojprop.v141.simulated.stage-two-evidence.v1",
+            challenge_ref=snapshot.challenge_ref,
+            terms=terms.contract_candidate_sha256,
+            phase_two_started_at=second.isoformat() if second else None,
+            phase_two_completed_at=final.isoformat(),
+            records=sorted((row for row in digest_rows if row[1] == 2),
+                           key=lambda row: json.dumps(row)),
+        )
+        phase_two_digest = sha256(json.dumps(
+            frozen_two, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=True).encode("utf-8")).hexdigest()
     payload = dict(
         domain="mojprop.v141.simulated.event-replay.review.v1",
         challenge_ref=snapshot.challenge_ref, terms=terms.contract_candidate_sha256,
@@ -499,4 +516,5 @@ def replay_simulated_challenge(*, snapshot: EngineSnapshot,
         phase_two_started_at_utc=second.isoformat() if second else None,
         phase_two_completed_at_utc=final.isoformat() if final else None,
         phase_one_frozen_evidence_sha256=phase_one_digest,
+        phase_two_frozen_evidence_sha256=phase_two_digest,
     )
