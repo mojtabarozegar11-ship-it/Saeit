@@ -95,17 +95,28 @@ class MojPropStarter30NativeAccessTests(TestCase):
         self.assertNotIn('value="digital" selected', html)
 
     def test_12_public_catalog_has_sku_bound_nojs_link(self):
+        # Starter30 is an older, nonpayable ten-session educational SKU,
+        # never the genuine MOJ-PROP-01 challenge. A generic blueprint
+        # fallback must NOT silently relabel genuine Plan1 enquiries.
+        home = (ROOT / "templates/moj-prop-v4/index.html").read_text("utf-8")
+        legacy_link = (
+            '/moj-prop-intake/?format=html&amp;service=blueprint'
+            '&amp;package=starter-30-trx'
+        )
+        self.assertNotIn(legacy_link, home)
+        self.assertIn('href="/moj-prop-interest/form/"', home)
+        self.assertIn('href="/moj-prop-interest/form/?lang=fa"', home)
+        self.assertNotIn("MOJPROP-STARTER30", home)
+        # The separate educational catalog and detail still expose their
+        # own bounded no-JS general-service interest page.
         for relative in (
-            "templates/moj-prop-v4/index.html",
             "templates/moj-prop-v4/catalog/index.html",
             "templates/moj-prop-v4/starter-30-trx/index.html",
         ):
             with self.subTest(relative=relative):
                 html = (ROOT / relative).read_text("utf-8")
-                self.assertIn(
-                    '/moj-prop-intake/?format=html&amp;service=blueprint'
-                    '&amp;package=starter-30-trx', html,
-                )
+                self.assertIn(legacy_link, html)
+                self.assertNotIn('action="/commerce/', html)
 
     def _submit_from_real_rendered_form(self):
         page = self.fetch(STARTER_URL)
