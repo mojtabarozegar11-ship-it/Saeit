@@ -115,7 +115,8 @@ class C161EffectiveConfigPrivacy(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             home=Path(td)
             root=home/"Saeit-staging"
-            root.mkdir(mode=0o770)
+            root.mkdir(mode=0o700)
+            os.chmod(root,0o770)  # mkdir mode alone is reduced by CI umask
             (root/"media").mkdir(mode=0o700)
             with patch.object(c,"HOME",home),patch.object(c,"ROOT",root):
                 d=c.class_media_path(SimpleNamespace(MEDIA_ROOT=root/"media",
