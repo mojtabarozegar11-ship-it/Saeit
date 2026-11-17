@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/mojprop-v141-stage-specific-28d-windows-20261117
+      - feature/mojprop-v141-secure-customer-statement-20261117
   workflow_dispatch:
 
 permissions:
@@ -60,7 +61,9 @@ jobs:
           PY
       - name: Migrate 0001-0010 into DISPOSABLE test database and execute real transactional tests
         run: |
-          python -m django test tests.test_mojprop_v141_mariadb_integration \
+          python -m django test \
+            tests.test_mojprop_v141_mariadb_integration \
+            tests.test_mojprop_v141_private_statement_mariadb \
             --settings=config.mojprop_v141_ci_mariadb_settings \
             --verbosity=2 --noinput
       - name: Explicit release status
