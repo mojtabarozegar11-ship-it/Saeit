@@ -1,0 +1,211 @@
+name: Zomorod auctions 72 SEO-only verified release
+on:
+  pull_request:
+    paths:
+      - "public/auctions/**"
+      - "public/sitemap-auctions.xml"
+      - "content/auctions-seo-20261117/**"
+      - "tests/test_zomorod_auctions_72_seo.py"
+      - "scripts/zomorod_auctions_seo_deploy_20261117.py"
+      - ".github/workflows/zomorod-auctions-seo-release.yml"
+  push:
+    branches: [main]
+    paths:
+      - "public/auctions/**"
+      - "public/sitemap-auctions.xml"
+      - "content/auctions-seo-20261117/**"
+      - "tests/test_zomorod_auctions_72_seo.py"
+      - "scripts/zomorod_auctions_seo_deploy_20261117.py"
+      - ".github/workflows/zomorod-auctions-seo-release.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-auctions-official-350-421
+  cancel-in-progress: false
+
+jobs:
+  seo-check:
+    name: Validate 72 unique Persian SEO pages and index
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      SECRET_KEY: "zomorod-auctions-seo-ci-only-not-for-production"
+      DEBUG: "0"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,testserver"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check SEO, legal invariants, sitemap, and release script
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_auctions_seo_deploy_20261117.py
+          python3 -m pip install --quiet --disable-pip-version-check -r requirements.txt
+          python3 -m pytest -q tests/test_zomorod_auction_directory_artifacts.py tests/test_zomorod_auctions_72_publication.py tests/test_zomorod_auctions_72_seo.py
+          echo AUCTIONS_SEO_SOURCE_QA=passed
+
+  seo-publish:
+    name: Publish only revised SEO assets via verified cPanel route
+    needs: seo-check
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit' }}
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare SSH with previously pinned factory and cPanel host identities
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-auctions-seo-relay"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 127.0.0.1 > "$d/vps.known" 2>/dev/null
+          test -s "$d/vps.known"
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 127.0.0.1
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = zomorod2'
+          echo AUCTIONS_SEO_PINNED_RELAY=verified
+
+      - name: Transfer 74 approved SEO file sources to private cPanel stage and preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-auctions-seo-relay"
+          stage="/home/zomorod2/.zm-auctions-seo-stage-$GITHUB_SHA"
+          files=("public/auctions/index.html" "public/sitemap-auctions.xml"
+                 "content/auctions-seo-20261117/baseline.json"
+                 "scripts/zomorod_auctions_seo_deploy_20261117.py")
+          for n in $(seq 350 421); do files+=("public/auctions/$n/index.html"); done
+          test "${#files[@]}" -eq 76
+          ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          tar -cf - "${files[@]}" | ssh -T -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
+          ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/scripts/zomorod_auctions_seo_deploy_20261117.py' check '$GITHUB_SHA'"
+          echo AUCTIONS_SEO_PRIVATE_STAGE=validated
+
+      - name: Atomic SEO release with per-file original hash gates and 74 private backups
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-auctions-seo-relay"
+          script="/home/zomorod2/.zm-auctions-seo-stage-$GITHUB_SHA/scripts/zomorod_auctions_seo_deploy_20261117.py"
+          ssh -T -F "$d/config" saeit-cpanel "python3 '$script' apply '$GITHUB_SHA'"
+
+      - name: Verify live canonical, robots, breadcrumbs, related links, 72 routes and originals
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-auctions-seo-relay"
+          script="/home/zomorod2/.zm-auctions-seo-stage-$GITHUB_SHA/scripts/zomorod_auctions_seo_deploy_20261117.py"
+          ssh -T -F "$d/config" saeit-cpanel "python3 '$script' verify '$GITHUB_SHA'"
+          python3 - <<'PY'
+          import concurrent.futures
+          import os
+          import re
+          import time
+          from urllib.request import urlopen, Request
+          from html.parser import HTMLParser
+
+          base="https://www.zomorodmelal.ir"
+          origin="https://zomorodmelal.ir"
+          sha=os.environ["GITHUB_SHA"]
+          def get(path, retries=3):
+              last=None
+              for attempt in range(retries):
+                  try:
+                      req=Request(base+path,headers={"User-Agent":"ZomorodSEORelease/1.0","Cache-Control":"no-cache"})
+                      with urlopen(req,timeout=27) as r:
+                          assert r.status==200, (path,r.status)
+                          return r.read(250000).decode("utf-8","replace")
+                  except Exception as e:
+                      last=e
+                      time.sleep(1+attempt)
+              raise RuntimeError(f"PUBLIC_SEO_HTTP_FAILED_{path}: {last}")
+          def inspect(n):
+              body=get(f"/auctions/{n}/?seo_release={sha}")
+              if n>=350:
+                  assert f"zm-auctions-seo-20261117-v1" in body, n
+                  assert f"zm-auctions-72-v1 official-{n}" in body, n
+                  assert f'rel="canonical" href="{origin}/auctions/{n}/"' in body, n
+                  assert '"@type":"BreadcrumbList"' in body, n
+                  assert 'meta property="og:description"' in body, n
+                  assert 'name="twitter:card"' in body, n
+                  assert f'href="/auctions/{n+(36 if n<=385 else -36)}/"' in body, n
+              else:
+                  assert str(n) in body, n
+              return n
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+              verified=list(pool.map(inspect,range(346,422)))
+          assert verified == list(range(346,422))
+          directory=get("/auctions/?seo_release="+sha)
+          assert "zm-auctions-seo-20261117-index-v1" in directory
+          for n in range(346,422):
+              assert f'href="/auctions/{n}/"' in directory
+          assert 'href="/auctions/supplier-kit/"' in directory
+          sitemap=get("/sitemap-auctions.xml?seo_release="+sha)
+          assert sitemap.count("<lastmod>2026-11-17</lastmod>")==73
+          for n in range(346,422):
+              assert f"/auctions/{n}/" in sitemap
+          robots=get("/robots.txt?seo_release="+sha)
+          assert "Sitemap: https://zomorodmelal.ir/sitemap-auctions.xml" in robots
+          kit=get("/auctions/supplier-kit/?seo_release="+sha)
+          assert "۳۴۶" in kit or "346" in kit
+          get("/?seo_release="+sha)
+          print("AUCTIONS_SEO_LIVE=72_metadata_breadcrumb_related_links_verified")
+          print("AUCTIONS_SEO_ORIGINALS=346_349_index_kit_robots_preserved")
+          PY
+
+      - name: Restore only owned 74 files on failed public verification
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-auctions-seo-relay"
+          if test -f "$d/config"; then
+            script="/home/zomorod2/.zm-auctions-seo-stage-$GITHUB_SHA/scripts/zomorod_auctions_seo_deploy_20261117.py"
+            ssh -T -F "$d/config" saeit-cpanel "python3 '$script' rollback '$GITHUB_SHA'" || true
+          fi
+
+      - name: Remove temporary SSH keys from runner
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-auctions-seo-relay"
