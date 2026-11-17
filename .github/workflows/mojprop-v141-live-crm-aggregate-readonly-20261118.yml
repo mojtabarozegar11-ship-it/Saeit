@@ -266,8 +266,9 @@ jobs:
               'public_mailto_link_count':len(parser.contacts),
               'unique_mailto_destinations':len(set(parser.contacts)),
               'directly_matches_connected_mojplaywin_gmail':bool(set(parser.contacts)&connected),
+              'published_public_contact_recipient':parser.contacts[0] if len(parser.contacts)==1 else None,
               'all_mailtos_directly_match_connected_mojplaywin_gmail':bool(parser.contacts and set(parser.contacts)<=connected),
-              'destination_addresses_logged':False,'messages_sent':False,
+              'destination_is_already_public_on_website':True,'messages_sent':False,
               'mailbox_forwarding_verified':False,
               'production_site_modified':False,
           }
