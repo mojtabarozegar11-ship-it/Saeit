@@ -153,6 +153,11 @@ class RcloneDualStore:
         self._admission = None
         self._objects_written = set()
         self._callbacks_claimed = False
+        # Independent per-provider ciphertext attestations; a final manifest
+        # cannot precede dual upload AND exact bounded remote readback.
+        self._cipher_parts = {self.remote_a: {}, self.remote_b: {}}
+        self._verified_parts = {self.remote_a: set(), self.remote_b: set()}
+        self._manifest_object_name = None
 
     def _run(self, *argv: str, max_output: int = 0, input_bytes: bytes | None = None) -> bytes:
         return _rclone_call([self.executable, '--config', str(self.config_path), '--quiet', *argv],
@@ -270,17 +275,39 @@ class RcloneDualStore:
             key = (remote, name)
             if key in self._objects_written:
                 raise TransferHold('DUPLICATE_PART_UPLOAD')
+            if encrypted and self._manifest_object_name is not None:
+                raise TransferHold('CIPHERTEXT_AFTER_MANIFEST_DENIED')
+            if manifest:
+                parts_a = self._cipher_parts[self.remote_a]
+                parts_b = self._cipher_parts[self.remote_b]
+                if (not parts_a or parts_a != parts_b
+                        or self._verified_parts[self.remote_a] != set(parts_a)
+                        or self._verified_parts[self.remote_b] != set(parts_b)):
+                    raise TransferHold('MANIFEST_BEFORE_DUAL_PART_READBACK_DENIED')
+                if self._manifest_object_name is not None and self._manifest_object_name != name:
+                    raise TransferHold('CONFLICTING_COMPLETION_MANIFEST_DENIED')
             path = prefix + '/' + name
             # Best-effort existence probe: rclone lsf on the whole folder; no
             # deletion or overwrite flags. Unique 128-bit run path is required.
             self._run('rcat', remote + ':' + path, '--size', str(len(payload)),input_bytes=payload)
             self._objects_written.add(key)
+            if encrypted:
+                self._cipher_parts[remote][name] = (len(payload), _sha(payload))
+            else:
+                self._manifest_object_name = name
 
         def read(remote: str, name: str) -> bytes:
             if (remote, name) not in self._objects_written:
                 raise TransferHold('UNUPLOADED_PART_READBACK_DENIED')
             max_bytes = MAX_MANIFEST_BYTES if name.endswith('-manifest.json') else MAX_CIPHER_PART_BYTES
-            return self._cat(remote, prefix + '/' + name, max_bytes=max_bytes)
+            observed = self._cat(remote, prefix + '/' + name, max_bytes=max_bytes)
+            if name.endswith('.enc'):
+                expected = self._cipher_parts[remote].get(name)
+                if (expected is None or len(observed) != expected[0]
+                        or not hmac.compare_digest(_sha(observed), expected[1])):
+                    raise TransferHold('REMOTE_CIPHERTEXT_READBACK_MISMATCH')
+                self._verified_parts[remote].add(name)
+            return observed
 
         return (lambda name,payload:upload(self.remote_a,name,payload),
                 lambda name,payload:upload(self.remote_b,name,payload),
