@@ -51,6 +51,8 @@ class LocalizedPublicInfoTests(TestCase):
         self.assertContains(page, 'v1.4.1-50-OR-28D-DRAFT')
         self.assertContains(page, 'NOT OPEN FOR PAID ENROLLMENT')
         self.assertContains(page, 'href="mailto:mojplaywin@gmail.com')
+        for code in SUPPORTED_CODES:
+            self.assertContains(page, 'href="/moj-prop-v141-info/?lang=' + code + '"')
         self.assertEqual(PropV141Interest.objects.count(), 0)
 
     def test_disable_interest_hides_localized_form_cta_not_information(self):
