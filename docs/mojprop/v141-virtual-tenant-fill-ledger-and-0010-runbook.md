@@ -53,31 +53,35 @@ customer trade form, no broker execution or payments have been proven.
   hash mismatch after loading a Django DecimalField; quantities * price
   differences permit an 8-place exact USD P&L in proposed persistence.
 
-## 2026-11-17 stage-clock correctness fix (stacked draft)
+## 2026-11-17 shared evaluation deadline and stage-transition hardening (stacked draft)
 
-**Detected defect in #2684:** the virtual replay originally compared **both**
-stages against the initial stage-one `opened_at_utc + 28 days`. This rejects
-legitimate second-stage events after the original window despite the
-two-consecutive-stage contract.
+**Contract reconciliation — important correction:** the *authoritative unsigned
+FA/EN buyer terms* in `plan1_v14_social_or_50_terms.py` and the base
+`xauusd_v13_draft_terms.py` specify **ONE 28-day evaluation window for BOTH
+sequential demo phases**, not 28 days *per phase*. The independently separate
+28-day social-post hold is a different clock. A previous implementation in
+this same draft briefly treated stage two as gaining an extra 28 days;
+**that interpretation was invalid and is now rejected**.
 
-The isolated fix now reads the **persisted** stage-one acceptance timestamp
-and stage-two start timestamp from `PropV141SimState` through the internal
-writer. Stage-one fills must execute from the first start **up to and including** its recorded acceptance instant (but strictly before its own deadline). Stage-two fills must execute from the recorded second
-start **up to but excluding** that stage's own 28-day deadline. A second stage
-requires stage-one acceptance within the first deadline, followed by its own
-recorded start; future or reversed transitions fail closed. Any still-open
-stage-one inventory prevents second-stage review. No database schema change
-is needed for this correction, since both transition fields already exist
-in the independent `0009` state schema.
+The final code reuses the **single deadline**
+`evaluation_started_at + timedelta(days=28)` for all phase-one and
+phase-two fills. It also validates independently persisted stage-one
+acceptance and stage-two start from `PropV141SimState`: no phase-two event
+may precede its actual start, no start at or after the overall 28-day
+deadline may unlock stage two, phase one freezes after acceptance, no
+reversed/future transitions, and no carried-open stage-one position
+inventory. A historical final fill exactly at first-stage acceptance is
+valid (the internal writer still blocks new post-acceptance appends).
+No additional database schema change was needed.
 
-Regression checks: 16 additional pure replay tests and 2 new Django source
-checks. These prove only the checked Python behavior and wiring; they do not
-prove that production MariaDB transitions have been applied, that an upstream source is
-genuine, or that the broker and payment service may operate.
+**Regression target:** 18 additional pure replay checks and 2 Django
+source checks compared with PR #2684's 817-case baseline. Exact combined
+Python test inventory = **837**. Previously reported 835-case CI
+demonstrated the *intermediate* clock interpretation; only a new CI success
+on the revised final SHA proves this corrected policy.
 
-**Deployment and commercial restrictions remain unchanged:** no merge to the
-production branch, no `0009`/`0010` migration, no public orders, no TRX
-settlement, and no automatic real-company broker execution.
+No production migration, deployment, broker order, enrollment, payment,
+legal approval or external market-feed authenticity is implied by these tests.
 
 ## 2026-11-17 ephemeral MariaDB integration evidence
 
