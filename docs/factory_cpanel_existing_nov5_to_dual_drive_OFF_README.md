@@ -26,11 +26,11 @@ Google Drive connector در هر حساب جداگانه برگشت `shared=fals
 
 ```bash
 # فقط فراداده: اثبات وجود دو فایل قدیمی روی cPanel، بدون خواندن محتوای بکاپ
-python3 -B scripts/factory_cpanel_existing_nov5_two_drive.py \
+python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive \
   --mode probe --snapshot nov5-a \
   --ssh-config /ABSOLUTE/OWNER_ONLY/ssh_config \
   --known-hosts /ABSOLUTE/OWNER_ONLY/cpanel_known_hosts
-python3 -B scripts/factory_cpanel_existing_nov5_two_drive.py \
+python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive \
   --mode probe --snapshot nov5-b \
   --ssh-config /ABSOLUTE/OWNER_ONLY/ssh_config \
   --known-hosts /ABSOLUTE/OWNER_ONLY/cpanel_known_hosts
@@ -41,7 +41,7 @@ python3 -B scripts/factory_cpanel_existing_nov5_two_drive.py \
 بعد از احراز دو هویت و دو سهمیه، اجرای تک‌فایلی با کلید عمومی رسمیِ دارای fingerprint تأییدشده (فایلِ کلید خصوصی و گذرواژه به Runner نیاید):
 
 ```bash
-python3 -B scripts/factory_cpanel_existing_nov5_two_drive.py \
+python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive \
   --mode transfer --snapshot nov5-a \
   --ssh-config /ABSOLUTE/OWNER_ONLY/ssh_config \
   --known-hosts /ABSOLUTE/OWNER_ONLY/cpanel_known_hosts \
@@ -67,3 +67,8 @@ python3 -B scripts/factory_cpanel_existing_nov5_two_drive.py \
 ### تفاوت مهم حساب محلی Runner و SSH مقصد
 
 در اجرای واقعی [#44177089787](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44177089787)، آزمون‌های ۴۲+۷۹ در اولین چرخه موفق شدند اما بررسی ریموت به‌دلیل فرض اشتباه «کاربر Runner محلی = githubops» پیش از تماس با هاست متوقف شد. حساب `githubops` نام SSH روی VPS است، نه الزاماً اکانت سرویس GitHub Actions. شرط به اجرای **غیرروت**، فایل‌های SSH با مالکیت همان Runner و مجوز 0600، و اثرانگشت دقیق هر دو مقصد تغییر یافت. این اصلاح مجوز دسترسی اضافی ایجاد نمی‌کند، کاربر SSH مقصد را تغییر نمی‌دهد و کارخانه را روشن نمی‌کند. نتیجه اجرای اصلاح‌شده باید جداگانه با رسید دقیق HEAD بررسی شود؛ موفقیت تست‌ها جایگزین رسید اتصال cPanel نیست.
+
+
+### رفع مشکل واردکردن ماژول در CLI
+
+در [CI #44178162335](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44178162335) پس از موفقیت ۱۲۱ آزمون آفلاین، فراخوانی فایل با مسیر `python3 -B scripts/...py`، واردکردن package `scripts` را از بین برد و پیش از خواندن فایل‌های cPanel خطای `ModuleNotFoundError` داد. فراخوانی از ریشه مخزن به شکل `python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive` اصلاح شد. این تغییر صرفاً روش اجرای کد است و هیچ مجوز، عملیات انتقال یا حذف تازه‌ای انجام نمی‌دهد.
