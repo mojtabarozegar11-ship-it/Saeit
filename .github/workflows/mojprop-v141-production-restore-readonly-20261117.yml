@@ -50,6 +50,14 @@ jobs:
             echo "PUBLIC_HEAD_EXIT=$curl_exit"
           done
           echo "HEAD_IS_READ_ONLY_AND_DOES_NOT_PROVE_DEPLOYMENT=true"
+      - name: Validate live FA/EN unpaid Plan1 lead form via bounded public GET (no POST)
+        id: lead_form
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
+            tests.test_mojprop_c142_public_form_get_readonly
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B scripts/mojprop_c142_public_form_get_readonly.py
       - name: Inspect candidate cPanel runtime, quota and DB connection through pinned SSH
         id: cpanel
         continue-on-error: true
@@ -171,6 +179,7 @@ jobs:
           echo "BROKER_ORDER_SUBMITTED=false"
           echo "PUBLIC_DEPLOYMENT_PERFORMED=false"
           echo "RELEASE_AUTHORIZED=false"
+          echo "PUBLIC_GET_FORM_STEP_OUTCOME=${{ steps.lead_form.outcome }}"
           echo "CPANEL_AUDIT_STEP_OUTCOME=${{ steps.cpanel.outcome }}"
           echo "VPS_AUDIT_STEP_OUTCOME=${{ steps.vps.outcome }}"
           if [[ "${{ steps.cpanel.outcome }}" != "success" || "${{ steps.vps.outcome }}" != "success" ]]; then
