@@ -149,7 +149,7 @@ def draft_gold_terms_v13() -> DraftV13GoldTerms:
             waiver.posting_a_condition_of_funded_profit is not False):
         raise ValueError("mandatory social-post waiver is not preserved")
     old_conflict = any(
-        "50 independently verified closed positions in EACH" in x
+        "50 independently verified closed positions are required in EACH" in x
         for x in PREPURCHASE_DISCLOSURES
     )
     if not old_conflict:
