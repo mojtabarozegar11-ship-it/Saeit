@@ -51,7 +51,8 @@ def prepare_consent_review(*, interest_ref: str, interest_digest: str,
         if type(value) is not str or _REF.fullmatch(value) is None:
             raise BridgeClosed("invalid private reference")
     if (type(interest_digest) is not str
-            or _HEX.fullmatch(interest_digest) is None):
+            or _HEX.fullmatch(interest_digest) is None
+            or interest_digest == "0" * 64):
         raise BridgeClosed("missing immutable interest provenance")
     if consent_recorded is not True:
         raise BridgeClosed("interest consent not independently recorded")
@@ -61,6 +62,9 @@ def prepare_consent_review(*, interest_ref: str, interest_digest: str,
             or _HEX.fullmatch(signed_customer_terms_sha256) is None
             or type(trusted_contract_sha256) is not str
             or _HEX.fullmatch(trusted_contract_sha256) is None
+            or signed_customer_terms_sha256 == "0" * 64
+            or trusted_contract_sha256 == "0" * 64
+            or hmac.compare_digest(interest_digest, trusted_contract_sha256)
             or not hmac.compare_digest(signed_customer_terms_sha256,
                                        trusted_contract_sha256)):
         raise BridgeClosed("independently signed customer terms not bound")
