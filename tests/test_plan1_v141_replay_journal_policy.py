@@ -300,7 +300,10 @@ class SignedReplayJournalPolicyTests(unittest.TestCase):
         snap=good_snapshot()
         alt=snap.closed_fills[:-1]+(replace(snap.closed_fills[-1],
                                               gross_realized_usd="0.24"),)
-        result=replay_simulated_challenge(snapshot=replace(snap,closed_fills=alt))
+        aligned_marks=snap.equity_marks[:-1]+(
+            replace(snap.equity_marks[-1],equity_usd="106.24"),)
+        result=replay_simulated_challenge(snapshot=replace(
+            snap,closed_fills=alt,equity_marks=aligned_marks))
         prior=previous_phase_one_passed()
         self.assertEqual(result.phase_one_frozen_evidence_sha256,
                          prior.last_phase_one_evidence_sha256)
@@ -361,6 +364,105 @@ class SignedReplayJournalPolicyTests(unittest.TestCase):
         old=replace(previous_phase_one_passed(),engine_state="SIMULATED_STAGE_ONE_IN_REVIEW")
         with self.assertRaises(JournalTransitionRejected):
             policy(state=old,calculated=replay_simulated_challenge(snapshot=good_snapshot()),sequence=2)
+
+
+def previous_stage_two_math_done():
+    calc=replay_simulated_challenge(snapshot=good_snapshot())
+    return replace(
+        previous_phase_one_passed(), sequence=2,
+        engine_state="TRADING_MATH_COMPLETE_WAITING_SOCIAL_CLOCK",
+        last_assessment_utc=NOW, last_phase_two_started_utc=PHASE2,
+        last_phase_two_completed_utc=COMPLETED,
+        last_phase_two_evidence_sha256=calc.phase_two_frozen_evidence_sha256,
+        previous_receipt_sha256=PREVIOUS,
+    )
+
+
+class FinishedStageTwoEvidenceGuards(unittest.TestCase):
+    def test_53_completed_stage_two_has_unique_frozen_digest(self):
+        x=replay_simulated_challenge(snapshot=good_snapshot())
+        self.assertRegex(x.phase_two_frozen_evidence_sha256,r"^[a-f0-9]{64}$")
+        self.assertNotEqual(x.phase_two_frozen_evidence_sha256,x.phase_one_frozen_evidence_sha256)
+
+    def test_54_uncompleted_phase_two_has_no_frozen_digest(self):
+        snap=replace(good_snapshot(),phase_two_completed_at=None)
+        self.assertIsNone(replay_simulated_challenge(snapshot=snap).phase_two_frozen_evidence_sha256)
+
+    def test_55_stage_two_completion_produces_signed_receipt_digest(self):
+        calc=replay_simulated_challenge(snapshot=good_snapshot())
+        x=policy(state=previous_phase_one_passed(),calculated=calc,sequence=2)
+        self.assertEqual(x.phase_two_evidence_sha256,calc.phase_two_frozen_evidence_sha256)
+
+    def test_56_proven_previous_stage_two_history_can_be_reverified(self):
+        snap=replace(good_snapshot(),as_of=NOW+timedelta(days=1))
+        x=policy(state=previous_stage_two_math_done(),
+                 calculated=replay_simulated_challenge(snapshot=snap),sequence=3)
+        self.assertEqual(x.resulting_engine_state,"TRADING_MATH_COMPLETE_WAITING_SOCIAL_CLOCK")
+
+    def test_57_stage_two_postcompletion_profit_reallocation_is_blocked(self):
+        snap=good_snapshot()
+        fs=list(snap.closed_fills)
+        fs[25]=replace(fs[25],gross_realized_usd="0.26")
+        fs[26]=replace(fs[26],gross_realized_usd="0.24")
+        result=replay_simulated_challenge(snapshot=replace(
+            snap,as_of=NOW+timedelta(days=1),closed_fills=tuple(fs)))
+        self.assertTrue(result.phase_math_complete)
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=previous_stage_two_math_done(),calculated=result,sequence=3)
+
+    def test_58_stage_two_postcompletion_equity_history_rewrite_is_blocked(self):
+        snap=good_snapshot()
+        marks=list(snap.equity_marks)
+        marks[15]=replace(marks[15],equity_usd="100.99")
+        calc=replay_simulated_challenge(snapshot=replace(
+            snap,as_of=NOW+timedelta(days=1),equity_marks=tuple(marks)))
+        self.assertTrue(calc.phase_two.mathematical_pass)
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=previous_stage_two_math_done(),calculated=calc,sequence=3)
+
+    def test_59_stage_two_completion_with_fewer_than_fifty_total_closes_is_rejected(self):
+        snap=good_snapshot()
+        fs=snap.closed_fills[:-1]
+        calc=replay_simulated_challenge(snapshot=replace(snap,closed_fills=fs))
+        self.assertFalse(calc.phase_math_complete)
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=previous_phase_one_passed(),calculated=calc,sequence=2)
+
+    def test_60_stage_two_unreconciled_close_blocks_final_approval(self):
+        snap=good_snapshot()
+        fs=snap.closed_fills[:25]+(replace(
+            snap.closed_fills[25],reconciliation_status="pending"),)+snap.closed_fills[26:]
+        calc=replay_simulated_challenge(snapshot=replace(snap,closed_fills=fs))
+        self.assertIn("unreconciled_close_event",calc.blockers)
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=previous_phase_one_passed(),calculated=calc,sequence=2)
+
+    def test_61_false_stage_two_frozen_hash_in_calculation_is_rejected(self):
+        calc=replay_simulated_challenge(snapshot=replace(
+            good_snapshot(),as_of=NOW+timedelta(days=1)))
+        calc=replace(calc,phase_two_frozen_evidence_sha256="b"*64)
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=previous_stage_two_math_done(),calculated=calc,sequence=3)
+
+    def test_62_persisted_complete_stage_two_without_fingerprint_is_invalid(self):
+        old=replace(previous_stage_two_math_done(),last_phase_two_evidence_sha256="")
+        calc=replay_simulated_challenge(snapshot=replace(
+            good_snapshot(),as_of=NOW+timedelta(days=1)))
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=old,calculated=calc,sequence=3)
+
+    def test_63_genesis_cannot_forge_stage_two_evidence(self):
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=good_previous(last_phase_two_evidence_sha256="c"*64))
+
+    def test_64_uncompleted_stage_two_cannot_forge_final_digest(self):
+        snap=replace(good_snapshot(),phase_two_completed_at=None)
+        calc=replay_simulated_challenge(snapshot=snap)
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=previous_phase_one_passed(),
+                   calculated=replace(calc,phase_two_frozen_evidence_sha256="c"*64),
+                   sequence=2)
+
 
 
 if __name__=="__main__":
