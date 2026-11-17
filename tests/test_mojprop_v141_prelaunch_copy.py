@@ -68,9 +68,10 @@ class V141NonPayableLandingTests(unittest.TestCase):
             ("a", "href", "mailto:mojplaywin@gmail.com?subject=MOJ-PROP-01%20v1.4.1%20FA%20Information%20request"),
             ("a", "href", "/moj-prop-v141-interest/?lang=en"),
             ("a", "href", "/moj-prop-v141-interest/?lang=fa"),
+            ("a", "href", "/moj-prop-v141-info/?lang={{ option.code }}"),
         }
         self.assertEqual(set(self.parsed.extras), allowed)
-        self.assertEqual(len(self.parsed.extras), 4)
+        self.assertEqual(len(self.parsed.extras), 5)
 
     def test_csp_blocks_connections_and_forms(self):
         csp = [m.get("content") for m in self.parsed.meta
