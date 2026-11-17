@@ -46,8 +46,7 @@ python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive \
   --ssh-config /ABSOLUTE/OWNER_ONLY/ssh_config \
   --known-hosts /ABSOLUTE/OWNER_ONLY/cpanel_known_hosts \
   --rclone-config /ABSOLUTE/OWNER_ONLY/rclone.conf \
-  --rclone-exe /ABSOLUTE/PINNED/rclone \
-  --public-pem /ABSOLUTE/OWNER_ONLY/verified-recovery-public.pem \
+  # --rclone-exe is optional: verified temporary client will be downloaded only after secure owner OAuth config exists.\n  --public-pem /ABSOLUTE/OWNER_ONLY/verified-recovery-public.pem \
   --trusted-public-spki-sha256 64_CHARACTER_OWNER_VERIFIED_SHA256
 # فایل دوم: فقط snapshot را به nov5-b تغییر دهید.
 ```
@@ -72,3 +71,11 @@ python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive \
 ### رفع مشکل واردکردن ماژول در CLI
 
 در [CI #44178162335](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44178162335) پس از موفقیت ۱۲۱ آزمون آفلاین، فراخوانی فایل با مسیر `python3 -B scripts/...py`، واردکردن package `scripts` را از بین برد و پیش از خواندن فایل‌های cPanel خطای `ModuleNotFoundError` داد. فراخوانی از ریشه مخزن به شکل `python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive` اصلاح شد. این تغییر صرفاً روش اجرای کد است و هیچ مجوز، عملیات انتقال یا حذف تازه‌ای انجام نمی‌دهد.
+
+### صفرنصب دائمیِ rclone و توقف امن جریان SSH
+
+کدِ انتقالِ همین PR اکنون اگر `--rclone-exe` ارائه نشده باشد، **ابتدا** وجود فایلِ امن `rclone.conf` متعلق به کاربر Runner را بررسی می‌کند؛ در نبود OAuth پیش از هر دانلود ابزار یا خواندن داده، با `OWNER_RCLONE_OAUTH_CONFIG_NOT_PRESENT` توقف می‌کند. تنها پس از اثبات پیکربندی OAuth و وجود مسیر مطلق امن `RUNNER_TEMP`، ابزار رایگان `rclone v1.76.0` از Release رسمی با **SHA-256 و طول دقیق از پیش پین‌شده** به پوشهٔ موقت `0700` دریافت، بررسی و فقط برای همان اجرای انتقال فعال می‌شود؛ پس از اتمام یا خطا پوشهٔ اجرایی موقت حذف می‌شود. نصب دائمی روی VPS یا روشن‌کردن کارخانه لازم نیست. اگر از قبل باینری مورد اعتماد وجود دارد، پارامتر `--rclone-exe /ABSOLUTE/PINNED/rclone` همچنان پشتیبانی می‌شود.
+
+خواندن لولهٔ SSH نیز **مهلت سکون ۱۵۰ ثانیه** و درخواست `os.read` با سقف ۱ مگابایت دارد؛ هنگ‌کردن SSH باعث انتظار نامحدود یا صدور مانیفست پایانِ کاذب نمی‌شود. این زمان‌سنج برای خواندن بلوک است، نه تضمین سرعت انتقال دو حساب Google Drive.
+
+**مانع باقی‌مانده و غیرقابل دورزدن با کد:** OAuth دو حساب Google روی خود محیط مالک هنوز برقرار/تأیید نشده است و سهمیهٔ آزاد هر حساب باید از خود Google اثبات شود. اتصال ChatGPT به Google Drive به Runner منتقل نمی‌شود. هیچ هزینه‌ای، توکنِ منتشرشده یا دسترسی عمومیِ مقصد مجاز نیست.
