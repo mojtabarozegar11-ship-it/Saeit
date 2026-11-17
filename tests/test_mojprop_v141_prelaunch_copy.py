@@ -114,7 +114,7 @@ class V141NonPayableLandingTests(unittest.TestCase):
     def test_gold_risk_limits_clearly_proposed(self):
         self.assertIn("XAUUSD real-risk framework", self.html)
         self.assertIn("3% nominal risk per order and 8% open aggregate", self.html)
-        self.assertIn("درخواست", self.html) if False else None
+        self.assertIn("سقف اسمی ریسک معامله ۳٪", self.html)
 
     def test_one_either_instagram_or_facebook(self):
         self.assertIn("At least ONE qualifying original post on EITHER Instagram OR Facebook", self.html)
