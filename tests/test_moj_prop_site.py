@@ -153,7 +153,16 @@ class MojPropCatalogTests(unittest.TestCase):
     def test_templates_contain_no_checkout_or_order_form(self):
         base = Path(__file__).resolve().parents[1]
         page = (base / "core/templates/mojplaywin/moj_prop.html").read_text(encoding="utf-8").lower()
-        for forbidden in ('<form', 'walletconnect', 'sendtransaction', 'order/submit', 'claim-profit'):
+        # An explicitly consented nonpayable interest form is allowed.
+        # There must be exactly one CSRF-guarded, separate Plan1 POST,
+        # never a checkout/order/funding form or TRX wallet collection.
+        self.assertEqual(page.count('<form'), 1)
+        self.assertIn('<form method="post" action="/moj-prop-interest/"', page)
+        self.assertIn('{% csrf_token %}', page)
+        self.assertIn('name="contact_consent"', page)
+        self.assertIn('name="plan_code" value="moj-prop-01"', page)
+        for forbidden in ('walletconnect', 'sendtransaction', 'order/submit',
+                          'claim-profit', 'action="/commerce/', 'name="wallet"'):
             self.assertNotIn(forbidden, page)
         self.assertIn('noindex,nofollow', page)
         self.assertIn('hreflang="{{ item.code }}"', page)
