@@ -70,7 +70,7 @@ jobs:
           dst="/home/zomorod2/restore-staging/factory/master-before-20261105T154953Z.sqlite3"
           ssh -F "$d/config" saeit-vps "test -f '$src'; stat -c 'SOURCE_BYTES=%s SOURCE_MTIME=%Y' '$src'"
           ssh -F "$d/config" saeit-cpanel "install -d -m 700 /home/zomorod2/restore-staging/factory; test ! -e '$dst'"
-          timeout 780s bash -o pipefail -c "ssh -F '$d/config' saeit-vps 'cat -- "$src"' | ssh -F '$d/config' saeit-cpanel 'umask 077; cat > "$dst"'"
+          timeout 780s bash -o pipefail -c "ssh -F '$d/config' saeit-vps 'cat -- "$src"' | ssh -F '$d/config' saeit-cpanel 'umask 077; set -C; cat > "$dst"'"
           ssh -F "$d/config" saeit-vps "sha256sum '$src'"
           ssh -F "$d/config" saeit-cpanel "sha256sum '$dst'; stat -c 'RESTORED_BYTES=%s' '$dst'"
           src_hash="$(ssh -F "$d/config" saeit-vps "sha256sum '$src' | awk '{print \$1}'")"
