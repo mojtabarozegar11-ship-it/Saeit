@@ -62,6 +62,7 @@ def world_catalog():
         if (type(value["lead"]) is not dict or
                 set(value["lead"]) != {
                     "name", "email", "reason", "consent", "submit", "receipt",
+                    "received", "duplicate", "private_token", "failed", "status_link",
                 } or any(type(v) is not str or not v.strip()
                          for v in value["lead"].values())):
             raise ValueError(f"Incomplete buyer form copy in {code}")
