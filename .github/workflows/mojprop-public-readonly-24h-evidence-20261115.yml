@@ -160,6 +160,12 @@ jobs:
             "$check_dir/mojprop_contact.body" \
             "$support_transport_proof" \
             "$GITHUB_STEP_SUMMARY"
+          # Static public HTML only. C128 emits fixed booleans to explain
+          # which reviewed Plan1 support safety markers are missing. Never
+          # logs a response body, cookie, CSRF, token, buyer field or mail.
+          python3 -B scripts/mojprop_public_contact_drift_c128.py \
+            "$check_dir/mojprop_contact.body" \
+            "templates/moj-prop/contact/index.html"
           # Compare ONLY existing downloaded PUBLIC GET response; never submit
           # buyer details or echo HTML/CSRF. Current main may have fixed the
           # source while an older cPanel public document is still served.
