@@ -267,6 +267,7 @@ jobs:
               return {'read_only':True,'records':results}
           data['october_sqlite_checks']=check_legacy_snapshot(backup)
           # Sampling only: estimate compressibility and zero extents without writing to VPS.
+          import zlib
           def backup_compression_samples(base):
               records=[]
               for dirpath,dirs,names in os.walk(base,followlinks=False):
