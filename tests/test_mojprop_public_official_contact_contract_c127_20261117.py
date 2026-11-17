@@ -46,7 +46,8 @@ class ContactFallbackProof(unittest.TestCase):
 
     def test_contact_support_does_not_fake_generic_plan1_crm(self):
         self.assertNotIn('/moj-prop/#request', self.html)
-        self.assertIn("not a verified Plan 1 lead", self.html)
+        self.assertIn("<strong>not</strong> a verified Plan 1 lead", self.html)
+        self.assertTrue(classify_contact(self.html.encode()))
         self.assertIn("nothing is sent automatically", self.html)
 
     def test_no_automatic_email_form_or_active_js(self):
