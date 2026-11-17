@@ -172,5 +172,17 @@ class VirtualTenantDjangoSourceTests(unittest.TestCase):
         self.assertNotIn("request.data",self.writer)
 
 
+    def test_35_accepted_stage_one_cannot_take_new_signed_fills(self):
+        self.assertIn("stage-one virtual history already accepted and frozen",self.writer)
+
+    def test_36_stage_two_event_must_be_after_server_transition(self):
+        self.assertIn("fill.executed_at_utc < started",self.writer)
+        self.assertIn("book.state.last_phase_two_started_at",self.writer)
+
+    def test_37_completed_stage_two_rejects_new_event(self):
+        self.assertIn("book.state.last_phase_two_completed_at is not None",self.writer)
+        self.assertIn("stage-two event outside independently recorded active stage",self.writer)
+
+
 if __name__=="__main__":
     unittest.main()
