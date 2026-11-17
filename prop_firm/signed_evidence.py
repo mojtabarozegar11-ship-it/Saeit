@@ -220,6 +220,24 @@ def ingest_signed_evidence(*, account_id, source, raw, signature, issued_at,
         if existing:
             if existing.evidence_digest != digest:
                 raise EvidenceRejected("Upstream replay ID has conflicting evidence")
+            # Raw-body SHA-256 excludes the trusted 'source' and HMAC header.
+            # Two independently signed sources can otherwise replay identical
+            # raw bytes and receive 'already_recorded' for a row belonging to
+            # the *other* source. Never conflate provider identities.
+            if existing.data_source != source:
+                raise EvidenceRejected("Upstream replay source identity differs")
+            # A matching digest must also reflect the ledger's original
+            # immutable signed fields, not only a stored digest left behind
+            # after accidental SQL/operator modification. Reconciliation
+            # status legitimately advances, so it is intentionally excluded.
+            for field, original in incoming.items():
+                if field in ("account", "external_event_id",
+                             "reconciliation_status", "evidence_digest"):
+                    continue
+                if getattr(existing, field) != original:
+                    raise EvidenceRejected(
+                        f"Upstream replay signed field changed: {field}"
+                    )
             return {"event_id": event_id, "result": "already_recorded",
                     "verified": False, "digest": digest}
 
