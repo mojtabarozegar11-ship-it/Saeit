@@ -74,7 +74,8 @@ def _addr_hex(value):
 
 
 def _release_enabled():
-    return getattr(settings, "MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED", False) is True
+    return (getattr(settings, "MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED", False) is True
+            and getattr(settings, "MOJPROP_TRX_GLOBAL_LEDGER_RECONCILED", False) is True)
 
 def _order_hmac(order):
     """Signed immutable invoice envelope; excludes mutable delivery status."""
