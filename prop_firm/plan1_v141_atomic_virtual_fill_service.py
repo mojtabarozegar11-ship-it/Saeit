@@ -114,23 +114,29 @@ def _book_snapshot(book, events, *, now):
 
 
 def _existing_row_matches(book, row, fill):
+    # DB DecimalFields always reload at their fixed storage scale, whereas a
+    # signed upstream payload may represent the same value with fewer zeros.
+    # Compare exact numeric values but preserve signed payload verification.
     try:
-        return _stored_fill(book, row) == VirtualFill(
-            trader_ref=fill.trader_ref, challenge_ref=fill.challenge_ref,
-            event_id=fill.event_id, sequence=fill.sequence,
-            position_ref=fill.position_ref, stage=fill.stage,
-            action=fill.action, direction=fill.direction,
-            symbol=fill.symbol,
-            quantity_ounces=str(Decimal(str(fill.quantity_ounces))),
-            price_usd_per_ounce=str(Decimal(str(fill.price_usd_per_ounce))),
-            fee_usd=str(Decimal(str(fill.fee_usd))),
-            executed_at_utc=fill.executed_at_utc,
-            feed_source=fill.feed_source,
-            raw_event_sha256=fill.raw_event_sha256,
-        )
-    except (ValueError, ArithmeticError):
+        timestamp = fill.executed_at_utc.astimezone(timezone.utc)
+        return all((
+            row.book_id == book.pk,
+            row.event_id == fill.event_id,
+            row.sequence == fill.sequence,
+            row.position_ref == fill.position_ref,
+            row.stage == fill.stage,
+            row.action == fill.action,
+            row.direction == fill.direction,
+            row.symbol == fill.symbol,
+            row.feed_source == fill.feed_source,
+            row.raw_event_sha256 == fill.raw_event_sha256,
+            row.executed_at_utc.astimezone(timezone.utc) == timestamp,
+            row.quantity_ounces == Decimal(str(fill.quantity_ounces)),
+            row.price_usd_per_ounce == Decimal(str(fill.price_usd_per_ounce)),
+            row.fee_usd == Decimal(str(fill.fee_usd)),
+        ))
+    except (ValueError, ArithmeticError, AttributeError, TypeError):
         return False
-
 
 @transaction.atomic
 def store_v141_virtual_fill(
