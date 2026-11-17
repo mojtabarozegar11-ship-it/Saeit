@@ -174,7 +174,7 @@ class V141NonPayableLandingTests(unittest.TestCase):
         self.assertEqual(self.html.count('href="mailto:'), 2)
         self.assertNotIn("body=", self.html.lower())
         self.assertIn("Optional contact only", self.html)
-        self.assertIn("not a purchase", self.html.lower())
+        self.assertIn("no purchase", self.html.lower())
 
     def test_prospect_never_promised_eligibility_or_funding(self):
         self.assertIn("Eligibility, local law, broker approval", self.html)
