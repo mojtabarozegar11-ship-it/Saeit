@@ -37,8 +37,8 @@ def test_directory_lists_all_four_published_notices_without_purchase_promises():
     assert "بدون تعهد خرید یا پیش‌پرداخت" in text
     assert "هیچ پرداخت، وجه ثبت‌نام یا پیش‌پرداختی" in text
     assert "/static/site/company/company-logo.png" in text
-    assert len(re.findall(r'class="notice-card"', text)) == 4
-    for n in NOTICES:
+    assert len(re.findall(r'class="notice-card"', text)) == 76
+    for n in range(346, 422):
         assert f"/auctions/{n}/" in parsed.links
     assert "/sitemap-auctions.xml" in parsed.links
     assert "هیچ مزایده‌ای برای نمایش" not in text
@@ -50,17 +50,18 @@ def test_directory_collection_schema_matches_public_notices():
     assert match is not None
     payload = json.loads(match.group(1))
     assert payload["@type"] == "CollectionPage"
-    assert payload["mainEntity"]["numberOfItems"] == 4
+    assert payload["mainEntity"]["numberOfItems"] == 76
     actual = {item["url"] for item in payload["mainEntity"]["itemListElement"]}
-    expected = {f"{ORIGIN}/auctions/{n}/" for n in NOTICES}
+    expected = {f"{ORIGIN}/auctions/{n}/" for n in range(346, 422)}
     assert actual == expected
+    assert len(actual) == 76
 
 
 def test_secondary_sitemap_contains_only_real_auction_urls():
     doc = ET.parse(ROOT / "sitemap.xml")
     ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
     urls = [n.text for n in doc.findall(".//sm:loc", ns)]
-    expected = {f"{ORIGIN}/auctions/{n}/" for n in NOTICES} | {f"{ORIGIN}/auctions/", f"{ORIGIN}/auctions/supplier-kit/"}
+    expected = {f"{ORIGIN}/auctions/{n}/" for n in range(346, 422)} | {f"{ORIGIN}/auctions/", f"{ORIGIN}/auctions/supplier-kit/"}
     assert set(urls) == expected
     assert len(urls) == len(expected)
 
