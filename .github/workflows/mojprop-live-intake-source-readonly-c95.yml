@@ -121,9 +121,9 @@ jobs:
           python3 -B -m py_compile scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c157_cpanel_statsbar_shape_readonly -q
           test ! -L scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py
-          test "$(git hash-object -- scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py)" = "a46065c94defe089600aad3c4901b06d41069f90"
+          test "$(git hash-object -- scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py)" = "c950f3f95d6a6e0d1b1eeb97089cdabe80a3a01a"
           test ! -L tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py
-          test "$(git hash-object -- tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py)" = "745352a38ed7632c4bfa897c8b8e2e4723d0cacf"
+          test "$(git hash-object -- tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py)" = "57f074159ef00c44cdf83be92e7acb194e9bf5a2"
           python3 -B -m py_compile scripts/mojprop_c157_offhost_stream_preflight_readonly.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c157_offhost_stream_preflight_readonly -q
           test ! -L scripts/mojprop_c157_offhost_stream_preflight_readonly.py
