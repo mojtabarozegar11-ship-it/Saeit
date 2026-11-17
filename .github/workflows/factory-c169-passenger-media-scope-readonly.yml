@@ -25,14 +25,14 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
           fetch-depth: 1
-      - name: Source hash pins and 27 offline tests
+      - name: Source hash pins and 30 offline tests
         shell: bash
         run: |
           set -euo pipefail
           test ! -L scripts/factory_c169_passenger_media_scope_readonly.py
           test ! -L tests/test_factory_c169_passenger_media_scope_readonly.py
-          test "$(git hash-object scripts/factory_c169_passenger_media_scope_readonly.py)" = 'c663b4029980ea976b00cf71ebb363a3ee467d89'
-          test "$(git hash-object tests/test_factory_c169_passenger_media_scope_readonly.py)" = 'aa4ea1dd13b17e3aef562acb7f7d27d61322f400'
+          test "$(git hash-object scripts/factory_c169_passenger_media_scope_readonly.py)" = 'b03398e3b78d19e98c36b946c7250996ce9d3294'
+          test "$(git hash-object tests/test_factory_c169_passenger_media_scope_readonly.py)" = 'ccfe8ac36fbee656fc92e9477cfeea4d33ef62e7'
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_c169_passenger_media_scope_readonly.py' -q
       - name: One owner-only cPanel read-only bounded metadata observation
         env:
