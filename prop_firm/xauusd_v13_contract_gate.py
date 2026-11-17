@@ -14,6 +14,7 @@ from .plan1_buyer_no_social_amendment import (
 )
 from .rules import POLICY
 from .xauusd_v13_preflight import DRAFT_CONTRACT_VERSION
+from .xauusd_v13_draft_terms import draft_gold_terms_v13
 
 
 @dataclass(frozen=True)
@@ -36,11 +37,23 @@ def audit_v13_gold_terms() -> GoldTermsGate:
     blockers = ["v13_signed_customer_terms_absent",
                 "v13_contract_intake_provenance_not_integrated",
                 "v13_independent_legal_release_unverified",
-                "v13_capital_and_broker_release_unverified"]
+                "v13_capital_and_broker_release_unverified",
+                "v13_social_platform_and_advertising_clearance_unverified",
+                "v13_social_post_buyer_acceptance_unverified"]
     try:
         historical = buyer_disclosure()
         current = current_plan1_buyer_copy()
         waiver = buyer_no_social_post_amendment()
+        draft = draft_gold_terms_v13()
+        if (draft.minimum_posts_on_either_platform != 1
+                or draft.continuous_visibility_days != 28
+                or draft.instagram_posts_required != 0
+                or draft.facebook_posts_required != 0
+                or draft.social_legality_independently_approved is not False
+                or draft.social_customer_terms_signed is not False
+                or "EITHER Instagram" not in draft.en
+                or "۲۸ روز" not in draft.fa):
+            blockers.append("v13_social_either_platform_draft_drift")
         if (historical.contract_version != TERMS_VERSION
                 or TERMS_VERSION != "2026-11-15/v1.2"
                 or POLICY.version != TERMS_VERSION):
@@ -50,7 +63,7 @@ def audit_v13_gold_terms() -> GoldTermsGate:
             in historical.en
         )
         current_each = any(
-            "50 independently verified closed positions in EACH" in statement
+            "50 independently verified closed positions are required in EACH" in statement
             for statement in PREPURCHASE_DISCLOSURES
         )
         if old_combined and current_each:
@@ -69,7 +82,11 @@ def audit_v13_gold_terms() -> GoldTermsGate:
                 or waiver.facebook_posts_required != 0
                 or waiver.posting_a_condition_of_challenge_pass is not False
                 or waiver.posting_a_condition_of_funded_profit is not False):
-            blockers.append("no_social_waiver_language_unreviewed")
+            blockers.append("historical_no_social_waiver_drift")
+        # Historical no-post waiver is not authority to impose a new v1.3
+        # social rule on buyers; independent buyer acceptance is required.
+        if waiver.current_signed_terms_verified_by_this_module is not False:
+            blockers.append("historical_waiver_contract_authority_drift")
     except (ValueError, RuntimeError, AttributeError) as exc:
         blockers.append("buyer_disclosure_source_failed_closed")
     return GoldTermsGate(

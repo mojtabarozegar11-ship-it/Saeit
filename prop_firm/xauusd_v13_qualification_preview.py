@@ -37,7 +37,7 @@ class QualificationPreview:
     phase_two_math_pass: bool
     entire_challenge_math_pass: bool
     reasons: tuple[str, ...]
-    social_post_evidence_required: bool = False
+    social_post_evidence_required: bool = True
     terms_fully_reconciled: bool = False
     signed_customer_contract_proven: bool = False
     funds_independently_verified: bool = False
