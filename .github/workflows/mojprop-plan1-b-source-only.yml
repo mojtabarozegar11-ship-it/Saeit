@@ -15,6 +15,8 @@ on:
       - 'prop_firm/plan1_private_order_draft.py'
       - 'prop_firm/plan1_intake_provenance.py'
       - 'prop_firm/plan1_canonical_interest_bridge.py'
+      - 'prop_firm/plan1_buyer_no_social_amendment.py'
+      - 'tests/test_prop_plan1_no_buyer_social.py'
       - 'prop_firm/plan1_orm_consent_review.py'
       - 'tests/test_prop_plan1_orm_consent_review.py'
       - 'tests/test_prop_plan1_orm_verified_handoff.py'
@@ -81,6 +83,10 @@ jobs:
             tests/test_prop_plan1_private_order_draft.py \
             tests/test_prop_plan1_intake_provenance.py \
             tests/test_prop_plan1_canonical_interest_bridge.py
+
+      - name: Verify new owner no-social buyer clause is source-only
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_no_buyer_social.py' -v
 
       - name: Read-only Plan 1 B contract / identity / consent tests
         run: |
