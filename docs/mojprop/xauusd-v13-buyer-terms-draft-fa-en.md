@@ -34,6 +34,12 @@ After successful transition and independent reconciliation of actual realized ne
 
 **Proposed v1.3 drafting decision (internal only):** at least **50 independently reconciled CLOSED positions TOTAL across both phases**, with at least **six verified trading days in EACH phase**. This follows the canonical evaluation engine and historical disclosure. The v1.2 pre-purchase text still contradicts it by requiring 50 in each phase; no buyer-facing, payable representation is approved until all versions are legally reconciled, contract-versioned, and signed.
 
+## 28-day social evidence — nonproduction review only
+
+The standalone `prop_firm/xauusd_v13_social_evidence.py` preview accepts exactly one Instagram **or** Facebook public-post URL, checks a 28-day continuous-visibility claim, review timestamps, voluntary buyer consent, original-content claim, advertising disclosure, truthful-profit claims and absence of broker credentials. It excludes owner personal social accounts. Its result is **not independent proof**: all caller claims require separately authenticated platform/operator evidence, lawful approval, and a buyer-signed prospective v1.3 contract. It publishes no posts and accepts no fee.
+
+بازبینی مستقل این شرط برای «یک پست در اینستاگرام یا فیسبوک» اجرا شده و فقط سازگاری داده پیشنهادی را می‌سنجد؛ راستی‌آزمایی واقعی پست، رضایت مشتری و مجوز تبلیغ هنوز انجام نشده است. مثبت بودن نتیجه پیش‌نمایش به معنای قبولی چالش یا حق دریافت وجه نیست.
+
 ## Hard release and evidence boundaries
 
 1. New signed FA/EN contract with unique `v1.3` fingerprint and a resolved, unequivocal 50-trade criterion; no silent changes to historic `v1.2` agreements.
