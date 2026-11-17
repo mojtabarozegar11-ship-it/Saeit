@@ -10,7 +10,7 @@ from scripts import mojprop_c157_cpanel_statsbar_shape_readonly as q
 class StatsBarShapeTests(unittest.TestCase):
     def test_01_exact_one_known_readonly_cli(self):
         self.assertEqual(q.ARGS,(q.BIN,"--output=json","StatsBar","get_stats",
-                                  "display=diskusage|mysqldiskusage|fileusage"))
+                                  "display=diskusage|mysqldiskusage"))
     def test_02_normal_flat_stats_list_counts_no_values(self):
         data={"result":{"status":1,"data":[
           {"id":"diskusage","name":"diskusage","count":"5200","max":"20000","units":"MB"},
