@@ -2,7 +2,7 @@
 """MojPlayWin cPanel -> two encrypted Google Drive destinations, no disk spool.
 
 This adapter does NOT auto-run. The Python API below requires an explicit,
-non-reusable owner-approval value and real cloud / recovery preflight. The
+explicit owner-approval value and real cloud / recovery preflight. The
 ordinary command-line entrypoint is OFFLINE and READ-ONLY. No database names,
 credentials, decrypted customer data, upload tokens or private keys are
 accepted in argv or emitted to stdout.
@@ -144,6 +144,20 @@ def _verify_pinned_host_key(path: Path, host_entry: str, fingerprint: str) -> No
         raise BackupHold("PINNED_SSH_FINGERPRINT_UNAVAILABLE") from None
 
 
+def _assert_private_ssh_key(path_text: str) -> None:
+    path = Path(path_text)
+    if not path.is_absolute() or path.is_symlink():
+        raise BackupHold("UNSAFE_SSH_IDENTITY_PATH")
+    try:
+        st = path.stat()
+    except OSError:
+        raise BackupHold("MISSING_SSH_IDENTITY_FILE") from None
+    if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid()
+            or st.st_nlink != 1 or st.st_mode & 0o077
+            or not 100 <= st.st_size <= 16384):
+        raise BackupHold("UNSAFE_SSH_PRIVATE_KEY_PERMISSIONS")
+
+
 def _ssh_guard(config_path: Path) -> None:
     """Reject unsafe configuration constructs *without invoking ssh -G*.
 
@@ -222,6 +236,8 @@ def _ssh_guard(config_path: Path) -> None:
         "178.239.147.150",
         "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs",
     )
+    _assert_private_ssh_key(effective["identityfile"])
+    _assert_private_ssh_key(relay["identityfile"])
 
 
 def admission(mode: str, *, source_path: Path, ssh_config: Path) -> SourceAdmission:
