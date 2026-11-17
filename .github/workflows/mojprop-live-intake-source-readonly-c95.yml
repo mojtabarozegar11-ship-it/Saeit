@@ -170,6 +170,7 @@ jobs:
           chmod 600 "$work/config"
           timeout 40s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
       - name: Verify deployed source and Django routes without opening a customer session
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -181,6 +182,7 @@ jobs:
           echo 'LIVE_MOJPROP_INTAKE_SOURCE_DIAGNOSTIC=PASS'
           echo 'No POST, customer data, payment, database migration or site release; this scan only identifies version and routing.' >> "$GITHUB_STEP_SUMMARY"
       - name: Classify exact Passenger entrypoint AST and absent staging modules — no writes
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -191,6 +193,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(7000); prefix="MOJPROP_C118_PASSENGER_SOURCE_READONLY="; lines=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_C118"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.passenger.source_identity.readonly.c118.v1" and d["read_only"] is True and d["crm_lead_created"] is False and d["payment_created"] is False and d["email_sent"] is False and d["deploy_authorized"] is False and d["runtime_worker_identity_proven"] is False and d["full_db_app_media_restore_proven"] is False; assert set(d["staging_sources"])=={"core/mojprop_views.py","core/mojprop_receipts.py","core/mojprop_accessible_intake.py","config/urls.py","core/management/commands/mojprop_sales_action_queue.py"}; assert all(v in ("present","missing","unsafe","unavailable") for v in d["staging_sources"].values()); print(lines[0])'
           echo 'C118_OWNER_PASSENGER_AST_READONLY=COMPLETE_NOT_DEPLOY_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: Inventory only existing account backup metadata via documented UAPI — no restoration
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -201,6 +204,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C120_BACKUP_CATALOG_READONLY="; rows=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(rows)==1,"MISSING_SANITIZED_BACKUP_RESULT"; d=json.loads(rows[0][len(prefix):]); assert d["schema"]=="mojprop.owner_backup_catalog.readonly.c120.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert all(d[k] is False for k in ("backup_files_opened_or_downloaded","customer_records_accessed","database_accessed","provider_offhost_backup_verified","independent_encrypted_full_restore_proven","production_release_authorized","cost_incurred")); assert type(d["backup_entries_reported"]) is int and 0 <= d["backup_entries_reported"] <= 100; assert type(d["possible_local_account_archive_present"]) is bool; assert not set(d).intersection({"file","path","token","email","username","database_name","customer_id"}); print(rows[0])'
           echo 'MOJPROP_C120_EXISTING_BACKUP_METADATA_READONLY=COMPLETE_NO_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: Check fixed owner home backup tarball metadata only — zero content reads
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -211,6 +215,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C120_LOCAL_ARCHIVE_METADATA_READONLY="; lines=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_LOCAL_ARCHIVE"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.owner_local_archive_metadata.readonly.c120.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert type(d["home_metadata_scan_completed"]) is bool; assert type(d["local_archive_candidates_count"]) is int and 0<=d["local_archive_candidates_count"]<=2048; assert all(d[k] is False for k in ("local_archive_content_read","archive_downloaded","app_or_db_accessed","customer_data_accessed","independent_encrypted_full_restore_proven","provider_offhost_backup_verified","production_deployment_authorized","new_cost_incurred")); assert not set(d).intersection({"file","path","email","secret","filename","archive_name"}); print(lines[0])'
           echo 'MOJPROP_C120_LOCAL_ARCHIVE_METADATA_READONLY=COMPLETE_NO_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: Observe only exact Starter30 public static file identity under owner docroot
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -221,6 +226,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C122_STATIC_OWNER_READONLY="; rows=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(rows)==1,"MISSING_SANITIZED_C122"; d=json.loads(rows[0][len(prefix):]); assert d["schema"]=="mojprop.owner_starter30_public_static.readonly.c122.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["no_payment_scope"] is True; assert set(d["assets"])=={"index.html","journal-template.csv","journal-guide.txt"}; assert all(v in ("reviewed_exact","unreviewed_bytes","missing","unsafe","unavailable") for v in d["assets"].values()); assert all(d[k] is False for k in ("http_public_delivery_proven","email_lead_received","database_accessed","customer_data_accessed","trx_payment_collected","funded_prop_challenge_available","production_deployment_authorized","new_cost_incurred")); assert not set(d).intersection({"email","customer_id","file_path","file_content","secret","trx_address"}); print(rows[0])'
           echo 'MOJPROP_C122_PUBLIC_ASSET_DISK_IDENTITY_READONLY=COMPLETE_NOT_HTTP_OR_PAYMENT' >> "$GITHUB_STEP_SUMMARY"
       - name: C146 pinpoint actual Plan1 route and Passenger staging drift (strict read-only)
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -231,6 +237,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(9000); prefix="MOJPROP_C146_PLAN1_LIVE_SOURCE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(a)==1,"MISSING_SANITIZED_PLAN1_PROBE"; d=json.loads(a[0][len(prefix):]); assert d["schema"]=="mojprop.plan1.live_source.readonly.c146.v1" and d["read_only"] is True and d["production_change_or_cost_authorized"] is False; assert set(d["source_identity"])=={"config/urls.py","core/moj_prop_views.py","core/templates/mojplaywin/moj_prop_interest_form_d.html","prop_firm/lead_models.py"}; assert all(v in ("matches","drifted","missing","unsafe","unavailable") for v in d["source_identity"].values()); assert set(d["static_urlconf_declares"])=={"browser_get","consent_post"} and all(type(x) is bool for x in d["static_urlconf_declares"].values()); assert all(d[k] is False for k in ("actual_passenger_worker_source_proven","public_plan1_get_verified","full_app_db_media_restore_proven","payment_or_enrollment_proven","customer_data_accessed","database_accessed","external_network_called","production_change_or_cost_authorized")); assert not set(d).intersection({"email","customer_id","db_password","api_key","wallet","customer_name","token"}); print(a[0])'
           echo 'C146_SOURCE_ONLY_PASSED_NO_DEPLOY_OR_BACKUP_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: C148 owner-only fixed path permission, disk and restore-case metadata (no writes)
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -241,6 +248,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C148_OWNER_DISK_RESTORE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C148_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.owner.cpanel.disk_restore_metadata.readonly.c148.v1" and d["read_only"] is True; assert d["owner_identity_verified"] is True; assert set(d["fixed_path_states"])=={"home","staging","webroot","prop_firm_dir","prop_interest_model_file","local_plan1_backup_dir","independent_restore_evidence_dir"}; assert all(v in ("safe","missing","symlink","wrong_owner","world_writable","group_writable","not_regular_file","not_directory","hardlinked","unavailable") for v in d["fixed_path_states"].values()); assert all(d[k] is False for k in ("account_quota_verified","offhost_backup_verified","full_app_db_media_restore_verified","customer_data_accessed","backup_content_read","database_accessed","external_network_called","payment_created","production_deployment_authorized","cost_incurred")); assert type(d["case_metadata"]["matching_owner_private_case_dirs"]) is int and 0<=d["case_metadata"]["matching_owner_private_case_dirs"]<=128; assert d["case_metadata"]["read_any_receipt_or_backup"] is False and d["case_metadata"]["independent_restore_proven"] is False; assert not set(d).intersection({"email","database_name","filename","path","secret","password","token","buyer","wallet","private_key"}); print(a[0])'
           echo 'C148_OWNER_STORAGE_PERMISSIONS_AND_RESTORE_METADATA_READONLY=COMPLETE_NOT_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: C149 actual existing Plan1 backup-root archive and manifest metadata inventory
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -251,6 +259,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C149_BACKUP_ROOT_METADATA_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C149_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.existing_backup_root.metadata.c149.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; inv=d["inventory"]; assert inv["metadata_only"] is True and inv["backup_content_read"] is False and inv["restore_rehearsal_verified"] is False and inv["independent_full_app_db_media_restore_proven"] is False; assert type(inv["direct_entries_scanned"]) is int and 0<=inv["direct_entries_scanned"]<=128; assert type(inv["owner_private_regular_archives"]) is int and 0<=inv["owner_private_regular_archives"]<=128; assert type(inv["owner_private_manifest_metadata_files"]) is int and 0<=inv["owner_private_manifest_metadata_files"]<=256; assert all(d[k] is False for k in ("provider_offhost_backup_proven","offhost_capacity_proven","database_restore_verified","application_restore_verified","media_restore_verified","tenant_quota_verified","customer_data_accessed","backup_downloaded_or_created","database_accessed","external_network_called","production_release_authorized","cost_incurred")); assert not set(d).intersection({"file","filename","archive_name","email","password","token","customer","wallet","database_name","secret"}); print(a[0])'
           echo 'C149_EXISTING_OWNER_BACKUP_ROOT_METADATA_ONLY=COMPLETE_NOT_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: C150 inspect only exact, bounded source rollback manifest shapes (not backup contents)
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -261,6 +270,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C150_ROLLBACK_MANIFEST_SHAPE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C150_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.local_rollback_manifest_shape.c150.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; v=d["inventory"]; assert v["owner_root_verified"] is True; assert all(type(v[k]) is int and 0 <= v[k] <= 8192 for k in ("case_directories_checked","manifest_read_attempts","source_only_rollback_manifests","unknown_or_invalid_manifest_shapes","source_files_declared_total","source_existing_files_declared_total","manifests_marking_migration_attempted")); assert v["read_any_database_or_media"] is False and v["read_any_backup_saved_file"] is False and v["independent_restore_verified"] is False and v["tenant_rollback_authorized"] is False; assert all(d[k] is False for k in ("db_snapshot_read","backup_content_read","customer_data_accessed","independent_offhost_backup_verified","app_db_media_restore_proven","payment_collected","production_release_authorized","cost_incurred")); assert not set(d).intersection({"path","file","filename","customer","wallet","secret","database_name","archive_name","sha256","token","email"}); print(a[0])'
           echo 'C150_OWNER_BACKUP_MANIFEST_METADATA_SHAPE_ONLY_NOT_FULL_RESTORE=COMPLETE' >> "$GITHUB_STEP_SUMMARY"
       - name: C151 aggregate-only structural fingerprint of historic owner manifests
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -271,6 +281,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C151_OWNER_MANIFEST_FORMAT_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C151_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.local_manifest_shape_features.c151.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; v=d["inventory"]; assert v["owner_root_verified"] is True and type(v["cases_checked"]) is int and 0<=v["cases_checked"]<=64; assert set(v["features"])=={"parsed_json_map","schema_string","matching_run_id","run_id_string_mismatch","commit_40hex","commit_sha_40hex","files_list_string","files_list_map","files_mapping","file_entries_absent_or_other","migration_flag_boolean","rolled_back_boolean","declared_first_party_source_list","original_file_metadata_dict_present","schema_contains_static_marker"}; assert all(type(n) is int and 0<=n<=64 for n in v["features"].values()); assert v["read_source_backup_contents"] is False and v["read_database_or_media"] is False and v["independent_restore_proven"] is False; assert all(d[k] is False for k in ("backup_file_content_read","customer_data_accessed","database_accessed","external_network_called","provider_offhost_backup_verified","app_db_media_restore_verified","production_release_authorized","cost_incurred")); assert not set(d).intersection({"path","file","filename","customer","wallet","secret","database_name","archive_name","sha256","run_id","email","token"}); print(a[0])'
           echo 'C151_LEGACY_MANIFEST_STRUCTURE_AGGREGATE_ONLY_NO_RESTORE=COMPLETE' >> "$GITHUB_STEP_SUMMARY"
       - name: C152 SHA256 verify bounded allowlisted archived source copies, never DB/media or restore
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -281,6 +292,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C152_LEGACY_SOURCE_SHA256_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C152_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.legacy_source_backup_sha256.c152.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; inv=d["inventory"]; assert inv["owner_root_verified"] is True; assert all(type(inv[k]) is int and 0<=inv[k]<=67108864 for k in ("legacy_manifest_cases_checked","legacy_manifest_cases_recognized","legacy_cases_with_all_allowed_source_hashes_matching","allowed_source_copies_with_matching_sha256","allowed_source_copies_missing_or_mismatched","sensitive_or_unreviewed_source_entries_not_opened","verified_read_bytes_bounded")); assert inv["saved_source_contents_disclosed"] is False and inv["customer_data_accessed"] is False and inv["database_or_media_backup_read"] is False and inv["source_only_is_full_restore"] is False and inv["independent_db_app_media_restore_proven"] is False; assert all(d[k] is False for k in ("customer_data_accessed","db_media_backup_content_read","offhost_independent_backup_proven","full_app_db_media_restore_proven","production_deployment_authorized","payment_created","cost_incurred")); assert not set(d).intersection({"file","path","filename","customer","wallet","secret","database_name","archive_name","sha256","run_id","email","token"}); print(a[0])'
           echo 'C152_OLD_SOURCE_BACKUP_SHA256_READONLY=COMPLETE_NOT_DB_APP_MEDIA_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: C154 actual cPanel account vs local-node quota via documented read-only UAPI
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -291,6 +303,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C154_CPIN_ACCOUNT_QUOTA_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C154_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.owner_quota.uapi.readonly.c154.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; allowed={"used","limit","quota","quota_used","quota_limit","disk_used","disk_limit","bytes_used","bytes_limit","megabytes_used","megabytes_limit","diskused","diskquota","quotaused","quotalimit","spaceused","spacelimit"}; assert set(d["whole_account"]["matched_numeric_fields"]) <= allowed; assert set(d["local_node"]["matched_numeric_fields"]) <= allowed; assert d["whole_account"]["account_write_headroom_proven"] is False and d["local_node"]["account_write_headroom_proven"] is False; assert all(d[k] is False for k in ("independent_restore_capacity_proven","full_app_db_media_restore_verified","backup_created_or_read","customer_data_accessed","database_accessed","external_network_called","production_deployment_authorized","payment_created","cost_incurred")); assert not set(d).intersection({"password","secret","token","email","customer","filename","path","api_key","wallet"}); print(a[0])'
           echo 'C154_CPIN_OWNER_QUOTA_READ_ONLY=COMPLETE_NOT_BACKUP_WRITE_ADMISSION' >> "$GITHUB_STEP_SUMMARY"
       - name: C155 owner cPanel read-only StatsBar diskusage and MySQL disk footprint
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -301,6 +314,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(9000); p="MOJPROP_C155_ACCOUNT_STATSBAR_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C155_STATSBAR_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.owner_statsbar_quota.readonly.c155.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; v=d["stats"]; assert set(v["requested_ids"])=={"diskusage","fileusage","mysqldiskusage"}; assert v["account_write_headroom_proven"] is False and v["full_database_media_backup_proven"] is False; allowed={"available","units","usage","maximum","percent_of_limit","account_write_headroom_proven"}; assert all(set(v[name])==allowed and v[name]["account_write_headroom_proven"] is False for name in ("diskusage","fileusage","mysqldiskusage")); assert all(d[k] is False for k in ("database_content_accessed","customer_data_accessed","file_or_backup_content_read","offhost_independent_backup_verified","full_app_db_media_restore_verified","production_release_authorized","payment_created","cost_incurred")); assert not set(d).intersection({"password","secret","token","email","customer","filename","path","domain","api_key","wallet"}); print(a[0])'
           echo 'C155_OWNER_STATSBAR_QUOTA_READ_ONLY=COMPLETE_NOT_BACKUP_OR_RELEASE_APPROVAL' >> "$GITHUB_STEP_SUMMARY"
       - name: C156 categorize real cPanel CLI and deprecated read-only API2 StatsBar fallback
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -311,6 +325,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(9000); p="MOJPROP_C156_QUOTA_READONLY_DIAGNOSTIC="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C156_SANITIZED_QUOTA_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.quota_cli_diagnostic.readonly.c156.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; allow={"binary_missing","binary_not_regular_or_executable","process_failed","timeout_or_os_error","response_missing_or_oversize","invalid_json","schema_unrecognized","api_status_failed","success_no_matching_quota","success_numeric_quota"}; row={"found","unit","used","limit","percent_used"}; assert all(d[name]["diagnostic"] in allow and set(d[name])=={"diagnostic","account_disk","mysql_disk"} and all(set(d[name][k])==row for k in ("account_disk","mysql_disk")) for name in ("uapi_statsbar","cpapi2_statsbar")); assert all(d[k] is False for k in ("account_backup_write_authorized","offhost_independent_restore_verified","full_app_db_media_restore_proven","database_content_read","backup_content_read","customer_data_accessed","external_network_called","production_deployment_authorized","payment_created","cost_incurred")); assert not set(d).intersection({"username","password","secret","token","email","customer","filename","path","api_key","wallet","domain"}); print(a[0])'
           echo 'C156_QUOTA_CLI_ERROR_CLASS_AND_SAFE_ACCOUNT_STATS=COMPLETE_NOT_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: C157 owner-only metadata on dump/crypto tools and bounded media directories
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -321,6 +336,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(9500); p="MOJPROP_C157_OFFHOST_STREAM_PREFLIGHT_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C157_SANITIZED_PREFLIGHT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.offhost_stream_tools.readonly.c157.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert set(d["installed_tool_capabilities"])=={"mariadb_dump","mysqldump","age","gpg","openssl","gzip"}; assert all(type(v) is bool for v in d["installed_tool_capabilities"].values()); assert set(d["fixed_media_candidates"])=={"staging_media","staging_uploads","webroot_media","webroot_uploads","public_html_media"}; assert all(v["recursive_media_scope_proven"] is False and v["media_content_read"] is False and type(v["direct_regular_files"]) is int and 0<=v["direct_regular_files"]<=64 and type(v["direct_subdirectories"]) is int and 0<=v["direct_subdirectories"]<=64 for v in d["fixed_media_candidates"].values()); assert all(d[k] is False for k in ("offhost_source_artifact_revalidated_in_this_probe","recipient_public_key_verified","database_connection_and_consistent_snapshot_verified","actual_live_media_root_verified","account_quota_verified","offhost_db_media_restore_proven","db_dump_executed","encryption_executed","database_or_media_contents_read","production_deployment_authorized","cost_incurred")); assert not set(d).intersection({"password","secret","token","email","customer","filename","path","api_key","wallet","domain"}); print(a[0])'
           echo 'C157_METADATA_ONLY_STREAMING_TOOL_PREFLIGHT_NOT_DB_BACKUP_OR_RESTORE=COMPLETE' >> "$GITHUB_STEP_SUMMARY"
       - name: C157 exact sanitized UAPI StatsBar structural fingerprint (no values)
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -331,6 +347,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(9500); p="MOJPROP_C157_UAPI_SHAPE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C157_SANITIZED_UAPI_SHAPE"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.statsbar_uapi_shape.c157.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; q=d["payload_shape"]; ids={"diskusage","mysqldiskusage","fileusage"}; assert set(q["known_id_matches"])==ids and set(q["known_name_matches"])==ids; assert all(type(v) is int and 0<=v<=128 for v in q["known_id_matches"].values()) and all(type(v) is int and 0<=v<=128 for v in q["known_name_matches"].values()); assert type(q["row_count"]) is int and 0<=q["row_count"]<=128; assert q["actual_account_quota_proven"] is False; assert all(d[k] is False for k in ("db_or_customer_content_accessed","provider_payload_logged","backup_created","offhost_backup_verified","independent_restore_verified","production_deploy_authorized","cost_incurred")); assert not set(d).intersection({"password","secret","token","email","customer","filename","path","api_key","wallet","domain","name","value","count","reason","errors"}); print(a[0])'
           echo 'C157_UAPI_STATS_STRUCTURE_ONLY_NO_VALUES_OR_QUOTA_CLAIM' >> "$GITHUB_STEP_SUMMARY"
       - name: C158 parse official owner StatsBar usage with inline GB units (read only)
+        if: github.head_ref == 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
