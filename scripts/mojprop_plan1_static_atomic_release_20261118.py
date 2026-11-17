@@ -106,8 +106,9 @@ def _directory_checks(live: Path, backup: Path, uid: int) -> None:
         raise ExactStaticReleaseDenied("ROLLBACK_FOLDER_NOT_OWNER_PRIVATE")
 
 
-def _validate_candidate(candidate: Path, uid: int) -> bytes:
-    if candidate == LIVE or candidate == BACKUP:
+def _validate_candidate(candidate: Path, uid: int, *, live: Path = LIVE,
+                        backup: Path = BACKUP) -> bytes:
+    if candidate == live or candidate == backup:
         raise ExactStaticReleaseDenied("CANDIDATE_OVERLAPS_LIVE_OR_BACKUP")
     data, _ = _regular_read(candidate, uid)
     exact(data, CANDIDATE_SHA, CANDIDATE_SIZE, "PROPOSED")
@@ -196,7 +197,7 @@ def transact(mode: str, *, live: Path = LIVE, backup: Path = BACKUP,
     current, _ = _regular_read(live, uid)
     if mode == "preflight":
         exact(current, ORIGINAL_SHA, ORIGINAL_SIZE, "CURRENT")
-        _validate_candidate(candidate, uid)
+        _validate_candidate(candidate, uid, live=live, backup=backup)
         if backup.exists() or backup.is_symlink():
             _backup_valid(backup, uid)
         return {"status": "PINNED_SOURCE_PREFLIGHT_ONLY", "writes": False,
@@ -211,7 +212,7 @@ def transact(mode: str, *, live: Path = LIVE, backup: Path = BACKUP,
             raise ExactStaticReleaseDenied("OWNER_OR_INDEPENDENT_RESTORE_GATES_UNMET")
         # These are attested facts by the separate reviewer; not verified here.
         exact(current, ORIGINAL_SHA, ORIGINAL_SIZE, "CURRENT")
-        payload = _validate_candidate(candidate, uid)
+        payload = _validate_candidate(candidate, uid, live=live, backup=backup)
     else:
         exact(current, CANDIDATE_SHA, CANDIDATE_SIZE, "CURRENT_INSTALL")
         if not _backup_valid(backup, uid):
