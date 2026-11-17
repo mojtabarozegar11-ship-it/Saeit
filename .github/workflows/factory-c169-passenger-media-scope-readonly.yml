@@ -1,0 +1,58 @@
+name: Factory C169 owner Passenger and media scope (READ ONLY)
+on:
+  pull_request:
+    paths:
+      - 'scripts/factory_c169_passenger_media_scope_readonly.py'
+      - 'tests/test_factory_c169_passenger_media_scope_readonly.py'
+      - '.github/workflows/factory-c169-passenger-media-scope-readonly.yml'
+permissions:
+  contents: read
+concurrency:
+  group: factory-c169-owner-scope-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  one_owner_readonly_preflight:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Source hash pins and 27 offline tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/factory_c169_passenger_media_scope_readonly.py
+          test ! -L tests/test_factory_c169_passenger_media_scope_readonly.py
+          test "$(git hash-object scripts/factory_c169_passenger_media_scope_readonly.py)" = 'c663b4029980ea976b00cf71ebb363a3ee467d89'
+          test "$(git hash-object tests/test_factory_c169_passenger_media_scope_readonly.py)" = 'aa4ea1dd13b17e3aef562acb7f7d27d61322f400'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_c169_passenger_media_scope_readonly.py' -q
+      - name: One owner-only cPanel read-only bounded metadata observation
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY" || exit 65
+          umask 077
+          work="$(mktemp -d -p "$RUNNER_TEMP" c169.owner.XXXXXXXX)"
+          trap 'rm -f -- "$work/host.key" "$work/known" "$work/config"; rmdir -- "$work" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 35s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
+          timeout 80s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/factory_c169_passenger_media_scope_readonly.py \
+            | python3 -c 'import sys,json; s=sys.stdin.read(11000); p="FACTORY_C169_PASSENGER_MEDIA_SCOPE_READONLY="; a=[v for v in s.splitlines() if v.startswith(p)]; assert len(a)==1,"NO_SANITIZED_RESULT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="factory.cpanel.passenger-media-scope.readonly.c169.v1" and d["read_only"] is True and d["owner_verified"] is True and d["staging_safe"] is True,"UNSAFE_OWNER_CONFIG"; assert set(d["fixed_candidate_metadata"])=={"staging_media","staging_uploads","webroot_media","webroot_uploads","public_html_media","public_html_uploads"}; assert all(d[k] is False for k in ("customer_rows_or_upload_contents_read","mysql_connection_opened","passenger_runtime_worker_identified","full_app_media_backup_scope_proven","cloud_quota_verified","current_backup_created","production_release_authorized","new_cost_incurred")); print(a[0]); print("C169_DECISION=METADATA_ONLY_NO_BACKUP_OR_DEPLOY")'
