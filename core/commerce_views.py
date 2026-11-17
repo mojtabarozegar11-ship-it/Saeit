@@ -12,11 +12,30 @@ def store_home(request):
 
 
 def auctions_home(request):
-    # Public, non-binding purchase RFQs are separate from staff-only PrivateAuction records.
-    notices, policy = get_public_procurement_notices()
+    # Public RFQ codes are immutable identifiers, NOT public ad serial numbers.
+    # Do not display these 72 announcements until ALL real serials are reserved
+    # strictly after the previous official advertisement high-watermark.
+    from command_center.models import PublicProcurementNumber
+
+    grouped, policy = get_public_procurement_notices()
+    all_notices = grouped["supply"] + grouped["equipment"]
+    serials = dict(
+        PublicProcurementNumber.objects.filter(
+            notice_key__in=[notice["id"] for notice in all_notices]
+        ).values_list("notice_key", "serial_number")
+    )
+    ready = len(serials) == len(all_notices) and len(set(serials.values())) == len(all_notices)
+    if ready:
+        supply = [dict(item, public_number=serials[item["id"]]) for item in grouped["supply"]]
+        equipment = [dict(item, public_number=serials[item["id"]]) for item in grouped["equipment"]]
+    else:
+        # Fail closed if the ledger is incomplete, to avoid public numbering conflicts.
+        supply, equipment = [], []
+
     return render(request, "core/auctions.html", {
         "auctions": [],
-        "supply_notices": notices["supply"],
-        "equipment_notices": notices["equipment"],
+        "supply_notices": supply,
+        "equipment_notices": equipment,
         "procurement_policy": policy,
+        "numbering_ready": ready,
     })
