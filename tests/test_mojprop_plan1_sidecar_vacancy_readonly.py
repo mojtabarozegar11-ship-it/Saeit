@@ -123,6 +123,13 @@ class VacancyTests(unittest.TestCase):
         self.assertEqual(m.URL,"https://mojplaywin.com/moj-prop/plan1/")
         self.assertEqual(m.PARENT,Path("/home/zomorod2/mojplaywin.com/moj-prop"))
 
+    def test_21_empty_dir_is_not_installable_until_owner_review(self):
+        (self.parent/"plan1").mkdir()
+        r=m.inspect(self.parent,lambda:404)
+        self.assertEqual(r["route_status"],"safe_empty_directory")
+        self.assertFalse(r["vacant_for_new_additive_source"])
+        self.assertFalse(r["production_release_authorized"])
+
     def test_20_report_does_not_claim_lawful_paid_enrollment(self):
         r=m.inspect(self.parent,lambda:404)
         self.assertFalse(r["production_release_authorized"])
