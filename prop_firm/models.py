@@ -505,3 +505,7 @@ class PropSocialEvidence(models.Model):
 
 # Contact-only inquiries never imply TRX settlement or funded challenges.
 from .lead_models import PropInterest
+
+# Isolated prospective v1.4.1 SIMULATED replay receipt tables; never
+# changes historical v1.2 buyer enrollments or authorizes payments.
+from .plan1_v141_persistence_models import PropV141SimState, PropV141SimReceipt  # noqa: E402,F401
