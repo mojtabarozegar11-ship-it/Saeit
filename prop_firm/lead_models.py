@@ -1,6 +1,6 @@
 """Plan 1 prospective customer contact records, NOT paid challenge enrollments."""
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from core.consent_guard_queryset import ConsentStatusQuerySet
 
 class PropInterest(models.Model):
@@ -21,13 +21,17 @@ class PropInterest(models.Model):
     class Meta:
         indexes = [models.Index(fields=("status", "-created_at"), name="mp_interest_status")]
 
-    def _check_withdrawal_lock(self):
-        # Never rewrite the email/provenance that an original consent covers:
-        # otherwise withdrawal could be hidden by changing the old identity.
+    def _check_withdrawal_lock(self, *, lock=False):
+        # Original consent provenance and a later opt-out are terminal.
+        # A plain read before save is subject to a concurrent withdrawal:
+        # check the current row FOR UPDATE in the *same* transaction as save.
         if self.pk is None:
             return
         identity = ("email", "plan_code", "consent_version", "source_language")
-        original = type(self).objects.filter(pk=self.pk).values("status", *identity).first()
+        query = type(self).objects.filter(pk=self.pk)
+        if lock:
+            query = query.select_for_update()
+        original = query.values("status", *identity).first()
         if original is None:
             return
         if original["status"] == "withdrawn" and self.status != "withdrawn":
@@ -41,8 +45,13 @@ class PropInterest(models.Model):
         self._check_withdrawal_lock()
 
     def save(self, *args, **kwargs):
-        self._check_withdrawal_lock()
-        return super().save(*args, **kwargs)
+        # Serialize operator follow-ups and revocation against each other.
+        # The lock must remain held until after Django writes the new state;
+        # other backends' bulk withdrawal must not race this saved instance.
+        # No checkout, invoice, notification or broker side effect.
+        with transaction.atomic():
+            self._check_withdrawal_lock(lock=True)
+            return super().save(*args, **kwargs)
 
     def __str__(self):
         return f"moj-prop-interest:{self.pk}"
