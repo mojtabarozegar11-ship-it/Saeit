@@ -202,7 +202,6 @@ class PrivateStatementMariaDBTests(TransactionTestCase):
         )
         self.assertFalse(stored.idempotent_replay)
         html = self._call().content.decode("utf-8")
-        self.assertIn("99", str(self.book.last_realized_net_usd) if False else "99")  # no implied equity assertion
         self.assertIn("OPEN", html)
         self.assertIn("3000.0000", html)
         self.assertIn("0.10000000", html)
