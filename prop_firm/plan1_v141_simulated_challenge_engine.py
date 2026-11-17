@@ -129,6 +129,7 @@ class ChallengeReplayDecision:
     phase_one_accepted_at_utc: str | None = None
     phase_two_started_at_utc: str | None = None
     phase_two_completed_at_utc: str | None = None
+    phase_one_frozen_evidence_sha256: str | None = None
 
 
 def _utc(value, name):
@@ -456,6 +457,23 @@ def replay_simulated_challenge(*, snapshot: EngineSnapshot,
         state = "SIMULATED_STAGE_ONE_MATH_PASSED_WAITING_TRANSITION"
     else:
         state = "SIMULATED_STAGE_ONE_IN_REVIEW"
+    # Freeze the *complete* stage-one fill + equity evidence at acceptance.
+    # Unlike snapshot_sha256 this digest is stable across stage-two snapshots.
+    # It is a local, replayable integrity fingerprint; never broker proof.
+    phase_one_digest = None
+    if accept is not None:
+        frozen = dict(
+            domain="mojprop.v141.simulated.stage-one-evidence.v1",
+            challenge_ref=snapshot.challenge_ref,
+            terms=terms.contract_candidate_sha256,
+            evaluation_started_at=start.isoformat(),
+            phase_one_accepted_at=accept.isoformat(),
+            records=sorted((row for row in digest_rows if row[1] == 1),
+                           key=lambda row: json.dumps(row)),
+        )
+        phase_one_digest = sha256(json.dumps(
+            frozen, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=True).encode("utf-8")).hexdigest()
     payload = dict(
         domain="mojprop.v141.simulated.event-replay.review.v1",
         challenge_ref=snapshot.challenge_ref, terms=terms.contract_candidate_sha256,
@@ -480,4 +498,5 @@ def replay_simulated_challenge(*, snapshot: EngineSnapshot,
         phase_one_accepted_at_utc=accept.isoformat() if accept else None,
         phase_two_started_at_utc=second.isoformat() if second else None,
         phase_two_completed_at_utc=final.isoformat() if final else None,
+        phase_one_frozen_evidence_sha256=phase_one_digest,
     )
