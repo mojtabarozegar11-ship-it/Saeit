@@ -31,7 +31,7 @@ jobs:
           set -euo pipefail
           test ! -L scripts/factory_c170_owner_proc_footprint_readonly.py
           test ! -L tests/test_factory_c170_owner_proc_footprint_readonly.py
-          test "$(git hash-object scripts/factory_c170_owner_proc_footprint_readonly.py)" = '40d59411f9a59d65e212efc14519160bcacbebca'
+          test "$(git hash-object scripts/factory_c170_owner_proc_footprint_readonly.py)" = '8747858dad6ce46eb06547b38c00ffc87b44f421'
           test "$(git hash-object tests/test_factory_c170_owner_proc_footprint_readonly.py)" = 'fbe8bf98d216c4616233eb4842a5e7462531c832'
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_c170_owner_proc_footprint_readonly.py' -q
       - name: One owner-only cPanel process-name and cwd hint observation
