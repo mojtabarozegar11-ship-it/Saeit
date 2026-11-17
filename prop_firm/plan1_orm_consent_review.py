@@ -11,6 +11,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .lead_models import PropInterest
+from .buyer_interest_form import UnverifiedInquiry
 from .plan1_canonical_interest_bridge import (
     bind_canonical_interest_to_private_inquiry,
     match_private_review_to_canonical_interest,
@@ -223,6 +224,12 @@ def review_email_verified_existing_interest(
     _require_authorized_staff(actor)
     if type(interest_pk) is not int or interest_pk <= 0:
         raise Plan1OrderGateClosed("valid canonical interest identifier required")
+    # Never permit a separately supplied country claim to diverge from the
+    # original consented, cryptographically bound private inquiry.
+    if (type(inquiry) is not UnverifiedInquiry
+            or type(declared_country) is not str
+            or inquiry.declared_country != declared_country):
+        raise Plan1OrderGateClosed("declared country differs from consented inquiry")
     with transaction.atomic():
         link = review_signed_existing_consent(
             actor=actor, interest_pk=interest_pk, inquiry=inquiry,
