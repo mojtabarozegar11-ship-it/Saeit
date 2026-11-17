@@ -316,3 +316,9 @@ class PrivateStatementMariaDBTests(TransactionTestCase):
         client = Client()
         client.force_login(self.owner)
         self.assertTrue(client.cookies["sessionid"]["secure"])
+
+    def test_32_inactive_site_user_cannot_reach_private_account(self):
+        self.owner.is_active = False
+        self.owner.save(update_fields=["is_active"])
+        with self.assertRaises(Http404):
+            self._call(user=self.owner)
