@@ -76,7 +76,9 @@ def classify_contact(raw: bytes) -> bool:
         parsed.close()
     except (UnicodeError, ValueError):
         return False
-    all_text = " ".join(parsed.words).lower()
+    # Human-readable words may be split by <strong>/<em> and extra spacing.
+    # Normalize HTMLParser text nodes, not the raw tagged markup.
+    all_text = " ".join(" ".join(parsed.words).lower().split())
     safe_links = all(
         href.startswith(("/", "#"))
         or href in (_PLAN1_MAILTO, _GENERAL_MAILTO)
