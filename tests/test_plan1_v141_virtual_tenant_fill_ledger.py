@@ -450,6 +450,21 @@ class VirtualTenantLedgerUnitTests(unittest.TestCase):
         with self.assertRaises(VirtualLedgerRejected):
             run(provisioned=(p,))
 
+    def test_65_future_first_stage_acceptance_rejected_even_if_locked(self):
+        p=provision(stage_one_accepted_at_utc=START+timedelta(days=3))
+        with self.assertRaises(VirtualLedgerRejected):
+            run(provisioned=(p,),server_now=NOW)
+
+    def test_66_first_stage_open_inventory_cannot_carry_into_stage_two(self):
+        later=START+timedelta(days=29)
+        p=provision(max_unlocked_stage=2,
+                    stage_one_accepted_at_utc=START+timedelta(hours=1),
+                    phase_two_started_at_utc=later)
+        with self.assertRaisesRegex(VirtualLedgerRejected,"open first-stage inventory"):
+            run(event(),event(seq=2,stage=2,position="POSITION-SECOND",
+                              executed_at_utc=later+timedelta(minutes=1)),
+                provisioned=(p,),server_now=later+timedelta(minutes=5))
+
 
 if __name__=="__main__":
     unittest.main()
