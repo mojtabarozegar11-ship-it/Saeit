@@ -108,14 +108,14 @@ _HISTORICAL_POST_CLAUSE_FA = (
     "را با افشای شفاف رابطه تبلیغاتی در نظر دارد؛ اجرای آن تابع قوانین قابل اعمال و "
     "سیاست پلتفرم است، هیچ تعریف یا نظر مثبت اجباری نیست و حساب‌های شخصی مالک "
     "برای انتشار یا داده‌برداری استفاده نمی‌شوند. پست‌ها طبق قرارداد باید ۲۸ روز "
-    "پس از انتشار در دسترس باشند.\\n"
+    "پس از انتشار در دسترس باشند.\n"
 )
 _HISTORICAL_POST_CLAUSE_EN = (
     "The v1.2 policy proposes ONE original Instagram and ONE original Facebook post "
     "for the entire challenge, each retained for 28 days after posting, with clear "
     "commercial-relationship disclosure and only where applicable law and platform "
     "terms permit. No forced positive endorsement; the owner's private social "
-    "accounts must not be accessed, scraped or used.\\n"
+    "accounts must not be accessed, scraped or used.\n"
 )
 
 
@@ -153,9 +153,9 @@ def current_plan1_buyer_copy():
             or historical.digest_sha256 != waiver.historical_disclosure_digest_sha256):
         raise ValueError("historical mandatory social clause drift requires legal copy review")
     fa = historical.fa.replace(
-        _HISTORICAL_POST_CLAUSE_FA, waiver.fa + "\\n", 1)
+        _HISTORICAL_POST_CLAUSE_FA, waiver.fa + "\n", 1)
     en = historical.en.replace(
-        _HISTORICAL_POST_CLAUSE_EN, waiver.en + "\\n", 1)
+        _HISTORICAL_POST_CLAUSE_EN, waiver.en + "\n", 1)
     if (fa == historical.fa or en == historical.en
             or "یک پست اصیل اینستاگرام" in fa
             or "ONE original Instagram and ONE original Facebook" in en
