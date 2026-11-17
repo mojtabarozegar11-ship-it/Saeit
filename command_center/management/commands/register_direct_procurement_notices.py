@@ -68,6 +68,19 @@ class Command(BaseCommand):
                 if not options["apply"]:
                     self.stdout.write("DRY RUN ONLY. No numbers have been reserved.")
                     return
+                # Do not silently reserve a different range than the verified
+                # GitHub source-of-truth mapping. Reconcile the live register
+                # and revise the proposal if a higher number has appeared.
+                grouped, _ = get_public_procurement_notices()
+                expected = [item["proposed_public_number"]
+                            for kind in ("supply", "equipment") for item in grouped[kind]]
+                actual = list(range(start, end + 1))
+                if actual != expected:
+                    raise CommandError(
+                        f"Number range changed: proposed {expected[0]}..{expected[-1]}, "
+                        f"but live registry indicates {start}..{end}. Update the "
+                        "verified baseline and draft mappings before reservation."
+                    )
                 if not evidence:
                     raise CommandError("Source evidence is required for actual reservation.")
                 PublicProcurementNumber.objects.bulk_create([
