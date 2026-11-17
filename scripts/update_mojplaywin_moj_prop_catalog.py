@@ -47,6 +47,10 @@ FILES = tuple(x for x in HTML_FILES if x not in PRESERVED_LIVE_FILES) + STARTER3
 MANIFEST_SCHEMA = "mojprop.static.plan1-c153.v4-contact-rollback"
 BASELINE_CATALOG = Path("baselines/catalog-index-v4.html")
 BASELINE_HOME = Path("baselines/index-v4.html")
+# Exact Git blob of main's current pre-Plan1 homepage, not an arbitrary
+# operator-supplied baseline; preserved separately from the historical v4.
+BASELINE_MAIN_HOME = Path("baselines/index-main-before-plan1-c153.html")
+BASELINE_MAIN_HOME_GIT_BLOB = "30b7fe4400f88252f3b71a581f96a796ca853b6c"
 BASELINE_CONTACT = Path("baselines/contact-index-pre-plan1.html")
 BASELINE_SIGNAL = Path("baselines/signals-index-before-free.html")
 # Exact #2407 one-off public research preview (before double opt-in #2428).
@@ -102,8 +106,15 @@ def source_root(run_id: str) -> Path:
     path = HOME / (".mojplaywin-moj-prop-catalog-" + safe_id(run_id)) / "templates/moj-prop-v4"
     if path.is_symlink() or not path.is_dir():
         raise RuntimeError("Invalid staged Moj Prop source")
-    for relative in FILES + PRESERVED_LIVE_FILES + (BASELINE_CATALOG, BASELINE_HOME, BASELINE_CONTACT, BASELINE_SIGNAL, BASELINE_SIGNAL_FREE_PREVIEW):
+    for relative in FILES + PRESERVED_LIVE_FILES + (BASELINE_CATALOG, BASELINE_HOME, BASELINE_MAIN_HOME, BASELINE_CONTACT, BASELINE_SIGNAL, BASELINE_SIGNAL_FREE_PREVIEW):
         assert_file(path / relative)
+    # Pin the newly added migration baseline to the exact public-repo Git
+    # blob of main (679d2fefd349f580e765fee1a5fc823c48e01851). A
+    # manipulated staged baseline must NEVER authorize rewriting owner edits.
+    reviewed = (path / BASELINE_MAIN_HOME).read_bytes()
+    blob = b"blob " + str(len(reviewed)).encode("ascii") + b"\\0" + reviewed
+    if hashlib.sha1(blob).hexdigest() != BASELINE_MAIN_HOME_GIT_BLOB:
+        raise RuntimeError("Unreviewed current-main homepage baseline denied")
     html = {str(relative): (path / relative).read_text("utf-8") for relative in HTML_FILES}
     if ("const endpoint='/moj-prop-intake/';" not in html["index.html"]
             or '<option value="week">This week</option>' not in html["index.html"]
@@ -222,6 +233,7 @@ def verify_private_backup_root(*, create: bool) -> None:
 def plan(root: Path) -> list[dict]:
     old_catalog = (root / BASELINE_CATALOG).read_bytes()
     old_home = (root / BASELINE_HOME).read_bytes()
+    exact_pre_plan1_home = (root / BASELINE_MAIN_HOME).read_bytes()
     old_contact = (root / BASELINE_CONTACT).read_bytes()
     old_signal = (root / BASELINE_SIGNAL).read_bytes()
     free_preview_signal = (root / BASELINE_SIGNAL_FREE_PREVIEW).read_bytes()
@@ -244,7 +256,7 @@ def plan(root: Path) -> list[dict]:
         before = target.read_bytes() if exists else None
         after = (root / relative).read_bytes()
         if relative == Path("index.html"):
-            if not exists or before not in (after, old_home, old_home_without_marker):
+            if not exists or before not in (after, old_home, old_home_without_marker, exact_pre_plan1_home):
                 raise RuntimeError("Live home differs from approved baseline; refusing replacement")
         elif relative == Path("contact/index.html") and exists:
             if before not in (after, old_contact):

@@ -86,6 +86,19 @@ class Plan1StaticTruth(unittest.TestCase):
                                  "/moj-prop/pay/" in link for link in p.hrefs))
         self.assertNotIn("walletconnect", self.home.lower())
 
+    def test_12_main_before_plan1_source_is_review_pinned_and_admitted_only_once(self):
+        script = (ROOT / "scripts/update_mojplaywin_moj_prop_catalog.py").read_text("utf-8")
+        baseline = ROOT / "templates/moj-prop-v4/baselines/index-main-before-plan1-c153.html"
+        import hashlib
+        data = baseline.read_bytes()
+        blob = b"blob " + str(len(data)).encode("ascii") + b"\\0" + data
+        expected = "30b7fe4400f88252f3b71a581f96a796ca853b6c"
+        self.assertEqual(hashlib.sha1(blob).hexdigest(), expected)
+        self.assertIn(f'BASELINE_MAIN_HOME_GIT_BLOB = "{expected}"', script)
+        self.assertIn("exact_pre_plan1_home", script)
+        self.assertIn("Unreviewed current-main homepage baseline denied", script)
+        self.assertNotEqual(data, HOME.read_bytes())
+
     def test_11_contact_source_is_in_install_and_rollback_inventory(self):
         script = (ROOT / "scripts/update_mojplaywin_moj_prop_catalog.py").read_text("utf-8")
         self.assertIn('Path("contact/index.html")', script)
