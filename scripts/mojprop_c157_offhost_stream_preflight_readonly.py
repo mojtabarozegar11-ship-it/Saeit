@@ -110,7 +110,7 @@ def report():
          "owner_identity_verified":False,"read_only":True,
          "installed_tool_capabilities":{name:False for name in TOOL_PATHS},
          "fixed_media_candidates":{name:dict(empty) for name in MEDIA_CANDIDATES},
-         "source_only_offhost_exists_from_c153":True,
+         "offhost_source_artifact_revalidated_in_this_probe":False,
          "recipient_public_key_verified":False,
          "database_connection_and_consistent_snapshot_verified":False,
          "actual_live_media_root_verified":False,
