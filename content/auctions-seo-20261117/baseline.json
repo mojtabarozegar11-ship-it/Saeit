@@ -1,0 +1,728 @@
+{
+  "schema_version": 1,
+  "source_commit": "a7a7eaa0192a322db6ec009d56fa8c2bea549a4a",
+  "baseline_git_blob_sha1": {
+    "public/auctions/350/index.html": "ad1a99e6d7a6684be5fb6c261ee6fcb198be5ce4",
+    "public/auctions/351/index.html": "455e16ac2087244f7b9a99e46e03f5dbd653c024",
+    "public/auctions/352/index.html": "25cf8cd31f44801fc2a0b9c2a18192c75cd8117e",
+    "public/auctions/353/index.html": "bf5c8f44fc3afd02c8be71567255903e335b1f70",
+    "public/auctions/354/index.html": "67acf0e67e73687066dfce9cd2d7af4d84b18615",
+    "public/auctions/355/index.html": "8cdb62a17bc9797718355430d412311ceb5410da",
+    "public/auctions/356/index.html": "d8db9cc9121ec3dba067a00010581d1431082ead",
+    "public/auctions/357/index.html": "c4f7c958b667aed525a15ca0c478c41652e9c7e9",
+    "public/auctions/358/index.html": "45392f06ba0e859b82cb37da88d967a9f21b9a3e",
+    "public/auctions/359/index.html": "e2a1617abd719cce1885124580951cbed77fe322",
+    "public/auctions/360/index.html": "c6dbc700f375e5e8fdf608b911c8a50a4e9c14ea",
+    "public/auctions/361/index.html": "01e37c11650e5f0aa4e081995e7f36388e2d34c8",
+    "public/auctions/362/index.html": "60b674276056d3dee6299bdcc316b196fa086937",
+    "public/auctions/363/index.html": "f7b9f9aba7d449379be2589f8a4d5d6d90cf6c18",
+    "public/auctions/364/index.html": "913692e84a7a092022cd595352373075f973eead",
+    "public/auctions/365/index.html": "e367455eb06611d4fd9778459d055afdd6d7980c",
+    "public/auctions/366/index.html": "d5d5a9c5b42e6d77552533aa77744dacbbef38d6",
+    "public/auctions/367/index.html": "fcdc05547135d23a31c9d4b782acd92e0a50a613",
+    "public/auctions/368/index.html": "a0db8c780d2a0925a67dd94589c772c2f1993c49",
+    "public/auctions/369/index.html": "13b67d7c8c0874159fb45cb54cb62924dd890c60",
+    "public/auctions/370/index.html": "4ebdf592d53083aff9c55f04893f41bb626d9a80",
+    "public/auctions/371/index.html": "81cc78e8f5efcec272aafcfcb36caa41046baad7",
+    "public/auctions/372/index.html": "0b62c97a4b52851fc0743e2d35e1ffb5884eee6a",
+    "public/auctions/373/index.html": "b43cdceba02652be26548b568a4befa046a89db3",
+    "public/auctions/374/index.html": "a32d040786da832d8aee9472b0e226ccc34e532d",
+    "public/auctions/375/index.html": "33fb354d1f052949fb1816a5623bf66d851ac033",
+    "public/auctions/376/index.html": "9ee506faa8c1fdb06bd2a04519e06c7e7a467f5d",
+    "public/auctions/377/index.html": "94bfeb26363629a065d8fb312cd9c363925d3a7b",
+    "public/auctions/378/index.html": "4c1ac0a95d22c7273a191aea5d200e524fbccbcf",
+    "public/auctions/379/index.html": "55f60f801a34763a09fab2893b755e3dde0d18a6",
+    "public/auctions/380/index.html": "40b71ec7e461e5ade21ece87d5b2db5558266d29",
+    "public/auctions/381/index.html": "0c6576a31e25a11f4e2fb5aaf7f032c260f65756",
+    "public/auctions/382/index.html": "266240f9f199617cb64ebc514841a6257a81d513",
+    "public/auctions/383/index.html": "83e9b58e284ebd815fbd16b45a48245a6f93aa5a",
+    "public/auctions/384/index.html": "c7bb01cba4b3cfe2ce53290f737199b9ca576ca1",
+    "public/auctions/385/index.html": "4e1256e7891c3701c4d16b844f53ab7d95c4bf27",
+    "public/auctions/386/index.html": "d4eee2532442d25b9839f67e3d22ad0750aeb34f",
+    "public/auctions/387/index.html": "7da395c6c85b08fd67dee301604d216887950532",
+    "public/auctions/388/index.html": "5f7f87847ba67bb2e0762ebb356e4fc3f1334c3c",
+    "public/auctions/389/index.html": "6a2a9332af3fee04250b1b9e6f37253731ce9910",
+    "public/auctions/390/index.html": "bb60a1c6dac6068eceeaa7b55d64b2bc1e29e26f",
+    "public/auctions/391/index.html": "b6c858d47cf699cb3503c34749127bb8629d7df2",
+    "public/auctions/392/index.html": "f300a7382fc8eaf9f0a05f3c6b8291f5dc689e5c",
+    "public/auctions/393/index.html": "884b35d4ae9f9ee1b118f67648b07874333d487a",
+    "public/auctions/394/index.html": "386db76daf563f0eccfd24aed7f91ccce647b732",
+    "public/auctions/395/index.html": "0503dd3524b79267764189261120177b50eb1de4",
+    "public/auctions/396/index.html": "a961ce30b04e6e8b16f14f3512d6c3e7bb597ba5",
+    "public/auctions/397/index.html": "911913b4a142c0eed84cf25ec7b764034f439ef7",
+    "public/auctions/398/index.html": "88af7970721f5e49db9b6741588cda28bb786e8c",
+    "public/auctions/399/index.html": "44400dda3232b49f0f8f2b3490cc3ded4df7b015",
+    "public/auctions/400/index.html": "bf97ff9311ab19b49be583d85912c19bf0356bec",
+    "public/auctions/401/index.html": "f7291738b18ab970b088de7238b127fff17760f6",
+    "public/auctions/402/index.html": "16f2a970243a5f2164b6670e1f88c6853e151b2a",
+    "public/auctions/403/index.html": "6734690866f25c578a109fabe1fe3b13e92260cd",
+    "public/auctions/404/index.html": "94b84ac65676d9310d134a49047f65a3522ab94f",
+    "public/auctions/405/index.html": "e73b2844eb6eeb7c65c163905f7f568116daa854",
+    "public/auctions/406/index.html": "d9da67c65aabdfdaddb9e9981a7c8696b8a6ad3e",
+    "public/auctions/407/index.html": "62fa15354227980337c3053c080eed874ac8a60b",
+    "public/auctions/408/index.html": "d3bf2f537ad664f3969f3cbe90f932896bd5baa9",
+    "public/auctions/409/index.html": "91ffa7c1f3e30569d0abe102ff85ee93822d55ef",
+    "public/auctions/410/index.html": "49deea7d2c568986ef701b3f6e626c2b0185cd17",
+    "public/auctions/411/index.html": "4e32b3eed2f3cd4c7b7782474ad5238d2fa7bf6f",
+    "public/auctions/412/index.html": "e74990194e531656286d16356396eb85486ffc8c",
+    "public/auctions/413/index.html": "1d0b4368313bcc45424a61d43eae25f9ec8fbf69",
+    "public/auctions/414/index.html": "5d88ea30cf2c264ae40b457dd543e832c80358c5",
+    "public/auctions/415/index.html": "a3fe899e868cda6ca4df3d1aae98118981cc59f2",
+    "public/auctions/416/index.html": "e8e5966b721ce00a389db2643647f74a46012e1d",
+    "public/auctions/417/index.html": "0e5be01197c4dc29c4d3aaeb17378043bbdede0f",
+    "public/auctions/418/index.html": "c7d71a6a0f2b03da8d589d546141806b15695728",
+    "public/auctions/419/index.html": "a01d6fe194199b639041d47fd3cddd790edec966",
+    "public/auctions/420/index.html": "ea2fd0d6dbc49f360994ef05e6815de7ae6121ce",
+    "public/auctions/421/index.html": "a22cf0f638e03f429661fe87892649466c214cc2",
+    "public/auctions/index.html": "09d4c47a7aa2a172e3f9478c46b709e136f11ab4",
+    "public/auctions/sitemap.xml": "9c97d9127614d5f6f685d620f35ff8c590b0bc6a",
+    "public/sitemap-auctions.xml": "9c97d9127614d5f6f685d620f35ff8c590b0bc6a"
+  },
+  "lastmod_date": "2026-11-17",
+  "edited_pages": [
+    {
+      "number": 350,
+      "title": "فراخوان تأمین‌کنندگان میوه تازه | شماره 350 زمرد ملل",
+      "related": [
+        386,
+        351
+      ]
+    },
+    {
+      "number": 351,
+      "title": "فراخوان تأمین‌کنندگان سبزیجات و صیفی‌جات | شماره 351 زمرد ملل",
+      "related": [
+        387,
+        350,
+        352
+      ]
+    },
+    {
+      "number": 352,
+      "title": "فراخوان تأمین‌کنندگان غلات و برنج | شماره 352 زمرد ملل",
+      "related": [
+        388,
+        351,
+        353
+      ]
+    },
+    {
+      "number": 353,
+      "title": "فراخوان تأمین‌کنندگان حبوبات | شماره 353 زمرد ملل",
+      "related": [
+        389,
+        352,
+        354
+      ]
+    },
+    {
+      "number": 354,
+      "title": "فراخوان تأمین‌کنندگان خشکبار و مغزها | شماره 354 زمرد ملل",
+      "related": [
+        390,
+        353,
+        355
+      ]
+    },
+    {
+      "number": 355,
+      "title": "فراخوان تأمین‌کنندگان خرما و فرآورده‌های آن | شماره 355 زمرد ملل",
+      "related": [
+        391,
+        354,
+        356
+      ]
+    },
+    {
+      "number": 356,
+      "title": "فراخوان تأمین‌کنندگان زعفران و ادویه | شماره 356 زمرد ملل",
+      "related": [
+        392,
+        355,
+        357
+      ]
+    },
+    {
+      "number": 357,
+      "title": "فراخوان تأمین‌کنندگان گیاهان دارویی و عطاری | شماره 357 زمرد ملل",
+      "related": [
+        393,
+        356,
+        358
+      ]
+    },
+    {
+      "number": 358,
+      "title": "فراخوان تأمین‌کنندگان روغن‌ها و چربی‌های خوراکی | شماره 358 زمرد ملل",
+      "related": [
+        394,
+        357,
+        359
+      ]
+    },
+    {
+      "number": 359,
+      "title": "فراخوان تأمین‌کنندگان عسل و فرآورده‌های زنبور | شماره 359 زمرد ملل",
+      "related": [
+        395,
+        358,
+        360
+      ]
+    },
+    {
+      "number": 360,
+      "title": "فراخوان تأمین‌کنندگان قارچ خوراکی | شماره 360 زمرد ملل",
+      "related": [
+        396,
+        359,
+        361
+      ]
+    },
+    {
+      "number": 361,
+      "title": "فراخوان تأمین‌کنندگان محصولات ارگانیک و گواهی‌شده | شماره 361 زمرد ملل",
+      "related": [
+        397,
+        360,
+        362
+      ]
+    },
+    {
+      "number": 362,
+      "title": "فراخوان تأمین‌کنندگان لبنیات | شماره 362 زمرد ملل",
+      "related": [
+        398,
+        361,
+        363
+      ]
+    },
+    {
+      "number": 363,
+      "title": "فراخوان تأمین‌کنندگان گوشت قرمز | شماره 363 زمرد ملل",
+      "related": [
+        399,
+        362,
+        364
+      ]
+    },
+    {
+      "number": 364,
+      "title": "فراخوان تأمین‌کنندگان مرغ و سایر طیور | شماره 364 زمرد ملل",
+      "related": [
+        400,
+        363,
+        365
+      ]
+    },
+    {
+      "number": 365,
+      "title": "فراخوان تأمین‌کنندگان تخم‌مرغ و فرآورده‌ها | شماره 365 زمرد ملل",
+      "related": [
+        401,
+        364,
+        366
+      ]
+    },
+    {
+      "number": 366,
+      "title": "فراخوان تأمین‌کنندگان ماهی و آبزیان | شماره 366 زمرد ملل",
+      "related": [
+        402,
+        365,
+        367
+      ]
+    },
+    {
+      "number": 367,
+      "title": "فراخوان تأمین‌کنندگان مواد غذایی فرآوری‌شده | شماره 367 زمرد ملل",
+      "related": [
+        403,
+        366,
+        368
+      ]
+    },
+    {
+      "number": 368,
+      "title": "فراخوان تأمین‌کنندگان شیرینی، شکلات و تنقلات | شماره 368 زمرد ملل",
+      "related": [
+        404,
+        367,
+        369
+      ]
+    },
+    {
+      "number": 369,
+      "title": "فراخوان تأمین‌کنندگان نوشیدنی‌ها و قهوه | شماره 369 زمرد ملل",
+      "related": [
+        405,
+        368,
+        370
+      ]
+    },
+    {
+      "number": 370,
+      "title": "فراخوان تأمین‌کنندگان بذر، نهال و نشا | شماره 370 زمرد ملل",
+      "related": [
+        406,
+        369,
+        371
+      ]
+    },
+    {
+      "number": 371,
+      "title": "فراخوان تأمین‌کنندگان کود، خاک و بستر کشت | شماره 371 زمرد ملل",
+      "related": [
+        407,
+        370,
+        372
+      ]
+    },
+    {
+      "number": 372,
+      "title": "فراخوان تأمین‌کنندگان حفاظت و سلامت گیاه | شماره 372 زمرد ملل",
+      "related": [
+        408,
+        371,
+        373
+      ]
+    },
+    {
+      "number": 373,
+      "title": "فراخوان تأمین‌کنندگان تجهیزات کشاورزی و گلخانه | شماره 373 زمرد ملل",
+      "related": [
+        409,
+        372,
+        374
+      ]
+    },
+    {
+      "number": 374,
+      "title": "فراخوان تأمین‌کنندگان گل و گیاه زینتی | شماره 374 زمرد ملل",
+      "related": [
+        410,
+        373,
+        375
+      ]
+    },
+    {
+      "number": 375,
+      "title": "فراخوان تأمین‌کنندگان دامپروری و پرورش طیور | شماره 375 زمرد ملل",
+      "related": [
+        411,
+        374,
+        376
+      ]
+    },
+    {
+      "number": 376,
+      "title": "فراخوان تأمین‌کنندگان پوشاک و منسوجات | شماره 376 زمرد ملل",
+      "related": [
+        412,
+        375,
+        377
+      ]
+    },
+    {
+      "number": 377,
+      "title": "فراخوان تأمین‌کنندگان کیف، کفش و چرم | شماره 377 زمرد ملل",
+      "related": [
+        413,
+        376,
+        378
+      ]
+    },
+    {
+      "number": 378,
+      "title": "فراخوان تأمین‌کنندگان خانه و آشپزخانه | شماره 378 زمرد ملل",
+      "related": [
+        414,
+        377,
+        379
+      ]
+    },
+    {
+      "number": 379,
+      "title": "فراخوان تأمین‌کنندگان لوازم برقی و دیجیتال | شماره 379 زمرد ملل",
+      "related": [
+        415,
+        378,
+        380
+      ]
+    },
+    {
+      "number": 380,
+      "title": "فراخوان تأمین‌کنندگان آرایشی، بهداشتی و شوینده | شماره 380 زمرد ملل",
+      "related": [
+        416,
+        379,
+        381
+      ]
+    },
+    {
+      "number": 381,
+      "title": "فراخوان تأمین‌کنندگان کودک، بازی و سرگرمی | شماره 381 زمرد ملل",
+      "related": [
+        417,
+        380,
+        382
+      ]
+    },
+    {
+      "number": 382,
+      "title": "فراخوان تأمین‌کنندگان فرش، صنایع دستی و هنر | شماره 382 زمرد ملل",
+      "related": [
+        418,
+        381,
+        383
+      ]
+    },
+    {
+      "number": 383,
+      "title": "فراخوان تأمین‌کنندگان طلا، نقره و گوهرسنگ | شماره 383 زمرد ملل",
+      "related": [
+        419,
+        382,
+        384
+      ]
+    },
+    {
+      "number": 384,
+      "title": "فراخوان تأمین‌کنندگان ساختمان، ابزار و تأسیسات | شماره 384 زمرد ملل",
+      "related": [
+        420,
+        383,
+        385
+      ]
+    },
+    {
+      "number": 385,
+      "title": "فراخوان تأمین‌کنندگان مواد اولیه و بسته‌بندی تولیدی | شماره 385 زمرد ملل",
+      "related": [
+        421,
+        384
+      ]
+    },
+    {
+      "number": 386,
+      "title": "استعلام خرید تجهیزات تولید میوه تازه | شماره 386 زمرد ملل",
+      "related": [
+        350,
+        387
+      ]
+    },
+    {
+      "number": 387,
+      "title": "استعلام خرید تجهیزات تولید سبزیجات و صیفی‌جات | شماره 387 زمرد ملل",
+      "related": [
+        351,
+        386,
+        388
+      ]
+    },
+    {
+      "number": 388,
+      "title": "استعلام خرید تجهیزات تولید غلات و برنج | شماره 388 زمرد ملل",
+      "related": [
+        352,
+        387,
+        389
+      ]
+    },
+    {
+      "number": 389,
+      "title": "استعلام خرید تجهیزات تولید حبوبات | شماره 389 زمرد ملل",
+      "related": [
+        353,
+        388,
+        390
+      ]
+    },
+    {
+      "number": 390,
+      "title": "استعلام خرید تجهیزات تولید خشکبار و مغزها | شماره 390 زمرد ملل",
+      "related": [
+        354,
+        389,
+        391
+      ]
+    },
+    {
+      "number": 391,
+      "title": "استعلام خرید تجهیزات تولید خرما و فرآورده‌های آن | شماره 391 زمرد ملل",
+      "related": [
+        355,
+        390,
+        392
+      ]
+    },
+    {
+      "number": 392,
+      "title": "استعلام خرید تجهیزات تولید زعفران و ادویه | شماره 392 زمرد ملل",
+      "related": [
+        356,
+        391,
+        393
+      ]
+    },
+    {
+      "number": 393,
+      "title": "استعلام خرید تجهیزات تولید گیاهان دارویی و عطاری | شماره 393 زمرد ملل",
+      "related": [
+        357,
+        392,
+        394
+      ]
+    },
+    {
+      "number": 394,
+      "title": "استعلام خرید تجهیزات تولید روغن‌ها و چربی‌های خوراکی | شماره 394 زمرد ملل",
+      "related": [
+        358,
+        393,
+        395
+      ]
+    },
+    {
+      "number": 395,
+      "title": "استعلام خرید تجهیزات تولید عسل و فرآورده‌های زنبور | شماره 395 زمرد ملل",
+      "related": [
+        359,
+        394,
+        396
+      ]
+    },
+    {
+      "number": 396,
+      "title": "استعلام خرید تجهیزات تولید قارچ خوراکی | شماره 396 زمرد ملل",
+      "related": [
+        360,
+        395,
+        397
+      ]
+    },
+    {
+      "number": 397,
+      "title": "استعلام خرید تجهیزات تولید محصولات ارگانیک و گواهی‌شده | شماره 397 زمرد ملل",
+      "related": [
+        361,
+        396,
+        398
+      ]
+    },
+    {
+      "number": 398,
+      "title": "استعلام خرید تجهیزات تولید لبنیات | شماره 398 زمرد ملل",
+      "related": [
+        362,
+        397,
+        399
+      ]
+    },
+    {
+      "number": 399,
+      "title": "استعلام خرید تجهیزات تولید گوشت قرمز | شماره 399 زمرد ملل",
+      "related": [
+        363,
+        398,
+        400
+      ]
+    },
+    {
+      "number": 400,
+      "title": "استعلام خرید تجهیزات تولید مرغ و سایر طیور | شماره 400 زمرد ملل",
+      "related": [
+        364,
+        399,
+        401
+      ]
+    },
+    {
+      "number": 401,
+      "title": "استعلام خرید تجهیزات تولید تخم‌مرغ و فرآورده‌ها | شماره 401 زمرد ملل",
+      "related": [
+        365,
+        400,
+        402
+      ]
+    },
+    {
+      "number": 402,
+      "title": "استعلام خرید تجهیزات تولید ماهی و آبزیان | شماره 402 زمرد ملل",
+      "related": [
+        366,
+        401,
+        403
+      ]
+    },
+    {
+      "number": 403,
+      "title": "استعلام خرید تجهیزات تولید مواد غذایی فرآوری‌شده | شماره 403 زمرد ملل",
+      "related": [
+        367,
+        402,
+        404
+      ]
+    },
+    {
+      "number": 404,
+      "title": "استعلام خرید تجهیزات تولید شیرینی، شکلات و تنقلات | شماره 404 زمرد ملل",
+      "related": [
+        368,
+        403,
+        405
+      ]
+    },
+    {
+      "number": 405,
+      "title": "استعلام خرید تجهیزات تولید نوشیدنی‌ها و قهوه | شماره 405 زمرد ملل",
+      "related": [
+        369,
+        404,
+        406
+      ]
+    },
+    {
+      "number": 406,
+      "title": "استعلام خرید تجهیزات تولید بذر، نهال و نشا | شماره 406 زمرد ملل",
+      "related": [
+        370,
+        405,
+        407
+      ]
+    },
+    {
+      "number": 407,
+      "title": "استعلام خرید تجهیزات تولید کود، خاک و بستر کشت | شماره 407 زمرد ملل",
+      "related": [
+        371,
+        406,
+        408
+      ]
+    },
+    {
+      "number": 408,
+      "title": "استعلام خرید تجهیزات تولید حفاظت و سلامت گیاه | شماره 408 زمرد ملل",
+      "related": [
+        372,
+        407,
+        409
+      ]
+    },
+    {
+      "number": 409,
+      "title": "استعلام خرید تجهیزات تولید تجهیزات کشاورزی و گلخانه | شماره 409 زمرد ملل",
+      "related": [
+        373,
+        408,
+        410
+      ]
+    },
+    {
+      "number": 410,
+      "title": "استعلام خرید تجهیزات تولید گل و گیاه زینتی | شماره 410 زمرد ملل",
+      "related": [
+        374,
+        409,
+        411
+      ]
+    },
+    {
+      "number": 411,
+      "title": "استعلام خرید تجهیزات تولید دامپروری و پرورش طیور | شماره 411 زمرد ملل",
+      "related": [
+        375,
+        410,
+        412
+      ]
+    },
+    {
+      "number": 412,
+      "title": "استعلام خرید تجهیزات تولید پوشاک و منسوجات | شماره 412 زمرد ملل",
+      "related": [
+        376,
+        411,
+        413
+      ]
+    },
+    {
+      "number": 413,
+      "title": "استعلام خرید تجهیزات تولید کیف، کفش و چرم | شماره 413 زمرد ملل",
+      "related": [
+        377,
+        412,
+        414
+      ]
+    },
+    {
+      "number": 414,
+      "title": "استعلام خرید تجهیزات تولید خانه و آشپزخانه | شماره 414 زمرد ملل",
+      "related": [
+        378,
+        413,
+        415
+      ]
+    },
+    {
+      "number": 415,
+      "title": "استعلام خرید تجهیزات تولید لوازم برقی و دیجیتال | شماره 415 زمرد ملل",
+      "related": [
+        379,
+        414,
+        416
+      ]
+    },
+    {
+      "number": 416,
+      "title": "استعلام خرید تجهیزات تولید آرایشی، بهداشتی و شوینده | شماره 416 زمرد ملل",
+      "related": [
+        380,
+        415,
+        417
+      ]
+    },
+    {
+      "number": 417,
+      "title": "استعلام خرید تجهیزات تولید کودک، بازی و سرگرمی | شماره 417 زمرد ملل",
+      "related": [
+        381,
+        416,
+        418
+      ]
+    },
+    {
+      "number": 418,
+      "title": "استعلام خرید تجهیزات تولید فرش، صنایع دستی و هنر | شماره 418 زمرد ملل",
+      "related": [
+        382,
+        417,
+        419
+      ]
+    },
+    {
+      "number": 419,
+      "title": "استعلام خرید تجهیزات تولید طلا، نقره و گوهرسنگ | شماره 419 زمرد ملل",
+      "related": [
+        383,
+        418,
+        420
+      ]
+    },
+    {
+      "number": 420,
+      "title": "استعلام خرید تجهیزات تولید ساختمان، ابزار و تأسیسات | شماره 420 زمرد ملل",
+      "related": [
+        384,
+        419,
+        421
+      ]
+    },
+    {
+      "number": 421,
+      "title": "استعلام خرید تجهیزات تولید مواد اولیه و بسته‌بندی تولیدی | شماره 421 زمرد ملل",
+      "related": [
+        385,
+        420
+      ]
+    }
+  ]
+}
