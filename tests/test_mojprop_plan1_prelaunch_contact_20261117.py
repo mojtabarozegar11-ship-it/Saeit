@@ -262,7 +262,7 @@ class FirstPlanOneContactTests(unittest.TestCase):
         self.assertEqual(self.html.count('href="/moj-prop-interest/form/?service=blueprint&amp;package=moj-prop-01"'), 2)
 
     def test_contact_preserves_unpaid_support(self):
-        self.assertIn("not a verified Plan 1 lead", self.html)
+        self.assertIn("not</strong> a verified Plan 1 lead", self.html)
 
     def test_optin_is_not_automatic_marketing_consent(self):
         self.assertIn("distinct recorded opt-in", self.html)
