@@ -1,0 +1,49 @@
+name: MOJ PROP C138 restore strict global CI provenance (read-only, NO RELEASE)
+on:
+  push:
+    branches: [fix/mojprop-c138-restore-global-ci-invariants-20261117]
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-c138-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  prove-integrated-source-no-prod:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SECRET_KEY: c138-synthetic-only
+      DEBUG: 'true'
+      ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install real application test dependencies in ephemeral runner
+        run: python3 -m pip install -r requirements.txt
+      - name: Prove the C136 merge and targeted previously-broken contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m pytest -q \
+            tests/test_mojprop_c136_preserve_main_merge_resolver.py \
+            tests/test_mpw_guest_telemetry_isolation_20261108.py \
+            tests/test_env_compat.py \
+            tests/test_mojprop_live_intake_source_drift_readonly_c95.py \
+            tests/test_mojprop_c138_full_ci_provenance.py
+          echo 'C138_GIT_ANCESTRY_REAL_AND_REVIEWED=true'
+          echo 'C138_MERCHANT_CANARY_STRICT_AND_201_NOT_INVOICE=true'
+          echo 'C138_C95_SOURCE_PIN_IS_IDENTITY_NOT_LIVE_DEPLOYMENT=true'
+          echo 'C138_CUSTOMER_POST_PAYMENT_DEPLOYMENT=false'
