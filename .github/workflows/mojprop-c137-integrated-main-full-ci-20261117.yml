@@ -1,0 +1,72 @@
+name: MOJ PROP C137 full project regression on integrated main + canonical source (NO RELEASE)
+on:
+  push:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/mojprop-c137-integrated-main-full-ci-20261117.yml'
+      - 'config/**'
+      - 'prop_firm/**'
+      - 'core/**'
+      - 'services/**'
+      - 'templates/**'
+permissions:
+  contents: read
+concurrency:
+  group: c137-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  full-regression-no-live-writes:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 23
+    env:
+      DEBUG: 'true'
+      SECRET_KEY: 'c137-synthetic-full-ci-only'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com'
+      DATABASE_URL: 'sqlite:///./c137-synthetic-ci.sqlite3'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install real project requirements
+        run: |
+          set -euo pipefail
+          python3 -m pip install -r requirements.txt
+      - name: Install approved hash-pinned PDF test dependency in isolated target
+        run: |
+          set -euo pipefail
+          parser="$RUNNER_TEMP/mpw-pdf-parser"
+          install -d -m 700 "$parser"
+          python3 -m pip install --no-deps --require-hashes --target "$parser" -r .github/requirements/mpw-pdf-parser-ci.txt
+          echo "PYTHONPATH=$parser" >> "$GITHUB_ENV"
+      - name: Check Django project and migrations fail closed
+        run: |
+          set -euo pipefail
+          python3 manage.py check
+          python3 manage.py makemigrations --check --dry-run
+      - name: Build real template manifest on synthetic runner only
+        run: |
+          set -euo pipefail
+          python3 manage.py collectstatic --noinput
+      - name: Run ALL repository pytest cases, including checkout, consent, store and other apps
+        run: |
+          set -euo pipefail
+          python3 -m pytest -q
+      - name: Apply entire Django migration chain to ephemeral CI SQLite
+        run: |
+          set -euo pipefail
+          python3 manage.py migrate --noinput
+          echo 'C137_FULL_APP_MIGRATION_EPHEMERAL_ONLY=true'
+          echo 'C137_MAIN_MERGE_OR_DEPLOYMENT=false'
+          echo 'C137_CUSTOMER_POST_TRX_PAYMENT_BROKER_EMAIL=false'
