@@ -23,6 +23,9 @@ KEYS = (
     "dedicated_view_guards_present",
     "consent_template_present",
     "consent_model_and_migration_present",
+    "django_app_registered",
+    "model_import_registered",
+    "migration_chain_complete",
     "source_ready",
 )
 MAX_SOURCE = 1024 * 1024
@@ -139,12 +142,80 @@ def _view_guards(source: str) -> bool:
     )
 
 
+
+def _installed_prop_app(settings: str, app_source: str) -> bool:
+    """Reject comment-only mentions of installed apps or unregistered AppConfig."""
+    try:
+        cfg = ast.parse(settings)
+        app_ast = ast.parse(app_source)
+        active = False
+        for node in cfg.body:
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "INSTALLED_APPS"
+                for target in node.targets
+            ):
+                installed = ast.literal_eval(node.value)
+                active = (type(installed) is list
+                          and installed.count("prop_firm.apps.MojPropConfig") == 1)
+        configured = any(
+            isinstance(node, ast.ClassDef) and node.name == "MojPropConfig"
+            and any(
+                isinstance(child, ast.Assign)
+                and any(isinstance(target, ast.Name) and target.id == "name"
+                        for target in child.targets)
+                and isinstance(child.value, ast.Constant)
+                and child.value.value == "prop_firm"
+                for child in node.body
+            )
+            for node in app_ast.body
+        )
+        return active and configured
+    except (SyntaxError, ValueError, TypeError, RecursionError):
+        return False
+
+
+def _model_exported(source: str) -> bool:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    return any(
+        isinstance(node, ast.ImportFrom) and node.level == 1
+        and node.module == "lead_models"
+        and any(alias.name == "PropInterest" for alias in node.names)
+        for node in tree.body
+    )
+
+
+def _migration_depends_on_previous(source: str) -> bool:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == "Migration":
+            for child in node.body:
+                if isinstance(child, ast.Assign) and any(
+                    isinstance(target, ast.Name) and target.id == "dependencies"
+                    for target in child.targets
+                ):
+                    try:
+                        deps = ast.literal_eval(child.value)
+                    except (ValueError, TypeError, RecursionError):
+                        return False
+                    return deps == [("prop_firm", "0007_equity_broker_source")]
+    return False
+
+
 def evaluate(root: Path) -> dict[str, bool]:
     pages = [_read(root, path) for path in PAGES]
     get_route, post_route = _source_routes(_read(root, "config/urls.py"))
     template = _read(root, "core/templates/mojplaywin/moj_prop_interest_form_d.html")
     model = _read(root, "prop_firm/lead_models.py")
     migration = _read(root, "prop_firm/migrations/0008_prospect_contact_intake.py")
+    settings = _read(root, "config/settings.py")
+    app_config = _read(root, "prop_firm/apps.py")
+    registered_models = _read(root, "prop_firm/models.py")
     evidence = {
         "landing_and_contact_query_contract": all(_canonical_links(page) for page in pages),
         "dedicated_get_route_mapped": get_route,
@@ -157,6 +228,12 @@ def evaluate(root: Path) -> dict[str, bool]:
             "class PropInterest(" in model
             and 'name="PropInterest"' in migration
             and "contact_consent" not in migration
+        ),
+        "django_app_registered": _installed_prop_app(settings, app_config),
+        "model_import_registered": _model_exported(registered_models),
+        "migration_chain_complete": (
+            _migration_depends_on_previous(migration)
+            and _read(root, "prop_firm/migrations/0007_equity_broker_source.py") != ""
         ),
     }
     evidence["source_ready"] = all(evidence.values())
