@@ -30,7 +30,10 @@ class MojPropManualSupportFallbackTests(unittest.TestCase):
         self.assertIn("/contact/", links.links)
         self.assertNotIn(MAILTO, links.links)
         self.assertNotIn("mailto:", page.lower())
-        self.assertIn("/moj-prop-intake/?format=html", links.links)
+        # Plan1 is not a blueprint request. Its consent form is a separate
+        # first-party route, backed by an actual server POST/CSRF contract.
+        self.assertIn("/moj-prop-interest/form/", links.links)
+        self.assertNotIn("/moj-prop-intake/?format=html", links.links)
         self.assertIn("If the form is unavailable", page)
         self.assertIn("No response time is guaranteed", page)
         self.assertNotIn("mojtaba.rozegar11@gmail.com", page)
@@ -42,7 +45,8 @@ class MojPropManualSupportFallbackTests(unittest.TestCase):
         links.feed(page)
         self.assertIn(MAILTO, links.links)
         self.assertNotIn("mojtaba.rozegar11@gmail.com", page)
-        self.assertIn("/moj-prop/#request", links.links)
+        self.assertIn("/moj-prop/#plan-one", links.links)
+        self.assertIn("/moj-prop-interest/form/", links.links)
         self.assertIn("no payment details or private credentials", page)
         self.assertIn("no response time is promised", page)
 
