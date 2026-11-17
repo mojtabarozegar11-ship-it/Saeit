@@ -84,6 +84,9 @@ def buyer_no_social_post_amendment():
     ).encode("utf-8")).hexdigest()
     if historical_digest != history.digest_sha256:
         raise ValueError("historic v1.2 disclosure digest mismatch")
+    if ("ONE original Instagram and ONE original Facebook post" not in history.en
+            or "یک پست اصیل اینستاگرام و یک پست اصیل فیس‌بوک" not in history.fa):
+        raise ValueError("historical mandatory post clause is not the expected source")
     if (history.sku != SKU or history.contract_version != HISTORICAL_TERMS_VERSION
             or history.fee_sun != 30_000_000 or history.network != "TRON-mainnet"
             or history.two_phases_simulated is not True
