@@ -20,6 +20,14 @@ _TERMINAL = frozenset((
     "SIMULATED_RISK_BREACHED", "SIMULATED_EVALUATION_EXPIRED",
     "BOTH_MATH_REVIEWS_PASSED_EXTERNAL_PROOF_REQUIRED",
 ))
+_GENESIS = "PENDING_SIGNED_SIMULATOR_FEED"
+_RECORDED_STATES = frozenset((
+    "SIMULATED_STAGE_ONE_IN_REVIEW",
+    "SIMULATED_STAGE_ONE_MATH_PASSED_WAITING_TRANSITION",
+    "SIMULATED_STAGE_TWO_IN_REVIEW",
+    "TRADING_MATH_COMPLETE_WAITING_SOCIAL_CLOCK",
+)) | _TERMINAL
+
 _STAGE_TWO_PARENTS = frozenset((
     "SIMULATED_STAGE_ONE_MATH_PASSED_WAITING_TRANSITION",
     "SIMULATED_STAGE_TWO_IN_REVIEW",
@@ -110,6 +118,8 @@ def decide_next_signed_replay_receipt(*, previous: PreviousReplayState,
     if previous.engine_state in _TERMINAL:
         raise JournalTransitionRejected("breached, expired or fully reviewed state is terminal")
     if previous.sequence == 0:
+        if previous.engine_state != _GENESIS:
+            raise JournalTransitionRejected("genesis cannot forge an already progressed status")
         if (previous.last_assessment_utc is not None
                 or previous.last_phase_one_accepted_utc is not None
                 or previous.last_phase_two_started_utc is not None
@@ -118,6 +128,19 @@ def decide_next_signed_replay_receipt(*, previous: PreviousReplayState,
             raise JournalTransitionRejected("initial empty state is inconsistent")
         prior_hash = "0" * 64
     else:
+        if previous.engine_state not in _RECORDED_STATES:
+            raise JournalTransitionRejected("unrecognized persisted challenge state")
+        if (previous.engine_state in (
+                "SIMULATED_STAGE_ONE_MATH_PASSED_WAITING_TRANSITION",
+                "SIMULATED_STAGE_TWO_IN_REVIEW",
+                "TRADING_MATH_COMPLETE_WAITING_SOCIAL_CLOCK",
+        ) and previous.last_phase_one_accepted_utc is None):
+            raise JournalTransitionRejected("checkpoint lacks a persisted phase-one acceptance")
+        if (previous.engine_state in (
+                "SIMULATED_STAGE_TWO_IN_REVIEW",
+                "TRADING_MATH_COMPLETE_WAITING_SOCIAL_CLOCK",
+        ) and previous.last_phase_two_started_utc is None):
+            raise JournalTransitionRejected("stage-two checkpoint lacks persisted start")
         if (previous.last_assessment_utc is None
                 or type(previous.previous_receipt_sha256) is not str
                 or _SHA.fullmatch(previous.previous_receipt_sha256) is None):
