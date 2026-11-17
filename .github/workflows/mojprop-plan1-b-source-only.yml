@@ -18,6 +18,7 @@ on:
       - 'prop_firm/plan1_buyer_no_social_amendment.py'
       - 'prop_firm/plan1_phase_account_boundary.py'
       - 'tests/test_prop_plan1_demo_to_real_boundary.py'
+      - 'tests/test_moj_prop_demo_to_real_db.py'
       - 'tests/test_prop_plan1_no_buyer_social.py'
       - 'prop_firm/plan1_orm_consent_review.py'
       - 'tests/test_prop_plan1_orm_consent_review.py'
@@ -130,7 +131,7 @@ jobs:
           python -m py_compile prop_firm/plan1_orm_consent_review.py tests/test_prop_plan1_orm_consent_review.py tests/test_prop_plan1_orm_verified_handoff.py
       - name: Source-only CRM/signed-review integration regression
         run: |
-          python manage.py test tests.test_prop_plan1_orm_consent_review tests.test_prop_plan1_orm_verified_handoff --verbosity 2
+          python manage.py test tests.test_prop_plan1_orm_consent_review tests.test_prop_plan1_orm_verified_handoff tests.test_moj_prop_demo_to_real_db --verbosity 2
       - name: Assert no Plan1 payment or funding activation
         run: |
           python - <<'PY'
