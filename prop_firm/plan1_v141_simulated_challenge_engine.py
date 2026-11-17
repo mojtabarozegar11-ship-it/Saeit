@@ -25,6 +25,7 @@ import json
 import re
 
 from .plan1_v14_social_or_50_terms import review_prospective_terms
+from .xauusd_v13_draft_terms import draft_gold_terms_v13
 from .plan1_v14_social_or_28d_review import Social28DayReview
 
 D = Decimal
@@ -182,7 +183,7 @@ def _phase_result(phase, fills, marks, *, opened, ended, as_of, required_net):
     best_day = max((D("0"), *net_by_day.values()))
     # A valid UTC trading day requires at least one completely closed position.
     trade_days = {
-        entries[-1][1].date().isoformat()
+        max(event[1] for event in entries).date().isoformat()
         for key, entries in fills.items() if key[0] == phase
         and key in completed_positions
     }
@@ -249,13 +250,15 @@ def replay_simulated_challenge(*, snapshot: EngineSnapshot,
     No externally verified settlement/account data is manufactured or assumed.
     """
     terms = review_prospective_terms()
+    prior = draft_gold_terms_v13()
     if (terms.sku != "MOJ-PROP-01"
             or terms.closed_trades_total != 50
-            or terms.min_trading_days_per_stage != 6
+            or terms.trading_days_each_phase != 6
             or terms.public_post_hours != 672
-            or terms.stage_one_profit_target_pct != D("9.6")
-            or terms.stage_two_profit_target_pct != D("6")
-            or terms.max_profitable_day_share_pct != D("32")):
+            or prior.stage_one_profit_target_pct != D("9.6")
+            or prior.stage_two_profit_target_pct != D("6")
+            or prior.max_profitable_day_share_pct != D("32")
+            or terms.source_draft_sha256 != prior.digest_sha256):
         raise ValueError("draft policy changed; independent review required")
     if type(snapshot) is not EngineSnapshot:
         raise ValueError("immutable engine snapshot required")
@@ -378,20 +381,16 @@ def replay_simulated_challenge(*, snapshot: EngineSnapshot,
     )
     if second is not None and not first.mathematical_pass:
         global_reasons.append("phase_two_started_without_phase_one_mathematical_pass")
-    total_positions = len({
-        (source, position) for phase, source, position in fills
-        if (phase == 1 and (1, source, position) in fills
-            and (1, source, position) in {
-                k for k, entries in fills.items()
-                if len([e for e in entries if e[0].position_fully_closed]) == 1
-                and sorted(entries, key=lambda x: x[1])[-1][0].position_fully_closed
-            })
-        or (phase == 2 and (2, source, position) in {
-                k for k, entries in fills.items()
-                if len([e for e in entries if e[0].position_fully_closed]) == 1
-                and sorted(entries, key=lambda x: x[1])[-1][0].position_fully_closed
-            })
-    })
+    # An event may contain several partial fills. Only one final close
+    # event per stable position ID makes that POSITION countable.
+    completed_all = set()
+    for key, entries in fills.items():
+        ordered = sorted(entries, key=lambda row: (row[1], row[0].external_event_id))
+        final_flags = [i for i, row in enumerate(ordered)
+                       if row[0].position_fully_closed is True]
+        if len(final_flags) == 1 and final_flags[0] == len(ordered) - 1:
+            completed_all.add((key[1], key[2]))
+    total_positions = len(completed_all)
     if total_positions < terms.closed_trades_total:
         global_reasons.append("fewer_than_fifty_distinct_fully_closed_positions_total")
     phase_math = (first.mathematical_pass and second_stage.mathematical_pass
