@@ -12,7 +12,7 @@ import sys
 
 from scripts.mojprop_public_official_contact_contract_c127 import (
     _ContactDocument, _GENERAL_MAILTO, _PLAN1_MAILTO, _SUPPORT,
-    _MAX_HTML_BYTES, classify_contact,
+    _MAX_HTML_BYTES, classify_contact, _safe_contact_href,
 )
 
 _CHECKS = (
@@ -32,19 +32,6 @@ _CHECKS = (
     "exact_reviewed_template_bytes",
     "complete_contact_contract",
 )
-
-
-def _safe_href(href: str) -> bool:
-    """Reject protocol-relative / backslash offsite tricks and hidden controls."""
-    if not isinstance(href, str) or any(ord(c) < 32 or ord(c) == 127 for c in href):
-        return False
-    if href in (_PLAN1_MAILTO, _GENERAL_MAILTO):
-        return True
-    if href.startswith("#") and "\\" not in href:
-        return True
-    if href.startswith("/") and not href.startswith("//") and "\\" not in href:
-        return True
-    return False
 
 
 def checks(raw: bytes | None, reviewed: bytes | None) -> dict[str, bool]:
@@ -67,7 +54,7 @@ def checks(raw: bytes | None, reviewed: bytes | None) -> dict[str, bool]:
         "official_support_visible": _SUPPORT in words,
         "plan1_subject_mailto": _PLAN1_MAILTO in page.links,
         "general_support_mailto": _GENERAL_MAILTO in page.links,
-        "all_links_first_party": all(_safe_href(h) for h in page.links),
+        "all_links_first_party": all(_safe_contact_href(h) for h in page.links),
         "legacy_generic_form_absent": "/moj-prop/#request" not in page.links,
         "prelaunch_warning_visible": "prelaunch only" in words,
         "no_payment_credentials_warning": "no payment details or private credentials" in words,
