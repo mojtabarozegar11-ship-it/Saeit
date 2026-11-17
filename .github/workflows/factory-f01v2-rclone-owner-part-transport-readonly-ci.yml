@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'scripts/factory_rclone_dual_parts.py'
+      - 'scripts/factory_dual_stream_v2.py'
       - 'tests/test_factory_rclone_dual_parts.py'
       - 'docs/factory_rclone_two_drive_multipart_README.md'
       - '.github/workflows/factory-f01v2-rclone-owner-part-transport-readonly-ci.yml'
@@ -27,6 +28,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test ! -L scripts/factory_dual_stream_v2.py
+          test "$(git hash-object scripts/factory_dual_stream_v2.py)" = '7a1d0ac87d97c30134f4d6955359379b0c88a255'
           test ! -L scripts/factory_rclone_dual_parts.py
           test ! -L tests/test_factory_rclone_dual_parts.py
           test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'a0f816b04c5e02093e443e68c72115e238d1fcad'
