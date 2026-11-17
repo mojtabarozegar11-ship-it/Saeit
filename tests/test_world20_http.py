@@ -167,7 +167,8 @@ class World20HTTPTests(SimpleTestCase):
                 self.assertIn(escape(locale["lead"]["email"]), text)
                 self.assertIn(escape(locale["lead"]["consent"]), text)
                 self.assertIn(escape(locale["lead"]["submit"]), text)
-                self.assertIn('action="/moj-prop-intake/?format=html"', text)
+                self.assertIn(escape(locale["lead"]["receipt"]), text)
+                self.assertIn('action="/world/' + code + '/moj-prop-interest/"', text)
                 for field in ("csrfmiddlewaretoken", "name", "email", "service",
                               "horizon", "website", "idempotency_key",
                               "notes", "consent"):
@@ -185,7 +186,12 @@ class World20HTTPTests(SimpleTestCase):
                      "/world/fa/moj-prop-interest/?email=x",
                      "/world/fa/moj-prop-interest/?lang=hi"):
             self.assertEqual(self.get(path).status_code, 404)
-        for method in (self.client.post, self.client.patch, self.client.put):
+        # CSRF fails closed before the locale form can write a lead.
+        strict = Client(enforce_csrf_checks=True)
+        self.assertEqual(strict.post(
+            "/world/fa/moj-prop-interest/", secure=True,
+            HTTP_HOST=self.HOST).status_code, 403)
+        for method in (self.client.patch, self.client.put, self.client.delete):
             response = method("/world/fa/moj-prop-interest/",
                               secure=True, HTTP_HOST=self.HOST)
             self.assertEqual(response.status_code, 405)
@@ -213,3 +219,22 @@ class World20HTTPTests(SimpleTestCase):
         self.assertIn("MojPropRequest.objects.create(", source)
         self.assertIn("def _keyed_request_id", source)
         self.assertIn('modes == ["html"]', source)
+
+    def test_14_21_private_receipt_locales_have_complete_validated_copy(self):
+        source = world_catalog()["locales"]
+        names = {
+            "received", "duplicate", "private_token", "failed", "status_link",
+        }
+        for code in _RANKED + _SUPPLEMENT:
+            with self.subTest(code=code):
+                fields = source[code]["lead"]
+                self.assertTrue(all(k in fields and fields[k].strip()
+                                    for k in names))
+                self.assertNotEqual(fields["received"], fields["failed"])
+        receipt = (Path(__file__).resolve().parents[1] /
+                   "core/templates/mojplaywin/world20_prop_receipt.html").read_text("utf-8")
+        self.assertIn('id="private-receipt"', receipt)
+        self.assertIn("{{ private_receipt }}", receipt)
+        self.assertIn("{{ copy.lead.received }}", receipt)
+        self.assertIn("{{ copy.lead.private_token }}", receipt)
+        self.assertNotIn("<script", receipt)
