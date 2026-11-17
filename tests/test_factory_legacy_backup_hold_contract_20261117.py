@@ -15,6 +15,7 @@ WORKFLOWS = {
     "zomorod-live-mysql-precompression-backup.yml": "inspect",
     "zomorod-relocate-verified-legacy-backups-20261104.yml": "inspect",
     "vps-controlled-old-sqlite-cleanup-20261107.yml": "cleanup",
+    "zomorod-online-alter-probe-lock-none.yml": "inspect",
 }
 
 def job_block(content: str, expected: str) -> str:
@@ -59,6 +60,8 @@ class LegacyFactoryBackupSafetyContract(unittest.TestCase):
                  "src.unlink()",
             "vps-controlled-old-sqlite-cleanup-20261107.yml":
                  "p.unlink()",
+            "zomorod-online-alter-probe-lock-none.yml":
+                 'sql("CREATE TABLE "',
         }
         for filename, marker in markers.items():
             with self.subTest(filename=filename):
