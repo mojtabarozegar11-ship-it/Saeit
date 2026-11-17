@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="{{ locale }}" dir="{{ copy.direction }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="same-origin">
+<title>{{ copy.prop_title }} — {{ copy.lead.reason }} | MojPlayWin</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:#0d1119;color:#f8f6ef;font:16px/1.75 system-ui,"Segoe UI",Arial,sans-serif}
+main{width:min(680px,calc(100% - 26px));margin:20px auto 50px;border:1px solid #58667b;border-radius:15px;padding:clamp(16px,4vw,34px);background:#18222f}
+h1{font-size:clamp(1.7rem,4vw,2.5rem);line-height:1.25;color:#f2ce84}
+label{display:block;margin:17px 0 6px;font-weight:650}
+input[type=text],input[type=email],textarea{display:block;width:100%;padding:12px;background:#fff;color:#151922;border:2px solid #8e98a9;border-radius:7px;font:inherit}
+input[type=email]{direction:ltr;text-align:start}
+textarea{min-height:170px;resize:vertical}
+p{color:#dde6ef}.alert{background:#32271f;border:1px solid #d3a46e;border-radius:9px;padding:12px}
+.checkbox{display:flex;gap:10px;align-items:flex-start}.checkbox input{width:20px;height:20px;flex-shrink:0;margin-top:8px}
+button{margin:18px 0;padding:13px 19px;border:0;border-radius:8px;background:#e8c67e;color:#211a11;font:inherit;font-weight:800;cursor:pointer}
+a{color:#f3d18c}button:focus-visible,a:focus-visible{outline:3px solid #fff;outline-offset:3px}
+small{display:block;color:#cdd5e1}
+</style>
+</head>
+<body><main>
+<a href="/world/{{ locale }}/">{{ copy.language_label }} — {{ copy.name }}</a>
+<h1>{{ copy.prop_title }}</h1>
+<p>{{ copy.prop_body }}</p>
+<p class="alert">{{ copy.payment_notice }}</p>
+<form action="/moj-prop-intake/?format=html" method="post" enctype="application/x-www-form-urlencoded">
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_value }}">
+<input type="hidden" name="service" value="blueprint">
+<input type="hidden" name="horizon" value="review">
+<input type="hidden" name="website" value="">
+<input type="hidden" name="idempotency_key" value="{{ nonce }}">
+<label for="buyer-name">{{ copy.lead.name }}</label>
+<input type="text" id="buyer-name" name="name" minlength="2" maxlength="200" autocomplete="name" required>
+<label for="buyer-email">{{ copy.lead.email }}</label>
+<input type="email" id="buyer-email" name="email" maxlength="254" autocomplete="email" required>
+<label for="buyer-notes">{{ copy.lead.reason }}</label>
+<textarea id="buyer-notes" name="notes" minlength="20" maxlength="5000" required>{{ notes }}</textarea>
+<label class="checkbox"><input type="checkbox" name="consent" value="on" required><span>{{ copy.lead.consent }}</span></label>
+<button type="submit">{{ copy.lead.submit }}</button>
+</form>
+<p><small>{{ copy.lead.receipt }}</small></p>
+<p><small>{{ copy.fallback_notice }}</small></p>
+<p><a href="mailto:mojplaywin@gmail.com?subject=MOJ-PROP-01%20information%20request">mojplaywin@gmail.com</a></p>
+</main></body></html>
