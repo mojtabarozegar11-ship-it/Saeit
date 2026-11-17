@@ -20,7 +20,7 @@ def form(locale="en", direction="ltr"):
             '<input type="email" name="email" maxlength="254" required>'
             '<input type="checkbox" name="contact_consent" value="yes" required>'
             '<button type="submit">Request information</button>'
-            'No invoice or settlement happens here. ' * 5 +
+            + ('No invoice or settlement happens here. ' * 5) +
             '</form></body></html>').encode("utf-8")
 
 class FakeResponse:
@@ -50,6 +50,12 @@ class Plan1GetOnlyProbeContract(unittest.TestCase):
         self.assertEqual(ENDPOINTS[1][0], "fa")
         self.assertTrue(all(url.startswith("https://mojplaywin.com/") for _,url in ENDPOINTS))
         self.assertEqual(len({url for _,url in ENDPOINTS}), 2)
+
+    def test_fixture_is_one_html_document_not_a_repeated_prefix(self):
+        self.assertEqual(form().count(b"<html"), 1)
+        self.assertEqual(form().count(b"<form"), 1)
+        self.assertEqual(form().count(b"</form>"), 1)
+        self.assertEqual(form("fa", "rtl").count(b"<html"), 1)
 
     def test_valid_nonpayable_english_and_farsi(self):
         self.assertEqual(evaluate_page(status=200, body=form(), language="en"),
