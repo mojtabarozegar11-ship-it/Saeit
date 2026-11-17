@@ -113,7 +113,7 @@ jobs:
           test ! -L scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py
           test "$(git hash-object -- scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py)" = "dfca22c694849686dbc52b70b6461ee0f5659b3a"
           test ! -L tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py
-          test "$(git hash-object -- tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py)" = "c1c19c152bd2825c1db66e84bcb17101bd10b303"
+          test "$(git hash-object -- tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py)" = "438269492d9121f84bf5d0b88fd26ce2d083f859"
           test ! -L scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
           test "$(git hash-object -- scripts/mojprop_c146_live_plan1_runtime_source_readonly.py)" = "198d3c2b4f8de90504002f95148c370604716cb9"
           test ! -L tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py
