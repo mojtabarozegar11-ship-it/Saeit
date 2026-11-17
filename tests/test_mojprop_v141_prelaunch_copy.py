@@ -63,7 +63,12 @@ class V141NonPayableLandingTests(unittest.TestCase):
         self.assertNotIn("object", self.parsed.tags)
 
     def test_no_trackers_or_remotes(self):
-        allowed = {\n            ("a", "href", "mailto:mojplaywin@gmail.com?subject=MOJ-PROP-01%20v1.4.1%20Information%20request"),\n            ("a", "href", "mailto:mojplaywin@gmail.com?subject=MOJ-PROP-01%20v1.4.1%20FA%20Information%20request"),\n        }\n        self.assertEqual(set(self.parsed.extras), allowed)\n        self.assertEqual(len(self.parsed.extras), 2)
+        allowed = {
+            ("a", "href", "mailto:mojplaywin@gmail.com?subject=MOJ-PROP-01%20v1.4.1%20Information%20request"),
+            ("a", "href", "mailto:mojplaywin@gmail.com?subject=MOJ-PROP-01%20v1.4.1%20FA%20Information%20request"),
+        }
+        self.assertEqual(set(self.parsed.extras), allowed)
+        self.assertEqual(len(self.parsed.extras), 2)
 
     def test_csp_blocks_connections_and_forms(self):
         csp = [m.get("content") for m in self.parsed.meta
@@ -156,7 +161,10 @@ class V141NonPayableLandingTests(unittest.TestCase):
         self.assertIn("NOT OPEN FOR PAID ENROLLMENT", self.html)
         self.assertIn("cannot accept customer information", self.html)
         self.assertEqual(self.html.lower().count("mailto:"), 2)
-        self.assertNotIn("Pay now", self.html)\n        self.assertIn("An email request is", self.html)\n        self.assertIn("NOT", self.html)\n        self.assertIn("اجازه بازاریابی", self.html)
+        self.assertNotIn("Pay now", self.html)
+        self.assertIn("An email request is", self.html)
+        self.assertIn("NOT", self.html)
+        self.assertIn("اجازه بازاریابی", self.html)
 
     def test_not_the_educational_product(self):
         self.assertIn("NOT MOJPROP-STARTER30 educational content", self.html)
