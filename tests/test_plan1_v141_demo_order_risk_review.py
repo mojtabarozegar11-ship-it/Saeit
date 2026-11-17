@@ -182,5 +182,39 @@ class V141DemoPretradeTests(unittest.TestCase):
         self.assertIn("assessed_at_does_not_match_challenge_snapshot",
                       review(1,challenge=status,order=order).blockers)
 
+    def test_25_unverified_latest_equity_blocks_demo_risk(self):
+        s=stage_one()
+        marks=s.equity_marks[:-1]+(replace(s.equity_marks[-1],
+                  reconciliation_status="pending"),)
+        status=replay_simulated_challenge(snapshot=replace(s,equity_marks=marks))
+        _,order=candidate(phase=1)
+        x=review(1,challenge=status,order=order)
+        self.assertIn("unreconciled_challenge_ledger_or_source",x.blockers)
+
+    def test_26_broken_initial_equity_blocks_order_even_with_good_quote(self):
+        s=stage_one()
+        marks=(replace(s.equity_marks[0],equity_usd="99"),)+s.equity_marks[1:]
+        status=replay_simulated_challenge(snapshot=replace(s,equity_marks=marks))
+        _,order=candidate(phase=1,day_open_equity="99")
+        x=review(1,challenge=status,order=order)
+        self.assertIn("current_phase_audit_integrity_not_reconciled",x.blockers)
+
+    def test_27_unreconciled_execution_source_blocks_math_order(self):
+        s=stage_one()
+        rows=(replace(s.closed_fills[0],data_source="mismatched.demo"),)+s.closed_fills[1:]
+        status=replay_simulated_challenge(snapshot=replace(s,closed_fills=rows))
+        _,order=candidate(phase=1)
+        x=review(1,challenge=status,order=order)
+        self.assertIn("current_phase_audit_integrity_not_reconciled",x.blockers)
+
+    def test_28_duplicate_conflicting_close_event_blocks_demo_preflight(self):
+        s=stage_one()
+        altered=replace(s.closed_fills[0],gross_realized_usd="44")
+        status=replay_simulated_challenge(snapshot=replace(
+            s,closed_fills=s.closed_fills+(altered,)))
+        _,order=candidate(phase=1)
+        x=review(1,challenge=status,order=order)
+        self.assertIn("unreconciled_challenge_ledger_or_source",x.blockers)
+
 if __name__=="__main__":
     unittest.main()
