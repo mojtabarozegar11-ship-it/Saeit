@@ -27,7 +27,7 @@ jobs:
         (github.actor == 'chatgpt-codex-connector[bot]' ||
          github.actor == 'mojtabarozegar11-ship-it') &&
         startsWith(github.event.head_commit.message,
-                   'Factory: one-time existing VPS SQL archive inventory')))
+                   'Factory: once more Python311 VPS SQL archive proof')))
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     steps:
