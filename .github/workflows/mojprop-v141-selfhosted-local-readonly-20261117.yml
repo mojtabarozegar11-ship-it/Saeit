@@ -554,6 +554,74 @@ jobs:
           print('CPANEL_REAL_LEGACY_INTAKE_SOURCE_FEATURES='+json.dumps(features,sort_keys=True))
           print('PRIVATE_CUSTOMER_DATA_READ=false')
           REMOTE_APACHE_PY
+          timeout 35s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_FORM_SCHEMA_PY'
+          """Inspect only published page field names and server source contract, not values."""
+          from pathlib import Path
+          from html.parser import HTMLParser
+          import json,re
+          home=Path('/home/zomorod2')
+          page=home/'mojplaywin.com'/'moj-prop'/'index.html'
+          server=home/'Saeit-staging'/'core'/'mojprop_views.py'
+          class PublicForm(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.in_form=False
+                  self.fields=[]
+                  self.form_actions=[]
+                  self.buttons=0
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=='form':
+                      self.in_form=True
+                      self.form_actions.append({
+                          'method':a.get('method','').lower(),
+                          'action_is_root_intake':a.get('action','').startswith('/moj-prop-intake/'),
+                          'has_form_id':bool(a.get('id')),
+                      })
+                  if self.in_form and tag in ('input','textarea','select'):
+                      self.fields.append({'tag':tag,'name':a.get('name',''),
+                          'id_present':bool(a.get('id')),
+                          'type':a.get('type','') if tag=='input' else ''})
+                  if self.in_form and tag=='button':
+                      self.buttons+=1
+              def handle_endtag(self,tag):
+                  if tag=='form':self.in_form=False
+          data={}
+          try:
+              raw=page.read_text(encoding='utf-8',errors='replace') if page.is_file() and not page.is_symlink() and page.stat().st_size<40000 else ''
+              p=PublicForm()
+              p.feed(raw)
+              data={
+                  'form_count':len(p.form_actions),
+                  'form_attributes':p.form_actions[:3],
+                  'form_inputs_public_names_and_types':p.fields[:26],
+                  'submit_buttons':p.buttons,
+                  'script_has_explicit_root_intake_url':'/moj-prop-intake/' in raw,
+                  'script_has_fetch_function':'fetch(' in raw,
+                  'script_has_json_stringify':'JSON.stringify(' in raw,
+                  'script_has_csrf_token_lookup':'csrf_token' in raw or 'csrfmiddlewaretoken' in raw,
+              }
+          except (OSError,ValueError,UnicodeError):
+              data={'live_public_dom_inspection_failed':True}
+          try:
+              raw=server.read_text(encoding='utf-8',errors='replace') if server.is_file() and not server.is_symlink() and server.stat().st_size<25000 else ''
+              keys=('name','email','service','horizon','notes','consent',
+                    'website','idempotency_key','product_id','csrfmiddlewaretoken')
+              data['server_source_expectations']={
+                  'source_bytes':len(raw.encode('utf-8')),
+                  'has_json_type_validation':'application/json' in raw,
+                  'has_form_payload_access':'request.POST' in raw,
+                  'has_csrf_token_generator':'get_token' in raw,
+                  'has_django_csrf_protect':'csrf_protect' in raw,
+                  'has_csrf_exempt':'csrf_exempt' in raw,
+                  'has_mojprop_request_db_write':'MojPropRequest.objects.create' in raw,
+                  'public_field_name_markers':{k:(re.search(r'(?<![a-z0-9_])'+re.escape(k)+r'(?![a-z0-9_])',raw) is not None) for k in keys},
+              }
+          except (OSError,ValueError,UnicodeError):
+              data['server_source_expectations']={'unavailable':True}
+          print('CPANEL_LIVE_PUBLIC_FORM_AND_BACKEND_CONTRACT='+json.dumps(data,sort_keys=True))
+          print('PUBLIC_FORM_VALUES_OR_CUSTOMER_RECORDS_READ=false')
+          REMOTE_FORM_SCHEMA_PY
           echo "LOCAL_TO_CPANEL_READONLY_COMPLETED=true"
       - name: Verify source remains operational NO-GO
         if: always()
