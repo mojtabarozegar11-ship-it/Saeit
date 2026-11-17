@@ -392,6 +392,90 @@ jobs:
               'release_permitted':False,
           },sort_keys=True))
           REMOTE_QUOTA_PY
+          timeout 45s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_APACHE_PY'
+          """Verify which candidate static/backend pieces can actually handle prospect intake."""
+          from pathlib import Path
+          from html.parser import HTMLParser
+          import json,ast
+          web=Path('/home/zomorod2/mojplaywin.com')
+          app=Path('/home/zomorod2/Saeit-staging')
+          def bounded_text(path,limit=150000):
+              try:
+                  if not path.is_symlink() and path.is_file() and 0<path.stat().st_size<=limit:
+                      return path.read_text(encoding='utf-8',errors='replace')
+              except OSError:pass
+              return None
+          class Forms(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.forms=[]
+                  self.links=0
+                  self.scripts=0
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=='form':
+                      self.forms.append({'method':a.get('method','').lower(),'action':a.get('action','')})
+                  elif tag=='a':
+                      self.links+=1
+                  elif tag=='script':
+                      self.scripts+=1
+          index=bounded_text(web/'moj-prop'/'index.html')
+          parser=Forms()
+          if index is not None:
+              parser.feed(index)
+          expected=['/moj-prop-intake/','/moj-prop-interest/','/moj-prop-interest/form/',
+                    '/moj-prop-status/','moj-prop-01']
+          page={
+              'static_index_exists':index is not None,
+              'html_form_count':len(parser.forms),
+              'root_mojprop_intake_form_action_count':sum(
+                  x['action'].startswith('/moj-prop-intake/') for x in parser.forms),
+              'form_methods_post_count':sum(x['method']=='post' for x in parser.forms),
+              'client_script_tag_count':parser.scripts,
+              'known_route_markers':{name:name.lower() in (index or '').lower() for name in expected},
+              'contains_fetch_method':bool(index and 'fetch(' in index),
+          }
+          htaccess=bounded_text(web/'.htaccess',20000)
+          wsgi=bounded_text(web/'passenger_wsgi.py',16000)
+          apache={
+              'htaccess_present':htaccess is not None,
+              'passenger_app_root_mentioned':bool(htaccess and 'PassengerAppRoot' in htaccess),
+              'passenger_enabled_mentioned':bool(htaccess and 'PassengerEnabled' in htaccess),
+              'rewrite_rule_count':sum(
+                  line.strip().startswith('RewriteRule ') for line in (htaccess or '').splitlines()),
+              'static_mojprop_rule_mentioned':bool(htaccess and 'moj-prop' in htaccess),
+              'wsgi_candidate_present':wsgi is not None,
+              'wsgi_references_candidate_django_tree':bool(wsgi and 'Saeit-staging' in wsgi),
+              'wsgi_environment_configured':bool(wsgi and 'DJANGO_SETTINGS_MODULE' in wsgi),
+              'effective_request_routing_proven':False,
+          }
+          views=bounded_text(app/'core'/'mojprop_views.py')
+          features={}
+          if views is not None:
+              try:
+                  tree=ast.parse(views)
+                  funcs={x.name for x in ast.walk(tree) if isinstance(x,(ast.FunctionDef,ast.AsyncFunctionDef))}
+              except SyntaxError:
+                  funcs=set()
+              features={
+                  'source_ast_parsed':bool(funcs),
+                  'function_count':len(funcs),
+                  'has_intake_entrypoint':('mojprop_intake' in funcs),
+                  'has_receipt_status_entrypoint':('mojprop_receipt_status' in funcs),
+                  'uses_csrf_protect':'csrf_protect' in views,
+                  'has_csrf_exempt_reference':'csrf_exempt' in views,
+                  'can_decode_json':'json.loads' in views,
+                  'can_parse_form':'request.POST' in views,
+                  'has_get_token':'get_token' in views,
+                  'stores_request_model':'MojPropRequest.objects' in views,
+                  'has_prospective_html_format_mode':'format=html' in views,
+                  'source_is_actual_wsgi_app_verified':False,
+              }
+          print('CPANEL_REAL_PUBLIC_MOJPROP_PAGE_CLASSIFICATION='+json.dumps(page,sort_keys=True))
+          print('CPANEL_REAL_APACHE_PASSENGER_CONFIG_CLASSIFICATION='+json.dumps(apache,sort_keys=True))
+          print('CPANEL_REAL_LEGACY_INTAKE_SOURCE_FEATURES='+json.dumps(features,sort_keys=True))
+          print('PRIVATE_CUSTOMER_DATA_READ=false')
+          REMOTE_APACHE_PY
           echo "LOCAL_TO_CPANEL_READONLY_COMPLETED=true"
       - name: Verify source remains operational NO-GO
         if: always()
