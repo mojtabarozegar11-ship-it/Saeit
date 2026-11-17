@@ -14,13 +14,14 @@ import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import sys
 
 FIRST, LAST = 350, 421
 NUMBERS = tuple(range(FIRST, LAST + 1))
 ORIGINALS = tuple(range(346, 350))
 HOME = Path.home()
-ROOT = HOME / "public_html"
+ROOT = None  # Resolved at runtime by cPanel's authoritative DomainInfo; never guess.
 LOCK = HOME / ".locks" / "zomorod-auctions-350-421.lock"
 
 
@@ -42,11 +43,57 @@ def stage_for(sha):
     return HOME / (".zm-auctions-72-stage-" + sha)
 
 
+def official_domain_root():
+    """Resolve Zomorod's actual docroot via authenticated cPanel UAPI only."""
+    insist(HOME.as_posix() == "/home/zomorod2" and os.geteuid() != 0,
+           "Refusing unexpected account")
+    try:
+        raw = subprocess.check_output(
+            ["uapi", "--output=json", "DomainInfo", "domains_data"],
+            stderr=subprocess.PIPE, timeout=30,
+        )
+        payload = json.loads(raw.decode("utf-8"))
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Cannot verify Zomorod domain root through cPanel UAPI") from exc
+    candidates = set()
+    def walk(obj):
+        if isinstance(obj, dict):
+            domain = obj.get("domain") or obj.get("servername")
+            root = obj.get("documentroot") or obj.get("document_root") or obj.get("docroot")
+            if (isinstance(domain, str) and isinstance(root, str)
+                    and domain.lower().rstrip(".") in ("zomorodmelal.ir", "www.zomorodmelal.ir")):
+                candidates.add(root.rstrip("/"))
+            for value in obj.values():
+                walk(value)
+        elif isinstance(obj, list):
+            for value in obj:
+                walk(value)
+    walk(payload)
+    print("AUCTIONS_CPANEL_DOMAINROOT_CANDIDATES=" + repr(sorted(candidates)), flush=True)
+    qualified = []
+    for value in sorted(candidates):
+        root = Path(value)
+        if not value.startswith("/home/zomorod2/") or root.is_symlink() or not root.is_dir():
+            continue
+        try:
+            if root.resolve() != root or root.stat().st_uid != os.geteuid():
+                continue
+            if all(regular(root / "auctions" / str(n) / "index.html") for n in (346, 347, 348, 349)):
+                qualified.append(root)
+        except OSError:
+            continue
+    insist(len(qualified) == 1, "Expected exactly one official domain root with real auctions 346–349")
+    print("AUCTIONS_CPANEL_DOMAINROOT_VERIFIED=" + str(qualified[0]), flush=True)
+    return qualified[0]
+
+
 def check_environment():
     insist(os.geteuid() != 0, "No root execution")
     insist(HOME.as_posix() == "/home/zomorod2", "Wrong cPanel account")
-    insist(ROOT.is_dir() and not ROOT.is_symlink(), "Root absent or symlink")
-    insist(ROOT.resolve() == Path("/home/zomorod2/public_html"), "Unexpected document root")
+    insist(ROOT is not None and ROOT.is_dir() and not ROOT.is_symlink(),
+           "Official cPanel domain root absent/unsafe")
+    insist(str(ROOT).startswith("/home/zomorod2/"), "Unexpected document root")
     insist(regular(ROOT / ".htaccess"), "Root .htaccess must exist and stay untouched")
     area = ROOT / "auctions"
     insist(area.is_dir() and not area.is_symlink(), "Auctions directory absent/unsafe")
@@ -241,6 +288,8 @@ def main():
     parser.add_argument("mode", choices=("check", "apply", "verify", "rollback"))
     parser.add_argument("sha")
     a = parser.parse_args()
+    global ROOT
+    ROOT = official_domain_root()
     stage = stage_for(a.sha)
     insist(stage.is_dir() and not stage.is_symlink(), "Private staging directory missing")
     insist(regular(stage / "public/auctions/index.html"), "Staged index absent")
