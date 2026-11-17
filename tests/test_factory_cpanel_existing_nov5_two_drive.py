@@ -239,14 +239,14 @@ class FactoryCpanelOldBackupTransportTests(unittest.TestCase):
     def test_29_factory_runner_is_mandatory(self):
         args=SimpleNamespace(mode="probe",snapshot="nov5-a",
                              ssh_config="/na",known_hosts="/na")
-        with patch.object(m.pwd,"getpwuid",return_value=SimpleNamespace(pw_name="root")):
-            with self.assertRaisesRegex(m.TransferHold,"OWNER_FACTORY_RUNNER_ONLY"):
+        with patch.object(m.os,"geteuid",return_value=0):
+            with self.assertRaisesRegex(m.TransferHold,"NONROOT_OWNER_TRANSFER_RUNNER_REQUIRED"):
                 m.run_export(args)
 
     def test_30_probe_no_remote_source_contents_or_cloud_write(self):
         args=SimpleNamespace(mode="probe",snapshot="nov5-a",
                              ssh_config="/na",known_hosts="/na")
-        with patch.object(m.pwd,"getpwuid",return_value=SimpleNamespace(pw_name="githubops")):
+        with patch.object(m.os,"geteuid",return_value=1001):
             with patch.object(m,"probe_source",return_value=self.fake_probe()):
                 with patch.object(m,"RcloneDualStore",side_effect=AssertionError("CLOUD_MUST_NOT_START")):
                     result=m.run_export(args)
@@ -263,7 +263,7 @@ class FactoryCpanelOldBackupTransportTests(unittest.TestCase):
         class Blocked:
             def __init__(self,*a,**kw): pass
             def preflight(self): raise m.TransferHold("OWNER_DRIVE_REMOTE_CONFIG_UNVERIFIED")
-        with patch.object(m.pwd,"getpwuid",return_value=SimpleNamespace(pw_name="githubops")):
+        with patch.object(m.os,"geteuid",return_value=1001):
             with patch.object(m,"probe_source",return_value=self.fake_probe()):
                 with patch.object(m,"_secure_file",return_value=b"PUBLIC_KEY"):
                     with patch.object(m,"RcloneDualStore",Blocked):
@@ -379,7 +379,7 @@ class FactoryCpanelOldBackupTransportTests(unittest.TestCase):
                 rclone_config="/na",rclone_exe="/usr/bin/rclone",
                 trusted_public_spki_sha256=fp)
         with patch.object(m,"SOURCE_BYTES",len(blob)),patch.object(m,"CHUNK_BYTES",4096):
-            with patch.object(m.pwd,"getpwuid",return_value=SimpleNamespace(pw_name="githubops")):
+            with patch.object(m.os,"geteuid",return_value=1001):
                 with patch.object(m,"probe_source",return_value=self.fake_probe()):
                     with patch.object(m,"_secure_file",return_value=pub):
                         with patch.object(m,"RcloneDualStore",MemoryRemote):
