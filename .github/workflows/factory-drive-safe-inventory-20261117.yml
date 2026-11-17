@@ -21,12 +21,28 @@ jobs:
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 12
     steps:
-      - name: Read factory backup metadata without disclosure or mutation
+      - name: Fetch factory backup metadata over pinned SSH from self-hosted factory runner
         shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          test "$(hostname -s)" = "factory" || { echo "FACTORY_RUNNER_HOSTNAME_MISMATCH"; exit 78; }
-          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          umask 077
+          test -n "$VPS_KEY"
+          work="$(mktemp -d)"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          target=""
+          for host in 127.0.0.1 178.239.147.150; do
+            ssh-keyscan -T 5 -p 22 -t rsa "$host" > "$work/known" 2>/dev/null || true
+            test -s "$work/known" || continue
+            actual="$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)"
+            if test "$actual" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then target="$host"; break; fi
+          done
+          test -n "$target" || { echo FACTORY_SSH_HOST_PIN_UNAVAILABLE; exit 78; }
+          timeout 240s ssh -T -i "$work/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -o ForwardAgent=no "githubops@$target" 'test "$(id -un)" = githubops && PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'PY'
           import datetime, hashlib, json, os, pathlib, re, sqlite3, stat
           root=pathlib.Path('/home/githubops/factory-runtime')
           backup=root/'operations'/'backups'
