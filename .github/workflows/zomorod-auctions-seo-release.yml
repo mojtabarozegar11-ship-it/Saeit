@@ -1,4 +1,4 @@
-name: Zomorod auctions 72 SEO-only verified release
+name: Zomorod auctions 72 structured supplier-offer release
 on:
   pull_request:
     paths:
@@ -6,9 +6,16 @@ on:
       - "public/sitemap-auctions.xml"
       - "content/auctions-seo-20261117/**"
       - "tests/test_zomorod_auctions_72_seo.py"
-      - "scripts/zomorod_auctions_seo_deploy_20261117.py"
+      - "scripts/zomorod_auctions_rfq_intake_deploy_20261117.py"
       - ".github/workflows/zomorod-auctions-seo-release.yml"
-  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "public/auctions/**"
+      - "content/auctions-rfq-intake-20261117/**"
+      - "scripts/zomorod_auctions_rfq_intake_deploy_20261117.py"
+      - "tests/test_zomorod_auction_proposal_intake.py"
+      - ".github/workflows/zomorod-auctions-seo-release.yml"
 permissions:
   contents: read
 concurrency:
@@ -17,7 +24,7 @@ concurrency:
 
 jobs:
   seo-check:
-    name: Validate 72 unique Persian SEO pages and index
+    name: Validate 72 numbered RFQ forms with existing SEO
     runs-on: ubuntu-latest
     timeout-minutes: 14
     env:
@@ -32,15 +39,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/zomorod_auctions_seo_deploy_20261117.py
+          python3 -m py_compile scripts/zomorod_auctions_rfq_intake_deploy_20261117.py
           python3 -m pip install --quiet --disable-pip-version-check -r requirements.txt
-          python3 -m pytest -q tests/test_zomorod_auction_directory_artifacts.py tests/test_zomorod_auctions_72_publication.py tests/test_zomorod_auctions_72_seo.py
-          echo AUCTIONS_SEO_SOURCE_QA=passed
+          python3 -m pytest -q tests/test_zomorod_auction_directory_artifacts.py tests/test_zomorod_auctions_72_publication.py tests/test_zomorod_auctions_72_seo.py tests/test_zomorod_auction_proposal_intake.py
+          echo AUCTIONS_RFQ_SOURCE_QA=passed
 
   seo-publish:
     name: Publish only revised SEO assets via verified cPanel route
     needs: seo-check
-    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit' }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit' }}
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 26
     steps:
@@ -96,23 +103,22 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = zomorod2'
-          echo AUCTIONS_SEO_PINNED_RELAY=verified
+          echo AUCTIONS_RFQ_PINNED_RELAY=verified
 
       - name: Transfer 74 approved SEO file sources to private cPanel stage and preflight
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-auctions-seo-relay"
-          stage="/home/zomorod2/.zm-auctions-seo-stage-$GITHUB_SHA"
-          files=("public/auctions/index.html" "public/sitemap-auctions.xml"
-                 "content/auctions-seo-20261117/baseline.json"
-                 "scripts/zomorod_auctions_seo_deploy_20261117.py")
+          stage="/home/zomorod2/.zm-auctions-rfq-intake-stage-$GITHUB_SHA"
+          files=("content/auctions-rfq-intake-20261117/baseline.json"
+                 "scripts/zomorod_auctions_rfq_intake_deploy_20261117.py")
           for n in $(seq 350 421); do files+=("public/auctions/$n/index.html"); done
-          test "${#files[@]}" -eq 76
+          test "${#files[@]}" -eq 74
           ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
           tar -cf - "${files[@]}" | ssh -T -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
-          ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/scripts/zomorod_auctions_seo_deploy_20261117.py' check '$GITHUB_SHA'"
-          echo AUCTIONS_SEO_PRIVATE_STAGE=validated
+          ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/scripts/zomorod_auctions_rfq_intake_deploy_20261117.py' check '$GITHUB_SHA'"
+          echo AUCTIONS_RFQ_PRIVATE_STAGE=validated
 
       - name: Atomic SEO release with per-file original hash gates and 74 private backups
         id: apply
@@ -120,7 +126,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-auctions-seo-relay"
-          script="/home/zomorod2/.zm-auctions-seo-stage-$GITHUB_SHA/scripts/zomorod_auctions_seo_deploy_20261117.py"
+          script="/home/zomorod2/.zm-auctions-rfq-intake-stage-$GITHUB_SHA/scripts/zomorod_auctions_rfq_intake_deploy_20261117.py"
           ssh -T -F "$d/config" saeit-cpanel "python3 '$script' apply '$GITHUB_SHA'"
 
       - name: Verify live canonical, robots, breadcrumbs, related links, 72 routes and originals
@@ -128,7 +134,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-auctions-seo-relay"
-          script="/home/zomorod2/.zm-auctions-seo-stage-$GITHUB_SHA/scripts/zomorod_auctions_seo_deploy_20261117.py"
+          script="/home/zomorod2/.zm-auctions-rfq-intake-stage-$GITHUB_SHA/scripts/zomorod_auctions_rfq_intake_deploy_20261117.py"
           ssh -T -F "$d/config" saeit-cpanel "python3 '$script' verify '$GITHUB_SHA'"
           python3 - <<'PY'
           import concurrent.futures
@@ -157,6 +163,9 @@ jobs:
               body=get(f"/auctions/{n}/?seo_release={sha}")
               if n>=350:
                   assert f"zm-auctions-seo-20261117-v1" in body, n
+                  assert f"zm-rfq-intake-20261117-{n}" in body, n
+                  assert f'id="rfq-offer-form-{n}"' in body, n
+                  assert f"var n={n}," in body, n
                   assert f"zm-auctions-72-v1 official-{n}" in body, n
                   assert f'rel="canonical" href="{origin}/auctions/{n}/"' in body, n
                   assert '"@type":"BreadcrumbList"' in body, n
@@ -183,8 +192,8 @@ jobs:
           kit=get("/auctions/supplier-kit/?seo_release="+sha)
           assert "۳۴۶" in kit or "346" in kit
           get("/?seo_release="+sha)
-          print("AUCTIONS_SEO_LIVE=72_metadata_breadcrumb_related_links_verified")
-          print("AUCTIONS_SEO_ORIGINALS=346_349_index_kit_robots_preserved")
+          print("AUCTIONS_RFQ_LIVE=72_metadata_breadcrumb_related_links_verified")
+          print("AUCTIONS_RFQ_ORIGINALS=346_349_index_kit_robots_preserved")
           PY
 
       - name: Restore only owned 74 files on failed public verification
@@ -193,7 +202,7 @@ jobs:
         run: |
           d="$RUNNER_TEMP/zomorod-auctions-seo-relay"
           if test -f "$d/config"; then
-            script="/home/zomorod2/.zm-auctions-seo-stage-$GITHUB_SHA/scripts/zomorod_auctions_seo_deploy_20261117.py"
+            script="/home/zomorod2/.zm-auctions-rfq-intake-stage-$GITHUB_SHA/scripts/zomorod_auctions_rfq_intake_deploy_20261117.py"
             ssh -T -F "$d/config" saeit-cpanel "python3 '$script' rollback '$GITHUB_SHA'" || true
           fi
 
