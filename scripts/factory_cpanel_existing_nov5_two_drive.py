@@ -257,10 +257,11 @@ class VerifiedCpanelStream:
 
 
 def run_export(args):
-    # This program never runs as root or under the target cPanel account.
-    identity = pwd.getpwuid(os.geteuid()).pw_name
-    if identity != "githubops":
-        raise TransferHold("OWNER_FACTORY_RUNNER_ONLY")
+    # VPS SSH identity (githubops) is NOT the GitHub Actions runner's local
+    # OS identity. The runner's own 0600 configs, pinned host keys and SSH
+    # authenticated remote identity are the admission boundary. Forbid root.
+    if os.geteuid() == 0:
+        raise TransferHold("NONROOT_OWNER_TRANSFER_RUNNER_REQUIRED")
     config,known=Path(args.ssh_config),Path(args.known_hosts)
     p = probe_source(config, known, args.snapshot)
     if args.mode == "probe":
