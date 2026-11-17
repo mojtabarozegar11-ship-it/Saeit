@@ -1,6 +1,6 @@
 <article class="zm-proc-card" id="{{ notice.id }}" aria-labelledby="title-{{ notice.id }}">
   <header class="zm-proc-card-head">
-    <span class="zm-proc-code">{{ notice.id }}</span>
+    <span class="zm-proc-code">شماره آگهی {{ notice.public_number }} <small>({{ notice.id }})</small></span>
     <span class="zm-proc-status">{{ notice.status }}</span>
   </header>
   <h3 id="title-{{ notice.id }}">{{ notice.title }}</h3>
@@ -12,6 +12,6 @@
     <p><strong>مدارک پیشنهادی:</strong> {{ notice.submission_requirements }}</p>
     <p>مقدار خرید، مشخصات نهایی و محل تحویل پس از بررسی پیشنهادها و فقط در قرارداد مکتوب مشخص می‌شود.</p>
   </details>
-  <p class="zm-proc-inquiry">برای ارائه پیشنهاد، کد <strong>{{ notice.id }}</strong> را در عنوان پیام ذکر کنید.</p>
+  <p class="zm-proc-inquiry">برای ارائه پیشنهاد، شماره <strong>{{ notice.public_number }}</strong> و کد <strong>{{ notice.id }}</strong> را در عنوان پیام ذکر کنید.</p>
   <a class="auction-inquiry" href="{{ notice.contact_path }}">ارتباط رسمی و ارائه پیشنهاد</a>
 </article>
