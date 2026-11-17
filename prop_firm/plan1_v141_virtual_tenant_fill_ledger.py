@@ -227,7 +227,9 @@ def replay_provisioned_virtual_books(
         phase_start = start if e.stage == 1 else second
         if phase_start is None or not phase_start <= when <= now or when >= phase_start + WINDOW:
             raise VirtualLedgerRejected("virtual fill outside its own stage 28-day window")
-        if e.stage == 1 and accepted is not None and when >= accepted:
+        # An already-recorded final fill may share the acceptance timestamp.
+        # Writer still forbids appending ANY new stage-one event after acceptance.
+        if e.stage == 1 and accepted is not None and when > accepted:
             raise VirtualLedgerRejected("stage-one fill after authoritative stage acceptance")
         qty = _dec(e.quantity_ounces, "quantity_ounces", ceiling=MAX_QTY, strictly_positive=True)
         price = _dec(e.price_usd_per_ounce, "price_usd_per_ounce", ceiling=MAX_PRICE, strictly_positive=True)
