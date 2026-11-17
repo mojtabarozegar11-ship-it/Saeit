@@ -8,15 +8,7 @@ on:
       - "tests/test_zomorod_auctions_72_seo.py"
       - "scripts/zomorod_auctions_seo_deploy_20261117.py"
       - ".github/workflows/zomorod-auctions-seo-release.yml"
-  push:
-    branches: [main]
-    paths:
-      - "public/auctions/**"
-      - "public/sitemap-auctions.xml"
-      - "content/auctions-seo-20261117/**"
-      - "tests/test_zomorod_auctions_72_seo.py"
-      - "scripts/zomorod_auctions_seo_deploy_20261117.py"
-      - ".github/workflows/zomorod-auctions-seo-release.yml"
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -48,7 +40,7 @@ jobs:
   seo-publish:
     name: Publish only revised SEO assets via verified cPanel route
     needs: seo-check
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit' }}
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 26
     steps:
