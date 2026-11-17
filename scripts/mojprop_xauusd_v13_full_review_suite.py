@@ -21,14 +21,14 @@ from pathlib import Path
 REQUIRED_TEST_MODULES = (
     ("tests.test_xauusd_v13_preflight", 28),
     ("tests.test_xauusd_v13_broker_evidence", 31),
-    ("tests.test_xauusd_v13_contract_gate", 12),
-    ("tests.test_xauusd_v13_draft_terms", 26),
+    ("tests.test_xauusd_v13_contract_gate", 14),
+    ("tests.test_xauusd_v13_draft_terms", 27),
     ("tests.test_xauusd_v13_qualification_preview", 32),
     ("tests.test_xauusd_v13_cross_source_guard", 12),
     ("tests.test_xauusd_v13_phase_day_audit", 20),
 )
 LEGACY_TEST_MODULE = "tests.test_prop_firm_policy"
-EXPECTED_V13_TESTS = 161
+EXPECTED_V13_TESTS = 164
 
 
 def run_full_review() -> int:
