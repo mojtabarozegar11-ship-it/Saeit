@@ -1,0 +1,36 @@
+name: Factory legacy backup safety guards — no production writes
+on:
+  pull_request:
+    paths:
+      - 'tests/test_factory_legacy_backup_hold_contract_20261117.py'
+      - 'scripts/factory_recovery_destination_admission_readonly_20261117.py'
+      - '.github/workflows/zomorod-mysql-lossless-page-compression.yml'
+      - '.github/workflows/zomorod-live-mysql-precompression-backup.yml'
+      - '.github/workflows/zomorod-relocate-verified-legacy-backups-20261104.yml'
+      - '.github/workflows/vps-controlled-old-sqlite-cleanup-20261107.yml'
+      - '.github/workflows/factory-legacy-backup-hold-contract-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tests/test_factory_legacy_backup_hold_contract_20261117.py'
+      - 'scripts/factory_recovery_destination_admission_readonly_20261117.py'
+      - '.github/workflows/zomorod-mysql-lossless-page-compression.yml'
+      - '.github/workflows/zomorod-live-mysql-precompression-backup.yml'
+      - '.github/workflows/zomorod-relocate-verified-legacy-backups-20261104.yml'
+      - '.github/workflows/vps-controlled-old-sqlite-cleanup-20261107.yml'
+      - '.github/workflows/factory-legacy-backup-hold-contract-ci.yml'
+permissions:
+  contents: read
+concurrency:
+  group: factory-legacy-backup-safety-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check destructive legacy job holds and restore admission contracts
+        run: python3 -m unittest discover -s tests -p 'test_factory_legacy_backup_hold_contract_20261117.py' -v
