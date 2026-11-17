@@ -183,7 +183,11 @@ class AccessibleCurrentMainLeadTests(TestCase):
     def test_16_native_fallback_link_is_on_public_moj_prop_page(self):
         html = (Path(__file__).resolve().parents[1] /
                 "templates/moj-prop-v4/index.html").read_text(encoding="utf-8")
-        self.assertIn('href="/moj-prop-intake/?format=html"', html)
+        self.assertIn(
+            'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01"',
+            html,
+        )
+        self.assertNotIn("MOJPROP-STARTER30", html)
 
     def test_17_unfulfillable_digital_product_option_is_hidden(self):
         html = self.first.content.decode()
