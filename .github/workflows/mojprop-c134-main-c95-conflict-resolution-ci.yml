@@ -1,0 +1,47 @@
+name: MOJ PROP C134 resolve one main/static C95 immutable pin conflict (NO RELEASE)
+on:
+  push:
+    branches: [fix/mojprop-c134-align-c95-hash-to-main-20261117]
+  pull_request:
+    branches: [fix/mojprop-main-prelaunch-real-plan1-20261116]
+permissions:
+  contents: read
+jobs:
+  main-source-parity-and-git-merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify exact current-main reviewed source C95 and old fail-closed regressions
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python -B -m unittest -v \
+            tests.test_mojprop_c134_c95_exact_source_alignment \
+            tests.test_mojprop_live_intake_source_drift_readonly_c95
+      - name: Ensure merged static branch has no three-way Git conflict with current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          main_sha="$(git rev-parse --verify refs/remotes/origin/main^{commit})"
+          head_sha="$(git rev-parse --verify HEAD^{commit})"
+          echo "C134_MAIN_SHA=$main_sha"
+          echo "C134_PR_MERGE_TEST_SHA=$head_sha"
+          set +e
+          git merge-tree --write-tree --name-only --no-messages "$main_sha" "$head_sha" > "$RUNNER_TEMP/c134-merge.txt"
+          rc=$?
+          set -e
+          if [ "$rc" != 0 ]; then
+            echo 'C134_MAIN_VS_STATIC_CONFLICTS_STILL_PRESENT=true'
+            tail -n +2 "$RUNNER_TEMP/c134-merge.txt" | head -n 50
+            exit 1
+          fi
+          echo 'C134_MAIN_VS_STATIC_NO_CONFLICTS=true'
+          echo 'C134_SOURCE_CONFLICT_RESOLVED_ONLY_NO_RELEASE=true'
+          echo 'C134_CUSTOMER_POST_PAYMENT_DEPLOYMENT=false'
