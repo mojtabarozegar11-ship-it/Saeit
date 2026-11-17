@@ -1,5 +1,5 @@
 """Authoritative Django DB tests, no TRX broadcast and no live charges."""
-from datetime import datetime, timezone as utc
+from datetime import datetime, timezone as utc, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -84,7 +84,7 @@ class RealNativePaymentStorageTests(TestCase):
     def proof(self, invoice, txid=TX_A, amount=30_000_000,
               receiver=None, sender=PAYER, result="SUCCESS", millis=None):
         if millis is None:
-            millis = int(timezone.now().timestamp() * 1000)
+            millis = int((invoice.issued_at + timedelta(seconds=5)).timestamp() * 1000)
         body = {
             "txID": txid,
             "ret": [{"contractRet": result}],
@@ -110,6 +110,15 @@ class RealNativePaymentStorageTests(TestCase):
         def node(base, path, txid):
             return body if path.endswith("/gettransactionbyid") else receipt
         return node
+
+    def checked_confirm(self, i, txid, body, receipt):
+        # Explicit synthetic clock: solidified block 5s AFTER issue and the
+        # server verifier clock 10s after issue; never depend on CI timing.
+        with patch("prop_firm.plan1_v141_native_checkout._query_solidified",
+                   side_effect=self.mock_sources(body, receipt)), \
+             patch("prop_firm.plan1_v141_native_checkout.timezone.now",
+                   return_value=i.issued_at + timedelta(seconds=10)):
+            return confirm_native_trx_and_deliver(reference=i.reference, txid=txid)
 
     def test_invoice_only_in_released_merchant(self):
         with override_settings(MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED=False):
@@ -169,9 +178,7 @@ class RealNativePaymentStorageTests(TestCase):
     def test_real_finality_creates_one_paid_book(self):
         i = self.invoice()
         body, receipt = self.proof(i)
-        with patch("prop_firm.plan1_v141_native_checkout._query_solidified",
-                   side_effect=self.mock_sources(body, receipt)):
-            r = confirm_native_trx_and_deliver(reference=i.reference, txid=TX_A)
+        r = self.checked_confirm(i, TX_A, body, receipt)
         i.refresh_from_db()
         self.assertEqual(i.status, "settled")
         self.assertEqual(PropGlobalTRXSettlement.objects.count(), 1)
@@ -186,9 +193,7 @@ class RealNativePaymentStorageTests(TestCase):
     def test_duplicate_same_order_is_idempotent(self):
         i = self.invoice()
         body, receipt = self.proof(i)
-        with patch("prop_firm.plan1_v141_native_checkout._query_solidified",
-                   side_effect=self.mock_sources(body, receipt)):
-            r1 = confirm_native_trx_and_deliver(reference=i.reference, txid=TX_A)
+        r1 = self.checked_confirm(i, TX_A, body, receipt)
         r2 = confirm_native_trx_and_deliver(reference=i.reference, txid=TX_A)
         self.assertEqual(r1.pk, r2.pk)
         self.assertEqual(PropV141NativeReceipt.objects.count(), 1)
@@ -197,9 +202,7 @@ class RealNativePaymentStorageTests(TestCase):
     def test_invoice_cannot_use_second_txid(self):
         i = self.invoice()
         body, receipt = self.proof(i)
-        with patch("prop_firm.plan1_v141_native_checkout._query_solidified",
-                   side_effect=self.mock_sources(body, receipt)):
-            confirm_native_trx_and_deliver(reference=i.reference, txid=TX_A)
+        self.checked_confirm(i, TX_A, body, receipt)
         with self.assertRaises(CheckoutRejected):
             confirm_native_trx_and_deliver(reference=i.reference, txid=TX_B)
 
@@ -207,11 +210,11 @@ class RealNativePaymentStorageTests(TestCase):
         i1 = self.invoice()
         i2 = self.invoice()
         body, receipt = self.proof(i1)
+        self.checked_confirm(i1, TX_A, body, receipt)
         with patch("prop_firm.plan1_v141_native_checkout._query_solidified",
-                   side_effect=self.mock_sources(body, receipt)):
-            confirm_native_trx_and_deliver(reference=i1.reference, txid=TX_A)
-        with patch("prop_firm.plan1_v141_native_checkout._query_solidified",
-                   side_effect=self.mock_sources(body, receipt)):
+                   side_effect=self.mock_sources(body, receipt)), \
+             patch("prop_firm.plan1_v141_native_checkout.timezone.now",
+                   return_value=i2.issued_at + timedelta(seconds=10)):
             with self.assertRaises(CheckoutRejected):
                 confirm_native_trx_and_deliver(reference=i2.reference, txid=TX_A)
         self.assertEqual(PropGlobalTRXSettlement.objects.count(), 1)
@@ -258,7 +261,9 @@ class RealNativePaymentStorageTests(TestCase):
         bad_receipt = dict(receipt, blockNumber=receipt["blockNumber"] + 1)
         calls = [body, receipt, body, bad_receipt]
         with patch("prop_firm.plan1_v141_native_checkout._query_solidified",
-                   side_effect=calls):
+                   side_effect=calls), \
+             patch("prop_firm.plan1_v141_native_checkout.timezone.now",
+                   return_value=i.issued_at + timedelta(seconds=10)):
             with self.assertRaises(CheckoutRejected):
                 confirm_native_trx_and_deliver(reference=i.reference, txid=TX_A)
         self.assertEqual(PropGlobalTRXSettlement.objects.count(), 0)
