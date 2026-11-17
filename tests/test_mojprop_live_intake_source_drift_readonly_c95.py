@@ -95,7 +95,7 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         })
         self.assertTrue(all(len(value) == 40 for value in EXPECTED.values()))
         self.assertEqual(EXPECTED["config/urls.py"],
-                         "74e52d8755788da12375a0605f506b64efd27b1e")
+                         "7c95dcfe86243b8ff1358018ae1206afc99f4bc6")
         # A stale four-file pin returned misleading "drift" after current-main
         # source was actually merged. Public HTML must be audited as well.
         self.assertEqual(EXPECTED["core/mojprop_views.py"],
