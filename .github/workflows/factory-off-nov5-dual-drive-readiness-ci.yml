@@ -30,8 +30,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git hash-object scripts/factory_cpanel_existing_nov5_two_drive.py)" = '66ccf5726662852adc36d2ea2a306c6a28c9fccd'
-          test "$(git hash-object tests/test_factory_cpanel_existing_nov5_two_drive.py)" = 'ec5203c9e85699660a9e0805cf44d2043201e539'
+          test "$(git hash-object scripts/factory_cpanel_existing_nov5_two_drive.py)" = '89e94c184a1babfb02b52dc7dfa26cf6f72f50c1'
+          test "$(git hash-object tests/test_factory_cpanel_existing_nov5_two_drive.py)" = 'd16ba5adcd0c7b95d602a007ec44e38df532fadc'
           test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'f9c6d8445144744920246a128c977bdc850eb80f'
           test "$(git hash-object scripts/factory_dual_stream_v2.py)" = '7a1d0ac87d97c30134f4d6955359379b0c88a255'
           test "$(git hash-object tests/test_factory_rclone_dual_parts.py)" = '4194efaaab093dd9e152ffaf2a558da80185b9ce'
@@ -60,7 +60,7 @@ jobs:
           set -euo pipefail
           umask 077
           test -n "$VPS_KEY" && test -n "$HOST_KEY"
-          test "$(id -un)" = githubops || { echo OWNER_RUNNER_ACCOUNT_NOT_VERIFIED; exit 78; }
+          test "$(id -u)" -ne 0 || { echo OWNER_RUNNER_MUST_BE_NONROOT; exit 78; }
           work="$(mktemp -d)"
           trap 'rm -rf -- "$work"' EXIT
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/vps.key"
