@@ -165,6 +165,26 @@ def _one(name):
         out["diagnostic"]="invalid_json"
         return out
     verdict,values=_parse_response(obj,name)
+    if name=="uapi_statsbar" and verdict=="success_no_matching_quota":
+        # Owner CLI C120 also probes without --user when provider result
+        # has no usable account rows (even if JSON status is successful).
+        try:
+            fallback=subprocess.run(
+                [UAPI,"--output=json","StatsBar","get_stats",
+                 "display="+DISPLAY],
+                capture_output=True,timeout=TIMEOUT,check=False,
+                env={"HOME":"/home/zomorod2","USER":OWNER,"LOGNAME":OWNER,
+                     "LC_ALL":"C","PATH":"/usr/bin:/bin:/usr/local/bin"},
+            )
+            if fallback.returncode==0 and 0<len(fallback.stdout)<=MAX_BYTES:
+                alternate, rows=_parse_response(
+                    json.loads(fallback.stdout.decode("utf-8")),name)
+                if alternate=="success_numeric_quota" or (
+                        alternate=="success_no_matching_quota" and rows and
+                        any(row["found"] for row in rows.values())):
+                    verdict,values=alternate,rows
+        except (OSError,UnicodeError,ValueError,subprocess.TimeoutExpired):
+            pass
     out["diagnostic"]=verdict
     if values:
         out["account_disk"]=values["diskusage"]
