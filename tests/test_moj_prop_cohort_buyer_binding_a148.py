@@ -146,7 +146,13 @@ class PaidCohortTradeIdentityTests(TestCase):
         PropExecution.objects.filter(pk=self.donor_event.pk).update(
             external_position_id="a148-position-1"
         )
-        self.assert_only_fortynine()
+        # This legacy fixture has different origins for the same broker
+        # position. C156 now excludes the *entire* contradictory identity,
+        # rather than arbitrarily accepting whichever phase was read first.
+        result = self.count()
+        self.assertEqual(result.valid_closed_positions, 48)
+        self.assertEqual(result.uncountable_events, 1)
+        self.assertFalse(result.sufficient)
 
     def test_11_outsider_account_cannot_be_repaired_by_stale_relation_cache(self):
         # Read a stale related object first, then mutate the backing DB row.
