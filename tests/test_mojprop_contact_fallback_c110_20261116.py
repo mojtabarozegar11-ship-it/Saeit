@@ -46,7 +46,18 @@ class MojPropManualSupportFallbackTests(unittest.TestCase):
         links.feed(page)
         self.assertIn(MAILTO, links.links)
         self.assertNotIn("mojtaba.rozegar11@gmail.com", page)
-        self.assertIn("/moj-prop/#request", links.links)
+        # The legacy #request anchor now renders an unrelated-service desk,
+        # NOT an accepted Plan 1 lead: keep the official support path, not a
+        # misleading shortcut that could fabricate a prop challenge interest.
+        self.assertNotIn("/moj-prop/#request", links.links)
+        self.assertIn("/moj-prop/", links.links)
+        self.assertIn(
+            "mailto:support@mojplaywin.com?subject=MOJ-PROP-01%20Prelaunch%20Information%20Request",
+            links.links,
+        )
+        self.assertIn("not a verified Plan 1 lead", page)
+        self.assertIn("nothing is sent automatically", page)
+        self.assertIn("MOJ-PROP-01", page)
         self.assertIn("no payment details or private credentials", page)
         self.assertIn("no response time is promised", page)
 
