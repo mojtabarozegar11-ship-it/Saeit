@@ -30,6 +30,8 @@ class FakeDriveAdapter(m.RcloneDualStore):
         if cmd=='about':
             remote=argv[2][:-1] if argv[2].endswith(':') else argv[2]
             return json.dumps({'free':self.free.get(remote)}).encode()
+        if cmd=='lsf':
+            return self.listings.get(argv[1], b'')
         if cmd=='mkdir':
             self.dirs.add(argv[1]);return b''
         if cmd=='rcat':
@@ -53,6 +55,7 @@ class TestRcloneDualDrive(unittest.TestCase):
         self.fake.free={'factory_a':100*1024*1024,'factory_b':100*1024*1024}
         self.fake.objects={}
         self.fake.dirs=set()
+        self.fake.listings={}
     def write_config(self,a_token='{"refresh_token":"A"}',b_token='{"refresh_token":"B"}',ra=ROOT_A,rb=ROOT_B):
         self.path.write_text('[factory_a]\ntype = drive\nroot_folder_id = '+ra+'\ntoken = '+a_token+'\n'
                              '[factory_b]\ntype = drive\nroot_folder_id = '+rb+'\ntoken = '+b_token+'\n')
@@ -212,5 +215,52 @@ class TestRcloneDualDrive(unittest.TestCase):
             self.assertFalse(s.finished)
         self.assertIsNotNone(s.producer.poll())
         self.assertIsNotNone(s.compressor.poll())
+
+    def test_41_existing_a_run_directory_denied_before_mkdir(self):
+        self.fake.preflight()
+        run_id='factory-current-'+'4'*32
+        self.fake.listings['factory_a:current-backups/']=(run_id+'/\n').encode()
+        with self.assertRaisesRegex(m.TransferHold,'BACKUP_RUN_NAMESPACE_ALREADY_EXISTS'):
+            self.fake.callbacks(run_id)
+        self.assertEqual(self.fake.dirs,set())
+    def test_42_existing_b_run_directory_denied_before_mkdir(self):
+        self.fake.preflight()
+        run_id='factory-current-'+'5'*32
+        self.fake.listings['factory_b:current-backups/']=(run_id.upper()+'/\n').encode()
+        with self.assertRaisesRegex(m.TransferHold,'BACKUP_RUN_NAMESPACE_ALREADY_EXISTS'):
+            self.fake.callbacks(run_id)
+        self.assertEqual(self.fake.dirs,set())
+    def test_43_unreadable_run_listing_denied_before_mkdir(self):
+        self.fake.preflight()
+        run_id='factory-current-'+'6'*32
+        self.fake.listings['factory_b:current-backups/']=b'\xff\xff'
+        with self.assertRaisesRegex(m.TransferHold,'REMOTE_NAMESPACE_LIST_UNREADABLE'):
+            self.fake.callbacks(run_id)
+        self.assertFalse(self.fake.dirs)
+    def test_44_pre_existing_files_after_mkdir_holds(self):
+        self.fake.preflight()
+        run_id='factory-current-'+'7'*32
+        self.fake.listings['factory_a:current-backups/'+run_id+'/']=b'000001.enc\n'
+        with self.assertRaisesRegex(m.TransferHold,'NEW_BACKUP_RUN_NAMESPACE_NOT_EMPTY'):
+            self.fake.callbacks(run_id)
+        self.assertEqual(len(self.fake.dirs),2)
+        self.assertEqual(self.fake.objects,{})
+    def test_45_reused_callbacks_denied_even_with_new_namespace(self):
+        self.fake.preflight()
+        self.fake.callbacks('factory-current-'+'8'*32)
+        with self.assertRaisesRegex(m.TransferHold,'MULTIPLE_RUNS_ON_SAME_TRANSPORT_DENIED'):
+            self.fake.callbacks('factory-current-'+'9'*32)
+        self.assertEqual(len(self.fake.dirs),2)
+    def test_46_failure_not_treated_as_empty(self):
+        self.fake.preflight()
+        run_id='factory-current-'+'a'*32
+        orig=self.fake._run
+        def unreachable(*argv,**kwargs):
+            if argv[0]=='lsf':raise m.TransferHold('RCLONE_PROVIDER_OPERATION_FAILED')
+            return orig(*argv,**kwargs)
+        with patch.object(self.fake,'_run',side_effect=unreachable):
+            with self.assertRaisesRegex(m.TransferHold,'RCLONE_PROVIDER_OPERATION_FAILED'):
+                self.fake.callbacks(run_id)
+        self.assertFalse(self.fake.dirs)
 
 if __name__=='__main__':unittest.main()
