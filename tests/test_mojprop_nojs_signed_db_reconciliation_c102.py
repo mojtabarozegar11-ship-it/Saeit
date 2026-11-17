@@ -55,8 +55,12 @@ class MojPropNoJsDbProofClosureTests(unittest.TestCase):
 
     def test_07_html_fallback_still_visible_on_main_commercial_landing(self):
         source = (ROOT / "templates/moj-prop-v4/index.html").read_text()
-        self.assertIn('href="/moj-prop-intake/?format=html"', source)
+        # Plan1 must not fall back to a generic service/order enquiry.
+        self.assertIn('href="/moj-prop-interest/form/"', source)
+        self.assertNotIn('href="/moj-prop-intake/?format=html"', source)
         self.assertIn("<noscript>", source)
+        self.assertIn("browser-native form", source)
+        self.assertIn('href="/moj-prop/contact/"', source)
 
     def test_08_no_js_view_uses_real_existing_idempotent_crm_path(self):
         code = (ROOT / "core/mojprop_views.py").read_text()
