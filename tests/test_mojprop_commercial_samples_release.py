@@ -205,7 +205,17 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         self.assertNotIn("data-legacy-publisher-fixture", source)
         self.assertIn('data-legacy-publisher-fixture="nonpayable"', stage)
         self.assertEqual(stage.count('href="/moj-prop/starter-30-trx/"'), 1)
-        self.assertNotIn("send trx", stage.lower())
+        # The Plan1 page correctly warns visitors not to send TRX; rejecting
+        # that protective warning would be a false positive. Instead assert
+        # the ONLY alteration is our nonpayable historical test-only fixture.
+        marker = (
+            '<!-- C139 test-only archived education, not a public offer -->'
+            '<aside data-legacy-publisher-fixture="nonpayable">'
+            '<a href="/moj-prop/starter-30-trx/">'
+            'Synthetic archived Starter30 publisher test; no payment'
+            '</a></aside>'
+        )
+        self.assertEqual(stage.replace(marker, "", 1), source)
 
     def test_updater_delivers_both_samples_and_retains_reversible_catalog(self):
         old_index = (self.route / "index.html").read_bytes()
