@@ -76,6 +76,35 @@ def _addr_hex(value):
 def _release_enabled():
     return getattr(settings, "MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED", False) is True
 
+def _order_hmac(order):
+    """Signed immutable invoice envelope; excludes mutable delivery status."""
+    key = getattr(settings, "MOJPROP_V141_ORDER_SIGNING_KEY", None)
+    if type(key) is not str or len(key) < 32:
+        raise CheckoutRejected("No production-grade private order signing key configured")
+    payload = dict(
+        reference=order.reference, buyer_id=order.buyer_id,
+        product_code=order.product_code, country=order.country_of_residence,
+        recipient=order.recipient, payer=order.payer_hex41,
+        amount_sun=order.amount_sun,
+        terms_version=order.terms_version, terms_sha256=order.terms_sha256,
+        consent_digest=order.consent_digest,
+        payer_wallet_attestation_sha256=order.payer_wallet_attestation_sha256,
+        legal_clearance_digest=order.legal_clearance_digest,
+        clearance_document_ref=order.clearance_document_ref,
+        issued_at=order.issued_at.isoformat(),
+        expires_at=order.expires_at.isoformat(),
+    )
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf8")
+    return hmac.new(key.encode("utf8"), raw, "sha256").hexdigest()
+
+
+def _check_signed_order(order):
+    actual = order.order_hmac_sha256
+    expected = _order_hmac(order)
+    if type(actual) is not str or not hmac.compare_digest(actual, expected):
+        raise CheckoutRejected("Merchant invoice envelope signature invalid")
+
+
 
 def issue_private_foreign_invoice(*, operator, buyer, foreign_country,
                                   payer_hex41, wallet_owner_attestation_sha256,
@@ -125,7 +154,7 @@ def issue_private_foreign_invoice(*, operator, buyer, foreign_country,
         raise CheckoutRejected("Identifiable buyer with valid email required")
     with transaction.atomic():
         now = timezone.now()
-        return PropV141NativeOrder.objects.create(
+        invoice = PropV141NativeOrder.objects.create(
             reference="MOJPROP01-" + secrets.token_hex(16).upper(),
             buyer=buyer,
             product_code=PRODUCT,
@@ -142,6 +171,9 @@ def issue_private_foreign_invoice(*, operator, buyer, foreign_country,
             issued_at=now,
             expires_at=now + timedelta(hours=2),
         )
+        invoice.order_hmac_sha256 = _order_hmac(invoice)
+        invoice.save(update_fields=["order_hmac_sha256"])
+        return invoice
 
 
 def _solidity_base_urls():
@@ -238,6 +270,7 @@ def confirm_native_trx_and_deliver(*, reference, txid):
         order = PropV141NativeOrder.objects.get(reference=reference)
     except PropV141NativeOrder.DoesNotExist as exc:
         raise CheckoutRejected("Unrecognized merchant-issued invoice") from exc
+    _check_signed_order(order)
     if order.status == "settled":
         stored = PropV141NativeReceipt.objects.select_related("settlement").get(order=order)
         if stored.settlement.txid == txid:
@@ -274,6 +307,7 @@ def confirm_native_trx_and_deliver(*, reference, txid):
     confirmed_at = datetime.fromtimestamp(millis / 1000, tz=utc.utc)
     with transaction.atomic():
         order = PropV141NativeOrder.objects.select_for_update().get(reference=reference)
+        _check_signed_order(order)
         if order.status == "settled":
             existing = PropV141NativeReceipt.objects.select_related("settlement").get(order=order)
             if existing.settlement.txid == txid:
