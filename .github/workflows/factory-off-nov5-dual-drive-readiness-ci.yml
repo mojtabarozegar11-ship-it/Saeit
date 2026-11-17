@@ -1,0 +1,108 @@
+name: Factory OFF Nov5 existing cPanel to owner A+B readiness (NO upload/delete)
+on:
+  pull_request:
+    paths:
+      - 'scripts/factory_cpanel_existing_nov5_two_drive.py'
+      - 'tests/test_factory_cpanel_existing_nov5_two_drive.py'
+      - 'scripts/factory_rclone_dual_parts.py'
+      - '.github/workflows/factory-off-nov5-dual-drive-readiness-ci.yml'
+      - 'docs/factory_cpanel_existing_nov5_to_dual_drive_OFF_README.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-off-nov5-dual-drive-ci-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit' &&
+        github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'))
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify immutable exact source SHA pins and 121 offline checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/factory_cpanel_existing_nov5_two_drive.py)" = '66ccf5726662852adc36d2ea2a306c6a28c9fccd'
+          test "$(git hash-object tests/test_factory_cpanel_existing_nov5_two_drive.py)" = 'ec5203c9e85699660a9e0805cf44d2043201e539'
+          test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'f9c6d8445144744920246a128c977bdc850eb80f'
+          test "$(git hash-object scripts/factory_dual_stream_v2.py)" = '7a1d0ac87d97c30134f4d6955359379b0c88a255'
+          test "$(git hash-object tests/test_factory_rclone_dual_parts.py)" = '4194efaaab093dd9e152ffaf2a558da80185b9ce'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_cpanel_existing_nov5_two_drive.py' -q
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_rclone_dual_parts.py' -q
+          echo FACTORY_CPanel_HISTORICAL_SOURCE_ONLY_OFFLINE_PASS=true
+  cpanel-source-metadata:
+    needs: offline
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Probe ONLY cPanel existing 2026-11-05 snapshots via owner pinned SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$(id -un)" = githubops || { echo OWNER_RUNNER_ACCOUNT_NOT_VERIFIED; exit 78; }
+          work="$(mktemp -d)"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/host.key"
+          chmod 600 "$work/"*.key
+          ssh-keygen -y -P "" -f "$work/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$work/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 127.0.0.1 > "$work/vps.known" 2>/dev/null
+          test -s "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$work/config" <<EOF
+          Host saeit-vps
+            HostName 127.0.0.1
+            User githubops
+            Port 22
+            IdentityFile $work/vps.key
+            UserKnownHostsFile $work/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $work/host.key
+            UserKnownHostsFile $work/cpanel.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$work/config"
+          scan="$(ssh -T -F "$work/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$work/cpanel.known"
+          chmod 600 "$work/cpanel.known" "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/cpanel.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/factory_cpanel_existing_nov5_two_drive.py --mode probe --snapshot nov5-a --ssh-config "$work/config" --known-hosts "$work/cpanel.known"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/factory_cpanel_existing_nov5_two_drive.py --mode probe --snapshot nov5-b --ssh-config "$work/config" --known-hosts "$work/cpanel.known"
+          echo FACTORY_EXISTING_CPANEL_NOV5_SNAPSHOTS_METADATA_ONLY=true
+          echo FACTORY_RUNNING_PROCESSES_STARTED=0
+          echo FACTORY_BACKUPS_UPLOADED=0
+          echo FACTORY_SOURCE_FILES_DELETED=0
