@@ -15,7 +15,7 @@ import re
 
 from .xauusd_v13_draft_terms import draft_gold_terms_v13
 
-VERSION = "2026-11-17/v1.4-50-OR-28D-DRAFT"
+VERSION = "2026-11-17/v1.4.1-50-OR-28D-DRAFT"
 SCHEMA = "mojprop.plan1.bilingual.50-total.social-or-28d.review.v1"
 MIN_VERIFIED_CLOSED_TOTAL = 50
 MIN_TRADING_DAYS_EACH_PHASE = 6
@@ -31,9 +31,11 @@ FA = (
     "حداقل ۵۰ موقعیت معاملاتی بسته‌شده و مستقلاً تطبیق‌شده در مجموع هر دو مرحله "
     "(نه ۵۰ معامله در هر مرحله)، حداقل ۶ روز معاملاتی تأییدشده در هر مرحله "
     "و مهلت ۲۸ روز برای ارزیابی است. "
-    "شرط تبلیغاتی پیشنهادی: شرکت‌کننده باید دقیقاً یک پست اصلی "
-    "در اینستاگرام یا فیس‌بوک (یکی از این دو، نه هر دو) منتشر کند "
+    "شرط تبلیغاتی پیشنهادی: شرکت‌کننده باید حداقل یک پست اصلی واجد شرایط "
+    "در اینستاگرام یا فیس‌بوک (یکی از این دو کافی است و هر دو الزامی نیست) منتشر کند "
     "و آن را حداقل ۲۸ روز متوالی (۶۷۲ ساعت) در دسترس عمومی نگه دارد. "
+    "مهلت ۲۸روزه ارزیابی معامله و مهلت ۲۸روزه ماندگاری پست مستقل هستند؛ "
+    "اگر پست دیرتر منتشر شود، تأیید نهایی تا پایان ۶۷۲ ساعت به تعویق می‌افتد. "
     "پست باید رابطه شرکت‌کننده با چالش را شفاف اعلام کند، وعده سود ندهد، "
     "مستلزم انتشار اطلاعات مالی شخصی نباشد و با مقررات پلتفرم و قوانین تبلیغات مالی سازگار باشد. "
     "محتوا، زمان انتشار و استمرار رؤیت فقط با مدرک معتبر مستقل تأیید می‌شود. "
@@ -55,9 +57,12 @@ EN = (
     "at least 50 distinct independently reconciled CLOSED positions TOTAL "
     "across BOTH phases (NOT 50 per phase), and at least SIX independently "
     "verified trading days in EACH phase, within a 28-day evaluation window. "
-    "Proposed social-post condition: exactly ONE original post on EITHER "
-    "Instagram OR Facebook (one platform, NOT both), continuously publicly "
-    "visible for at least 28 consecutive days (672 hours). The post must "
+    "Proposed social-post condition: at least ONE qualifying original post on EITHER "
+    "Instagram OR Facebook (one platform is sufficient; both are not required), continuously publicly "
+    "visible for at least 28 consecutive days (672 hours). The trading evaluation "
+    "28-day window and the social post 28-day hold use SEPARATE clocks; when "
+    "the post is published later, final social qualification must wait for "
+    "all 672 hours independently of evaluation completion. The post must "
     "transparently disclose challenge participation, make no profit promises, "
     "avoid sensitive financial data, and comply with applicable platform and "
     "financial-advertising law. Posting time, authorship and continuous visibility "
