@@ -1,0 +1,44 @@
+name: Factory encrypted SQLite offsite export
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+concurrency:
+  group: moj-factory-drive-offsite-export
+  cancel-in-progress: false
+jobs:
+  encrypted_backup:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.issue.number == 1600 &&
+      !github.event.issue.pull_request &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'MOJ-FACTORY-ENCRYPT-DB-PAIR-20261117'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Export two source-verified snapshots into an encrypted archive
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: bash scripts/factory_drive_offsite_export_20261117.sh
+      - name: Preserve encrypted artifact only for Google Drive handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-verified-encrypted-pair-${{ github.run_id }}
+          path: ${{ runner.temp }}/factory-verified-encrypted-pair-${{ github.run_id }}/upload/
+          if-no-files-found: error
+          retention-days: 2
+          compression-level: 0
+      - name: Remove job-owned temporary runner files
+        if: always()
+        shell: bash
+        run: rm -rf -- "${RUNNER_TEMP}/factory-verified-encrypted-pair-${GITHUB_RUN_ID}"
