@@ -71,6 +71,25 @@ class GoldQualificationPreviewTests(unittest.TestCase):
         self.assertEqual(r.reviewed_closed_positions,30)
         self.assertFalse(r.entire_challenge_math_pass)
 
+    def test_same_position_id_cross_source_requires_private_reconciliation(self):
+        rows=executions(25)
+        rows += executions(25, source="second.reviewed.simulator")
+        verdict=review(events=rows)
+        self.assertEqual(verdict.reviewed_closed_positions,50)
+        self.assertIn("cross_source_duplicate_position_review_required",verdict.reasons)
+        self.assertFalse(verdict.entire_challenge_math_pass)
+        self.assertFalse(verdict.real_orders_authorized)
+
+    def test_distinct_position_ids_across_sources_still_count_only_as_draft(self):
+        rows=executions(25)
+        second=executions(25, source="second.reviewed.simulator")
+        for i,row in enumerate(second):
+            row.external_position_id="second-position-"+str(i)
+        verdict=review(events=rows+second)
+        self.assertEqual(verdict.reviewed_closed_positions,50)
+        self.assertNotIn("cross_source_duplicate_position_review_required",verdict.reasons)
+        self.assertFalse(verdict.real_orders_authorized)
+
     def test_phase_one_profit_shortfall(self):
         self.assertIn("phase_1_profit_target_not_met",
                       review(p1=replace(P1,realized_net_profit_usd="9.59")).reasons)
