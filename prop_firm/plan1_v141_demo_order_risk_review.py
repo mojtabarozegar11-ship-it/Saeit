@@ -74,6 +74,35 @@ def review_v141_demo_order(*, challenge: ChallengeReplayDecision,
         blockers.append("stage_not_currently_open_for_demo_risk_review")
     if intended_phase == 2 and challenge.phase_one.mathematical_pass is not True:
         blockers.append("stage_one_not_mathematically_completed")
+    # Profit/day/consistency targets can remain incomplete during an ACTIVE
+    # simulated stage. Ledger corruption, wrong sources, forged statuses or
+    # mismatched equity may not be ignored just because the stage is open.
+    critical_global = frozenset((
+        "unsupported_non_xauusd_close",
+        "close_outside_evaluation_or_future",
+        "close_outside_sequential_phase_window",
+        "equity_outside_evaluation_or_future",
+        "equity_outside_sequential_phase_window",
+        "unreconciled_close_event",
+        "unreconciled_equity_observation",
+        "conflicting_duplicate_event_id",
+        "conflicting_duplicate_equity_id",
+        "cross_source_position_id_conflict",
+        "position_reused_between_simulated_phases",
+        "phase_two_started_without_phase_one_mathematical_pass",
+    ))
+    if any(reason in critical_global for reason in challenge.blockers):
+        blockers.append("unreconciled_challenge_ledger_or_source")
+    permitted_incomplete = frozenset((
+        f"phase_{intended_phase}_fewer_than_six_utc_trading_days",
+        f"phase_{intended_phase}_profit_target_not_met",
+        f"phase_{intended_phase}_best_day_consistency_exceeded",
+        f"phase_{intended_phase}_acceptance_transition_not_recorded",
+        f"phase_{intended_phase}_no_closed_positions",
+        f"phase_{intended_phase}_equity_history_missing",
+    ))
+    if any(reason not in permitted_incomplete for reason in current.blockers):
+        blockers.append("current_phase_audit_integrity_not_reconciled")
     if (current.latest_verified_equity_usd is None
             or current.latest_verified_day_open_usd is None
             or current.latest_equity_observed_at_utc is None):
