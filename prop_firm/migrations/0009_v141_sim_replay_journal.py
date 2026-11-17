@@ -21,6 +21,7 @@ class Migration(migrations.Migration):
                 ("terms_sha256", models.CharField(max_length=64)),
                 ("trusted_source", models.CharField(max_length=160)),
                 ("trusted_key_id", models.CharField(max_length=160)),
+                ("trusted_feed_source", models.CharField(max_length=160)),
                 ("last_sequence", models.PositiveBigIntegerField(default=0)),
                 ("last_manifest_sha256", models.CharField(max_length=64, blank=True)),
                 ("last_replay_sha256", models.CharField(max_length=64, blank=True)),
