@@ -84,12 +84,89 @@ def cpapi2_numeric():
         return {"available":False,"reason":"CPAPI2_SCHEMA_NOT_RECOGNIZED"}
 
 
+
+def uapi_mysql_numeric():
+    """Database-level cached disk usage; no names, users or contents leaked."""
+    import hashlib
+    try:
+        p=subprocess.run(
+            ["uapi","--output=json","Mysql","list_databases"],
+            stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+            text=True,timeout=95,check=False)
+        if p.returncode:return {"available":False,"reason":"UAPI_MYSQL_CALL_FAILED"}
+        result=json.loads(p.stdout).get("result",{})
+        data=result.get("data")
+        if not isinstance(result,dict) or result.get("status") not in (1,True) or not isinstance(data,list):
+            return {"available":False,"reason":"UAPI_MYSQL_SCHEMA_OR_STATUS"}
+        ranked=[]
+        unknown=0
+        for row in data:
+            if not isinstance(row,dict):
+                unknown+=1
+                continue
+            size=row.get("disk_usage")
+            if isinstance(size,str) and size.isdigit():size=int(size)
+            if not isinstance(size,int) or isinstance(size,bool) or size<0:
+                unknown+=1
+                continue
+            name=row.get("database","")
+            if not isinstance(name,str):name=""
+            ranked.append({"id_sha256_prefix":hashlib.sha256(
+                name.encode("utf-8")).hexdigest()[:12],
+                "bytes":size})
+        ranked.sort(key=lambda x:x["bytes"],reverse=True)
+        return {"available":True,"database_count":len(data),
+                "size_rows":len(ranked),"size_unknown_rows":unknown,
+                "total_disk_usage_bytes":sum(r["bytes"] for r in ranked),
+                "largest_three_pseudonymized":ranked[:3],
+                "names_disclosed":False,
+                "note":"database disk usage may be cached by cPanel"}
+    except (OSError,ValueError,subprocess.TimeoutExpired):
+        return {"available":False,"reason":"UAPI_MYSQL_TIMEOUT_OR_PARSE"}
+
+
+def uapi_statsbar_numeric():
+    """Numeric only for cached DB and account disk size from official UAPI."""
+    display="cachedmysqldiskusage|cachedpostgresdiskusage|diskusage"
+    try:
+        p=subprocess.run(
+            ["uapi","--output=json","StatsBar","get_stats","display="+display],
+            stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+            text=True,timeout=55,check=False)
+        if p.returncode:return {"available":False,"reason":"STATSBAR_CALL_FAILED"}
+        result=json.loads(p.stdout).get("result",{})
+        data=result.get("data")
+        if not isinstance(result,dict) or result.get("status") not in (1,True) or not isinstance(data,list):
+            return {"available":False,"reason":"STATSBAR_SCHEMA_OR_STATUS"}
+        allowed={"cachedmysqldiskusage","cachedpostgresdiskusage","diskusage"}
+        out=[]
+        for row in data:
+            if not isinstance(row,dict) or row.get("id") not in allowed:continue
+            item={"id":row["id"]}
+            for k in ("count","_count","usage","units"):
+                val=row.get(k)
+                if isinstance(val,(int,float)) and not isinstance(val,bool):
+                    item[k]=val
+                elif isinstance(val,str) and len(val)<24:
+                    if k=="units" and val.lower() in {"b","kb","mb","gb","tb","bytes"}:
+                        item[k]=val
+                    elif k!="units":
+                        try:item[k]=float(val)
+                        except ValueError:pass
+            out.append(item)
+        return {"available":bool(out),"returned_rows":len(out),
+                "numeric_statistics":out,"names_disclosed":False}
+    except (OSError,ValueError,subprocess.TimeoutExpired):
+        return {"available":False,"reason":"STATSBAR_TIMEOUT_OR_PARSE"}
+
 def main():
     if pwd.getpwuid(os.geteuid()).pw_name != USER:
         raise RuntimeError("WRONG_ACCOUNT")
     start=time.monotonic()
     before=call_quota()
     api=cpapi2_numeric()
+    mysql=uapi_mysql_numeric()
+    stats=uapi_statsbar_numeric()
     after=call_quota()
     if before.get("megabyte_limit")!=after.get("megabyte_limit"):
         raise RuntimeError("ACCOUNT_QUOTA_LIMIT_CHANGED")
@@ -99,6 +176,9 @@ def main():
         "no_sensitive_names_reported":True,
         "quota_before":before,
         "api2_extras":api,
+        "uapi_mysql":mysql,
+        "uapi_statsbar":stats,
+        "external_usage_quantified":bool(mysql.get("available") or stats.get("available")),
         "quota_after":after,
         "account_quota_megabytes_are_cpanel_uapi_values":True,
         "api2_values_bytes_are_not_home_du_bytes":True,
@@ -107,6 +187,8 @@ def main():
         "elapsed_seconds":round(time.monotonic()-start,2),
     }
     print("MOJ_CPANEL_EXTERNAL_QUOTA="+json.dumps(report,sort_keys=True),flush=True)
+    if not report["external_usage_quantified"]:
+        raise RuntimeError("NO_DB_ACCOUNTING_ENDPOINT")
 
 
 if __name__=="__main__":
