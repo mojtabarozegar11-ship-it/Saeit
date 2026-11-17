@@ -327,6 +327,7 @@ class PrivateStatementMariaDBTests(TransactionTestCase):
         from prop_firm.moj_prop_page import SUPPORTED_CODES
         from prop_firm.mojprop_v141_statement_i18n import statement_labels
         from core.mojprop_v141_private_statement_view import _LOCALIZED
+        from django.utils.html import escape
         for code in SUPPORTED_CODES:
             with self.subTest(code=code):
                 response = self._call(query="lang=" + code)
@@ -335,7 +336,7 @@ class PrivateStatementMariaDBTests(TransactionTestCase):
                 direction = "rtl" if code in ("fa", "ar", "ur") else "ltr"
                 self.assertIn('lang="' + code + '" dir="' + direction + '"', html)
                 self.assertIn(CHALLENGE, html)
-                self.assertIn(statement_labels(code, _LOCALIZED)["title"], html)
+                self.assertIn(escape(statement_labels(code, _LOCALIZED)["title"]), html)
                 self.assertIn("no-store", response["Cache-Control"])
                 for other in SUPPORTED_CODES:
                     self.assertIn(
