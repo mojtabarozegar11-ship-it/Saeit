@@ -27,7 +27,7 @@ EXPECTED = {
     "core/mojprop_views.py": "12ee5e408f2a50e0571d5e6d91a760644ec210a9",
     "core/mojprop_receipts.py": "9fe6eb1ad13857143440517b14b3f2ebcfef6db3",
     "core/mojprop_accessible_intake.py": "505a1d237e3deb156e7e394e94b1c34ddf1e0071",
-    "config/urls.py": "7c95dcfe86243b8ff1358018ae1206afc99f4bc6",
+    "config/urls.py": "b924051fc75df43a8dfc7822fede041495230491",
     "core/management/commands/mojprop_sales_action_queue.py":
         "095dcf51e005694f4cb24df1e39ce8a4f6a0cf08",
 }
