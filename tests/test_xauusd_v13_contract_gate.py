@@ -38,10 +38,18 @@ class NewBuyerGoldTermsTests(unittest.TestCase):
         self.assertFalse(d.independently_verified_capital)
         self.assertFalse(d.independently_verified_broker_account)
 
-    def test_social_posts_waived_in_current_copy(self):
+    def test_social_posts_waived_in_historical_current_copy(self):
         v=current_plan1_buyer_copy()
         self.assertEqual(v.instagram_posts_required,0)
         self.assertEqual(v.facebook_posts_required,0)
+
+    def test_future_social_platform_legal_approval_is_not_fabricated(self):
+        self.assertIn("v13_social_platform_and_advertising_clearance_unverified",
+                      audit_v13_gold_terms().blockers)
+
+    def test_future_buyer_social_acceptance_is_not_fabricated(self):
+        self.assertIn("v13_social_post_buyer_acceptance_unverified",
+                      audit_v13_gold_terms().blockers)
 
     def test_old_order_review_rejects_new_draft_terms(self):
         evidence={name:True for name in REQUIRED}
