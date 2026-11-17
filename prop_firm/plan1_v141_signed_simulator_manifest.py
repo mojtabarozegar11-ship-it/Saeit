@@ -181,6 +181,10 @@ def verify_and_replay_signed_simulator_manifest(
         raise LedgerManifestRejected("combined ledger exceeds bounded replay")
     if data["as_of"] > issued:
         raise LedgerManifestRejected("assessment cannot predate signed manifest data")
+    # A newly signed packet must NOT make a stale historical DEMO ledger look
+    # like a fresh review. Both the signature AND its snapshot must be current.
+    if issued - data["as_of"] > MAX_MANIFEST_AGE:
+        raise LedgerManifestRejected("signed simulator assessment is stale")
     try:
         result=replay_simulated_challenge(snapshot=EngineSnapshot(**data))
     except (ValueError,TypeError,ArithmeticError) as exc:
