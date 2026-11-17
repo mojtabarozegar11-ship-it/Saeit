@@ -176,6 +176,93 @@ jobs:
               'release_authorized':False,
           },sort_keys=True))
           REMOTE_PY
+          timeout 55s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_ROUTE_PY'
+          """Constrained source route and cPanel UAPI metadata; NEVER print raw response."""
+          from pathlib import Path
+          import hashlib, json, os, subprocess
+          root=Path('/home/zomorod2/Saeit-staging')
+          web=Path('/home/zomorod2/mojplaywin.com')
+          names={
+              'urlconf':root/'config'/'urls.py',
+              'legacy_intake':root/'core'/'mojprop_views.py',
+              'legacy_form_renderer':root/'core'/'mojprop_accessible_intake.py',
+              'new_form_renderer':root/'core'/'moj_prop_views.py',
+              'v141_public':root/'core'/'mojprop_v141_info_view.py',
+              'v141_statement':root/'core'/'mojprop_v141_private_statement_view.py',
+              'public_static_mojprop_index':web/'moj-prop'/'index.html',
+              'public_htaccess':web/'.htaccess',
+          }
+          sources={}
+          for label,path in names.items():
+              try:
+                  if path.is_symlink() or not path.is_file():
+                      sources[label]={'present':False}
+                      continue
+                  size=path.stat().st_size
+                  if size>128*1024 or size<1:
+                      sources[label]={'present':False,'bounded':False}
+                      continue
+                  raw=path.read_bytes()
+                  sources[label]={
+                      'present':True,
+                      'bytes':len(raw),
+                      'sha256':hashlib.sha256(raw).hexdigest(),
+                  }
+                  if label=='urlconf':
+                      text=raw.decode('utf-8',errors='replace')
+                      sources[label].update({
+                          'root_mojprop_intake_route': 'path("moj-prop-intake/"' in text,
+                          'root_mojprop_status_route': 'path("moj-prop-status/"' in text,
+                          'v141_info_route': 'path("moj-prop-v141-info/"' in text,
+                          'v141_private_statement_route': 'path("moj-prop-v141/statement/' in text,
+                          'new_interest_form_route': 'path("moj-prop-interest/form/"' in text,
+                      })
+              except (OSError,UnicodeError):
+                  sources[label]={'present':False,'read_error':True}
+          print('CPANEL_LIVE_CODE_ROUTE_FINGERPRINT='+json.dumps(sources,sort_keys=True))
+          uapi={}
+          for kind,mod,action in (
+                  ('passenger','PassengerApps','list_applications'),
+                  ('mysql','Mysql','list_databases'),
+                  ('quota','Quota','get_local_quota_info')):
+              row={'uapi_status_ok':False}
+              try:
+                  run=subprocess.run(['uapi','--output=json',mod,action],
+                      stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+                      timeout=15,check=False)
+                  if run.returncode==0 and len(run.stdout)<=250000:
+                      data=json.loads(run.stdout).get('result',{})
+                      row['uapi_status_ok']=data.get('status') in (1,'1')
+                      payload=data.get('data')
+                      if kind=='passenger' and row['uapi_status_ok']:
+                          apps=payload if isinstance(payload,list) else (
+                              payload.get('applications',[]) if isinstance(payload,dict) else [])
+                          row['app_count']=len(apps) if isinstance(apps,list) else None
+                          row['mojplaywin_candidate_count']=sum(
+                              'mojplaywin' in str(item.get('domain','')).lower()
+                              or 'mojplaywin' in str(item.get('app_root','')).lower()
+                              or 'mojplaywin' in str(item.get('base_uri','')).lower()
+                              for item in apps if isinstance(item,dict)) if isinstance(apps,list) else None
+                      if kind=='mysql' and row['uapi_status_ok']:
+                          dbs=payload if isinstance(payload,list) else (
+                              payload.get('databases',[]) if isinstance(payload,dict) else [])
+                          row['database_count']=len(dbs) if isinstance(dbs,list) else None
+                      if kind=='quota' and row['uapi_status_ok'] and isinstance(payload,dict):
+                          for source,target in [('bytes_used','used_bytes'),
+                                  ('byte_limit','limit_bytes'),
+                                  ('disk_used','disk_used_raw'),
+                                  ('disk_limit','disk_limit_raw')]:
+                              value=payload.get(source)
+                              if isinstance(value,int) and value>=0:
+                                  row[target]=value
+                              elif isinstance(value,str) and value.isdigit():
+                                  row[target]=int(value)
+              except (OSError,ValueError,TypeError,subprocess.TimeoutExpired):
+                  pass
+              uapi[kind]=row
+          print('CPANEL_ACCOUNT_UAPI_READONLY='+json.dumps(uapi,sort_keys=True))
+          print('CPANEL_PASSENGER_ROOT_AND_DB_BACKEND_NOT_PROVEN=true')
+          REMOTE_ROUTE_PY
           echo "LOCAL_TO_CPANEL_READONLY_COMPLETED=true"
       - name: Verify source remains operational NO-GO
         if: always()
