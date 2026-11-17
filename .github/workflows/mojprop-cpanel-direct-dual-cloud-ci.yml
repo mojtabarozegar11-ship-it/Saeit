@@ -53,3 +53,28 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python -B scripts/mojprop_cpanel_direct_dual_cloud.py \
             | python -c 'import json,sys;d=json.load(sys.stdin); assert d["schema"]=="mojprop.cpanel.dual-cloud.readiness.v1"; assert d["reviewed_source_blob_present"] is True; assert all(d[k] is False for k in ("provider_quota_verified","ssh_runtime_authenticated","key_offsite_recovery_proven","current_backup_created","restore_performed","production_modified","payment_created")); print("OFFSITE_BACKUP_BRIDGE_OFFLINE_GUARDS=PASS")'
           echo 'ZERO_BACKUP_UPLOADED_ZERO_PRODUCTION_READS_NO_OAUTH_NO_SSH_NO_PAYMENT' >> "$GITHUB_STEP_SUMMARY"
+
+  owner-runner-local-readiness-only:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Offline source and runner rclone readiness, no provider access
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/mojplaywin_backup_stream_cpanel.py)" = '7b330168b4ca1d597616e8724bc634910e769ea5'
+          PYTHONPATH=scripts python3 -B scripts/factory_rclone_dual_parts.py |
+            python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["schema"]=="factory.rclone.runner-readiness.readonly.v1"; assert all(d[k] is False for k in ("oauth_tokens_read","provider_queried","provider_free_quota_verified","new_backup_created","production_modified","two_independent_remotes_verified")); print("OWNER_RUNNER_OFFLINE_RCLONE_PRESENT="+str(d["rclone_installed"]).lower()); print("OWNER_RUNNER_PRIVATE_RCLONE_CONFIG_PRESENT="+str(d["owner_local_config_secure_file_present"]).lower())'
+          echo 'NO_REMOTE_OAUTH_READ_NO_PROVIDER_QUERY_NO_PRODUCTION_BACKUP' >> "$GITHUB_STEP_SUMMARY"
