@@ -1,0 +1,51 @@
+name: MOJ PROP Plan1 official contact integrity and C110 regression
+on:
+  push:
+    branches: [fix/mojprop-official-contact-live-content-proof-20261117]
+    paths:
+      - '.github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml'
+      - '.github/workflows/mojprop-official-contact-live-contract-ci-20261117.yml'
+      - 'scripts/mojprop_public_official_contact_contract_c127.py'
+      - 'tests/test_mojprop_public_official_contact_contract_c127_20261117.py'
+      - 'tests/test_mojprop_contact_fallback_c110_20261116.py'
+  pull_request:
+    branches: [fix/mojprop-main-prelaunch-real-plan1-20261116]
+    paths:
+      - '.github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml'
+      - '.github/workflows/mojprop-official-contact-live-contract-ci-20261117.yml'
+      - 'scripts/mojprop_public_official_contact_contract_c127.py'
+      - 'tests/test_mojprop_public_official_contact_contract_c127_20261117.py'
+      - 'tests/test_mojprop_contact_fallback_c110_20261116.py'
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify-official-plan1-contact-is-not-generic-crm-lead:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate no-fee official contact and source-only fallback tests
+        run: |
+          python -m py_compile scripts/mojprop_public_official_contact_contract_c127.py
+          python -B -m unittest -v \
+            tests.test_mojprop_contact_fallback_c110_20261116 \
+            tests.test_mojprop_public_official_contact_contract_c127_20261117 \
+            tests.test_mojprop_public_buyer_readiness_summary_20261117
+      - name: No-deploy/no-mail/no-payment audit marker
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          workflow = Path(".github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml").read_text("utf-8")
+          assert "NO_POST_NO_PAYMENT_NO_RELEASE=true" in workflow
+          assert "PUBLIC_MOJPROP_OFFICIAL_CONTACT" not in workflow  # fixed-key output produced by offline classifier only
+          assert "mojprop_public_official_contact_contract_c127.py" in workflow
+          print("C127_OFFICIAL_CONTACT_SOURCE=PASS; NO_EMAIL=true; NO_PAYMENT=true; NO_DEPLOY=true")
+          PY
