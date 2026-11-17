@@ -1,0 +1,33 @@
+name: MOJ PROP Plan1 controlled backend release gate contract (source only)
+on:
+  push:
+    branches: [fix/mojprop-backend-manual-gate-and-nojs-smoke-20261117]
+    paths:
+      - '.github/workflows/mojprop-backend-controlled-release-20261115.yml'
+      - '.github/workflows/mojprop-backend-plan1-gate-ci-20261117.yml'
+      - 'tests/test_mojprop_backend_manual_plan1_smoke_20261117.py'
+  pull_request:
+    branches: [fix/mojprop-main-prelaunch-real-plan1-20261116]
+    paths:
+      - '.github/workflows/mojprop-backend-controlled-release-20261115.yml'
+      - '.github/workflows/mojprop-backend-plan1-gate-ci-20261117.yml'
+      - 'tests/test_mojprop_backend_manual_plan1_smoke_20261117.py'
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify-release-denial-and-synthetic-nojs-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: No-deploy backend source, private log, and no-JS smoke regressions
+        run: |
+          python3 -m py_compile scripts/deploy_mojplaywin_moj_prop_backend.py
+          python3 -B -m unittest -v tests.test_mojprop_backend_manual_plan1_smoke_20261117
+      - name: Check backend inventory integrity without deployment
+        run: python3 scripts/deploy_mojplaywin_moj_prop_backend.py selftest .
