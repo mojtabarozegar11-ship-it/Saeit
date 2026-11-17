@@ -73,6 +73,8 @@ _LOCALIZED = {
 def _allowed_statement_request(request, challenge_ref):
     if getattr(settings, "MOJ_PROP_V141_PORTFOLIO_ENABLED", False) is not True:
         raise Http404("Private statement is disabled")
+    if getattr(request.user, "is_active", False) is not True:
+        raise Http404("Inactive site user")
     try:
         host = request.get_host().split(":", 1)[0].lower()
     except Exception as exc:
