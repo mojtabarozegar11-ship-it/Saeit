@@ -8,6 +8,7 @@ ROOT=Path(__file__).resolve().parents[1]
 PAGE_ROOT=ROOT/"public/auctions"
 RECORDS=json.loads((ROOT/"content/auctions-72/procurement-notices.json").read_text(encoding="utf-8"))
 BASELINE=json.loads((ROOT/"content/auctions-aeo-20261117/baseline.json").read_text(encoding="utf-8"))
+GROUPS=json.loads((ROOT/"content/auctions-aeo-20261117/bilingual-groups.json").read_text(encoding="utf-8"))
 CANON="https://zomorodmelal.ir"
 
 def fact_section(source, number):
@@ -18,6 +19,12 @@ def fact_section(source, number):
 
 def test_all_72_machine_and_human_readable_answers_are_true_and_citable():
     ids=set()
+    translations={}
+    assert len(GROUPS["pairs"])==36
+    for group in GROUPS["pairs"]:
+        translations[group["product_serial"]]=group["english_group"]
+        translations[group["equipment_serial"]]=group["english_group"]
+    assert len(translations)==72
     for record in RECORDS["notices"]:
         n=record["proposed_public_number"]
         assert n not in ids
@@ -40,6 +47,10 @@ def test_all_72_machine_and_human_readable_answers_are_true_and_citable():
         assert 'lang="en" dir="ltr"' in answers
         assert f"Official Zomorod Melal procurement inquiry No. {n}" in answers
         assert "non-binding" in answers and "No fixed closing deadline" in answers
+        english_topic=translations[n]
+        assert english_topic in answers, (n, english_topic)
+        assert len(english_topic)>=9
+        assert answers.count(english_topic)==1
         assert f"zm-auctions-72-v1 official-{n}" in markup
         assert "zm-auctions-seo-20261117-v1" in markup
         assert f'id="rfq-offer-form-{n}"' in markup
@@ -70,6 +81,13 @@ def test_directory_has_citable_human_qa_without_legacy_notice_damage():
 def test_existing_search_crawler_access_policy_and_sitemap_unchanged_in_scope():
     robots=(PAGE_ROOT/"robots.txt").read_text(encoding="utf-8")
     assert "User-agent: *" in robots
+    from urllib.robotparser import RobotFileParser
+    rp=RobotFileParser()
+    rp.parse(robots.splitlines())
+    for bot in ("OAI-SearchBot","Googlebot","Claude-SearchBot","PerplexityBot","Bingbot"):
+        assert rp.can_fetch(bot, "/auctions/350/"), bot
+        assert rp.can_fetch(bot, "/auctions/421/"), bot
+        assert not rp.can_fetch(bot, "/admin/"), bot
     for p in ("/admin/","/site-heritage/","/__zm_","/zm-agriculture-guides/"):
         assert "Disallow: "+p in robots
     assert "Disallow: /auctions/" not in robots
