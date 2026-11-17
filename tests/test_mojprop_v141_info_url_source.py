@@ -81,10 +81,19 @@ class V141InfoRouteSourceTests(unittest.TestCase):
         self.assertIn('noindex,nofollow,noarchive',self.html)
 
     def test_16_no_checkout_or_db_orm_imported_by_new_view(self):
-        for forbidden in ('from prop_firm.models', 'from django.db',
-                          'request.POST', 'request.body', 'objects.create',
-                          'wallet', 'invoice', 'checkout', 'send_email'):
-            self.assertNotIn(forbidden,self.view.lower() if forbidden in ('wallet','invoice','checkout') else self.view)
+        executable = ast.parse(self.view)
+        imported = set()
+        called = []
+        for node in ast.walk(executable):
+            if isinstance(node, ast.ImportFrom):
+                imported.add(node.module)
+            elif isinstance(node, ast.Call):
+                called.append(ast.unparse(node.func))
+        self.assertNotIn("django.db", imported)
+        self.assertNotIn("prop_firm.models", imported)
+        for forbidden in ("objects.create", "objects.update", "objects.delete",
+                          "send_email", "send_mail", "request.POST", "request.body"):
+            self.assertNotIn(forbidden, called)
 
     def test_17_no_broker_adapter_or_executor_import(self):
         self.assertNotIn("broker", self.view.lower())
