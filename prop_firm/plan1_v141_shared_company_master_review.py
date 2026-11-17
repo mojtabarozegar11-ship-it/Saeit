@@ -127,10 +127,13 @@ def review_company_master_capacity(
     seen_orders = set()
     unique_traders = set()
     unique_challenges = set()
+    challenge_owner = {}
     requested = Decimal("0")
     margin = Decimal("0")
     sides = set()
     reasons = []
+    if not intents:
+        reasons.append("no_website_order_intents_to_review")
     for intent in intents:
         if type(intent) is not VirtualTraderIntent:
             raise CompanyMasterReviewRejected("immutable internal trader intent required")
@@ -140,6 +143,9 @@ def review_company_master_capacity(
         if ref in seen_orders:
             raise CompanyMasterReviewRejected("duplicate internal order reference")
         seen_orders.add(ref)
+        if challenge in challenge_owner and challenge_owner[challenge] != trader:
+            raise CompanyMasterReviewRejected("cross_trader_virtual_challenge_identity_collision")
+        challenge_owner[challenge] = trader
         unique_traders.add(trader)
         unique_challenges.add(challenge)
         if intent.symbol != "XAUUSD" or intent.side not in ("BUY", "SELL"):
