@@ -40,6 +40,18 @@ DATABASES = {
         "TEST": {"NAME": "test_mojprop_v141_ci_only"},
     }
 }
+# Template rendering is restricted to the repository template directory.
+# No live web server or public user session is started by these CI settings.
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_URL = "/static/"
+TEMPLATES = [{
+    "BACKEND": "django.template.backends.django.DjangoTemplates",
+    "DIRS": [BASE_DIR / "templates"],
+    "APP_DIRS": True,
+    "OPTIONS": {"context_processors": []},
+}]
+LOGIN_URL = "/admin/login/"
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 MIDDLEWARE = []
 ROOT_URLCONF = None
