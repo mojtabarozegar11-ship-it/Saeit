@@ -70,7 +70,7 @@ jobs:
           python3 -B -m py_compile scripts/mojprop_live_crm_schema_readonly_20261118.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_live_crm_schema_readonly_20261118 -q
           test ! -L scripts/mojprop_live_crm_schema_readonly_20261118.py
-          test "$(git hash-object -- scripts/mojprop_live_crm_schema_readonly_20261118.py)" = "0cadb0fa746318d1c6086a2072cf0a0b25f76671"
+          test "$(git hash-object -- scripts/mojprop_live_crm_schema_readonly_20261118.py)" = "6909518e419a3eb5433a0b1db6c4f91d2ee632a6"
           work="$RUNNER_TEMP/mojprop-queue-c93"
           timeout 65s ssh -T -F "$work/config" cpanel \
             'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
