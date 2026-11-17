@@ -82,8 +82,8 @@ class ProvisionedVirtualChallenge:
     # This is a server-sourced review input, NOT an authenticated approval.
     max_unlocked_stage: int
     trusted_feed_source: str
-    # Authoritative stage timestamps are persisted on PropV141SimState.
-    # Never infer a second 28-day clock from the first stage's start.
+    # Stage transitions originate in PropV141SimState. The contractual
+    # 28-day evaluation window covers BOTH sequential phases, not each phase.
     stage_one_accepted_at_utc: datetime | None = None
     phase_two_started_at_utc: datetime | None = None
 
@@ -194,7 +194,8 @@ def replay_provisioned_virtual_books(
             raise VirtualLedgerRejected("stage two has not been unlocked")
         if c.max_unlocked_stage == 2 and (
                 accepted is None or second is None
-                or not accepted <= second <= now):
+                or not accepted <= second <= now
+                or second >= start + WINDOW):
             raise VirtualLedgerRejected("stage two requires an accepted first stage and trusted start")
         registry[ref] = (c, trader, start, accepted, second)
 
@@ -225,8 +226,11 @@ def replay_provisioned_virtual_books(
             raise VirtualLedgerRejected("only XAUUSD OPEN/CLOSE BUY/SELL virtual fills allowed")
         when = _utc(e.executed_at_utc, "executed_at_utc")
         phase_start = start if e.stage == 1 else second
-        if phase_start is None or not phase_start <= when <= now or when >= phase_start + WINDOW:
-            raise VirtualLedgerRejected("virtual fill outside its own stage 28-day window")
+        # One legal 28-day evaluation clock for both phases. The second-phase
+        # transition cannot restart, extend or bypass the original deadline.
+        if (phase_start is None or not phase_start <= when <= now
+                or when >= start + WINDOW):
+            raise VirtualLedgerRejected("virtual fill outside shared 28-day evaluation window")
         # An already-recorded final fill may share the acceptance timestamp.
         # Writer still forbids appending ANY new stage-one event after acceptance.
         if e.stage == 1 and accepted is not None and when > accepted:
