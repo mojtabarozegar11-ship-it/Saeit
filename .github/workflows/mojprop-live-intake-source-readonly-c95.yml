@@ -25,6 +25,8 @@ on:
       - "tests/test_mojprop_c151_owner_manifest_format_readonly.py"
       - "scripts/mojprop_c152_legacy_source_backup_sha256_readonly.py"
       - "tests/test_mojprop_c152_legacy_source_backup_sha256_readonly.py"
+      - "scripts/mojprop_c154_cpanel_quota_uapi_readonly.py"
+      - "tests/test_mojprop_c154_cpanel_quota_uapi_readonly.py"
 
 permissions:
   contents: read
@@ -90,6 +92,12 @@ jobs:
           test "$(git hash-object -- scripts/mojprop_c152_legacy_source_backup_sha256_readonly.py)" = "b8aadf75c6c243988be9fdc4bd29a6a8b8606cc4"
           test ! -L tests/test_mojprop_c152_legacy_source_backup_sha256_readonly.py
           test "$(git hash-object -- tests/test_mojprop_c152_legacy_source_backup_sha256_readonly.py)" = "bf7547e73340232915959954a5a65537f31b067f"
+          python3 -B -m py_compile scripts/mojprop_c154_cpanel_quota_uapi_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c154_cpanel_quota_uapi_readonly -q
+          test ! -L scripts/mojprop_c154_cpanel_quota_uapi_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c154_cpanel_quota_uapi_readonly.py)" = "68f8679667a1fbaa79a572a0076a8b166d225ed4"
+          test ! -L tests/test_mojprop_c154_cpanel_quota_uapi_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c154_cpanel_quota_uapi_readonly.py)" = "1b41fbdd3a0f8f6de332c3be771255aab89d5cbf"
           test ! -L scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
           test "$(git hash-object -- scripts/mojprop_c146_live_plan1_runtime_source_readonly.py)" = "198d3c2b4f8de90504002f95148c370604716cb9"
           test ! -L tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py
@@ -233,6 +241,16 @@ jobs:
             < scripts/mojprop_c152_legacy_source_backup_sha256_readonly.py \
             | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C152_LEGACY_SOURCE_SHA256_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C152_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.legacy_source_backup_sha256.c152.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; inv=d["inventory"]; assert inv["owner_root_verified"] is True; assert all(type(inv[k]) is int and 0<=inv[k]<=67108864 for k in ("legacy_manifest_cases_checked","legacy_manifest_cases_recognized","legacy_cases_with_all_allowed_source_hashes_matching","allowed_source_copies_with_matching_sha256","allowed_source_copies_missing_or_mismatched","sensitive_or_unreviewed_source_entries_not_opened","verified_read_bytes_bounded")); assert inv["saved_source_contents_disclosed"] is False and inv["customer_data_accessed"] is False and inv["database_or_media_backup_read"] is False and inv["source_only_is_full_restore"] is False and inv["independent_db_app_media_restore_proven"] is False; assert all(d[k] is False for k in ("customer_data_accessed","db_media_backup_content_read","offhost_independent_backup_proven","full_app_db_media_restore_proven","production_deployment_authorized","payment_created","cost_incurred")); assert not set(d).intersection({"file","path","filename","customer","wallet","secret","database_name","archive_name","sha256","run_id","email","token"}); print(a[0])'
           echo 'C152_OLD_SOURCE_BACKUP_SHA256_READONLY=COMPLETE_NOT_DB_APP_MEDIA_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: C154 actual cPanel account vs local-node quota via documented read-only UAPI
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c154_cpanel_quota_uapi_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C154_CPIN_ACCOUNT_QUOTA_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C154_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.owner_quota.uapi.readonly.c154.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; allowed={"used","limit","quota","quota_used","quota_limit","disk_used","disk_limit","bytes_used","bytes_limit","megabytes_used","megabytes_limit","diskused","diskquota","quotaused","quotalimit","spaceused","spacelimit"}; assert set(d["whole_account"]["matched_numeric_fields"]) <= allowed; assert set(d["local_node"]["matched_numeric_fields"]) <= allowed; assert d["whole_account"]["account_write_headroom_proven"] is False and d["local_node"]["account_write_headroom_proven"] is False; assert all(d[k] is False for k in ("independent_restore_capacity_proven","full_app_db_media_restore_verified","backup_created_or_read","customer_data_accessed","database_accessed","external_network_called","production_deployment_authorized","payment_created","cost_incurred")); assert not set(d).intersection({"password","secret","token","email","customer","filename","path","api_key","wallet"}); print(a[0])'
+          echo 'C154_CPIN_OWNER_QUOTA_READ_ONLY=COMPLETE_NOT_BACKUP_WRITE_ADMISSION' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
