@@ -27,13 +27,19 @@ class PaymentMethod(str, Enum):
 
 @dataclass(frozen=True)
 class LegalEvidence:
-    """Server-attested external evidence; the dataclass alone proves NOTHING."""
+    """Independently reviewed legal BASIS, not necessarily a new permit.
+
+    If applicable law actually requires a governmental authorization, that
+    authorization must be in the back-office evidence file. Do not invent a
+    universal pre-authorization requirement absent a specific law. Neither a
+    merchant self-assertion nor this dataclass constitutes a legal opinion.
+    """
     merchant_owner_verified: bool
     merchant_residence_country: str
     buyer_residence_verified: bool
     buyer_residence_country: str
     customer_country_permitted: bool
-    seller_cross_border_permission_verified: bool
+    seller_cross_border_lawful_basis_reviewed: bool
     fee_based_independent_evaluation_approved: bool
     full_terms_accepted_and_verified: bool
     refunds_and_consumer_rights_cleared: bool
@@ -44,7 +50,7 @@ class LegalEvidence:
     # These flags cannot be attested by a visitor/browser, IP or wallet alone.
     seller_role: str = "unknown"  # natural_person_independent_service, licensed_crypto_broker, other
     seller_role_verified: bool = False
-    iran_foreign_trx_receipt_rights_verified: bool = False
+    iran_foreign_trx_settlement_lawfulness_reviewed: bool = False
     us_person_and_us_nexus_excluded: bool = False
     relevant_sanctions_screen_verified: bool = False
 
@@ -104,9 +110,9 @@ def decide_preinvoice(lane: Lane, method: PaymentMethod,
         return PreinvoiceDecision(lane, True, PaymentMethod.IRR, None,
                                   "IRR price, merchant registration and licensed PSP still required")
     if (evidence.merchant_residence_country == "IR" and
-            evidence.seller_cross_border_permission_verified is not True):
+            evidence.seller_cross_border_lawful_basis_reviewed is not True):
         return PreinvoiceDecision(lane, False, PaymentMethod.NONE, None,
-                                  "Iran-resident seller's foreign merchant receipt rights unverified")
+                                  "No independently documented legal basis for foreign-service merchant receipt")
     if method is not PaymentMethod.NATIVE_TRX:
         return PreinvoiceDecision(lane, False, PaymentMethod.NONE, None,
                                   "Payment method not cleared by this foreign-buyer route")
@@ -120,9 +126,9 @@ def decide_preinvoice(lane: Lane, method: PaymentMethod,
         return PreinvoiceDecision(lane, False, PaymentMethod.NONE, None,
                                   "Independent seller's actual contracting capacity not verified")
     if evidence.merchant_residence_country == "IR" and (
-            evidence.iran_foreign_trx_receipt_rights_verified is not True):
+            evidence.iran_foreign_trx_settlement_lawfulness_reviewed is not True):
         return PreinvoiceDecision(lane, False, PaymentMethod.NONE, None,
-                                  "Foreign TRX service export/receipt authority not verified for Iran resident")
+                                  "No reviewed foreign TRX export-service tax and FX settlement basis")
     if (evidence.us_person_and_us_nexus_excluded is not True or
             evidence.relevant_sanctions_screen_verified is not True):
         return PreinvoiceDecision(lane, False, PaymentMethod.NONE, None,
