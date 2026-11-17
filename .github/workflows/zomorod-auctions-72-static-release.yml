@@ -37,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/zomorod_auctions_72_deploy.py
-          python3 -m pip install --quiet --disable-pip-version-check pytest
+          python3 -m pip install --quiet --disable-pip-version-check -r requirements.txt
           python3 -m pytest -q tests/test_zomorod_auction_directory_artifacts.py tests/test_zomorod_auctions_72_publication.py
           python3 - <<'PY'
           from pathlib import Path
