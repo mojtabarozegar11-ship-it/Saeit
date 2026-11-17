@@ -104,5 +104,25 @@ class HistoricalSqlArchiveNoDuplicateExport(unittest.TestCase):
                         self.assertLess(body.index("    if: false"),body.index("    runs-on:"))
                         self.assertIn("FAIL-CLOSED",body)
 
+
+class LegacyPackageCleanupOwnerAndBackupSafety(unittest.TestCase):
+    def test_backup_relocation_is_unavailable_and_both_steps_disabled(self):
+        p=ROOT/".github/workflows/zomorod-safe-package-cache-cleanup-20261018.yml"
+        s=p.read_text(encoding="utf-8")
+        self.assertNotIn("          - migrate_backup",s)
+        self.assertNotIn("      confirm_backup_relocation:",s)
+        self.assertEqual(s.count(
+            "if: false  # Source backup deletion/relocation blocked pending independent restore"),2)
+        self.assertIn("tools/cpanel_backup_archive_relocate.py",s)
+        self.assertIn("contents: read",s)
+    def test_cache_and_stale_apply_requires_the_actual_owner(self):
+        s=(ROOT/".github/workflows/zomorod-safe-package-cache-cleanup-20261018.yml").read_text(encoding="utf-8")
+        self.assertIn("CACHE_CLEANUP_BLOCKED_NON_OWNER",s)
+        self.assertIn("STALE_CLEANUP_BLOCKED_NON_OWNER",s)
+        self.assertEqual(s.count('test "$GITHUB_ACTOR" = "mojtabarozegar11-ship-it"'),2)
+        self.assertIn("CONFIRM_DISPOSABLE_ONLY",s)
+        self.assertIn('if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch"',s)
+        self.assertIn('if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch"',s)
+
 if __name__=="__main__":
     unittest.main()
