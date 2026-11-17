@@ -28,7 +28,7 @@ class Migration(migrations.Migration):
                 ("last_sequence", models.PositiveBigIntegerField(default=0)),
                 ("last_history_sha256", models.CharField(max_length=64, blank=True)),
                 ("last_realized_net_usd", models.DecimalField(
-                    max_digits=24, decimal_places=4, default=0)),
+                    max_digits=24, decimal_places=8, default=0)),
                 ("last_fully_closed_count", models.PositiveBigIntegerField(default=0)),
                 ("opened_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
