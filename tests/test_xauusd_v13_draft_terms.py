@@ -73,10 +73,22 @@ class DraftV13BuyerTermsTests(unittest.TestCase):
         self.assertFalse(x.independently_financed_account_verified)
         self.assertFalse(x.broker_live_trading_approved)
 
-    def test_social_posts_never_required(self):
+    def test_single_either_platform_post_is_proposed_for_28_days(self):
         x = draft_gold_terms_v13()
         self.assertEqual((x.instagram_posts_required, x.facebook_posts_required), (0, 0))
-        self.assertIn("No Instagram or Facebook posting", x.en)
+        self.assertEqual(x.minimum_posts_on_either_platform, 1)
+        self.assertEqual(x.continuous_visibility_days, 28)
+        self.assertIn("EITHER Instagram", x.en)
+        self.assertIn("OR Facebook", x.en)
+        self.assertIn("28 days", x.en)
+        self.assertIn("۲۸ روز", x.fa)
+
+    def test_social_rule_never_self_authorizes_platform_or_buyer_consent(self):
+        x = draft_gold_terms_v13()
+        self.assertFalse(x.social_legality_independently_approved)
+        self.assertFalse(x.social_customer_terms_signed)
+        self.assertFalse(x.customer_contract_signed)
+        self.assertFalse(x.checkout_enabled)
 
     def test_payment_enrollment_execution_all_disabled(self):
         x = draft_gold_terms_v13()
