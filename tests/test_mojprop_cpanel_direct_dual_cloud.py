@@ -297,7 +297,7 @@ class DirectCPanelDualDriveTests(unittest.TestCase):
         with patch("factory_dual_stream_v2._public_fingerprint",
                    return_value=(object(), "a" * 64)), \
              patch.object(bridge, "build_producer_argv",
-                          return_value=["/usr/bin/ssh", "pinned-source"]), \\
+                          return_value=["/usr/bin/ssh", "pinned-source"]), \
              patch("factory_rclone_dual_parts.encrypt_verified_pipe_to_two_owner_drives",
                    return_value=sentinel.encrypted_dual_store_receipt) as encrypt:
             value = bridge.transfer_approved_scope(**params)
@@ -326,7 +326,7 @@ class DirectCPanelDualDriveTests(unittest.TestCase):
         with patch("factory_dual_stream_v2._public_fingerprint",
                    return_value=(object(), "a" * 64)), \
              patch.object(bridge, "build_producer_argv",
-                          return_value=["ssh", "source"]), \\
+                          return_value=["ssh", "source"]), \
              patch("factory_rclone_dual_parts.encrypt_verified_pipe_to_two_owner_drives",
                    side_effect=AssertionError("must not upload")):
             with self.assertRaisesRegex(bridge.BackupHold,
