@@ -19,6 +19,8 @@ on:
       - "tests/test_mojprop_c148_owner_restore_storage_readonly.py"
       - "scripts/mojprop_c149_existing_backup_root_readonly.py"
       - "tests/test_mojprop_c149_existing_backup_root_readonly.py"
+      - "scripts/mojprop_c150_owner_rollback_manifest_shape_readonly.py"
+      - "tests/test_mojprop_c150_owner_rollback_manifest_shape_readonly.py"
 
 permissions:
   contents: read
@@ -66,6 +68,12 @@ jobs:
           test "$(git hash-object -- scripts/mojprop_c149_existing_backup_root_readonly.py)" = "608f9e93c2475ccaea75d3a4d23c936674865239"
           test ! -L tests/test_mojprop_c149_existing_backup_root_readonly.py
           test "$(git hash-object -- tests/test_mojprop_c149_existing_backup_root_readonly.py)" = "8aac9932328732fbb8beccbf7c1b8db67439e384"
+          python3 -B -m py_compile scripts/mojprop_c150_owner_rollback_manifest_shape_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c150_owner_rollback_manifest_shape_readonly -q
+          test ! -L scripts/mojprop_c150_owner_rollback_manifest_shape_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c150_owner_rollback_manifest_shape_readonly.py)" = "944aec433d1b34fb9868dd501c3caf397429d0c8"
+          test ! -L tests/test_mojprop_c150_owner_rollback_manifest_shape_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c150_owner_rollback_manifest_shape_readonly.py)" = "ed6e72bcafd1b83c3909cc1818f10815242c5f99"
           test ! -L scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
           test "$(git hash-object -- scripts/mojprop_c146_live_plan1_runtime_source_readonly.py)" = "198d3c2b4f8de90504002f95148c370604716cb9"
           test ! -L tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py
@@ -179,6 +187,16 @@ jobs:
             < scripts/mojprop_c149_existing_backup_root_readonly.py \
             | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C149_BACKUP_ROOT_METADATA_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C149_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.existing_backup_root.metadata.c149.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; inv=d["inventory"]; assert inv["metadata_only"] is True and inv["backup_content_read"] is False and inv["restore_rehearsal_verified"] is False and inv["independent_full_app_db_media_restore_proven"] is False; assert type(inv["direct_entries_scanned"]) is int and 0<=inv["direct_entries_scanned"]<=128; assert type(inv["owner_private_regular_archives"]) is int and 0<=inv["owner_private_regular_archives"]<=128; assert type(inv["owner_private_manifest_metadata_files"]) is int and 0<=inv["owner_private_manifest_metadata_files"]<=256; assert all(d[k] is False for k in ("provider_offhost_backup_proven","offhost_capacity_proven","database_restore_verified","application_restore_verified","media_restore_verified","tenant_quota_verified","customer_data_accessed","backup_downloaded_or_created","database_accessed","external_network_called","production_release_authorized","cost_incurred")); assert not set(d).intersection({"file","filename","archive_name","email","password","token","customer","wallet","database_name","secret"}); print(a[0])'
           echo 'C149_EXISTING_OWNER_BACKUP_ROOT_METADATA_ONLY=COMPLETE_NOT_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: C150 inspect only exact, bounded source rollback manifest shapes (not backup contents)
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c150_owner_rollback_manifest_shape_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C150_ROLLBACK_MANIFEST_SHAPE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C150_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.local_rollback_manifest_shape.c150.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; v=d["inventory"]; assert v["owner_root_verified"] is True; assert all(type(v[k]) is int and 0 <= v[k] <= 8192 for k in ("case_directories_checked","manifest_read_attempts","source_only_rollback_manifests","unknown_or_invalid_manifest_shapes","source_files_declared_total","source_existing_files_declared_total","manifests_marking_migration_attempted")); assert v["read_any_database_or_media"] is False and v["read_any_backup_saved_file"] is False and v["independent_restore_verified"] is False and v["tenant_rollback_authorized"] is False; assert all(d[k] is False for k in ("db_snapshot_read","backup_content_read","customer_data_accessed","independent_offhost_backup_verified","app_db_media_restore_proven","payment_collected","production_release_authorized","cost_incurred")); assert not set(d).intersection({"path","file","filename","customer","wallet","secret","database_name","archive_name","sha256","token","email"}); print(a[0])'
+          echo 'C150_OWNER_BACKUP_MANIFEST_METADATA_SHAPE_ONLY_NOT_FULL_RESTORE=COMPLETE' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
