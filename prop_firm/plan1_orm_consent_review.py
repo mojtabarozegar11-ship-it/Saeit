@@ -16,6 +16,7 @@ from .plan1_canonical_interest_bridge import (
     match_private_review_to_canonical_interest,
 )
 from .buyer_order_review import Plan1OrderGateClosed
+from .plan1_demo_email_interest import review_existing_demo_interest_otp
 from .plan1_private_order_draft import (
     _DOCUMENT_BINDINGS,
     build_plan1_private_review_draft,
@@ -176,3 +177,46 @@ def review_verified_precontract_for_interest(
         seller_signature_proof_sha256=draft.seller_signature_proof_sha256,
         expires_at_sec=draft.expires_at_sec,
     )
+
+
+def review_email_verified_existing_interest(
+    *, actor, interest_pk, inquiry, consent_attestation, consent_tag_hex,
+    consent_key, request_ref, inquiry_sha256, consent_evidence_sha256,
+    private_order_draft, signed_otp_receipt, signed_otp_tag_hex,
+    trusted_otp_service_key, declared_country, age_18_self_attested,
+):
+    """Verify OTP for an existing consented CRM prospect, never for payment.
+
+    Server-side staff service is responsible for keeping the OTP signing key
+    independent from the consent registry. An email code is validated in the
+    separate OTP service, not fabricated from a self-declared browser flag.
+    The outer transaction retains the canonical row lock throughout both
+    consent and OTP lineage checks to avoid withdrawal race during review.
+
+    This method does NOT send OTP messages, perform real identity KYC, accept
+    buyer agreements, activate DEMO/REAL accounts or create payable invoices.
+    """
+    _require_authorized_staff(actor)
+    if type(interest_pk) is not int or interest_pk <= 0:
+        raise Plan1OrderGateClosed("valid canonical interest identifier required")
+    with transaction.atomic():
+        link = review_existing_interest(
+            actor=actor, interest_pk=interest_pk, inquiry=inquiry,
+            consent_attestation=consent_attestation,
+            consent_tag_hex=consent_tag_hex, consent_key=consent_key,
+            request_ref=request_ref, inquiry_sha256=inquiry_sha256,
+            consent_evidence_sha256=consent_evidence_sha256,
+            private_order_draft=private_order_draft,
+        )
+        now = timezone.now()
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise Plan1OrderGateClosed("trusted server clock required")
+        return review_existing_demo_interest_otp(
+            consent_link=link, signed_otp_receipt=signed_otp_receipt,
+            otp_tag_hex=signed_otp_tag_hex,
+            trusted_otp_service_key=trusted_otp_service_key,
+            trusted_consent_service_key=consent_key,
+            declared_country=declared_country,
+            age_18_self_attested=age_18_self_attested,
+            server_now_sec=int(now.timestamp()),
+        )
