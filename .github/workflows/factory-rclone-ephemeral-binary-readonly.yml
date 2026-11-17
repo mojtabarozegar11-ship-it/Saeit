@@ -1,0 +1,48 @@
+name: Factory pinned rclone ephemeral bootstrap (NO OAUTH / NO BACKUP)
+on:
+  pull_request:
+    paths:
+      - 'scripts/factory_rclone_ephemeral_binary.py'
+      - 'tests/test_factory_rclone_ephemeral_binary.py'
+      - '.github/workflows/factory-rclone-ephemeral-binary-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  owner-ephemeral-rclone-version-only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Pin source and test bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/factory_rclone_ephemeral_binary.py
+          test ! -L tests/test_factory_rclone_ephemeral_binary.py
+          test "$(git hash-object scripts/factory_rclone_ephemeral_binary.py)" = 'fa088e6531c302b95044d014ac8e8c568fb9ca7a'
+          test "$(git hash-object tests/test_factory_rclone_ephemeral_binary.py)" = 'df5924adf2a39dece73e31371795fa7d18dcdf42'
+      - name: Run 21 offline supply-chain guards
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          PYTHONPATH=scripts python3 -B -m unittest -q tests.test_factory_rclone_ephemeral_binary
+      - name: Verify only official digest-pinned ephemeral rclone binary
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          python3 -B scripts/factory_rclone_ephemeral_binary.py \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["schema"]=="factory.rclone.ephemeral-signed-digest-readonly.v1"; assert d["artifact_sha256_verified"] and d["ephemeral_binary_version_verified"] and d["no_system_install"] and d["failure"] is None; assert not any(d[k] for k in ("oauth_tokens_read","cloud_provider_queried","production_modified","new_backup_created")); print("OWNER_EPHEMERAL_RCLONE_PINNED_RELEASE_VERIFIED="+json.dumps(d,sort_keys=True,separators=(",",":")))'
+          echo 'DIGEST_PINNED_RCLONE_EPHEMERAL_BINARY_PASS_NO_OAUTH_NO_PROVIDER_NO_SQL' >> "$GITHUB_STEP_SUMMARY"

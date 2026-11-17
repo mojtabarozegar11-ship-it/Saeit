@@ -1,0 +1,41 @@
+name: Factory owner Drive OAuth onboarding (OFFLINE TESTS ONLY)
+on:
+  pull_request:
+    paths:
+      - 'scripts/factory_owner_drive_setup.py'
+      - 'tests/test_factory_owner_drive_setup.py'
+      - 'docs/factory_owner_drive_setup_README.md'
+      - '.github/workflows/factory-owner-oauth-offline-ci.yml'
+permissions:
+  contents: read
+jobs:
+  owner-only-sanitized-tests:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify pinned owner script and tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/factory_owner_drive_setup.py
+          test ! -L tests/test_factory_owner_drive_setup.py
+          test "$(git hash-object scripts/factory_owner_drive_setup.py)" = '03f20faf0cb763017e97dfbf32a5faf9081f21ec'
+          test "$(git hash-object tests/test_factory_owner_drive_setup.py)" = 'e9064eaf59692d74a46571ff4d2e9d4543d5aa72'
+      - name: Run 18 offline fail-closed cases, NO GOOGLE OR SECRETS
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          PYTHONPATH=scripts python3 -B -m unittest -q tests.test_factory_owner_drive_setup
+          echo '18 OWNER OAUTH SAFETY TESTS PASS: NO TOKEN / NO LOGIN / NO BACKUP' >> "$GITHUB_STEP_SUMMARY"
