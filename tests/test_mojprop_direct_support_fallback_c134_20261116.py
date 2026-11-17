@@ -90,12 +90,20 @@ class CanonicalMojPropContactFallback(unittest.TestCase):
                 self.assertNotIn("fetch('mailto:", data)
 
     def test_native_intake_not_replaced_with_fallible_email_transport(self):
-        for page in PUBLIC:
+        # The generic educational catalog/Starter30 keep the browser-native
+        # no-JS request link. Real MOJ-PROP-01 needs the separate verified
+        # consent form; a generic legacy intake must not be marketed as it.
+        for page in PUBLIC[1:]:
             with self.subTest(page=page):
                 self.assertIn("/moj-prop-intake/?format=html", page.read_text("utf-8"))
         home = PUBLIC[0].read_text("utf-8")
+        self.assertIn("const endpoint='/moj-prop-intake/'", home)
         self.assertIn('id="request-form"', home)
         self.assertIn('id="status-form"', home)
+        self.assertIn('href="/moj-prop/contact/"', home)
+        self.assertIn("Support contact is NOT an accepted Plan 1 CRM lead", home)
+        self.assertNotIn('href="/moj-prop-intake/?format=html', home)
+        self.assertNotIn('href="/moj-prop-interest/form/', home)
 
     def test_starter30_fallback_never_asks_for_payment_or_credentials(self):
         detail = PUBLIC[2].read_text("utf-8")
