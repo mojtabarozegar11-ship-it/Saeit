@@ -101,3 +101,74 @@ def buyer_no_social_post_amendment():
                                separators=(",", ":"), allow_nan=False
                                ).encode("utf-8")).hexdigest()
     return NoBuyerSocialPostAmendment(**payload, digest_sha256=digest)
+
+
+_HISTORICAL_POST_CLAUSE_FA = (
+    "سیاست نسخه v1.2 برای کل چالش، یک پست اصیل اینستاگرام و یک پست اصیل فیس‌بوک "
+    "را با افشای شفاف رابطه تبلیغاتی در نظر دارد؛ اجرای آن تابع قوانین قابل اعمال و "
+    "سیاست پلتفرم است، هیچ تعریف یا نظر مثبت اجباری نیست و حساب‌های شخصی مالک "
+    "برای انتشار یا داده‌برداری استفاده نمی‌شوند. پست‌ها طبق قرارداد باید ۲۸ روز "
+    "پس از انتشار در دسترس باشند.\\n"
+)
+_HISTORICAL_POST_CLAUSE_EN = (
+    "The v1.2 policy proposes ONE original Instagram and ONE original Facebook post "
+    "for the entire challenge, each retained for 28 days after posting, with clear "
+    "commercial-relationship disclosure and only where applicable law and platform "
+    "terms permit. No forced positive endorsement; the owner's private social "
+    "accounts must not be accessed, scraped or used.\\n"
+)
+
+
+@dataclass(frozen=True)
+class CurrentPlan1BuyerCopy:
+    """Fresh informational copy without obsolete mandatory-post language."""
+    sku: str
+    fee_sun: int
+    network: str
+    historical_terms_version: str
+    amendment_version: str
+    fa: str
+    en: str
+    digest_sha256: str
+    instagram_posts_required: int = 0
+    facebook_posts_required: int = 0
+    requires_separate_buyer_contract_acceptance: bool = True
+    requires_independent_kyc_and_funding: bool = True
+    payment_enabled: bool = False
+    invoice_enabled: bool = False
+    enrollment_enabled: bool = False
+    status: str = STATUS
+
+
+def current_plan1_buyer_copy():
+    """Build replacement FA+EN *information*, not retroactive signed buyer terms.
+
+    Fails closed if the immutable v1.2 source language ever changes, rather than
+    accidentally showing both a post obligation and its waiver.
+    """
+    historical = buyer_disclosure()
+    waiver = buyer_no_social_post_amendment()
+    if (historical.fa.count(_HISTORICAL_POST_CLAUSE_FA) != 1
+            or historical.en.count(_HISTORICAL_POST_CLAUSE_EN) != 1
+            or historical.digest_sha256 != waiver.historical_disclosure_digest_sha256):
+        raise ValueError("historical mandatory social clause drift requires legal copy review")
+    fa = historical.fa.replace(
+        _HISTORICAL_POST_CLAUSE_FA, waiver.fa + "\\n", 1)
+    en = historical.en.replace(
+        _HISTORICAL_POST_CLAUSE_EN, waiver.en + "\\n", 1)
+    if (fa == historical.fa or en == historical.en
+            or "یک پست اصیل اینستاگرام" in fa
+            or "ONE original Instagram and ONE original Facebook" in en
+            or "NOT required" not in en or "موظف" not in fa):
+        raise ValueError("buyer disclosure still contains a mandatory social clause")
+    payload = {
+        "sku": SKU, "fee_sun": historical.fee_sun,
+        "network": historical.network,
+        "historical_terms_version": historical.contract_version,
+        "amendment_version": waiver.amendment_version,
+        "fa": fa, "en": en,
+    }
+    digest = sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False,
+                               separators=(",", ":"), allow_nan=False
+                               ).encode("utf-8")).hexdigest()
+    return CurrentPlan1BuyerCopy(**payload, digest_sha256=digest)
