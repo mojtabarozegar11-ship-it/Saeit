@@ -1,0 +1,82 @@
+"""Public procurement serials: continuation, uniqueness, idempotence, and publication gating."""
+from io import StringIO
+
+from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.test import TestCase
+
+from command_center.models import PrivateAuction, PublicProcurementNumber
+
+
+class ProcurementSerialRegistrationTests(TestCase):
+    EVIDENCE = "Checked legacy advertisement register and recorded its highest serial"
+
+    def register(self, last=100, apply=False):
+        out = StringIO()
+        options = {
+            "last_existing_number": last,
+            "evidence": self.EVIDENCE,
+            "stdout": out,
+        }
+        if apply:
+            options["apply"] = True
+        call_command("register_direct_procurement_notices", **options)
+        return out.getvalue()
+
+    def test_dry_run_does_not_claim_numbers(self):
+        msg = self.register(last=100)
+        self.assertIn("101..172", msg)
+        self.assertIn("DRY RUN", msg)
+        self.assertEqual(PublicProcurementNumber.objects.count(), 0)
+
+    def test_reserves_36_plus_36_after_highest_registered(self):
+        user = get_user_model().objects.create_user("ad-number-check", password="nottestpassword")
+        old_ad = PrivateAuction.objects.create(title="Existing internal tender", created_by=user)
+        PublicProcurementNumber.objects.create(
+            notice_key="OLDER-EXISTING-REGISTER",
+            serial_number=180,
+            baseline_evidence=self.EVIDENCE,
+        )
+        self.register(last=200, apply=True)
+        rows = list(PublicProcurementNumber.objects.exclude(notice_key="OLDER-EXISTING-REGISTER").order_by("serial_number"))
+        self.assertEqual(len(rows), 72)
+        self.assertEqual([r.serial_number for r in rows], list(range(201, 273)))
+        self.assertEqual([r.notice_key for r in rows[:36]], [f"ZM-SUP-{i:03d}" for i in range(1, 37)])
+        self.assertEqual([r.notice_key for r in rows[36:]], [f"ZM-EQP-{i:03d}" for i in range(1, 37)])
+        self.assertGreater(rows[0].serial_number, old_ad.pk)
+
+    def test_auto_uses_larger_legacy_pk_even_if_supplied_floor_is_lower(self):
+        user = get_user_model().objects.create_user("old-auction-number", password="nottestpassword")
+        old_ad = PrivateAuction.objects.create(title="Previous auction", created_by=user)
+        self.register(last=0, apply=True)
+        first = PublicProcurementNumber.objects.get(notice_key="ZM-SUP-001")
+        self.assertEqual(first.serial_number, old_ad.pk + 1)
+
+    def test_second_registration_does_not_reassign_or_duplicate_numbers(self):
+        self.register(last=500, apply=True)
+        original = list(PublicProcurementNumber.objects.values_list("notice_key", "serial_number"))
+        msg = self.register(last=500, apply=True)
+        self.assertIn("Already reserved", msg)
+        self.assertEqual(original, list(PublicProcurementNumber.objects.values_list("notice_key", "serial_number")))
+        self.assertEqual(len(original), 72)
+
+    def test_rejects_historical_claim_that_conflicts_with_reserved_numbers(self):
+        self.register(last=75, apply=True)
+        with self.assertRaises(CommandError):
+            self.register(last=80, apply=True)
+        self.assertEqual(PublicProcurementNumber.objects.count(), 72)
+
+    def test_public_page_fails_closed_before_numbers_exist_then_shows_reserved(self):
+        before = self.client.get("/auctions/")
+        self.assertEqual(before.status_code, 200)
+        self.assertContains(before, "شماره‌گذاری نهایی آگهی‌ها در انتظار")
+        self.assertNotContains(before, "شماره آگهی 1")
+        self.register(last=912, apply=True)
+        after = self.client.get("/auctions/")
+        self.assertEqual(after.status_code, 200)
+        self.assertContains(after, "شماره آگهی 913")
+        self.assertContains(after, "شماره آگهی 984")
+        self.assertContains(after, "ZM-SUP-001")
+        self.assertContains(after, "ZM-EQP-036")
+        self.assertNotContains(after, "شماره‌گذاری نهایی آگهی‌ها در انتظار")
