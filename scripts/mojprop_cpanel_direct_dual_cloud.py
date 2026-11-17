@@ -40,7 +40,7 @@ REMOTE_LAUNCH = (
     "import base64,sys;"
     "code=base64.b64decode(sys.argv[1],validate=True);"
     "sys.argv=[sys.argv[0]]+sys.argv[2:];"
-    "exec(compile(code,'<reviewed-cpanel-backup-source>','exec'))"
+    'exec(compile(code,"<reviewed-cpanel-backup-source>","exec"))'
 )
 
 
@@ -88,7 +88,25 @@ def _git_blob(data: bytes) -> str:
 
 
 def _source_bytes(path: Path) -> bytes:
-    raw = _owner_file(path, MAX_SOURCE_BLOB_BYTES)
+    # Git checkout source is intentionally mode 0644 (not secret). Secure
+    # private config files separately; pin the *whole* executable blob.
+    if not path.is_absolute() or path.is_symlink():
+        raise BackupHold("UNSAFE_SOURCE_PATH")
+    try:
+        stat_before = path.stat()
+        if (not stat.S_ISREG(stat_before.st_mode)
+                or stat_before.st_uid != os.geteuid()
+                or not 0 < stat_before.st_size <= MAX_SOURCE_BLOB_BYTES):
+            raise BackupHold("UNSAFE_SOURCE_IDENTITY")
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(fd, "rb") as fh:
+            check = os.fstat(fh.fileno())
+            if (check.st_ino, check.st_dev, check.st_size) != (
+                    stat_before.st_ino, stat_before.st_dev, stat_before.st_size):
+                raise BackupHold("SOURCE_CHANGED_DURING_READ")
+            raw = fh.read(MAX_SOURCE_BLOB_BYTES + 1)
+    except (OSError, ValueError):
+        raise BackupHold("UNAVAILABLE_REVIEWED_SOURCE") from None
     if _git_blob(raw) != REVIEWED_SOURCE_BLOB:
         raise BackupHold("UNAPPROVED_CPANEL_EXPORTER_CHANGE")
     return raw
