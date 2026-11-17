@@ -32,14 +32,14 @@ def specimen(intake="PASS", status="PASS", gate="PASS"):
 
 def transport(intake_http="200", intake_exit="0", intake_redirects="0",
               status_http="200", status_exit="0", status_redirects="0"):
-    return "\\n".join((
+    return "\n".join((
         f"{TRANSPORT_KEYS[0]}={intake_http}",
         f"{TRANSPORT_KEYS[1]}={intake_exit}",
         f"{TRANSPORT_KEYS[2]}={intake_redirects}",
         f"{TRANSPORT_KEYS[3]}={status_http}",
         f"{TRANSPORT_KEYS[4]}={status_exit}",
         f"{TRANSPORT_KEYS[5]}={status_redirects}",
-    )) + "\\n"
+    )) + "\n"
 
 
 class BuyerReadinessEvidenceTests(unittest.TestCase):
