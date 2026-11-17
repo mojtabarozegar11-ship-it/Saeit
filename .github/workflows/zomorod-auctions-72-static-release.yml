@@ -123,7 +123,7 @@ jobs:
           d="$RUNNER_TEMP/zm-auctions-72-relay"
           stage="/home/zomorod2/.zm-auctions-72-stage-$GITHUB_SHA"
           ssh -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
-          tar -cf - -C . public/auctions public/sitemap-auctions.xml scripts/zomorod_auctions_72_deploy.py |
+          tar -cf - -C . public/auctions public/sitemap-auctions.xml content/auctions-72 scripts/zomorod_auctions_72_deploy.py |
             ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
           ssh -F "$d/config" saeit-cpanel "python3 '$stage/scripts/zomorod_auctions_72_deploy.py' check '$GITHUB_SHA'"
           echo "ZOMOROD_AUCTIONS_PRIVATE_STAGING=passed"
