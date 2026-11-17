@@ -1,13 +1,23 @@
 name: MOJ PROP C131 canonical consent backend plus nonpayable static Plan1 integration
 on:
   push:
-    branches: [integration/mojprop-c131-canonical-consent-static-20261117]
+    branches: [integration/mojprop-c131-canonical-consent-static-20261117, feature/prop-firm-policy-v11-20261114]
     paths:
       - 'templates/moj-prop-v4/index.html'
       - 'templates/moj-prop/contact/index.html'
       - 'scripts/mojprop_plan1_form_source_gate_c130.py'
       - 'tests/test_mojprop_c131_canonical_static_consent_integration.py'
       - '.github/workflows/mojprop-c131-canonical-static-consent-integration-20261117.yml'
+      - 'core/moj_prop_views.py'
+      - 'core/templates/mojplaywin/moj_prop_interest_form_d.html'
+      - 'config/urls.py'
+      - 'config/settings.py'
+      - 'prop_firm/apps.py'
+      - 'prop_firm/models.py'
+      - 'prop_firm/lead_models.py'
+      - 'prop_firm/migrations/0007_equity_broker_source.py'
+      - 'prop_firm/migrations/0008_prospect_contact_intake.py'
+      - 'tests/test_moj_prop_interest_intake.py'
   pull_request:
     branches: [feature/prop-firm-policy-v11-20261114]
 permissions:
