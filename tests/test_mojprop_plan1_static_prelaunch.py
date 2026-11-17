@@ -53,7 +53,7 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
         self.assertGreaterEqual(self.page.count('/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01'), 3)
         self.assertNotIn('/moj-prop-interest/form/', self.page)
         self.assertNotIn('/moj-prop/?service=blueprint&amp;package=moj-prop-01#request', self.page)
-        self.assertIn('MOJ-PROP-01 prefilled accessible request (manual review, not enrolment)', self.page)
+        self.assertIn('MOJ-PROP-01 prefilled accessible request (manual review, not enrolment; deployment unverified)', self.page)
 
     def test_no_js_plan1_fallback_exists_in_current_main_backend(self):
         backend = (ROOT / "core/mojprop_accessible_intake.py").read_text(encoding="utf-8")
@@ -84,10 +84,10 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
 
 
     def test_nav_points_to_existing_root_consent_form_not_generic_anchor(self):
-        self.assertIn('class="nav-cta" href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01"', self.page)
+        self.assertIn('class="nav-cta" href="/moj-prop/contact/"', self.page)
 
     def test_no_missing_notes_field_instruction_in_accessible_cta(self):
-        self.assertIn("Accessible Plan 1 form — no payment", self.page)
+        self.assertIn("Try the browser-native enquiry (not yet live-verified)", self.page)
         self.assertNotIn("Accessible enquiry (state MOJ-PROP-01 in notes)", self.page)
 
     def test_no_fake_one_hundred_percent_risk_readiness(self):
@@ -117,11 +117,11 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
 
     def test_nav_and_main_cta_do_not_imply_enrollment(self):
         self.assertNotIn("Join Plan 1 prelaunch enquiry", self.page)
-        self.assertIn("Request free Plan 1 launch information", self.page)
-        self.assertIn("Free Plan 1 prelaunch enquiry", self.page)
+        self.assertIn("Contact support about future Plan 1 (free)", self.page)
+        self.assertIn("Ask Plan 1 support — no purchase", self.page)
 
     def test_no_public_page_view_confused_with_saved_customer(self):
-        self.assertIn("Only a server-accepted consent record, not a click or GET 200", self.page)
+        self.assertIn("Only a server-accepted consent record with traceable source and privacy notice", self.page)
         self.assertIn("does not record a lead by itself", self.page)
 
     def test_jurisdiction_and_refund_require_prepayment_terms(self):
@@ -168,7 +168,7 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
         self.assertIn("Generic services must not infer a funded-challenge SKU", self.page)
 
     def test_server_persistence_is_required_for_optin_claim(self):
-        self.assertIn("confirmed server receipt", self.page)
+        self.assertIn("not independently verified on production", self.page)
         self.assertIn("not a saved lead", self.page)
 
     def test_review_consent_not_bulk_marketing(self):
@@ -223,7 +223,7 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
         self.assertIn("شرایط اقامت", self.page)
 
     def test_persian_cta_remains_nonpayable_nonjs_main_route(self):
-        self.assertIn("درخواست رایگان اطلاعات — بدون پرداخت", self.page)
+        self.assertIn("تماس با پشتیبانی رسمی — رایگان", self.page)
         self.assertIn("فرم در نسخه اصلی ممکن است انگلیسی باشد", self.page)
         self.assertGreaterEqual(self.page.count("package=moj-prop-01"), 4)
 
@@ -238,6 +238,97 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
         self.assertIn('id="prelaunch-guidance"', self.page)
         self.assertNotIn('name="wallet_address"', self.page)
 
+
+
+    def test_public_nav_is_real_first_party_support_not_unverified_intake(self):
+        self.assertIn('class="nav-cta" href="/moj-prop/contact/"', self.page)
+        self.assertNotIn('class="nav-cta" href="/moj-prop-intake/', self.page)
+
+    def test_hero_primary_is_existing_support_path(self):
+        self.assertIn('<a class="btn primary" href="/moj-prop/contact/">Ask about Plan 1 via official support</a>', self.page)
+
+    def test_secondary_root_form_remains_distinct_and_transparent(self):
+        self.assertIn('Try the prelaunch form (availability unverified)', self.page)
+        self.assertIn('Try the browser-native enquiry (not yet live-verified)', self.page)
+
+    def test_no_fake_live_form_consent_or_receipt(self):
+        self.assertIn('NOT been independently verified in production', self.page)
+        self.assertIn('do not assume a submitted request was saved', self.page)
+
+    def test_first_contact_section_exists_once(self):
+        self.assertEqual(self.page.count('id="first-contact"'), 1)
+        self.assertIn('aria-labelledby="first-contact-title"', self.page)
+
+    def test_fallback_is_first_party_support_only(self):
+        self.assertIn('href="/moj-prop/contact/">Official first-party contact', self.page)
+        self.assertNotIn('mailto:', self.page.lower())
+
+    def test_fallback_does_not_transmit_credentials(self):
+        self.assertIn('Do not include documents, credentials, bank details or wallet keys', self.page)
+
+    def test_contact_form_is_not_auto_marketing_consent(self):
+        self.assertIn('A voluntary request permits a reply about that request only', self.page)
+        self.assertIn('updates need separate, affirmative recorded consent', self.page)
+
+    def test_support_reply_does_not_equal_customer(self):
+        self.assertIn('Support contact is NOT an accepted Plan 1 CRM lead', self.page)
+        self.assertIn('independently confirmed server receipt', self.page)
+
+    def test_country_review_precedes_lawful_offer(self):
+        self.assertIn('permitted jurisdictions', self.page)
+        self.assertIn('source, jurisdiction and stored opt-in', self.page)
+
+    def test_broken_status_html_not_claimed_as_available(self):
+        self.assertIn('public request-status HTML endpoint is not verified as available', self.page)
+
+    def test_navigation_to_customer_support_without_javascript(self):
+        self.assertIn('<a href="#first-contact">Prelaunch contact</a>', self.page)
+
+    def test_minimal_personal_information_in_support_route(self):
+        self.assertIn('minimum reply details and country of residence if specifically requested', self.page)
+
+    def test_no_priority_or_reply_time_promises(self):
+        self.assertIn('no promised response time', self.page.lower())
+        self.assertIn('no guaranteed reply time', self.page.lower())
+
+    def test_persian_fallback_labeled_free_and_not_enrollment(self):
+        self.assertIn('تماس با پشتیبانی رسمی — رایگان', self.page)
+        self.assertIn('این پیام به‌تنهایی ثبت رضایت در CRM', self.page)
+
+    def test_persian_customer_can_find_help(self):
+        self.assertIn('مسیر رسمی پشتیبانی و حریم خصوصی منتشرشده', self.page)
+        self.assertIn('اگر پاسخ یا رسید واقعی دریافت نشد', self.page)
+
+    def test_persian_form_uncertainty_is_translated(self):
+        self.assertIn('مشاهده فرم پیش‌راه‌اندازی (فعال‌بودن تأیید نشده)', self.page)
+
+    def test_no_plan1_payment_collection_in_fallback(self):
+        self.assertNotIn('action="/moj-prop/checkout/', self.page)
+        self.assertIn('no transfer to an unverified wallet', self.page)
+
+    def test_consent_is_not_implied_by_support_email(self):
+        self.assertIn('A separate, recorded opt-in would be required for future updates', self.page)
+
+    def test_fallback_preserves_nonjs_root_for_after_release(self):
+        self.assertGreaterEqual(self.page.count('package=moj-prop-01'), 4)
+        self.assertIn('not yet live-verified', self.page)
+
+    def test_site_does_not_claim_public_buyer_exists(self):
+        self.assertIn('not validated CRM opt-ins, invoices, reservations or purchases', self.page)
+
+    def test_support_is_not_paid_transaction(self):
+        self.assertIn('no payment, no priority reservation, no guaranteed funded account', self.page)
+
+    def test_static_meta_does_not_imply_payable_challenge(self):
+        self.assertIn('Voluntary first-party support contact.', self.page)
+        self.assertIn('No payment or funded account today.', self.page)
+
+    def test_support_fallback_no_auto_send_or_tracker(self):
+        first=self.page.split('<section class="section" id="first-contact"',1)[1].split('</section>',1)[0]
+        self.assertNotIn('<script', first.lower())
+        self.assertNotIn('<form', first.lower())
+        self.assertNotIn('data-email=', first.lower())
+        self.assertNotIn('pixel', first.lower())
 
 
 if __name__ == "__main__":
