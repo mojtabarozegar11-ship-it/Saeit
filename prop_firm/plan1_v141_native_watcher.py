@@ -11,7 +11,7 @@ from datetime import timezone as utc
 import json
 import re
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request, HTTPRedirectHandler, build_opener
 
 from django.conf import settings
 
@@ -26,6 +26,15 @@ _FINGERPRINT = re.compile(r"[A-Za-z0-9_=-]{8,500}\Z")
 MAX_PAGES = 25
 PAGE_LIMIT = 200
 _BASE = "https://api.trongrid.io"
+
+
+class _RejectRedirects(HTTPRedirectHandler):
+    """Never forward private API keys to arbitrary redirected hosts."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_NO_REDIRECT_OPENER = build_opener(_RejectRedirects)
 
 
 def _indexer_configuration():
@@ -57,7 +66,7 @@ def _get_page(base, api_key, *, from_ms, fingerprint=None):
     if api_key:
         headers["TRON-PRO-API-KEY"] = api_key
     request = Request(target, headers=headers, method="GET")
-    with urlopen(request, timeout=12) as response:
+    with _NO_REDIRECT_OPENER.open(request, timeout=12) as response:
         if response.status != 200 or response.geturl() != target:
             raise CheckoutRejected("Indexer HTTP redirect or failure")
         raw = response.read(1_000_001)
