@@ -47,6 +47,8 @@ class VerifiedPrivateHandoff:
     """Bound proof references only; neither executed terms nor a purchase."""
     interest_pk: int
     request_ref: str
+    buyer_ref: str
+    seller_ref: str
     private_review_ref: str
     inquiry_sha256: str
     contract_pdf_sha256: str
@@ -194,6 +196,7 @@ def review_verified_precontract_for_interest(
         raise Plan1OrderGateClosed("private review expired during canonical lookup")
     return VerifiedPrivateHandoff(
         interest_pk=interest_pk, request_ref=request_ref,
+        buyer_ref=expected_buyer_ref, seller_ref=expected_seller_ref,
         private_review_ref=draft.private_review_ref,
         inquiry_sha256=draft.inquiry_sha256,
         contract_pdf_sha256=draft.contract_pdf_sha256,
