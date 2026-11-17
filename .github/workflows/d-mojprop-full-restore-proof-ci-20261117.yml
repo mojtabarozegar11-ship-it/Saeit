@@ -1,0 +1,36 @@
+name: D MOJ PROP Plan1 three-part recovery evidence offline CI
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/mojprop_plan1_full_restore_review_d.py'
+      - 'tests/test_mojprop_plan1_full_restore_review_d.py'
+      - '.github/workflows/d-mojprop-full-restore-proof-ci-20261117.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  isolated_source_regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify no-network source imports and exact Plan1 scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mojprop_plan1_full_restore_review_d.py tests/test_mojprop_plan1_full_restore_review_d.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_plan1_full_restore_review_d -v
+          python3 -B - <<'PY'
+          from pathlib import Path
+          source = Path('scripts/mojprop_plan1_full_restore_review_d.py').read_text()
+          assert 'mojprop.plan1.full-restore-review.d1' in source
+          assert '"deployment_authorized": False' in source
+          assert '"payment_authorized": False' in source
+          assert '"remote_restore_independently_observed_by_this_process": False' in source
+          assert 'mojplaywin.com' in source
+          print('D source-only release gate is intentionally NOT proof of a live restore')
+          PY

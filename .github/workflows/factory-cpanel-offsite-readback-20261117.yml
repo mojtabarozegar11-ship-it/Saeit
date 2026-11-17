@@ -1,0 +1,170 @@
+name: Factory cPanel November backups current SHA proof — owner only
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+concurrency:
+  group: factory-cpanel-offsite-readback-20261117
+  cancel-in-progress: false
+jobs:
+  verify-offsite:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.number == 1600 &&
+      !github.event.issue.pull_request &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'MOJ-FACTORY-CPANEL-OFFSITE-READBACK-20261117'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 13
+    steps:
+      - name: Prepare pinned VPS and cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/sqlite-restore-proof"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 127.0.0.1 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 127.0.0.1
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "PINNED_RELAY=verified"
+      - name: Recheck both immutable offsite SQLite copies and available filesystem bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/sqlite-restore-proof"
+          timeout 480s ssh -T -F "$d/config" saeit-cpanel 'nice -n 15 python3 -B -' <<'PY' | tee "$RUNNER_TEMP/factory-cpanel-offsite-$GITHUB_RUN_ID.log"
+          import hashlib, json, os, pathlib, stat, time
+          base=pathlib.Path("/home/zomorod2/restore-staging/factory")
+          expected={
+              "master-before-20261105T154953Z.sqlite3":"a9fd2175f9ace1a81d67cf7145e54b8621fd44cc06b0b2739bdc9345e21750e2",
+              "master-before-20261105T210434Z.sqlite3":"402c16b67d430132701435eb4b3f79de88cd5c2479bb07c741c6674708a931be",
+          }
+          if base.is_symlink() or not base.is_dir():raise SystemExit("UNSAFE_STAGING_ROOT")
+          entries=[]
+          for name,wanted in expected.items():
+              p=base/name
+              st=p.lstat()
+              if not stat.S_ISREG(st.st_mode) or st.st_nlink!=1 or st.st_size!=1408634880:
+                  raise SystemExit("OFFSITE_FILE_NOT_REGULAR_OR_SIZE_MISMATCH")
+              h=hashlib.sha256()
+              fd=os.open(p,os.O_RDONLY|getattr(os,"O_NOFOLLOW",0))
+              try:
+                  pre=os.fstat(fd)
+                  with os.fdopen(fd,"rb",closefd=False) as stream:
+                      if stream.read(16)!=b"SQLite format 3"+bytes([0]):raise SystemExit("OFFSITE_SQLITE_MAGIC_FAIL")
+                      stream.seek(0)
+                      for chunk in iter(lambda:stream.read(2*1024*1024),b""):h.update(chunk)
+                  after=os.fstat(fd)
+                  if (pre.st_ino,pre.st_size,pre.st_mtime_ns)!=(after.st_ino,after.st_size,after.st_mtime_ns):
+                      raise SystemExit("OFFSITE_CHANGED_DURING_HASH")
+              finally:os.close(fd)
+              entries.append({"name":name,"bytes":st.st_size,"sha256":h.hexdigest(),"hash_match":h.hexdigest()==wanted})
+          v=os.statvfs(base)
+          report={"schema":"moj.factory.cpanel.offsite.readback.v1","read_only":True,
+                  "snapshots":entries,
+                  "both_hashes_match":all(x["hash_match"] for x in entries),
+                  "filesystem_free_bytes":v.f_bavail*v.f_frsize,
+                  "filesystem_total_bytes":v.f_blocks*v.f_frsize,
+                  "disk_free_is_account_quota":False,
+                  "source_files_deleted":0,"cpanel_files_deleted":0,"files_created":0}
+          print("MOJ_CPANEL_OFFSITE_READBACK="+json.dumps(report,sort_keys=True),flush=True)
+          if not report["both_hashes_match"]:raise SystemExit("OFFSITE_HASH_MISMATCH")
+          # cPanel account quota is separate from filesystem statvfs; never infer from host free bytes.
+          import subprocess
+          try:
+              p=subprocess.run(["uapi","--output=json","Quota","get_quota_info"],
+                               capture_output=True,text=True,timeout=25,check=False)
+              reply=json.loads(p.stdout).get("result",{}) if p.stdout else {}
+              data=reply.get("data") if isinstance(reply,dict) else None
+              safe={}
+              if isinstance(data,dict):
+                  for key,value in data.items():
+                      k=str(key).lower()
+                      if any(word in k for word in ("quota","limit","used","free","space","megabyte","byte")):
+                          if isinstance(value,(int,float)) and not isinstance(value,bool):
+                              safe[str(key)[:45]]=value
+                          elif isinstance(value,str) and len(value)<=24 and (value.replace(".","",1).isdigit() or value.lower() in {"unlimited","none"}):
+                              safe[str(key)[:45]]=value
+              print("MOJ_CPANEL_ACCOUNT_QUOTA="+json.dumps({
+                  "available":p.returncode==0 and reply.get("status")==1 if isinstance(reply,dict) else False,
+                  "quota_fields":safe,
+                  "quota_observed":bool(safe),
+                  "disk_free_is_not_account_quota":True},sort_keys=True),flush=True)
+          except Exception as exc:
+              print("MOJ_CPANEL_ACCOUNT_QUOTA="+json.dumps({"available":False,"error":type(exc).__name__,"disk_free_is_not_account_quota":True}),flush=True)
+          # Fixed-root read-only cPanel account usage map; no email/account details.
+          classifications={}
+          known=("restore-staging","public_html","mail",".backups",".trash","tmp","logs","Saeit","backup","public_ftp")
+          for name in known:
+              p=pathlib.Path("/home/zomorod2")/name
+              if p.is_symlink() or not p.exists():continue
+              try:
+                  v=subprocess.run(["nice","-n","15","du","-skx",str(p)],
+                                   capture_output=True,text=True,timeout=50,check=False)
+                  if v.returncode==0 and v.stdout.split():
+                      classifications[name]=int(v.stdout.split()[0])*1024
+                  else:classifications[name]="not_available"
+              except (OSError,ValueError,subprocess.TimeoutExpired):
+                  classifications[name]="time_budget_or_denied"
+          print("MOJ_CPANEL_FIXED_DIR_USAGE="+json.dumps({
+              "schema":"moj.factory.cpanel.fixed-directory-usage.v1",
+              "read_only":True,"directory_allocated_bytes":classifications,
+              "source_deleted":0,"cpanel_deleted":0,
+              "account_quota_separately_provided":True
+          },sort_keys=True),flush=True)
+          PY
+          echo CPANEL_OFFSITE_SNAPSHOTS_RECHECK_PASSED=true
+      - name: Preserve short offsite proof only
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-cpanel-offsite-proof-${{ github.run_id }}
+          path: ${{ runner.temp }}/factory-cpanel-offsite-${{ github.run_id }}.log
+          if-no-files-found: error
+          retention-days: 2
+      - name: Remove runner-only SSH files
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/sqlite-restore-proof"
+          if test -d "$d"; then rm -rf -- "$d"; fi
+          rm -f -- "$RUNNER_TEMP/factory-cpanel-offsite-$GITHUB_RUN_ID.log"

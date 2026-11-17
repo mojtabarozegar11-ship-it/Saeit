@@ -172,8 +172,20 @@ def _record_funnel_event_best_effort(request, event, product):
     return True
 
 
+def _new_trx_merchant_canary_is_true(config) -> bool:
+    """New invoices are denied unless the actual merchant canary is exactly True.
+
+    This does not alter access to previously settled invoices or downloads.
+    No caller may infer authorization from public-enabled or old payments.
+    """
+    return getattr(config, "MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED", False) is True
+
 def _checkout_page(request, product_id, pages_namespace):
     from django.conf import settings
+    # Show no payable checkout when independent merchant admission is blocked.
+    # This check must precede live DB/RPC imports and any funnel instrumentation.
+    if not _new_trx_merchant_canary_is_true(settings):
+        raise Http404("New TRX checkout unavailable")
     from django.db import connection
     from django.shortcuts import render
     from core.models import Product
@@ -280,6 +292,12 @@ def patch_commercial(namespace):
 
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
+                # Guest identity provisioning and invoice creation must never
+                # occur before the actual merchant safety canary is verified.
+                if view_name == "start_order":
+                    from django.conf import settings
+                    if not _new_trx_merchant_canary_is_true(settings):
+                        raise Http404("New TRX invoices unavailable")
                 response = _dispatch(request, view, args, kwargs, create=make_claim)
                 if view_name == "start_order":
                     # Count invoice_created only when a COMMITTED order writer

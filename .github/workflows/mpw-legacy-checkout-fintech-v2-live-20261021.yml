@@ -1,17 +1,40 @@
 name: MojPlayWin legacy payment route modern visual release 2026-10-21
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/mpw-legacy-checkout-fintech-v2-live-20261021.yml
-      - scripts/mpw_legacy_checkout_fintech_v2_20261021.py
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: "Explicitly preapproved exact main SHA (no branch reference)"
+        required: true
+        type: string
+      owner_approval:
+        description: "Owner-authorized legacy repair only after independent restore"
+        required: true
+        type: choice
+        options: ['NO', 'OWNER_APPROVED']
+        default: 'NO'
 permissions: {contents: read}
 concurrency:
   group: mpw-legacy-checkout-fintech-v2-only
   cancel-in-progress: false
 jobs:
   release:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    # Legacy checkout/chain code is never published on push or merge.
+    # All external evidence variables are intentionally missing/false until
+    # independently reviewed backup+restore, rollback, tenant and source proof.
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.triggering_actor == 'mojtabarozegar11-ship-it' &&
+      github.run_attempt == 1 &&
+      github.ref == 'refs/heads/main' &&
+      inputs.owner_approval == 'OWNER_APPROVED' &&
+      inputs.release_sha == github.sha &&
+      vars.MPW_LEGACY_RELEASE_ALLOWED == 'true' &&
+      vars.MPW_APPROVED_MAIN_SHA == github.sha &&
+      vars.MPW_BACKUP_RESTORE_VERIFIED == 'true' &&
+      vars.MPW_ROLLBACK_VERIFIED == 'true' &&
+      vars.MPW_TENANT_ISOLATION_VERIFIED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 16
     steps:

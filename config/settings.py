@@ -97,6 +97,30 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 APP_VERSION = env("APP_VERSION", default="0.1.0")
 PAYMENT_WEBHOOK_SECRET = env("PAYMENT_WEBHOOK_SECRET", default="")
 
+# Public receiving address verified against owner's native-TRX Trust Wallet QR.
+# Source merge alone never permits a payable customer invoice. Independently
+# approved native billing and finalized-chain verification are separate gates.
+# No keys, mnemonic or secrets are stored here; do not infer www/other domains.
+from services.mojtaba_tron_owner_receiver import (
+    APPROVED_NATIVE_TRX_RECIPIENT as MPW_TRX_OWNER_RECEIVER,
+    owner_merchant_registry,
+)
+MPW_TRX_INVOICE_RELEASE_VERIFIED = env.bool("MPW_TRX_INVOICE_RELEASE_VERIFIED", default=False)
+MPW_TRX_SOLIDITY_RELEASE_VERIFIED = env.bool("MPW_TRX_SOLIDITY_RELEASE_VERIFIED", default=False)
+
+# Historical, already-paid core-walletless digital entitlement bridge.
+# SOURCE ONLY until independent DB/media restore + authenticated buyer/download
+# adapter are reviewed. Never enable based solely on a paid flag or QR alone.
+MPW_WALLETLESS_EXISTING_PAID_DIGITAL_ACCESS_ENABLED = env.bool(
+    "MPW_WALLETLESS_EXISTING_PAID_DIGITAL_ACCESS_ENABLED", default=False
+)
+
+MPW_TRX_MERCHANT_BINDINGS = owner_merchant_registry(
+    invoice_enabled=MPW_TRX_INVOICE_RELEASE_VERIFIED,
+    finality_enabled=MPW_TRX_SOLIDITY_RELEASE_VERIFIED,
+)
+
+
 # Company international trade mailbox. Credentials remain in environment/.env only.
 COMPANY_TRADE_EMAIL = env("COMPANY_TRADE_EMAIL", default="")
 TRADE_EMAIL_ENABLED = env.bool("TRADE_EMAIL_ENABLED", default=False)
@@ -108,6 +132,13 @@ EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
 EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default=COMPANY_TRADE_EMAIL)
+# Fail closed: only enable after SMTP ownership, consent, privacy and backup are checked.
+MOJTABA_SIGNAL_FREE_SIGNUP_ENABLED = env.bool("MOJTABA_SIGNAL_FREE_SIGNUP_ENABLED", default=False)
+
+# Cross-device guest recovery is source-only until the full checkout graph, schema lineage,
+# SMTP ownership/consent and rollback are independently verified. Both flags stay off.
+MPW_GUEST_RECOVERY_ENABLED = env.bool("MPW_GUEST_RECOVERY_ENABLED", default=False)
+MPW_GUEST_RECOVERY_EMAIL_APPROVED = env.bool("MPW_GUEST_RECOVERY_EMAIL_APPROVED", default=False)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [

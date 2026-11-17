@@ -1,0 +1,39 @@
+name: Moj Prop quote source contract safety (no release)
+on:
+  push:
+    branches: [fix/mojprop-root-form-horizon-c73-20261115]
+    paths:
+      - 'core/mojprop_quote_contract.py'
+      - 'core/mojprop_quote_views.py'
+      - 'core/mojprop_receipts.py'
+      - 'tests/test_mojprop_quote_no_future_acceptance_20261115.py'
+      - '.github/workflows/mojprop-quote-guard-c73-20261115.yml'
+permissions:
+  contents: read
+jobs:
+  source-only-quote-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile proposal, receipts, buyer route and offline tests
+        run: |
+          python3 -m py_compile core/mojprop_quote_contract.py core/mojprop_quote_views.py core/mojprop_receipts.py tests/test_mojprop_quote_no_future_acceptance_20261115.py core/test_mojprop_public_quote_contract_consistency_20261115.py
+      - name: Verify forty quote money, acceptance and evidence regressions
+        run: python3 -m unittest discover -s tests -p 'test_mojprop_quote_no_future_acceptance_20261115.py' -v
+      - name: Assert test files cannot authorize payment or production release
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("core/mojprop_quote_contract.py").read_text()
+          assert '"payable": False' in source
+          assert '"revenue_status": "not_received"' in source
+          workflow = Path(".github/workflows/mojprop-quote-guard-c73-20261115.yml").read_text()
+          assert "contents: read" in workflow
+          assert "runs-on: ubuntu-latest" in workflow
+          reviewed_steps = workflow.split("      - name: Assert test files", 1)[0]
+          assert "ssh " not in reviewed_steps and "scp " not in reviewed_steps
+          print("MOJPROP_SOURCE_ONLY=PASS; RELEASE=DENIED; REVENUE=UNVERIFIED")
+          PY

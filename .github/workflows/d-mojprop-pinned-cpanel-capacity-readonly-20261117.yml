@@ -1,0 +1,94 @@
+name: D MOJ PROP owner cPanel current recovery capacity (strict read-only)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/d-mojprop-pinned-cpanel-capacity-readonly-20261117.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  live_owner_readonly_capacity:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact owner-only PR HEAD without GitHub token retention
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Pin legacy C94 script bytes and source-only offline regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_full_restore_capacity_readonly_c94.py
+          test "$(git hash-object -- scripts/mojprop_full_restore_capacity_readonly_c94.py)" = "0e8dd0a9ef09d9826c3ec5e3588ec1779a878bd2"
+          test ! -L scripts/mojprop_quota_gap_inventory_readonly_c113.py
+          test "$(git hash-object -- scripts/mojprop_quota_gap_inventory_readonly_c113.py)" = "8abaddda8272b2f8a4b0c40cdb358d71ef65fa73"
+          test ! -L scripts/mojprop_vps_restore_capacity_readonly_c114.py
+          test "$(git hash-object -- scripts/mojprop_vps_restore_capacity_readonly_c114.py)" = "e1a1581320840396c582d2529beb3ce3169b9418"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_full_restore_capacity_readonly_c94 tests.test_mojprop_quota_gap_inventory_c113 tests.test_mojprop_db_table_profile_c115 tests.test_mojprop_vps_restore_capacity_readonly_c114 -q
+
+      - name: Query only pinned cPanel owner via existing factory-vps SSH bridge
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?PINNED_OWNER_KEY_MISSING}"
+          umask 077
+          work="$RUNNER_TEMP/mojprop-d-live-capacity"
+          install -d -m 700 "$work"
+          trap 'rm -f -- "$work/host.key" "$work/known" "$work/config"; rmdir "$work" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 35s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
+          timeout 120s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_full_restore_capacity_readonly_c94.py |
+            python3 -c 'import json,sys; lines=sys.stdin.read(6000).splitlines();pre="MOJPROP_FULL_RESTORE_CAPACITY_READONLY=";hits=[x for x in lines if x.startswith(pre)];assert len(hits)==1,"LIVE_READONLY_EVIDENCE_MISSING";p=json.loads(hits[0][len(pre):]);assert p["schema"]=="mojprop.full_restore.capacity_readonly.v1" and p["read_only"] is True and p["no_host_or_database_writes"] is True and p["production_deployment_authorized"] is False and p["customer_payment_collected_by_probe"] is False and p["isolated_database_restore_executed"] is False and p["media_and_app_recovery_proven"] is False;print(hits[0]);print("INDEPENDENT_RESTORE_STILL_REQUIRED=true")'
+          timeout 240s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_quota_gap_inventory_readonly_c113.py |
+            python3 -c 'import json,sys;raw=sys.stdin.read(10000);pfx="MOJPROP_C113_QUOTA_GAP=";matches=[x for x in raw.splitlines() if x.startswith(pfx)];assert len(matches)==1,"QUOTA_CATEGORY_PROBE_MISSING";d=json.loads(matches[0][len(pfx):]);assert d["schema"]=="mojprop.cpanel.quota_gap_inventory.readonly.v1" and d["read_only"] is True and d["files_deleted_or_modified"] is False and d["isolated_restore_executed"] is False and d["production_deploy_authorized"] is False and d["payment_collected"] is False and len(d["category_usage"])==8;print(matches[0])'
+          echo 'C113 confirms only bounded quota and storage categories, no cleanup or backup.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Pinned live C94 capacity screen only — **not a DB dump, app/media backup, real isolated restore, payment or deploy**.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Screen separate factory VPS independent restore space — read only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${VPS_KEY:?VPS_KEY_MISSING}"
+          umask 077
+          work="$RUNNER_TEMP/mojprop-d-vps-capacity"
+          install -d -m 700 "$work"
+          trap 'rm -f -- "$work/key" "$work/known"; rmdir "$work" 2>/dev/null || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test -s "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          timeout 80s ssh -T -i "$work/key" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$work/known" -o ConnectTimeout=15 \
+            -o ConnectionAttempts=1 -o ForwardAgent=no -o RequestTTY=no \
+            githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
+            < scripts/mojprop_vps_restore_capacity_readonly_c114.py |
+            python3 -c 'import json,sys;lines=sys.stdin.read(6000).splitlines();pre="MOJPROP_C114_VPS_RESTORE_SCREEN=";matches=[x for x in lines if x.startswith(pre)];assert len(matches)==1,"VPS_SCREEN_MISSING";p=json.loads(matches[0][len(pre):]);assert p["schema"]=="mojprop.vps.restore_screen.readonly.v1" and p["read_only"] is True and p["live_services_modified"] is False and p["files_created_or_deleted"] is False and p["restoration_test_performed"] is False and p["production_release_authorized"] is False;print(matches[0])'
+          echo 'C114: existing VPS size screen only; no DB transfer, restore, billing or production changes.' >> "$GITHUB_STEP_SUMMARY"

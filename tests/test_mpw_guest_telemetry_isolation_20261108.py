@@ -14,14 +14,20 @@ def source_function(name, namespace=None):
     source = ast.parse(SOURCE.read_text(encoding="utf8"))
     node = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == name)
     scope = dict(namespace or {})
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(SOURCE), "exec"), scope)
+    helpers = ([next(n for n in source.body if isinstance(n, ast.FunctionDef)
+                     and n.name == "_new_trx_merchant_canary_is_true")]
+               if name == "patch_commercial" else [])
+    if name == "patch_commercial":
+        scope["Http404"] = LookupError
+    exec(compile(ast.Module(body=helpers + [node], type_ignores=[]), str(SOURCE), "exec"), scope)
     return scope[name]
 
 
 def stub_modules(record, product):
     names = (
         "django", "django.views", "django.views.decorators", "django.views.decorators.cache",
-        "django.views.decorators.csrf", "django.views.decorators.http", "core", "core.models",
+        "django.views.decorators.csrf", "django.views.decorators.http", "django.conf",
+        "core", "core.models",
         "core.commerce_funnel",
     )
     result = {name: types.ModuleType(name) for name in names}
@@ -30,6 +36,10 @@ def stub_modules(record, product):
     result["django.views.decorators.csrf"].csrf_protect = identity
     result["django.views.decorators.http"].require_GET = identity
     result["django.views.decorators.http"].require_POST = identity
+    # The isolated event-telemetry contract uses a verified merchant fixture.
+    # Unknown/false merchant status remains denied by the C119 guard tests.
+    result["django.conf"].settings = types.SimpleNamespace(
+        MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED=True)
     result["core.models"].Product = product
     result["core.commerce_funnel"].record_funnel_event = record
     return result
@@ -52,7 +62,8 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertFalse(helper(object(), "begin_checkout", object()))
 
     def test_invoice_response_preserved_when_telemetry_or_lookup_fails(self):
-        response = object()
+        # Match the actual invoice handler contract: a committed HTTP 201.
+        response = types.SimpleNamespace(status_code=201)
         request = object()
         product = object()
         product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
@@ -78,6 +89,14 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             product_model.objects.filter.side_effect = RuntimeError("query unavailable")
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertEqual(dispatch.call_count, 2)
+            # A rejected invoice is not a completed checkout; never report it
+            # as an invoice_created event. Both HTTP 201 (without exact signed
+            # invoice redirect) and HTTP 400 must leave the count at zero.
+            rejected = types.SimpleNamespace(status_code=400)
+            dispatch.return_value = rejected
+            self.assertIs(namespace["start_order"](request, product_id=72), rejected)
+            self.assertEqual(record.call_count, 0)
+            self.assertEqual(dispatch.call_count, 3)
 
 
     def test_only_server_issued_invoice_redirect_creates_funnel_event(self):

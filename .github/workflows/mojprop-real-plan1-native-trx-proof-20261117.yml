@@ -1,0 +1,53 @@
+name: MOJ PROP REAL Plan1 30 TRX offline settlement proof
+on:
+  push:
+    branches: [feat/mojprop-real-plan1-tron-matcher-20261117]
+    paths:
+      - 'services/mojprop_real_plan1_tron_candidate.py'
+      - 'tests/test_mojprop_real_plan1_tron_candidate.py'
+      - '.github/workflows/mojprop-real-plan1-native-trx-proof-20261117.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/mojprop_real_plan1_tron_candidate.py'
+      - 'tests/test_mojprop_real_plan1_tron_candidate.py'
+      - '.github/workflows/mojprop-real-plan1-native-trx-proof-20261117.yml'
+permissions:
+  contents: read
+jobs:
+  offline-plan1-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Review exact source SHA
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Python syntax and real + legacy isolation
+        run: |
+          python -m py_compile services/mojprop_real_plan1_tron_candidate.py
+          python -m unittest -v tests.test_mojprop_real_plan1_tron_candidate tests.test_mojprop_starter30_tron_settlement
+      - name: Assert no payment paths, network access or misattribution
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from services import mojprop_real_plan1_tron_candidate as real
+          from services import mojprop_starter30_tron_settlement as old
+          text=Path("services/mojprop_real_plan1_tron_candidate.py").read_text("utf-8")
+          assert real.PRODUCT == 'MOJ-PROP-01'
+          assert old.PRODUCT == 'MOJPROP-STARTER30'
+          assert real.PRODUCT != old.PRODUCT
+          assert real.NATIVE_AMOUNT_SUN == 30_000_000
+          assert real.CONTRACT_VERSION == '2026-11-15/v1.2'
+          assert 'GLOBAL UNIQUE(network, txid)' in text
+          assert 'revenue_booked": False' in text
+          assert 'buyer_entitlement_granted": False' in text
+          assert 'merchant_legal_release_proven_by_this_module": False' in text
+          for danger in ('requests.post(', 'requests.get(', 'web3', 'subprocess.run('):
+              assert danger not in text, danger
+          print('SOURCE_ONLY_PLAN1_MATCHER_NOT_LIVE_CHECKOUT')
+          PY

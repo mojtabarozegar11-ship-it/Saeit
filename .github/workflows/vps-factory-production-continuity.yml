@@ -1,8 +1,6 @@
 name: VPS Factory Production Continuity
 on:
-  schedule:
-    # Every hour: verify or recover the existing isolated VPS factory loop.
-    - cron: "13 * * * *"
+  # Legacy hourly auto-recovery retired: no unverified unattended code repair.
   push:
     branches: [main]
     paths: [.github/workflows/vps-factory-production-continuity.yml]
@@ -210,7 +208,12 @@ jobs:
           REMOTE
 
   ensure:
-    if: github.event_name != 'push' || (!contains(github.event.head_commit.message, '[factory-readonly-audit-20261029]') && !contains(github.event.head_commit.message, '[factory-pause-low-disk-loop-20261029]'))
+    # HARD SAFETY HOLD (2026-11-16): this legacy job patches files on VPS
+    # before checking recovery approval and independent off-host restore.
+    # Never execute it through scheduled, push or manual events. Retain
+    # historical implementation for offline review only. Do not alter SSH,
+    # firewall, user cron, processes, keys or production files.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:

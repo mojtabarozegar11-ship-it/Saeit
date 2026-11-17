@@ -1,0 +1,63 @@
+name: Moj Prop owner cPanel horizon/file parity C125 — read only
+on:
+  pull_request:
+    paths:
+      - "scripts/mojprop_cpanel_horizon_parity_readonly_c125.py"
+      - "tests/test_mojprop_cpanel_horizon_parity_readonly_c125.py"
+      - "scripts/mojprop_surgical_horizon_patch_plan_c126.py"
+      - "tests/test_mojprop_surgical_horizon_patch_plan_c126.py"
+      - ".github/workflows/mojprop-owner-cpanel-horizon-readonly-c125.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-owner-cpanel-c125-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  owner-cpanel-static-horizon-readonly:
+    name: Compare public GET to owner-only cPanel HTML hash, no writes
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Run owner-file source-only unit safety suite
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest tests.test_mojprop_cpanel_horizon_parity_readonly_c125 tests.test_mojprop_surgical_horizon_patch_plan_c126 -q
+          python3 -B -m py_compile scripts/mojprop_cpanel_horizon_parity_readonly_c125.py
+      - name: Compare exact public GET with owner file using pinned cPanel key
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test "$(id -u)" -ne 0
+          : "${HOST_KEY:?}"
+          umask 077
+          d="$RUNNER_TEMP/mojprop-c125-readonly"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/key" "$d/known" "$d/config" "$d/public"; rmdir "$d" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          test "$(curl --proto '=https' --tlsv1.2 --max-redirs 1 -L --silent --show-error --connect-timeout 6 --max-time 18 -o "$d/public" -w '%{http_code}' 'https://mojplaywin.com/moj-prop/')" = '200'
+          public_sha="$(sha256sum "$d/public" | cut -d ' ' -f 1)"
+          [[ "$public_sha" =~ ^[0-9a-f]{64}$ ]]
+          timeout 45s ssh -T -F "$d/config" cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - '$public_sha'" \
+            < scripts/mojprop_cpanel_horizon_parity_readonly_c125.py |
+            python3 -c 'import json,sys;rows=[x for x in sys.stdin.read(8192).splitlines() if x.startswith("MOJPROP_CPANEL_HORIZON_C125=")]; assert len(rows)==1,"invalid report count";d=json.loads(rows[0].split("=",1)[1]); assert d.get("schema")=="mojprop.cpanel.horizon_parity.readonly.c125.v1" and d.get("read_only") is True and d.get("writes_or_customer_records_accessed") is False and d.get("production_change_authorized") is False; print(rows[0])'
+          echo 'MOJPROP_C125_READONLY_COMPLETED=PASS'

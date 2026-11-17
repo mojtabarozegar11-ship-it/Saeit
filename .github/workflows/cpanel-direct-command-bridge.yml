@@ -15,6 +15,11 @@ on:
           - django_check
           - django_migrations
 
+  # Only an exact owner-authored command on the existing private-command issue
+  # can invoke the self-hosted *read-only* operation from chat. No push trigger.
+  issue_comment:
+    types: [created]
+
 permissions:
   contents: read
 
@@ -24,7 +29,26 @@ concurrency:
 
 jobs:
   cpanel:
-    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' }}"
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'issue_comment' &&
+          github.actor == 'mojtabarozegar11-ship-it' &&
+          github.event.issue.number == 1600 &&
+          !github.event.issue.pull_request &&
+          github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+          github.event.comment.author_association == 'OWNER' &&
+          (
+            github.event.comment.body == 'MPW-FACTORY-CPANEL-READONLY-20261115' ||
+            github.event.comment.body == 'MPW-FACTORY-CPANEL-RUNTIME-READONLY-20261115' ||
+            github.event.comment.body == 'MPW-FACTORY-BACKUP-READINESS-READONLY-20261115' ||
+            github.event.comment.body == 'MPW-FACTORY-PROVIDER-BACKUPS-READONLY-20261115'
+          )
+        )
+      )
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     steps:
@@ -33,8 +57,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Execute selected read-only cPanel operation
+        if: github.event_name == 'workflow_dispatch'
         env:
           FACTORY_VPS_RUNNER: "1"
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
@@ -42,3 +68,74 @@ jobs:
           set -euo pipefail
           test -n "$HOST_KEY"
           bash deploy/cpanel_direct_command.sh "${{ inputs.operation }}"
+
+      - name: Inspect existing cPanel over factory-VPS direct SSH without writes
+        if: >-
+          github.event_name == 'issue_comment' &&
+          github.event.comment.body == 'MPW-FACTORY-CPANEL-READONLY-20261115'
+        shell: bash
+        env:
+          FACTORY_VPS_RUNNER: "1"
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          # The bridge and output sanitizer are already-reviewed main sources.
+          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "57a1c95c6a144b0e625ff1a45ba4e9b18f5afaa3"
+          test "$(git hash-object -- scripts/mojplaywin_cpanel_readonly_inventory.py)" = "89a3ca61cf3919dd397b5cb2dd36194273f6ee98"
+          # Read-only operations run *on* the authorized self-hosted VPS.
+          # Never run a GitHub-hosted SSH hop to a possibly filtered VPS port.
+          timeout 95s bash deploy/cpanel_direct_command.sh relay_preflight
+          timeout 95s bash deploy/cpanel_direct_command.sh passenger_inventory
+
+      - name: Audit current MojPlayWin Passenger and store source without cPanel writes
+        if: >-
+          github.event_name == 'issue_comment' &&
+          github.event.comment.body == 'MPW-FACTORY-CPANEL-RUNTIME-READONLY-20261115'
+        shell: bash
+        env:
+          FACTORY_VPS_RUNNER: "1"
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "57a1c95c6a144b0e625ff1a45ba4e9b18f5afaa3"
+          test "$(git hash-object -- scripts/mpw_public_passenger_runtime_readonly_20261102.py)" = "0e4d22460ee62ebf9f89c94a6fecf6f9a14531c2"
+          timeout 130s bash deploy/cpanel_direct_command.sh mpw_runtime_readonly
+
+      - name: Audit scoped cPanel backup prerequisites and local isolated-restore capabilities
+        if: >-
+          github.event_name == 'issue_comment' &&
+          github.event.comment.body == 'MPW-FACTORY-BACKUP-READINESS-READONLY-20261115'
+        shell: bash
+        env:
+          FACTORY_VPS_RUNNER: "1"
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "57a1c95c6a144b0e625ff1a45ba4e9b18f5afaa3"
+          test "$(git hash-object -- scripts/mojplaywin_backup_restore_readiness_readonly.py)" = "9fe37626a0d58ae7f2ab8fb4a9206342e997a6be"
+          test "$(git hash-object -- scripts/mojplaywin_isolated_restore_capabilities_readonly.py)" = "70dcf0fabd4c581a41c6d01438c25faaa75df6bd"
+          timeout 110s bash deploy/cpanel_direct_command.sh mpw_backup_readiness_readonly
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojplaywin_isolated_restore_capabilities_readonly.py
+          test "$(git hash-object -- scripts/mojplaywin_backup_vps_destination_readonly.py)" = "08b4cd466e18fcfb61369c0626d9e2596db5506b"
+          test "$(git hash-object -- scripts/mpw_vps_mount_capacity_readonly_20261105.py)" = "89a8b3ec3df04a8994c88caa8f6589bfa2f7ef26"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojplaywin_backup_vps_destination_readonly.py vps
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mpw_vps_mount_capacity_readonly_20261105.py
+
+      - name: Inspect provider backup registrations and candidate Django DB engine without disclosure
+        if: >-
+          github.event_name == 'issue_comment' &&
+          github.event.comment.body == 'MPW-FACTORY-PROVIDER-BACKUPS-READONLY-20261115'
+        shell: bash
+        env:
+          FACTORY_VPS_RUNNER: "1"
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "57a1c95c6a144b0e625ff1a45ba4e9b18f5afaa3"
+          test "$(git hash-object -- scripts/mojplaywin_cpanel_domains_backups_readonly.py)" = "d0890b1f3d3081bead2b4ff65a52b512a4a99fc6"
+          test "$(git hash-object -- scripts/mojplaywin_db_backend_config_hints_readonly.py)" = "5d0e687c93178d2bb84cc6aeca469bfd25a9a4a1"
+          timeout 170s bash deploy/cpanel_direct_command.sh mpw_provider_backup_readonly

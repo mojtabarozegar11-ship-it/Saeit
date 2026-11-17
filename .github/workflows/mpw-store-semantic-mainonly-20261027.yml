@@ -13,7 +13,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    # RETIRED: do not overwrite the current verified store or trigger Passenger on main push.
+    # No workflow_dispatch is declared, so this legacy publisher is disabled.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 16
     steps:

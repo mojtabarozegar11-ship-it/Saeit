@@ -1,0 +1,294 @@
+name: Moj Prop public reachability evidence — read-only only
+on:
+  pull_request:
+    paths:
+      - "templates/moj-prop-v4/**"
+      - ".github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml"
+      - "scripts/mojprop_public_horizon_codes_readonly_c124.py"
+      - "tests/test_mojprop_public_horizon_codes_readonly_c124.py"
+      - "scripts/mojprop_cpanel_horizon_parity_readonly_c125.py"
+      - "tests/test_mojprop_cpanel_horizon_parity_readonly_c125.py"
+      - "scripts/mojprop_surgical_horizon_patch_plan_c126.py"
+      - "tests/test_mojprop_surgical_horizon_patch_plan_c126.py"
+      - "scripts/mojprop_public_nojs_get_contract_c123.py"
+      - "tests/test_mojprop_public_nojs_get_contract_c123_20261116.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-public-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-get-only:
+    name: Read-only buyer-path evidence (NOT production release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Probe public HTTPS GET routes only — no secrets, POST or customer data
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_dir="$RUNNER_TEMP/mojprop-live-get"
+          mkdir -m 700 "$check_dir"
+          printf '%s\n' "### Read-only public site evidence (NOT a launch approval)" >> "$GITHUB_STEP_SUMMARY"
+          targets=(
+            "mojprop_root|https://mojplaywin.com/moj-prop/"
+            "mojprop_catalog|https://mojplaywin.com/moj-prop/catalog/"
+            "mojprop_contact|https://mojplaywin.com/moj-prop/contact/"
+            "mpw_contact|https://mojplaywin.com/contact/"
+            "mojprop_intake_get|https://mojplaywin.com/moj-prop-intake/"
+            "mojprop_intake_html|https://mojplaywin.com/moj-prop-intake/?format=html"
+            "mojprop_status_html|https://mojplaywin.com/moj-prop-status/?format=html"
+            "signal_desk|https://mojplaywin.com/moj-prop/signals/"
+            "signal_free_signup_api|https://mojplaywin.com/moj-signal-free-subscribe/"
+            "saman_brand_signals|https://mojplaywin.com/saman/market-signals/"
+            "saman_ar_signals|https://mojplaywin.com/ar/saman/market-signals/"
+            "single_bot_root|https://mojtaba.bot.ai/"
+          )
+          unhealthy=0
+          mojplaywin_unhealthy=0
+          for item in "${targets[@]}"; do
+            name="${item%%|*}"
+            url="${item#*|}"
+            # -w emits diagnostics even when curl cannot complete HTTP.
+            # Do not print response bodies, resolved IPs, secrets or buyer data.
+            # Exit codes are curl transport errors, never HTTP status codes.
+            metrics="$(curl --proto '=https' --tlsv1.2 -L --max-redirs 1 \
+              --connect-timeout 6 --max-time 15 --silent --show-error \
+              -H 'Cache-Control: no-cache' \
+              -o "$check_dir/$name.body" \
+              -w '%{http_code}|%{exitcode}|%{time_namelookup}|%{time_connect}|%{time_appconnect}|%{time_starttransfer}' \
+              "$url" 2>/dev/null || true)"
+            IFS='|' read -r code curl_exit dns_time connect_time tls_time ttfb <<< "$metrics"
+            [[ "$code" =~ ^[0-9]{3}$ ]] || code="000"
+            [[ "$curl_exit" =~ ^[0-9]+$ ]] || curl_exit="unknown"
+            case "$curl_exit" in
+              0) class="http_response" ;;
+              6) class="dns_resolution_failed" ;;
+              7) class="tcp_connection_failed" ;;
+              28) class="timeout" ;;
+              35|60) class="tls_certificate_or_handshake_failed" ;;
+              47) class="redirect_limit" ;;
+              52|56) class="empty_or_interrupted_response" ;;
+              *) class="other_transport_error" ;;
+            esac
+            if [[ "$code" != "200" || "$curl_exit" != "0" ]]; then
+              unhealthy=$((unhealthy+1))
+              [[ "$name" == "single_bot_root" ]] || mojplaywin_unhealthy=$((mojplaywin_unhealthy+1))
+            fi
+            echo "GET_ONLY_${name}_HTTP=$code"
+            echo "GET_ONLY_${name}_CURL_EXIT=$curl_exit"
+            echo "GET_ONLY_${name}_TRANSPORT_CLASS=$class"
+            echo "GET_ONLY_${name}_DNS_SECONDS=${dns_time:-unknown}"
+            echo "GET_ONLY_${name}_TCP_SECONDS=${connect_time:-unknown}"
+            echo "GET_ONLY_${name}_TLS_SECONDS=${tls_time:-unknown}"
+            echo "GET_ONLY_${name}_TTFB_SECONDS=${ttfb:-unknown}"
+            printf '%s\n' "- $name : HTTP $code; curl exit $curl_exit ($class); DNS ${dns_time:-?}s; TCP ${connect_time:-?}s; TLS ${tls_time:-?}s; TTFB ${ttfb:-?}s — GET only" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$code" == "200" && "$name" == "mojprop_root" ]]; then
+              if grep -Fq 'starter-30-trx' "$check_dir/$name.body"; then
+                echo "PUBLIC_STARTER_IN_ROOT=yes"
+              else
+                echo "PUBLIC_STARTER_IN_ROOT=no"
+              fi
+            fi
+            if [[ "$code" == "200" && "$name" == "mojprop_catalog" ]]; then
+              if grep -Fq 'starter-30-trx' "$check_dir/$name.body"; then
+                echo "PUBLIC_STARTER_IN_CATALOG=yes"
+              else
+                echo "PUBLIC_STARTER_IN_CATALOG=no"
+              fi
+            fi
+            if [[ "$code" == "200" && "$name" == "mojprop_intake_get" ]]; then
+              python3 - "$check_dir/$name.body" <<'PY'
+          import json
+          import sys
+          try:
+              with open(sys.argv[1], encoding="utf-8") as handle:
+                  payload = json.load(handle)
+              valid = payload.get("ok") is True and payload.get("service") == "moj-prop-intake" and bool(payload.get("csrf_token"))
+          except (OSError, ValueError, TypeError):
+              valid = False
+          print("PUBLIC_INTAKE_GET_CSRF_SHAPE=" + ("valid" if valid else "invalid"))
+          PY
+            fi
+          done
+          # Sensitive GET content (including CSRF) remains only in ephemeral runner
+          # files. Print Boolean shape diagnostics, never response bodies.
+          python3 -B scripts/mojprop_public_nojs_get_contract_c123.py \
+            "$check_dir/mojprop_intake_html.body" \
+            "$check_dir/mojprop_status_html.body"
+          # Compare ONLY existing downloaded PUBLIC GET response; never submit
+          # buyer details or echo HTML/CSRF. Current main may have fixed the
+          # source while an older cPanel public document is still served.
+          python3 -B scripts/mojprop_public_horizon_codes_readonly_c124.py \
+            "$check_dir/mojprop_root.body" \
+            "templates/moj-prop/index.html" \
+            "templates/moj-prop-v4/index.html"
+          # A diagnostic match does not prove the POST backend, payment or delivery.
+          # Compare the public page byte-for-byte with only reviewed source
+          # releases. No content is printed; "unknown" prevents unsafe overwrite.
+          python3 - "$check_dir/signal_desk.body" <<'PY'
+          import sys
+          from pathlib import Path
+          root=Path("templates/moj-prop-v4")
+          target=Path(sys.argv[1])
+          known={
+              "original":root/"baselines/signals-index-before-free.html",
+              "free-preview":root/"baselines/signals-index-after-free-preview.html",
+              "double-opt-in":root/"signals/index.html",
+          }
+          outcome="unknown"
+          try:
+              live=target.read_bytes()
+              outcome=next((name for name, source in known.items()
+                            if source.is_file() and live == source.read_bytes()), "unknown")
+          except OSError:
+              pass
+          print("PUBLIC_SIGNAL_DESK_EXACT_RELEASE=" + outcome)
+          print("PUBLIC_SIGNAL_DESK_SAFE_UPGRADE=" +
+                ("yes" if outcome in ("original", "free-preview", "double-opt-in") else "unverified"))
+          PY
+          # The live file is unrecognized. Classify its *shape* without
+          # exposing HTML, tokens, public personal text, cookies or IPs.
+          python3 - "$check_dir/signal_desk.body" <<'PY'
+          import hashlib,sys
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Shape(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.title_mode=False
+                  self.title=[]
+                  self.forms=0
+                  self.scripts=0
+                  self.links=0
+              def handle_starttag(self,tag,attrs):
+                  if tag=="title": self.title_mode=True
+                  if tag=="form": self.forms+=1
+                  if tag=="script": self.scripts+=1
+                  if tag=="a": self.links+=1
+              def handle_endtag(self,tag):
+                  if tag=="title": self.title_mode=False
+              def handle_data(self,data):
+                  if self.title_mode: self.title.append(data[:100])
+          try:
+              raw=Path(sys.argv[1]).read_bytes()
+              kind="html" if b"<html" in raw[:3000].lower() else "other"
+              parsed=Shape()
+              parsed.feed(raw.decode("utf-8","replace")[:200000])
+              title=" ".join(parsed.title).lower()
+              class_name=("signal-desk" if "signal" in title
+                          else "moj-prop" if "moj prop" in title
+                          else "not-found" if "404" in title or "not found" in title
+                          else "other" if title else "missing")
+              # This is diagnostic evidence, never authorization to overwrite.
+              print("PUBLIC_SIGNAL_LIVE_DOCUMENT_KIND="+kind)
+              print("PUBLIC_SIGNAL_LIVE_TITLE_CLASS="+class_name)
+              print("PUBLIC_SIGNAL_LIVE_BYTE_COUNT="+str(len(raw)))
+              print("PUBLIC_SIGNAL_LIVE_SHA256_PREFIX="+hashlib.sha256(raw).hexdigest()[:12])
+              print("PUBLIC_SIGNAL_LIVE_FORM_COUNT="+str(parsed.forms))
+              print("PUBLIC_SIGNAL_LIVE_LINK_COUNT="+str(parsed.links))
+              print("PUBLIC_SIGNAL_LIVE_SCRIPT_COUNT="+str(parsed.scripts))
+              print("PUBLIC_SIGNAL_LIVE_CONTENT_REVIEW_REQUIRED=true")
+          except (OSError, ValueError, TypeError):
+              print("PUBLIC_SIGNAL_LIVE_DOCUMENT_KIND=unavailable")
+              print("PUBLIC_SIGNAL_LIVE_CONTENT_REVIEW_REQUIRED=true")
+          PY
+          # Inspect only public HTML and the public API's contract; do not log
+          # emails, CSRF token values, cookies, or subscriber identifiers.
+          if [[ -f "$check_dir/signal_desk.body" ]]; then
+            if grep -Fq 'id="free-preview"' "$check_dir/signal_desk.body"; then
+              echo "PUBLIC_SIGNAL_HISTORICAL_SAMPLE=yes"
+            else
+              echo "PUBLIC_SIGNAL_HISTORICAL_SAMPLE=no"
+            fi
+            if grep -Fq 'id="free-education-membership"' "$check_dir/signal_desk.body" &&
+               grep -Fq '/moj-signal-free-subscribe/' "$check_dir/signal_desk.body"; then
+              echo "PUBLIC_SIGNAL_OPTIN_FORM=yes"
+            else
+              echo "PUBLIC_SIGNAL_OPTIN_FORM=no"
+            fi
+          fi
+          python3 - "$check_dir/signal_free_signup_api.body" <<'PY'
+          import json,sys
+          try:
+              with open(sys.argv[1], encoding="utf-8") as f:
+                  data=json.load(f)
+              valid=(type(data) is dict and data.get("ok") is True
+                     and data.get("agent") == "mojtaba.bot.ai"
+                     and data.get("product") == "free-historical-research-updates"
+                     and data.get("paid_entitlement") is False
+                     and type(data.get("enabled")) is bool
+                     and type(data.get("csrf_token")) is str
+                     and bool(data.get("csrf_token")))
+          except (OSError, UnicodeError, ValueError, TypeError):
+              data={}
+              valid=False
+          print("PUBLIC_SIGNAL_FREE_API_CONTRACT=" + ("valid" if valid else "invalid"))
+          print("PUBLIC_SIGNAL_FREE_EMAIL_FLAG=" +
+                ("enabled-config-only" if data.get("enabled") is True and valid
+                 else "disabled" if valid else "unknown"))
+          print("PUBLIC_SIGNAL_FREE_CONFIRMED_MEMBER_COUNT=not_checked")
+          print("PUBLIC_SIGNAL_FREE_REAL_SMTP_DELIVERY=not_checked")
+          print("PUBLIC_SIGNAL_PAID_PAYMENT_DELIVERY=not_checked")
+          PY
+          if [[ "$mojplaywin_unhealthy" == "0" ]]; then
+            echo "PUBLIC_MOJPLAYWIN_HOST_ROUTE_GATE=PASS"
+          else
+            echo "PUBLIC_MOJPLAYWIN_HOST_ROUTE_GATE=DEGRADED"
+          fi
+          echo "PUBLIC_MOJPLAYWIN_UNHEALTHY_ROUTE_COUNT=$mojplaywin_unhealthy"
+          if [[ "$unhealthy" == "0" ]]; then
+            echo "PUBLIC_BUYER_ROUTE_GATE=PASS"
+          else
+            echo "PUBLIC_BUYER_ROUTE_GATE=DEGRADED"
+          fi
+          echo "PUBLIC_UNHEALTHY_ROUTE_COUNT=$unhealthy"
+          # Cross-check the public bot hostname against independent HTTPS DNS
+          # resolvers. Never print returned A records or raw DNS JSON; only
+          # the DNS response code and record count are needed for diagnosis.
+          for provider in google cloudflare; do
+            if [[ "$provider" == "google" ]]; then
+              doh_url='https://dns.google/resolve?name=mojtaba.bot.ai&type=A'
+            else
+              doh_url='https://cloudflare-dns.com/dns-query?name=mojtaba.bot.ai&type=A'
+            fi
+            json_path="$check_dir/doh-$provider.json"
+            doh_http="$(curl --proto '=https' --tlsv1.2 --max-redirs 0 \
+              --connect-timeout 5 --max-time 10 --silent --show-error \
+              -H 'Accept: application/dns-json' \
+              -o "$json_path" -w '%{http_code}' "$doh_url" 2>/dev/null || true)"
+            [[ "$doh_http" =~ ^[0-9]{3}$ ]] || doh_http="000"
+            echo "BOT_DOH_${provider}_HTTP=$doh_http"
+            if [[ "$doh_http" == "200" ]]; then
+              python3 - "$provider" "$json_path" <<'PY'
+          import json
+          import sys
+          provider, source = sys.argv[1:]
+          try:
+              with open(source, encoding="utf-8") as handle:
+                  info = json.load(handle)
+              status = info.get("Status")
+              answers = info.get("Answer", [])
+              if type(status) is not int or type(answers) is not list:
+                  raise ValueError("Unexpected DNS response shape")
+              print(f"BOT_DOH_{provider}_DNS_RCODE={status}")
+              print(f"BOT_DOH_{provider}_ANSWER_COUNT={len(answers)}")
+          except (OSError, ValueError, TypeError):
+              print(f"BOT_DOH_{provider}_DNS_RCODE=unavailable")
+          PY
+            else
+              echo "BOT_DOH_${provider}_DNS_RCODE=unavailable"
+            fi
+          done
+          # This read-only diagnostic job reports an observation and must not
+          # be mistaken for a launch authorization, irrespective of exit code.
+          echo "PUBLIC_CHECK_IS_READ_ONLY=true"
+          echo "NO_POST_NO_PAYMENT_NO_RELEASE=true"
+          echo "HTTP evidence does not prove a persisted buyer lead, payment, merchant custody, or a restore plan."

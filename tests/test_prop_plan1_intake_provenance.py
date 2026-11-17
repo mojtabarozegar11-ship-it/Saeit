@@ -8,7 +8,7 @@ import unittest
 from prop_firm.buyer_interest_form import UnverifiedInquiry
 from prop_firm.buyer_order_review import Plan1OrderGateClosed
 from prop_firm.plan1_intake_provenance import verify_server_issued_private_inquiry
-from test_prop_buyer_precontract_chain import new_inquiry, REF
+from tests.test_prop_buyer_precontract_chain import new_inquiry, REF
 
 INTAKE_KEY=b"synthetic-INDEPENDENT-intake-service-HMAC-key-v1-64bytes!!!!!!"
 

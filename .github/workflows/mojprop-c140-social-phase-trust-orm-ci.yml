@@ -1,0 +1,42 @@
+name: MOJ PROP C140 strict synthetic social phase payment evidence and split fills
+on:
+  push:
+    branches: [fix/mojprop-c140-social-proof-phase-integrity-20261117]
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+permissions:
+  contents: read
+jobs:
+  verified-purchase-and-phase-chain:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    env:
+      SECRET_KEY: c140-ci-synthetic-not-a-payment
+      DEBUG: 'true'
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install project requirements
+        run: python3 -m pip install -r requirements.txt
+      - name: Validate precise social-proof consent tests on a destroyed-after-run Django DB
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 manage.py check
+          python3 manage.py makemigrations --check --dry-run
+          python3 manage.py test tests.test_moj_prop_social_review --verbosity 1
+          echo 'C140_UNPAID_PURCHASE_REJECTED=true'
+          echo 'C140_PHASE_TWO_REQUIRES_VERIFIED_CLOSED_PHASE_ONE=true'
+          echo 'C140_CONTRADICTORY_FILL_ORIGIN_NOT_CREDITED=true'
+          echo 'C140_PRODUCTION_POST_PAYMENT_BROKER_DEPLOYMENT=false'

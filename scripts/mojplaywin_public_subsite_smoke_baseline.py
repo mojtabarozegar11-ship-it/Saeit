@@ -13,6 +13,16 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+# This audit is used both as python -m scripts.* and as a direct cron script.
+if __package__:
+    from .mpw_retired_subsite_policy import (
+        assert_no_retired_routes, assert_retired_picm_manifest,
+    )
+else:
+    from mpw_retired_subsite_policy import (
+        assert_no_retired_routes, assert_retired_picm_manifest,
+    )
+
 HOST = "mojplaywin.com"
 ALLOWED_HOSTS = frozenset({"mojplaywin.com", "www.mojplaywin.com"})
 PUBLIC_PATHS = (
@@ -21,7 +31,6 @@ PUBLIC_PATHS = (
     "/about/",
     "/mojtaba.roozegar/",
     "/mojtaba.roozegar/about/",
-    "/picm/login/",
     "/studio.Roham/",
     "/saman/",
     "/farnaz/",
@@ -100,6 +109,8 @@ def probe(path: str, opener_factory=None) -> dict:
 
 
 def report(probe_function=probe) -> dict:
+    assert_retired_picm_manifest()
+    assert_no_retired_routes(PUBLIC_PATHS)
     records = [probe_function(path) for path in PUBLIC_PATHS]
     return {
         "classification": "KNOWN_PUBLIC_ROUTES_READ_ONLY_GET_BASELINE",
@@ -110,6 +121,7 @@ def report(probe_function=probe) -> dict:
         "unknown_subsites_inventoried": False,
         "complete_content_parity_verified": False,
         "all_protected_sites_verified": False,
+        "retired_picm_excluded_from_active_queue": True,
         "payments_or_login_tested": False,
         "backup_restore_verified": False,
         "release_permitted": False,

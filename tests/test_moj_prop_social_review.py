@@ -145,10 +145,36 @@ class FourWeekProofTests(TestCase):
                     )
 
     def test_purchase_identity_must_be_trusted(self):
-        self.enrollment.settlement_verified=False
-        self.enrollment.save()
+        from django.core.exceptions import ValidationError
+        # The once-confirmed settlement must be immutable at ORM level, so
+        # attempting to forge a pending state is itself rejected.
+        self.enrollment.settlement_verified = False
+        with self.assertRaises(ValidationError):
+            self.enrollment.save()
+        self.enrollment.refresh_from_db()
+        self.assertTrue(self.enrollment.settlement_verified)
+        # An independent synthetic UNSETTLED purchase cannot provide any
+        # social evidence, even if the phase is incorrectly labelled active.
+        unpaid = PropChallengeEnrollment.objects.create(
+            trader=self.profile,
+            verified_invoice_ref="synthetic-unsettled-challenge-002",
+            confirmed_at=START,
+            settlement_verified=False,
+        )
+        account = PropAccount.objects.create(
+            trader=self.profile,
+            kind=PropAccount.Kind.PHASE_ONE,
+            status=PropAccount.Status.ACTIVE,
+            opened_at=START,
+            challenge_enrollment=unpaid,
+        )
         with self.assertRaises(SocialEvidenceRejected):
-            self.submit()
+            submit_social_evidence(
+                account_id=account.pk, submitter=self.user,
+                platform="instagram", post_url=self.url("instagram"),
+                posted_at=START+timedelta(hours=2), explicit_consent=True,
+            )
+        self.assertFalse(PropSocialEvidence.objects.filter(enrollment=unpaid).exists())
 
     def test_consent_required(self):
         with self.assertRaises(PermissionDenied):
@@ -293,6 +319,10 @@ class FourWeekProofTests(TestCase):
         phase_one=account_projection(self.phase1)
         self.assertTrue(phase_one["social_posting"].satisfied)
         self.assertTrue(phase_one["assessment"].passed)
+        # A PASSED flag alone cannot unlock phase two. The genuine phase-one
+        # lifecycle must be closed before the second phase opens, with
+        # all six verified trading days inside that closed window.
+        self.phase1.closed_at=START+timedelta(days=6)
         self.phase1.status=PropAccount.Status.PASSED
         self.phase1.save()
         phase_two=account_projection(self.phase2)
@@ -325,7 +355,24 @@ class FourWeekProofTests(TestCase):
         self.phase1.status=PropAccount.Status.PASSED
         self.phase1.save()
         result=account_projection(self.phase2)
+        # The 38 duplicated fills alternate manual/bot origin. A broker
+        # position with contradictory origin is entirely disqualified, not
+        # credited once based on whichever fill happens to be first.
+        self.assertEqual(result["challenge_trade_count"].valid_closed_positions,12)
+        self.assertEqual(result["challenge_trade_count"].uncountable_events,1)
+        self.assertFalse(result["assessment"].passed)
+
+    def test_identical_split_fills_count_one_position_when_origin_consistent(self):
+        self.trades(self.phase1,0,"1.60")
+        self.trades(self.phase2,7,"1.00")
+        self.extra_positions(self.phase1,0,38,same_position=True)
+        PropExecution.objects.filter(
+            account=self.phase1,
+            external_position_id="one-split-position",
+        ).update(execution_origin="manual")
+        result=account_projection(self.phase2)
         self.assertEqual(result["challenge_trade_count"].valid_closed_positions,13)
+        self.assertEqual(result["challenge_trade_count"].uncountable_events,0)
         self.assertFalse(result["assessment"].passed)
 
     def test_trade_after_day_28_cannot_qualify(self):

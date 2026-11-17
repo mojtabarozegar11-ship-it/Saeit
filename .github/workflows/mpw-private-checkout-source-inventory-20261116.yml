@@ -1,0 +1,31 @@
+name: MPW offline private checkout source inventory tests
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/mpw_private_checkout_live_source_inventory_20261116.py'
+      - 'tests/test_mpw_private_checkout_live_source_inventory_20261116.py'
+      - '.github/workflows/mpw-private-checkout-source-inventory-20261116.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify immutable source and execute isolated unit tests only
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mpw_private_checkout_live_source_inventory_20261116.py
+          test "$(git hash-object -- scripts/mpw_private_checkout_live_source_inventory_20261116.py)" = "f4a3684b97d597909e4c3e6baead9dd6405c5de1"
+          test ! -L tests/test_mpw_private_checkout_live_source_inventory_20261116.py
+          test "$(git hash-object -- tests/test_mpw_private_checkout_live_source_inventory_20261116.py)" = "a3f49e74e9c33165eb18dd28dd42fbad2e214950"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_mpw_private_checkout_live_source_inventory_20261116
+          echo 'MPW_LIVE_SOURCE_INVENTORY_OFFLINE_SUITE=PASS'
+          echo 'LIVE_CPANEL_MODULES=NOT_ACCESSED'

@@ -1,0 +1,151 @@
+name: Moj Prop actual deployed intake route and source drift — read only
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mojprop-live-intake-source-readonly-c95.yml"
+      - "scripts/mojprop_live_intake_source_drift_readonly_c95.py"
+      - "tests/test_mojprop_live_intake_source_drift_readonly_c95.py"
+      - "scripts/mojprop_passenger_source_readonly_c118.py"
+      - "tests/test_mojprop_passenger_source_readonly_c118.py"
+      - "scripts/mojprop_owner_backup_catalog_readonly_c120.py"
+      - "tests/test_mojprop_owner_backup_catalog_readonly_c120.py"
+      - "scripts/mojprop_owner_local_archive_readonly_c120.py"
+      - "tests/test_mojprop_owner_local_archive_readonly_c120.py"
+      - "scripts/mojprop_starter30_public_presence_readonly_c122.py"
+      - "tests/test_mojprop_starter30_public_presence_readonly_c122.py"
+      - "scripts/mojprop_c146_live_plan1_runtime_source_readonly.py"
+      - "tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py"
+
+permissions:
+  contents: read
+
+jobs:
+  read_only_live_intake_source_identity:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - name: Checkout exact owner-authored PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Validate exact immutable read-only diagnostic and privacy regressions
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mojprop_live_intake_source_drift_readonly_c95.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_live_intake_source_drift_readonly_c95 -q
+          python3 -B -m py_compile scripts/mojprop_passenger_source_readonly_c118.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_passenger_source_readonly_c118 -q
+          python3 -B -m py_compile scripts/mojprop_owner_backup_catalog_readonly_c120.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_owner_backup_catalog_readonly_c120 -q
+          python3 -B -m py_compile scripts/mojprop_owner_local_archive_readonly_c120.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_owner_local_archive_readonly_c120 -q
+          python3 -B -m py_compile scripts/mojprop_starter30_public_presence_readonly_c122.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_starter30_public_presence_readonly_c122 -q
+          python3 -B -m py_compile scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c146_live_plan1_runtime_source_readonly -q
+          test ! -L scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c146_live_plan1_runtime_source_readonly.py)" = "198d3c2b4f8de90504002f95148c370604716cb9"
+          test ! -L tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py)" = "8bbeac081bddca87eca58dde435e93f65c473e2a"
+          test ! -L scripts/mojprop_starter30_public_presence_readonly_c122.py
+          test "$(git hash-object -- scripts/mojprop_starter30_public_presence_readonly_c122.py)" = "6e7fb0c7d7f96f9af10c67201f267b7cbc58a09a"
+          test ! -L scripts/mojprop_owner_local_archive_readonly_c120.py
+          test "$(git hash-object -- scripts/mojprop_owner_local_archive_readonly_c120.py)" = "09e41e3ba3d0fc6412a6f448b5ee7a4e414603b0"
+          test ! -L scripts/mojprop_owner_backup_catalog_readonly_c120.py
+          test "$(git hash-object -- scripts/mojprop_owner_backup_catalog_readonly_c120.py)" = "a48c1160dc2c2ec54249101d601c8a82c7579ddc"
+          test ! -L scripts/mojprop_passenger_source_readonly_c118.py
+          test "$(git hash-object -- scripts/mojprop_passenger_source_readonly_c118.py)" = "f6507179c762bdea1e1bb28ea17d5e420e2b4dcb"
+          test ! -L scripts/mojprop_live_intake_source_drift_readonly_c95.py
+          test "$(git hash-object -- scripts/mojprop_live_intake_source_drift_readonly_c95.py)" = "877d7a76b7b09a49b95d20d1f815ec5f218e707a"
+      - name: Connect only through pinned factory runner to the existing cPanel
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 40s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
+      - name: Verify deployed source and Django routes without opening a customer session
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 80s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_live_intake_source_drift_readonly_c95.py \
+            | python3 -c 'import json,sys; data=sys.stdin.read(6000); prefix="MOJPROP_C95_LIVE_INTAKE_SOURCE_READONLY="; lines=[x for x in data.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_QUEUE"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.intake.live_source_drift.readonly.v1" and d["read_only"] is True and d["customer_data_accessed"] is False and d["customer_lead_created"] is False and d["production_release_permitted"] is False; assert isinstance(d["source_identity"],dict) and len(d["source_identity"])==5; assert all(v in ("matches","drifted","missing","unsafe","unavailable") for v in d["source_identity"].values()); print(lines[0])'
+          echo 'LIVE_MOJPROP_INTAKE_SOURCE_DIAGNOSTIC=PASS'
+          echo 'No POST, customer data, payment, database migration or site release; this scan only identifies version and routing.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Classify exact Passenger entrypoint AST and absent staging modules — no writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 80s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_passenger_source_readonly_c118.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(7000); prefix="MOJPROP_C118_PASSENGER_SOURCE_READONLY="; lines=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_C118"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.passenger.source_identity.readonly.c118.v1" and d["read_only"] is True and d["crm_lead_created"] is False and d["payment_created"] is False and d["email_sent"] is False and d["deploy_authorized"] is False and d["runtime_worker_identity_proven"] is False and d["full_db_app_media_restore_proven"] is False; assert set(d["staging_sources"])=={"core/mojprop_views.py","core/mojprop_receipts.py","core/mojprop_accessible_intake.py","config/urls.py","core/management/commands/mojprop_sales_action_queue.py"}; assert all(v in ("present","missing","unsafe","unavailable") for v in d["staging_sources"].values()); print(lines[0])'
+          echo 'C118_OWNER_PASSENGER_AST_READONLY=COMPLETE_NOT_DEPLOY_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: Inventory only existing account backup metadata via documented UAPI — no restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 40s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_owner_backup_catalog_readonly_c120.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C120_BACKUP_CATALOG_READONLY="; rows=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(rows)==1,"MISSING_SANITIZED_BACKUP_RESULT"; d=json.loads(rows[0][len(prefix):]); assert d["schema"]=="mojprop.owner_backup_catalog.readonly.c120.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert all(d[k] is False for k in ("backup_files_opened_or_downloaded","customer_records_accessed","database_accessed","provider_offhost_backup_verified","independent_encrypted_full_restore_proven","production_release_authorized","cost_incurred")); assert type(d["backup_entries_reported"]) is int and 0 <= d["backup_entries_reported"] <= 100; assert type(d["possible_local_account_archive_present"]) is bool; assert not set(d).intersection({"file","path","token","email","username","database_name","customer_id"}); print(rows[0])'
+          echo 'MOJPROP_C120_EXISTING_BACKUP_METADATA_READONLY=COMPLETE_NO_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: Check fixed owner home backup tarball metadata only — zero content reads
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 40s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_owner_local_archive_readonly_c120.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C120_LOCAL_ARCHIVE_METADATA_READONLY="; lines=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_LOCAL_ARCHIVE"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.owner_local_archive_metadata.readonly.c120.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert type(d["home_metadata_scan_completed"]) is bool; assert type(d["local_archive_candidates_count"]) is int and 0<=d["local_archive_candidates_count"]<=2048; assert all(d[k] is False for k in ("local_archive_content_read","archive_downloaded","app_or_db_accessed","customer_data_accessed","independent_encrypted_full_restore_proven","provider_offhost_backup_verified","production_deployment_authorized","new_cost_incurred")); assert not set(d).intersection({"file","path","email","secret","filename","archive_name"}); print(lines[0])'
+          echo 'MOJPROP_C120_LOCAL_ARCHIVE_METADATA_READONLY=COMPLETE_NO_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: Observe only exact Starter30 public static file identity under owner docroot
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 40s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_starter30_public_presence_readonly_c122.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C122_STATIC_OWNER_READONLY="; rows=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(rows)==1,"MISSING_SANITIZED_C122"; d=json.loads(rows[0][len(prefix):]); assert d["schema"]=="mojprop.owner_starter30_public_static.readonly.c122.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["no_payment_scope"] is True; assert set(d["assets"])=={"index.html","journal-template.csv","journal-guide.txt"}; assert all(v in ("reviewed_exact","unreviewed_bytes","missing","unsafe","unavailable") for v in d["assets"].values()); assert all(d[k] is False for k in ("http_public_delivery_proven","email_lead_received","database_accessed","customer_data_accessed","trx_payment_collected","funded_prop_challenge_available","production_deployment_authorized","new_cost_incurred")); assert not set(d).intersection({"email","customer_id","file_path","file_content","secret","trx_address"}); print(rows[0])'
+          echo 'MOJPROP_C122_PUBLIC_ASSET_DISK_IDENTITY_READONLY=COMPLETE_NOT_HTTP_OR_PAYMENT' >> "$GITHUB_STEP_SUMMARY"
+      - name: C146 pinpoint actual Plan1 route and Passenger staging drift (strict read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 80s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c146_live_plan1_runtime_source_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(9000); prefix="MOJPROP_C146_PLAN1_LIVE_SOURCE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(a)==1,"MISSING_SANITIZED_PLAN1_PROBE"; d=json.loads(a[0][len(prefix):]); assert d["schema"]=="mojprop.plan1.live_source.readonly.c146.v1" and d["read_only"] is True and d["production_change_or_cost_authorized"] is False; assert set(d["source_identity"])=={"config/urls.py","core/moj_prop_views.py","core/templates/mojplaywin/moj_prop_interest_form_d.html","prop_firm/lead_models.py"}; assert all(v in ("matches","drifted","missing","unsafe","unavailable") for v in d["source_identity"].values()); assert set(d["static_urlconf_declares"])=={"browser_get","consent_post"} and all(type(x) is bool for x in d["static_urlconf_declares"].values()); assert all(d[k] is False for k in ("actual_passenger_worker_source_proven","public_plan1_get_verified","full_app_db_media_restore_proven","payment_or_enrollment_proven","customer_data_accessed","database_accessed","external_network_called","production_change_or_cost_authorized")); assert not set(d).intersection({"email","customer_id","db_password","api_key","wallet","customer_name","token"}); print(a[0])'
+          echo 'C146_SOURCE_ONLY_PASSED_NO_DEPLOY_OR_BACKUP_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove ephemeral SSH authentication material
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          if test -d "$work"; then rm -f "$work/host.key" "$work/known" "$work/config"; rmdir "$work"; fi

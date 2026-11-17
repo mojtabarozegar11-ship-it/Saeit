@@ -127,6 +127,25 @@ urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("n
 from core.blog_views import blog_home, blog_page
 urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/", blog_page, name="blog_page")]
 
+
+# Moj Prop public request intake is deliberately separate from payment and order APIs.
+from core.mojprop_views import mojprop_intake, mojprop_receipt_status
+from core.mojprop_quote_views import customer_quote
+from core.signal_free_views import signal_free_subscribe, signal_free_confirm, signal_free_unsubscribe
+# The public /moj-prop/ directory is served as a static product surface by Apache.
+# Keep the intake API at a root-level WSGI path so GET and POST reach Passenger.
+urlpatterns += [
+    path("moj-prop-intake/", mojprop_intake, name="mojprop_intake"),
+    path("moj-prop-status/", mojprop_receipt_status, name="mojprop_receipt_status"),
+    path("moj-prop-quote/<str:token>/", customer_quote, name="mojprop_quote_public"),
+    path("moj-prop/intake/", mojprop_intake, name="mojprop_intake_legacy"),
+    # Root-level WSGI paths avoid Apache's static /moj-prop/ directory.
+    path("moj-signal-free-subscribe/", signal_free_subscribe, name="moj_signal_free_subscribe"),
+    path("moj-signal-free-confirm/<str:token>/", signal_free_confirm, name="moj_signal_free_confirm"),
+    path("moj-signal-free-unsubscribe/<str:token>/", signal_free_unsubscribe, name="moj_signal_free_unsubscribe"),
+]
+
+# C136: keep existing main public intake and add the independent consent-only
 # Moj Prop is a MojPlayWin-only informational division. Checkout and broker execution are disabled.
 from core.moj_prop_views import moj_prop_landing, moj_prop_dashboard, moj_prop_interest, moj_prop_interest_form
 urlpatterns += [

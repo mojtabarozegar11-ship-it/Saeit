@@ -1,0 +1,74 @@
+name: Moj Prop C111 actual cPanel Quota API reason — read only
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mojprop-cpanel-quota-uapi-cause-readonly-c111.yml"
+      - "scripts/mojprop_cpanel_uapi_cause_readonly_c111.py"
+      - "tests/test_mojprop_cpanel_uapi_cause_readonly_c111.py"
+
+permissions:
+  contents: read
+
+jobs:
+  read_only_uapi_cause:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - name: Checkout exact owner-authored PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate pinned read-only code and offline no-secret regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mojprop_cpanel_uapi_cause_readonly_c111.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_cpanel_uapi_cause_readonly_c111 -q
+          test ! -L scripts/mojprop_cpanel_uapi_cause_readonly_c111.py
+          test "$(git hash-object -- scripts/mojprop_cpanel_uapi_cause_readonly_c111.py)" = "c387bd03551d96b8493a0ab9bbad0c211bd2443f"
+
+      - name: Connect existing VPS to pinned owner cPanel SSH
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/mojprop-quota-c111"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 40s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
+
+      - name: Classify two legitimate quota API reads; no host change
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-quota-c111"
+          timeout 90s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_cpanel_uapi_cause_readonly_c111.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(6000); pre="MOJPROP_UAPI_CAUSE_C111="; lines=[x for x in raw.splitlines() if x.startswith(pre)]; assert len(lines)==1,"MISSING_SANITIZED_PROBE"; p=json.loads(lines[0][len(pre):]); assert p["schema"]=="mojprop.cpanel.uapi_cause.readonly.v1" and p["read_only"] is True and p["capacity_confirmed"] is False and p["production_deploy_authorized"] is False and p["payment_collected"] is False and len(p["probes"]) in (0,2); print(lines[0])'
+          echo 'C111_QUOTA_CAUSE_READ_ONLY_COMPLETED=PASS'
+          echo 'This is cause classification, not quota verification, backup, database recovery or permission to deploy.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary SSH key and connection metadata
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/mojprop-quota-c111"
+          if test -d "$work"; then rm -f "$work/host.key" "$work/known" "$work/config"; rmdir "$work"; fi

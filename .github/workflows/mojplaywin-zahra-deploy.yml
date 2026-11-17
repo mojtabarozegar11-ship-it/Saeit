@@ -13,6 +13,17 @@ on:
       - "scripts/deploy_mojplaywin_zahra.py"
       - "templates/zahra/index.html"
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact approved main commit, 40 lowercase hexadecimal digits'
+        required: true
+        type: string
+      owner_approval:
+        description: 'Owner-approved deployment only after full DB/media restore and rollback proof'
+        type: choice
+        required: true
+        options: ['NO', 'OWNER_APPROVED']
+        default: 'NO'
 
 permissions:
   contents: read
@@ -46,12 +57,28 @@ jobs:
           PY
 
   deploy:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # A merge/push cannot deploy; independent production evidence is mandatory.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.owner_approval == 'OWNER_APPROVED' &&
+      vars.MPW_BACKUP_RESTORE_VERIFIED == 'true' &&
+      vars.MPW_ROLLBACK_VERIFIED == 'true' &&
+      vars.MPW_TENANT_ISOLATION_VERIFIED == 'true'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Verify exactly approved immutable main commit before any SSH secrets
+        shell: bash
+        env:
+          REQUESTED_RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$REQUESTED_RELEASE_SHA" == "$GITHUB_SHA" ]]
       - name: Configure pinned VPS-to-cPanel SSH relay
         shell: bash
         env:

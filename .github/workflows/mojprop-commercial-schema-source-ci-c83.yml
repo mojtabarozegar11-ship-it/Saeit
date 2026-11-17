@@ -1,0 +1,56 @@
+name: Moj Prop 0041-0045 source closure (no release)
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mojprop-commercial-schema-source-ci-c83.yml"
+      - ".github/workflows/mojprop-backend-controlled-release-20261115.yml"
+      - "scripts/deploy_mojplaywin_moj_prop_backend.py"
+      - "scripts/mojprop_schema_preflight_c83.py"
+      - "scripts/mojprop_db_release_evidence.py"
+      - "scripts/mojprop_live_database_identity_c85.py"
+      - "tests/test_mojprop_db_release_evidence_20261115.py"
+      - "tests/test_mojprop_live_db_identity_c85_20261115.py"
+      - "tests/test_mojprop_commercial_release_closure_c83_20261115.py"
+      - "tests/test_mojprop_backend_receipts_release_20261115.py"
+      - "core/migrations/004?_mojprop_*.py"
+      - "core/mojprop_*.py"
+permissions:
+  contents: read
+jobs:
+  source-only:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile complete Moj Prop schema and backend release source
+        run: |
+          python3 -m py_compile scripts/deploy_mojplaywin_moj_prop_backend.py scripts/mojprop_schema_preflight_c83.py
+          python3 scripts/deploy_mojplaywin_moj_prop_backend.py selftest
+      - name: Verify commercial schema closure before live DB mutation
+        run: python3 -m unittest discover -s tests -p 'test_mojprop_commercial_release_closure_c83_20261115.py' -v
+      - name: Independently signed DB restore and live DB identity contracts
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mojprop_db_release_evidence_20261115.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojprop_live_db_identity_c85_20261115.py' -v
+      - name: Verify signed receipt and routing regressions
+        run: python3 -m unittest discover -s tests -p 'test_mojprop_backend_receipts_release_20261115.py' -v
+      - name: Assert this action cannot reach any production credential or publish
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path(".github/workflows/mojprop-commercial-schema-source-ci-c83.yml").read_text(encoding="utf-8")
+          assert "github.event_name == 'pull_request'" in source
+          assert "contents: read" in source
+          assert "runs-on: ubuntu-latest" in source
+          assert "self-" + "hosted" not in source
+          assert ("se" + "crets.") not in source
+          assert ("s" + "sh ") not in source
+          assert ("s" + "cp ") not in source
+          print("SOURCE_ONLY=PASS; DB_RESTORE_UNVERIFIED=true; RELEASE=false")
+          PY

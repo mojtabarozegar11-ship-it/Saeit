@@ -1,0 +1,173 @@
+name: MPW TRON safe flags evidence (read-only)
+
+on:
+  pull_request:
+    paths:
+      - "scripts/mpw_trx_live_gates_readonly_20261115.py"
+      - ".github/workflows/mpw-trx-safe-flags-evidence-20261115.yml"
+      - "scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py"
+      - "tests/test_mpw_trx_canary_existing_receipts_readonly_20261116.py"
+      - "scripts/mpw_trx_paid_product_scope_readonly_20261116.py"
+      - "tests/test_mpw_trx_paid_product_scope_readonly_20261116.py"
+      - "scripts/mpw_tron_one_existing_payment_solidity_readonly_20261116.py"
+      - "tests/test_mpw_tron_one_existing_payment_solidity_readonly_20261116.py"
+      - "scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py"
+      - "tests/test_mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py"
+      - "scripts/mpw_trx_active_download_route_readonly_20261116.py"
+      - "tests/test_mpw_trx_active_download_route_readonly_20261116.py"
+      - "scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py"
+      - "tests/test_mpw_existing_paid_buyer_entitlement_readonly_20261116.py"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Compile immutable diagnostic
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mpw_trx_live_gates_readonly_20261115.py scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py
+          python3 -B -m unittest tests.test_mpw_trx_canary_existing_receipts_readonly_20261116 -q
+          python3 -B -m py_compile scripts/mpw_trx_paid_product_scope_readonly_20261116.py
+          python3 -B -m unittest tests.test_mpw_trx_paid_product_scope_readonly_20261116 -q
+          python3 -B -m py_compile scripts/mpw_tron_one_existing_payment_solidity_readonly_20261116.py
+          python3 -B -m unittest tests.test_mpw_tron_one_existing_payment_solidity_readonly_20261116 -q
+          python3 -B -m py_compile scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py
+          python3 -B -m unittest tests.test_mpw_trx_existing_buyer_entitlement_link_readonly_20261116 -q
+          python3 -B -m py_compile scripts/mpw_trx_active_download_route_readonly_20261116.py
+          python3 -B -m unittest tests.test_mpw_trx_active_download_route_readonly_20261116 -q
+          test -f scripts/mpw_trx_active_download_route_readonly_20261116.py
+          test ! -L scripts/mpw_trx_active_download_route_readonly_20261116.py
+          test "$(git hash-object -- scripts/mpw_trx_active_download_route_readonly_20261116.py)" = "a4a928688dff01121f8242cb2d3d157a2a836c62"
+          python3 -B -m py_compile scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py
+          python3 -B -m unittest tests.test_mpw_existing_paid_buyer_entitlement_readonly_20261116 -q
+          test -f scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py
+          test ! -L scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py
+          test "$(git hash-object -- scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py)" = "3f10cb8ff4652a8fab9ce06af9df8a462b0239d7"
+          test -f scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py
+          test ! -L scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py
+          test "$(git hash-object -- scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py)" = "01b0189c22f2027702c0a0801a959f6d5565810e"
+          test -f scripts/mpw_tron_one_existing_payment_solidity_readonly_20261116.py
+          test ! -L scripts/mpw_tron_one_existing_payment_solidity_readonly_20261116.py
+          test "$(git hash-object -- scripts/mpw_tron_one_existing_payment_solidity_readonly_20261116.py)" = "d7e844da562b18f87ce8f5d530dea9d7ad96916e"
+          test -f scripts/mpw_trx_paid_product_scope_readonly_20261116.py
+          test ! -L scripts/mpw_trx_paid_product_scope_readonly_20261116.py
+          test "$(git hash-object -- scripts/mpw_trx_paid_product_scope_readonly_20261116.py)" = "fe2c596a56ff2b0cf83628adc5177847ab2b4d5d"
+          test -f scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py
+          test ! -L scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py
+          test "$(git hash-object -- scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py)" = "02fc1bd354bbb335945d6bb97680438f74876ff9"
+
+      - name: Connect to cPanel with pinned host key
+        id: link
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="${RUNNER_TEMP}/mpw-trx-gates-ssh"
+          install -d -m 700 "$d"
+          test -n "$HOST_KEY"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read().replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10); sys.stdout.write(s)' > "$d/host.key"
+          chmod 600 "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 20\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          timeout 90s ssh -T -F "$d/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
+
+      - name: Read live commercial flags without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/mpw-trx-gates-ssh"
+          test -s "$d/config"
+          timeout 90s ssh -T -F "$d/config" cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_trx_live_gates_readonly_20261115.py
+
+      - name: Inspect real existing native-TRX evidence and effective canary gate — no writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/mpw-trx-gates-ssh"
+          test -s "$d/config"
+          timeout 90s ssh -T -F "$d/config" cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py \
+            | python3 -c 'import json,sys; s=sys.stdin.read(10000); lines=[x for x in s.splitlines() if x.startswith("MPW_TRX_CANARY_RECEIPT_READONLY=")]; assert len(lines)==1,"missing or duplicate bounded evidence"; d=json.loads(lines[0].split("=",1)[1]); assert d["schema"]=="mpw.trx.canary.existing_receipts.readonly.v1" and d["read_only"] is True and d["no_host_changes_or_financial_writes"] is True; print(lines[0])'
+          echo "EXISTING_TRX_LEDGER_READONLY=COMPLETE"
+          echo "A stored paid intent or receipt is NOT an independently verified customer delivery or fresh chain finality." >> "$GITHUB_STEP_SUMMARY"
+      - name: Classify real persisted paid products and scoped customer fulfillment — READ ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/mpw-trx-gates-ssh"
+          test -s "$d/config"
+          timeout 90s ssh -T -F "$d/config" cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mpw_trx_paid_product_scope_readonly_20261116.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8192); lines=[l for l in raw.splitlines() if l.startswith("MPW_TRX_PAID_PRODUCT_SCOPE_READONLY=")]; assert len(lines)==1,"missing or repeated report"; data=json.loads(lines[0].split("=",1)[1]); assert data["schema"]=="mpw.trx.existing.paid.product.delivery.v1" and data["read_only"] is True; print(lines[0])'
+          echo 'TRON_EXISTING_PAID_ORDER_CLASSIFIED=READ_ONLY'
+          echo 'An in-game cosmetic is not a digital download. Payment persistence does not establish external customer income.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Reconcile one prior buyer exact order invoice receipt asset entitlement -- READ ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/mpw-trx-gates-ssh"
+          test -s "$d/config"
+          timeout 90s ssh -T -F "$d/config" cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8192); lines=[l for l in raw.splitlines() if l.startswith("MPW_ONE_PAID_BUYER_ENTITLEMENT_READONLY=")]; assert len(lines)==1,"missing or duplicated bounded report"; d=json.loads(lines[0].split("=",1)[1]); assert d["schema"]=="mpw.existing_paid_buyer.same_order_entitlement.readonly.v1" and d["read_only"] is True and d["no_money_or_customer_messages"] is True and d["production_db_or_files_changed"] is False; print(lines[0])'
+          echo 'TRON_SAME_ORDER_BUYER_DELIVERY_AUDIT=READ_ONLY'
+          echo 'Receipt/outbox and entitlement booleans do not prove an independent customer acknowledgment.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Independently reverify at most one prior paid Mainnet tx from solidified read-only node
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/mpw-trx-gates-ssh"
+          test -s "$d/config"
+          timeout 90s ssh -T -F "$d/config" cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mpw_tron_one_existing_payment_solidity_readonly_20261116.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8192); lines=[l for l in raw.splitlines() if l.startswith("MPW_TRON_PRIOR_RECEIPT_SOLIDITY_READONLY=")]; assert len(lines)==1,"missing or duplicated bounded proof"; item=json.loads(lines[0].split("=",1)[1]); assert item["schema"]=="mpw.tron.one_prior_payment.solidity.readonly.v1" and item["read_only"] is True and item["no_paid_checkout_or_broadcast"] is True; print(lines[0])'
+          echo 'TRON_ONE_EXISTING_SETTLEMENT_CHECK=READ_ONLY'
+          echo 'Mainnet check unavailable or false does NOT reverse a persisted receipt. No funds moved.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Identify missing same-order paid CommerceInvoice, CommerceReceipt or buyer entitlement — no writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/mpw-trx-gates-ssh"
+          test -s "$d/config"
+          timeout 90s ssh -T -F "$d/config" cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8192); lines=[l for l in raw.splitlines() if l.startswith("MPW_TRX_EXISTING_BUYER_LINK_READONLY=")]; assert len(lines)==1,"missing or duplicated proof"; data=json.loads(lines[0].split("=",1)[1]); assert data["schema"]=="mpw.trx.walletless.paid.commerce.invoice_link.v1" and data["read_only"] is True and data["new_payment_or_financial_write"] is False; print(lines[0])'
+          echo 'TRON_LEGACY_BUYER_INVOICE_LINK=READ_ONLY'
+          echo 'A READY grant and existing paid transfer do not establish actual customer download.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Prove effective walletless paid download GET routing — NO buyer request
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/mpw-trx-gates-ssh"
+          test -s "$d/config"
+          timeout 90s ssh -T -F "$d/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mpw_trx_active_download_route_readonly_20261116.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8192); lines=[l for l in raw.splitlines() if l.startswith("MPW_TRX_ACTUAL_DOWNLOAD_ROUTE_READONLY=")]; assert len(lines)==1,"missing or duplicated report"; d=json.loads(lines[0].split("=",1)[1]); assert d["schema"]=="mpw.trx.walletless.active.download.route.readonly.v1" and d["read_only"] is True and d["production_files_changed"] is False and d["download_request_executed"] is False and d["private_file_opened"] is False; print(lines[0])'
+          echo 'TRON_EFFECTIVE_DOWNLOAD_URL_SCAN=READ_ONLY'
+      - name: Remove relay material
+        if: always()
+        run: |
+          d="${RUNNER_TEMP}/mpw-trx-gates-ssh"
+          if [ -d "$d" ]; then rm -f "$d/host.key" "$d/known" "$d/config"; rmdir "$d"; fi
