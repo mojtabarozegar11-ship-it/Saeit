@@ -176,20 +176,20 @@ class TestRcloneDualDrive(unittest.TestCase):
     def test_32_runner_metadata_missing_config(self):
         self.path.unlink();self.assertFalse(m.runner_metadata_only(self.path)['owner_local_config_secure_file_present'])
     def test_33_rclone_subprocess_no_shell_uses_bounded(self):
-        with patch.object(m.subprocess,'run') as run:
-            run.return_value.returncode=0;run.return_value.stdout=b'GOOD'
-            self.assertEqual(m._rclone_call(['/usr/bin/rclone','about'],max_output=4),b'GOOD')
-            self.assertFalse(run.call_args.kwargs.get('shell',False))
+        self.assertEqual(m._rclone_call(
+            [sys.executable,'-c',"import sys;sys.stdout.buffer.write(b'GOOD')"],
+            max_output=4,timeout=10),b'GOOD')
     def test_34_rclone_output_above_bound_holds(self):
-        with patch.object(m.subprocess,'run') as run:
-            run.return_value.returncode=0;run.return_value.stdout=b'TOO-LONG'
-            with self.assertRaisesRegex(m.TransferHold,'RCLONE_OUTPUT_OVERSIZE'):
-                m._rclone_call(['/usr/bin/rclone','cat'],max_output=3)
+        with self.assertRaisesRegex(m.TransferHold,'RCLONE_OUTPUT_OVERSIZE'):
+            m._rclone_call([sys.executable,'-c',
+                "import sys;sys.stdout.buffer.write(b'TOO-LONG')"],
+                max_output=3,timeout=10)
     def test_35_rclone_failure_redacted(self):
-        with patch.object(m.subprocess,'run') as run:
-            run.return_value.returncode=99;run.return_value.stdout=b'PRIVATE_PASSWORD'
-            with self.assertRaisesRegex(m.TransferHold,'RCLONE_PROVIDER_OPERATION_FAILED'):
-                m._rclone_call(['/usr/bin/rclone','cat'],max_output=100)
+        with self.assertRaisesRegex(m.TransferHold,'RCLONE_PROVIDER_OPERATION_FAILED') as cm:
+            m._rclone_call([sys.executable,'-c',
+                "import sys;sys.stderr.write('PRIVATE_PASSWORD');sys.exit(99)"],
+                max_output=100,timeout=10)
+        self.assertNotIn('PRIVATE_PASSWORD',str(cm.exception))
     def test_36_gzip_success_producer_no_shell(self):
         with m.VerifiedGzipSource([sys.executable,'-c',"import sys;sys.stdout.buffer.write(b'hello'*5000)"],
                                   gzip_executable='/usr/bin/gzip',process_timeout=60) as s:
@@ -500,4 +500,69 @@ class TestRcloneDualDrive(unittest.TestCase):
                 minimum_free_reserve_bytes=0)
         self.assertFalse(dest.exists())
 
+
+    def test_68_rclone_stdout_huge_provider_response_rejected(self):
+        with self.assertRaisesRegex(m.TransferHold,'RCLONE_OUTPUT_OVERSIZE'):
+            m._rclone_call([sys.executable,'-c',
+                "import sys;sys.stdout.buffer.write(b'X'*2000000)"],
+                max_output=256,timeout=10)
+
+    def test_69_rclone_stdout_exact_boundary_accepted(self):
+        self.assertEqual(m._rclone_call([sys.executable,'-c',
+            "import sys;sys.stdout.buffer.write(b'12345678')"],
+            max_output=8,timeout=10),b'12345678')
+
+    def test_70_rclone_stdout_child_not_finishing_times_out(self):
+        with self.assertRaisesRegex(m.TransferHold,'RCLONE_TIMEOUT'):
+            m._rclone_call([sys.executable,'-c','import time;time.sleep(4)'],
+                           max_output=100,timeout=1)
+
+    def test_71_rclone_stdout_partial_then_stall_times_out(self):
+        with self.assertRaisesRegex(m.TransferHold,'RCLONE_TIMEOUT'):
+            m._rclone_call([sys.executable,'-c',
+                "import sys,time;sys.stdout.write('partial');sys.stdout.flush();time.sleep(4)"],
+                max_output=100,timeout=1)
+
+    def test_72_rclone_stdout_zero_bytes_can_succeed(self):
+        self.assertEqual(m._rclone_call([sys.executable,'-c','pass'],
+                                        max_output=8,timeout=10),b'')
+
+    def test_73_rclone_no_stdout_upload_failure_is_redacted(self):
+        with self.assertRaisesRegex(m.TransferHold,'RCLONE_PROVIDER_OPERATION_FAILED'):
+            m._rclone_call([sys.executable,'-c',
+                "import sys;sys.stderr.write('SENSITIVE');sys.exit(2)"],
+                max_output=0,timeout=10)
+
+    def test_74_rclone_no_stdout_upload_with_bounded_input(self):
+        m._rclone_call([sys.executable,'-c',
+            "import sys;assert sys.stdin.buffer.read()==b'CHUNK'"],
+            max_output=0,input_bytes=b'CHUNK',timeout=10)
+
+    def test_75_rclone_rejects_simultaneous_output_and_input(self):
+        with self.assertRaisesRegex(m.TransferHold,'RCLONE_IO_BOUNDS_INVALID'):
+            m._rclone_call([sys.executable,'-c','pass'],
+                max_output=32,input_bytes=b'EXCLUDED')
+
+    def test_76_rclone_rejects_bad_output_limit(self):
+        with self.assertRaisesRegex(m.TransferHold,'RCLONE_IO_BOUNDS_INVALID'):
+            m._rclone_call([sys.executable,'-c','pass'],max_output=True)
+        with self.assertRaisesRegex(m.TransferHold,'RCLONE_IO_BOUNDS_INVALID'):
+            m._rclone_call([sys.executable,'-c','pass'],
+                max_output=m.MAX_CIPHER_PART_BYTES+m.MAX_MANIFEST_BYTES+1)
+
+    def test_77_rclone_rejects_invalid_timeout(self):
+        for value in (0,True,3601,-1):
+            with self.assertRaisesRegex(m.TransferHold,'RCLONE_IO_BOUNDS_INVALID'):
+                m._rclone_call([sys.executable,'-c','pass'],
+                    max_output=10,timeout=value)
+
+    def test_78_rclone_stdout_missing_executable_is_sanitized(self):
+        with self.assertRaisesRegex(m.TransferHold,'RCLONE_EXECUTABLE_MISSING'):
+            m._rclone_call(['/nonexistent/guarded_binary_no_rclone','cat'],
+                           max_output=10,timeout=5)
+
+    def test_79_rclone_stderr_discarded_on_valid_stdout(self):
+        self.assertEqual(m._rclone_call([sys.executable,'-c',
+             "import sys;sys.stderr.write('NEVER_EXPOSE_SECRET');sys.stdout.write('OK')"],
+             max_output=2,timeout=10),b'OK')
 if __name__=='__main__':unittest.main()
