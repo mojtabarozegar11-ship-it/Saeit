@@ -1,4 +1,4 @@
-name: Factory cPanel largest MySQL table metadata census — safe one-time push
+name: Factory cPanel largest MySQL table metadata census — preverified local DSN
 on:
   issue_comment:
     types: [created]
@@ -27,7 +27,7 @@ jobs:
         (github.actor == 'chatgpt-codex-connector[bot]' ||
          github.actor == 'mojtabarozegar11-ship-it') &&
         startsWith(github.event.head_commit.message,
-                   'Factory: one-time read-only MySQL table metadata census')))
+                   'Factory: one-time authenticated local MySQL table census')))
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 12
     steps:
