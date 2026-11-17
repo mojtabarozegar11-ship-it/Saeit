@@ -71,7 +71,8 @@ def run_full_review() -> int:
                    if name.startswith("tests.test_xauusd_v13_")}
     v14_modules = {name: count for name, count in observed.items()
                    if name.startswith("tests.test_plan1_v14")
-                   or name == "tests.test_mojprop_v141_prelaunch_copy"}
+                   or name in ("tests.test_mojprop_v141_prelaunch_copy",
+                               "tests.test_mojprop_v141_info_url_source")}
     if (sum(v13_modules.values()) != EXPECTED_V13_TESTS
             or sum(v14_modules.values()) != EXPECTED_V14_TESTS):
         print("Version-specific unit test inventory drift; fail closed", file=sys.stderr)
