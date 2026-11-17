@@ -234,15 +234,7 @@ jobs:
           # Never open a zero-prefix/sidecar-bearing candidate with SQLite.
           def check_legacy_snapshot(base):
               results=[]
-              child='''import sqlite3,sys
-p=sys.argv[1]
-c=sqlite3.connect("file:"+p+"?mode=ro&immutable=1",uri=True,timeout=5)
-try:
-    c.execute("PRAGMA query_only=ON")
-    row=c.execute("PRAGMA quick_check").fetchone()
-    print("ok" if row and row[0]=="ok" else "failed",flush=True)
-finally:c.close()
-'''
+              child="import sqlite3,sys\np=sys.argv[1]\nc=sqlite3.connect(\"file:\"+p+\"?mode=ro&immutable=1\",uri=True,timeout=5)\ntry:\n    c.execute(\"PRAGMA query_only=ON\")\n    row=c.execute(\"PRAGMA quick_check\").fetchone()\n    print(\"ok\" if row and row[0]==\"ok\" else \"failed\",flush=True)\nfinally:\n    c.close()\n"
               for d,dirs,names in os.walk(base,followlinks=False):
                   if len(pathlib.Path(d).relative_to(base).parts)>4:dirs[:]=[];continue
                   dirs[:]=[n for n in dirs if not (pathlib.Path(d)/n).is_symlink()]
