@@ -44,8 +44,8 @@ jobs:
           set -euo pipefail
           test ! -L templates/moj-prop-plan1-sidecar/index.html
           test ! -L scripts/mojprop_plan1_sidecar_release.py
-          test "$(git hash-object -- templates/moj-prop-plan1-sidecar/index.html)" = "66f3126d22d41c3395e7c09982120989e9eb5f0f"
-          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_release.py)" = "7df750f4ec2a3e8b9d7fdfd2145f5ff6c6994455"
+          test "$(git hash-object -- templates/moj-prop-plan1-sidecar/index.html)" = "cc406477e6ec2a75b95b206574c4c215b837150d"
+          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_release.py)" = "0fbce9c8ee9f35ba5b559d14fc167f0fc032c70e"
       - name: Run owner-preservation, exact staged source and security regressions
         run: |
           set -euo pipefail
@@ -79,8 +79,8 @@ jobs:
       - name: Verify unchanged reviewed source, source-only and owner-manual scope
         run: |
           set -euo pipefail
-          test "$(git hash-object -- templates/moj-prop-plan1-sidecar/index.html)" = "66f3126d22d41c3395e7c09982120989e9eb5f0f"
-          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_release.py)" = "7df750f4ec2a3e8b9d7fdfd2145f5ff6c6994455"
+          test "$(git hash-object -- templates/moj-prop-plan1-sidecar/index.html)" = "cc406477e6ec2a75b95b206574c4c215b837150d"
+          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_release.py)" = "0fbce9c8ee9f35ba5b559d14fc167f0fc032c70e"
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_mojprop_plan1_sidecar_release
       - name: Prepare pinned cPanel connection through authorized factory runner
         shell: bash

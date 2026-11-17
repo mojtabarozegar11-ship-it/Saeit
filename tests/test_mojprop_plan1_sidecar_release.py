@@ -255,5 +255,45 @@ class SidecarTests(unittest.TestCase):
         self.assertTrue(report["existing_owner_home_contact_preserved"])
 
 
+    def test_31_og_title_does_not_claim_verified_draft(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("Moj Prop Plan 1 — draft rules, prelaunch only", s)
+        self.assertNotIn("Moj Prop Plan 1 — verified rules", s)
+
+    def test_32_social_post_clause_not_approved(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("Social-post conditions are under contract review", s)
+        self.assertIn("no social post is requested while paid enrollment is closed", s)
+
+    def test_33_no_false_xauusd_three_percent_launch(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("XAUUSD-only 3% per-order / 8% open-risk policy is NOT implemented", s)
+
+    def test_34_existing_engine_limits_are_stated(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("0.8% order risk / 1.6% aggregate open risk", s)
+
+    def test_35_proposed_risk_always_discloses_drawdown(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("4% daily and 8% total drawdown limits", s)
+        self.assertIn("افت روزانه ۴٪ و کل ۸٪", s)
+
+    def test_36_profit_split_conditional_not_paid(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("70% trader / 30% organizer", s)
+        self.assertIn("No actual funding, brokerage execution or profit distribution is enabled", s)
+
+    def test_37_persian_risk_status_does_not_claim_deployment(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("هنوز در موتور اجرا پیاده‌سازی یا تأیید نشده", s)
+
+    def test_38_public_page_still_has_no_registration_or_payment_form(self):
+        parsed = HTMLSafety()
+        parsed.feed(REVIEWED.read_text("utf-8"))
+        self.assertEqual(parsed.forms, 0)
+        self.assertEqual(parsed.scripts, ["application/ld+json"])
+        self.assertIn("payment disabled", REVIEWED.read_text("utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()
