@@ -108,3 +108,23 @@ factory. Neither side is marked as having a complete **current** backup merely
 because the structural manifest passed. The source is still staged in a Draft
 PR; production backups remain forbidden until source identity, owner OAuth,
 provider storage quotas and independent key recovery are proven.
+
+
+## Bound provider stdout at acquisition (security fix, 2026-11-17)
+
+A previously dangerous gap accumulated *all* provider stdout with
+subprocess.run(..., stdout=PIPE) before checking its size. An unexpectedly
+large, stalled or malicious Google/rclone response could exceed memory on the
+capacity-constrained owner runner. The hardened `_rclone_call` now uses a
+separate `Popen`/select/read loop for commands which return data. It consumes
+at most the configured result byte ceiling **plus one overflow-detection byte**,
+enforces an absolute monotonic-clock timeout, terminates/reaps a stalled or
+overproducing child, and never exposes stderr or access tokens. Upload commands
+continue using a no-stdout pipe, bounded source payload and no shell invocation.
+
+This change does **not** create current SQL/app/media backups or authorize
+unobserved vendor downloads. Tests include genuinely spawned local Python
+provider processes emitting an oversized stream, no output, exact-boundary
+output, nonzero exit, truncated/stalled output, and redacted stderr. The
+real crypto-core synthetic isolated restore tests are preserved. The owner
+self-hosted CI must report a successful exact-head status for the full suite.
