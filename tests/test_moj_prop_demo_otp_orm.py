@@ -195,3 +195,22 @@ class RealDatabaseDemoEmailConsentTests(TestCase):
         data=self.data()
         self.assertNotIn("private_order_draft", data)
         self.assertFalse(self.review(data).payable_invoice)
+
+    def test_declared_country_cannot_differ_from_original_signed_inquiry(self):
+        data=self.data()
+        data["declared_country"]="FR"
+        with self.assertRaises(Plan1OrderGateClosed):
+            self.review(data)
+
+    def test_changing_original_inquiry_country_without_resigning_denied(self):
+        from dataclasses import replace
+        data=self.data()
+        data["inquiry"]=replace(data["inquiry"],declared_country="FR")
+        with self.assertRaises(Plan1OrderGateClosed):
+            self.review(data)
+
+    def test_country_cannot_be_boolean(self):
+        data=self.data()
+        data["declared_country"]=True
+        with self.assertRaises(Plan1OrderGateClosed):
+            self.review(data)
