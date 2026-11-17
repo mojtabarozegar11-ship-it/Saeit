@@ -294,5 +294,61 @@ class VirtualTenantLedgerUnitTests(unittest.TestCase):
         self.assertFalse(out.commercial_service_enabled)
 
 
+    def test_46_equal_decimals_have_same_audit_hash_after_database_reload(self):
+        plain=run(event(),event(seq=2,action="CLOSE",price="3002"))
+        persisted=run(
+            event(qty="1.0000",price="3000.0000",fee_usd="0.1000"),
+            event(seq=2,action="CLOSE",price="3002.0000",
+                  qty="1.0000",fee_usd="0.1000"),
+        )
+        self.assertEqual(plain.challenge_books[0].canonical_event_history_sha256,
+                         persisted.challenge_books[0].canonical_event_history_sha256)
+
+    def test_47_fifo_uses_oldest_open_lot_on_partial_close(self):
+        book=run(
+            event(price="3000",qty="1"),
+            event(seq=2,action="OPEN",price="3003",qty="2"),
+            event(seq=3,action="CLOSE",price="3004",qty="1"),
+        ).challenge_books[0]
+        self.assertEqual(book.closed_realized_gross_usd,Decimal("4"))
+        self.assertEqual(book.open_positions[0].remaining_ounces,Decimal("2"))
+        self.assertEqual(book.open_positions[0].weighted_open_price_usd,Decimal("3003"))
+
+    def test_48_exact_eight_decimal_usd_profit_retained(self):
+        book=run(
+            event(qty="0.0001",price="3000.0001",fee_usd="0"),
+            event(seq=2,action="CLOSE",qty="0.0001",
+                  price="3000.0002",fee_usd="0"),
+        ).challenge_books[0]
+        self.assertEqual(book.realized_net_after_all_fees_usd,
+                         Decimal("0.00000001"))
+        self.assertEqual(book.cash_balance_excluding_unrealized_usd,
+                         Decimal("100.00000001"))
+
+    def test_49_fifo_multiple_partial_closures_preserve_exact_total(self):
+        book=run(
+            event(qty="1",price="3000",fee_usd="0"),
+            event(seq=2,action="OPEN",qty="1",price="3002",fee_usd="0"),
+            event(seq=3,action="CLOSE",qty="0.5000",price="3004",fee_usd="0"),
+            event(seq=4,action="CLOSE",qty="1.5000",price="3005",fee_usd="0"),
+        ).challenge_books[0]
+        self.assertEqual(book.closed_realized_gross_usd,Decimal("8"))
+        self.assertEqual(book.fully_closed_positions_total,1)
+
+    def test_50_ledger_is_not_a_broker_trade_and_has_no_paid_entitlements(self):
+        book=run(event(),event(seq=2,action="CLOSE",price="3002")).challenge_books[0]
+        self.assertFalse(book.paid_enrollment_authorized)
+        self.assertFalse(book.broker_orders_authorized)
+        self.assertFalse(book.payouts_authorized)
+        self.assertFalse(book.floating_equity_and_risk_verified)
+
+    def test_51_closed_positions_do_not_count_raw_fills(self):
+        book=run(event(),event(seq=2,action="OPEN",price="3001"),
+                 event(seq=3,action="CLOSE",qty="1",price="3002"),
+                 event(seq=4,action="CLOSE",qty="1",price="3003")).challenge_books[0]
+        self.assertEqual(book.unique_event_count,4)
+        self.assertEqual(book.fully_closed_positions_total,1)
+
+
 if __name__=="__main__":
     unittest.main()
