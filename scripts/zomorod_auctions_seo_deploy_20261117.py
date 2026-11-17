@@ -40,7 +40,7 @@ def sha256(path):
 
 def git_blob_sha(path):
     data = path.read_bytes()
-    return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\\0" + data).hexdigest()
+    return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
 
 
 def stage_dir(commit):
@@ -57,7 +57,7 @@ def source_path(stage, rel):
 
 
 def target_path(rel):
-    m = re.fullmatch(r"public/auctions/(\\d{3})/index.html", rel)
+    m = re.fullmatch(r"public/auctions/(\d{3})/index.html", rel)
     if m:
         n = int(m.group(1))
         require(n in SERIALS, "Number out of target range")
@@ -148,7 +148,7 @@ def staged_plan(stage):
         require(target.parent.is_dir() and not target.parent.is_symlink()
                 and regular(target), "Unrecognized production target: " + str(target))
         data = source.read_text(encoding="utf-8")
-        if re.fullmatch(r"public/auctions/\\d{3}/index.html", rel):
+        if re.fullmatch(r"public/auctions/\d{3}/index.html", rel):
             n = int(rel.split("/")[2])
             require(MARKER in data and f"zm-auctions-72-v1 official-{n}" in data,
                     "SEO marker or original serial missing: " + str(n))
@@ -220,7 +220,7 @@ def rollback(commit, stage):
         require(regular(Path(path)) and sha256(Path(path)) == hash_before,
                 "Protected original changed: " + path)
     info["status"] = "rolled_back"
-    atomic_write(record, (json.dumps(info,ensure_ascii=False,indent=2)+"\\n").encode())
+    atomic_write(record, (json.dumps(info,ensure_ascii=False,indent=2)+"\n").encode())
     print("AUCTIONS_SEO_ROLLBACK=74_original_files_restored",flush=True)
 
 
@@ -254,14 +254,14 @@ def apply(commit, stage):
         require(sha256(saved) == sha256(target), "Backup validation failure: " + rel)
     info = {"sha":commit,"status":"applying","protected":protected(),"target_count":74}
     record = manifest_file(commit)
-    record.write_text(json.dumps(info,ensure_ascii=False,indent=2)+"\\n", encoding="utf-8")
+    record.write_text(json.dumps(info,ensure_ascii=False,indent=2)+"\n", encoding="utf-8")
     try:
         # Details first, public collection and sitemap last. Never touch .htaccess.
         for rel, source, target, _ in assets:
             atomic_write(target, source.read_bytes())
         verify(commit, stage)
         info["status"] = "deployed"
-        atomic_write(record,(json.dumps(info,ensure_ascii=False,indent=2)+"\\n").encode())
+        atomic_write(record,(json.dumps(info,ensure_ascii=False,indent=2)+"\n").encode())
         print("AUCTIONS_SEO_RELEASE=72_pages_index_sitemap_published",flush=True)
     except Exception:
         rollback(commit, stage)
