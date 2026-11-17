@@ -34,10 +34,10 @@ class ProcurementSerialRegistrationTests(TestCase):
             serial_number=180,
             baseline_evidence=self.EVIDENCE,
         )
-        self.register(last=200, apply=True)
+        self.register(last=349, apply=True)
         rows = list(PublicProcurementNumber.objects.exclude(notice_key="OLDER-EXISTING-REGISTER").order_by("serial_number"))
         self.assertEqual(len(rows), 72)
-        self.assertEqual([r.serial_number for r in rows], list(range(201, 273)))
+        self.assertEqual([r.serial_number for r in rows], list(range(350, 422)))
         self.assertEqual([r.notice_key for r in rows[:36]], [f"ZM-SUP-{i:03d}" for i in range(1, 37)])
         self.assertEqual([r.notice_key for r in rows[36:]], [f"ZM-EQP-{i:03d}" for i in range(1, 37)])
         self.assertGreater(rows[0].serial_number, old_ad.pk)
@@ -46,9 +46,9 @@ class ProcurementSerialRegistrationTests(TestCase):
         user = get_user_model().objects.create_user("old-auction-number", password="nottestpassword")
         for i in range(3):
             PrivateAuction.objects.create(title=f"Internal auction {i}", created_by=user)
-        self.register(last=0, apply=True)
+        self.register(last=349, apply=True)
         first = PublicProcurementNumber.objects.get(notice_key="ZM-SUP-001")
-        self.assertEqual(first.serial_number, 1)
+        self.assertEqual(first.serial_number, 350)
 
     def test_real_live_public_baseline_349_gives_350_through_421(self):
         output = self.register(last=349)
@@ -63,17 +63,17 @@ class ProcurementSerialRegistrationTests(TestCase):
         self.assertEqual(grouped[-1].notice_key, "ZM-EQP-036")
 
     def test_second_registration_does_not_reassign_or_duplicate_numbers(self):
-        self.register(last=500, apply=True)
+        self.register(last=349, apply=True)
         original = list(PublicProcurementNumber.objects.values_list("notice_key", "serial_number"))
-        msg = self.register(last=500, apply=True)
+        msg = self.register(last=349, apply=True)
         self.assertIn("Already reserved", msg)
         self.assertEqual(original, list(PublicProcurementNumber.objects.values_list("notice_key", "serial_number")))
         self.assertEqual(len(original), 72)
 
     def test_rejects_historical_claim_that_conflicts_with_reserved_numbers(self):
-        self.register(last=75, apply=True)
+        self.register(last=349, apply=True)
         with self.assertRaises(CommandError):
-            self.register(last=80, apply=True)
+            self.register(last=350, apply=True)
         self.assertEqual(PublicProcurementNumber.objects.count(), 72)
 
     def test_public_page_fails_closed_before_numbers_exist_then_shows_reserved(self):
@@ -81,11 +81,11 @@ class ProcurementSerialRegistrationTests(TestCase):
         self.assertEqual(before.status_code, 200)
         self.assertContains(before, "شماره‌گذاری نهایی آگهی‌ها در انتظار")
         self.assertNotContains(before, "شماره آگهی 1")
-        self.register(last=912, apply=True)
+        self.register(last=349, apply=True)
         after = self.client.get("/auctions/")
         self.assertEqual(after.status_code, 200)
-        self.assertContains(after, "شماره آگهی 913")
-        self.assertContains(after, "شماره آگهی 984")
+        self.assertContains(after, "شماره آگهی 350")
+        self.assertContains(after, "شماره آگهی 421")
         self.assertContains(after, "ZM-SUP-001")
         self.assertContains(after, "ZM-EQP-036")
         self.assertNotContains(after, "شماره‌گذاری نهایی آگهی‌ها در انتظار")
@@ -102,11 +102,22 @@ class ProcurementSerialRegistrationTests(TestCase):
         self.assertNotContains(response, "شماره آگهی 450")
 
     def test_out_of_order_registry_fails_closed(self):
-        self.register(last=800, apply=True)
+        self.register(last=349, apply=True)
         first = PublicProcurementNumber.objects.get(notice_key="ZM-SUP-001")
-        first.serial_number = 950
+        first.serial_number = 450
         first.save(update_fields=["serial_number"])
         response = self.client.get("/auctions/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "شماره‌گذاری نهایی آگهی‌ها در انتظار")
-        self.assertNotContains(response, "شماره آگهی 950")
+        self.assertNotContains(response, "شماره آگهی 450")
+
+    def test_refuse_to_reserve_if_a_higher_existing_public_number_appears(self):
+        PublicProcurementNumber.objects.create(
+            notice_key="ANOTHER-PUBLIC-AD",
+            serial_number=350,
+            baseline_evidence=self.EVIDENCE,
+        )
+        with self.assertRaises(CommandError):
+            self.register(last=349, apply=True)
+        self.assertEqual(PublicProcurementNumber.objects.count(), 1)
+        self.assertFalse(PublicProcurementNumber.objects.filter(notice_key="ZM-SUP-001").exists())
