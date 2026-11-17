@@ -8,7 +8,7 @@ import re
 import sqlite3
 
 _REVIEW = re.compile(r"PROP1-REVIEW-[A-F0-9]{32}\Z")
-_DIGEST = re.compile(r"[0-9a-f]{64}\\Z")
+_DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 
 
 class ReviewReplayClosed(ValueError):
