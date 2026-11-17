@@ -131,4 +131,6 @@ def moj_prop_v141_private_statement(request, challenge_ref):
         "frame-ancestors 'none'; form-action 'none'; connect-src 'none'"
     )
     response["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+    if request.method == "HEAD":
+        response.content = b""
     return response
