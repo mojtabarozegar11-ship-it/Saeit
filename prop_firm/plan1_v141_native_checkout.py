@@ -234,6 +234,14 @@ def confirm_native_trx_and_deliver(*, reference, txid):
             order.country_of_residence in ("IR", "US") or
             order.recipient != RECEIVER or "DRAFT" in order.terms_version.upper()):
         raise CheckoutRejected("Order/terms not authorized for foreign TRX")
+    immutable_order_snapshot = (
+        order.pk, order.buyer_id, order.reference, order.product_code,
+        order.country_of_residence, order.recipient, order.payer_hex41,
+        order.amount_sun, order.terms_version, order.terms_sha256,
+        order.consent_digest, order.payer_wallet_attestation_sha256,
+        order.legal_clearance_digest, order.clearance_document_ref,
+        order.issued_at, order.expires_at,
+    )
     bases = _solidity_base_urls()
     observations = []
     for base in bases:
@@ -258,6 +266,16 @@ def confirm_native_trx_and_deliver(*, reference, txid):
             if existing.settlement.txid == txid:
                 return existing
             raise CheckoutRejected("Order already settled to another transaction")
+        locked_order_snapshot = (
+            order.pk, order.buyer_id, order.reference, order.product_code,
+            order.country_of_residence, order.recipient, order.payer_hex41,
+            order.amount_sun, order.terms_version, order.terms_sha256,
+            order.consent_digest, order.payer_wallet_attestation_sha256,
+            order.legal_clearance_digest, order.clearance_document_ref,
+            order.issued_at, order.expires_at,
+        )
+        if locked_order_snapshot != immutable_order_snapshot:
+            raise CheckoutRejected("Invoice changed during independent chain verification")
         # Race-safe global unique reservation: no double-selling one txid.
         try:
             claim = PropGlobalTRXSettlement.objects.create(
