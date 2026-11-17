@@ -9,6 +9,8 @@ from django.conf import settings
 from django.http import Http404, HttpResponseNotAllowed
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
+from prop_firm.mojprop_v141_info_i18n import info_context
+from prop_firm.moj_prop_page import SUPPORTED_CODES
 
 _ALLOWED_HOSTS = frozenset(("mojplaywin.com", "www.mojplaywin.com"))
 
@@ -24,14 +26,25 @@ def moj_prop_v141_public_info(request):
         raise Http404("Only MojPlayWin HTTPS is permitted")
     if request.method not in ("GET", "HEAD"):
         return HttpResponseNotAllowed(["GET", "HEAD"])
-    # A template-only page: no user input is parsed, recorded or echoed.
+    # Only a single recognized language selection is allowed, with no PII.
     if request.META.get("QUERY_STRING", ""):
-        raise Http404("Unexpected query data")
-    response = render(
-        request, "moj-prop-plan1-v141-prelaunch/index.html",
-        {"interest_enabled": getattr(settings, "MOJ_PROP_V141_INTEREST_ENABLED", False) is True},
-        content_type="text/html; charset=utf-8",
-    )
+        if set(request.GET) != {"lang"} or len(request.GET.getlist("lang")) != 1:
+            raise Http404("Unexpected query data")
+        lang = request.GET["lang"]
+        if lang not in SUPPORTED_CODES:
+            raise Http404("Unsupported language")
+        response = render(
+            request, "moj-prop-plan1-v141-prelaunch/info_20.html",
+            {**info_context(lang), "interest_enabled": getattr(
+                settings, "MOJ_PROP_V141_INTEREST_ENABLED", False) is True},
+            content_type="text/html; charset=utf-8",
+        )
+    else:
+        response = render(
+            request, "moj-prop-plan1-v141-prelaunch/index.html",
+            {"interest_enabled": getattr(settings, "MOJ_PROP_V141_INTEREST_ENABLED", False) is True},
+            content_type="text/html; charset=utf-8",
+        )
     response["Cache-Control"] = "private, no-store, max-age=0"
     response["Pragma"] = "no-cache"
     response["Referrer-Policy"] = "no-referrer"
@@ -43,4 +56,6 @@ def moj_prop_v141_public_info(request):
         "base-uri 'none'; form-action 'none'; object-src 'none'; "
         "frame-ancestors 'none'; connect-src 'none'"
     )
+    if request.method == "HEAD":
+        response.content = b""
     return response
