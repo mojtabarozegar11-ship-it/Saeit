@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import re
+import socket
+import ssl
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -54,6 +56,22 @@ def evaluate_page(*, status: int, body: bytes, language: str) -> str:
     return "verified_get_form_no_payment_claim"
 
 
+def safe_network_state(exc: BaseException) -> str:
+    """Classify exceptions WITHOUT returning error strings, addresses or headers."""
+    cause = exc.reason if isinstance(exc, URLError) else exc
+    if isinstance(cause, (TimeoutError, socket.timeout)):
+        return "network_timeout"
+    if isinstance(cause, socket.gaierror):
+        return "dns_unavailable"
+    if isinstance(cause, ssl.SSLError):
+        return "tls_failed"
+    if isinstance(cause, ConnectionRefusedError):
+        return "connection_refused"
+    if isinstance(cause, ConnectionResetError):
+        return "connection_reset"
+    return "network_unavailable"
+
+
 def probe_one(opener, language: str, url: str) -> dict:
     request = Request(
         url, method="GET",
@@ -72,8 +90,8 @@ def probe_one(opener, language: str, url: str) -> dict:
         status = exc.code
         body = b""
         exc.close()
-    except (URLError, TimeoutError, OSError):
-        return {"lang": language, "state": "network_unavailable", "http_status": None,
+    except (URLError, TimeoutError, OSError) as exc:
+        return {"lang": language, "state": safe_network_state(exc), "http_status": None,
                 "get_form_verified": False}
     state = evaluate_page(status=status, body=body, language=language)
     return {"lang": language, "state": state, "http_status": status,
