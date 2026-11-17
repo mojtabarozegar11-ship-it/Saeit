@@ -54,6 +54,25 @@ jobs:
             tests/test_mojprop_starter30_single_sku_contract_20261115.py \
             tests/test_moj_prop_social_review.py \
             tests/test_mpw_cutover_current_catalog_guard_20261115.py \
-            tests/test_mpw_guest_telemetry_isolation_20261108.py
+            tests/test_mpw_guest_telemetry_isolation_20261108.py \
+            tests/test_mojprop_c142_public_form_get_readonly.py
           echo 'C142_FOCUSED_REAL_CONTRACT_TESTS=PASS'
           echo 'C142_CUSTOMER_POST_PAYMENT_RELEASE=false'
+
+  live-plan1-consent-form-get-only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Observe real public EN/FA consent GET without buyer POST or email
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_c142_public_form_get_readonly.py
