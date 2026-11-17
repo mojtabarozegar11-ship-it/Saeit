@@ -57,7 +57,9 @@ class QuotaTruthTests(unittest.TestCase):
     def test_08_reject_nan_infinity_boolean_bad_decimal(self):
         r=q.quota_shape({"result":{"status":1,"data":{"used":True,"limit":1,
                             "bytes_used":"NaN","bytes_limit":"Inf"}}})
-        self.assertFalse(r["matched_numeric_fields"])
+        self.assertEqual(r["matched_numeric_fields"],{"limit":1.0})
+        self.assertIsNone(r["same_unit_used_to_limit_ratio_percent"])
+        self.assertFalse(r["account_write_headroom_proven"])
 
     def test_09_never_infer_unlimited_from_zero_limit(self):
         r=q.quota_shape({"result":{"status":1,"data":{"used":300,"limit":0}}})
