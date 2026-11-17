@@ -292,7 +292,7 @@ def run_export(args):
             expected_root_a=GOOGLE_A_ROOT, expected_root_b=GOOGLE_B_ROOT,
             proof_path=PROOF_PATH, proof_sha256=PROOF_SHA256,
             max_source_bytes=SOURCE_BYTES, chunk_bytes=CHUNK_BYTES,
-            free_reserve_bytes=MIN_FREE_RESERVE,rclone_exe=args.rclone_exe)
+            free_reserve_bytes=MIN_FREE_RESERVE,rclone_exe=str(rclone_binary))
         admission = transport.preflight()
         namespace = "factory-historical-" + secrets.token_hex(16)
         callbacks = transport.callbacks(namespace, destination_kind="historical-nov5")
