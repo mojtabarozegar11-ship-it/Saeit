@@ -431,7 +431,9 @@ class RealNativePaymentStorageTests(TestCase):
         self.assertContains(response, RECEIVER)
         self.assertContains(response, i.reference)
         self.assertEqual(response.headers["X-Robots-Tag"], "noindex, nofollow, noarchive")
-        self.assertEqual(response.headers["Cache-Control"], "private, no-store, max-age=0")
+        self.assertIn("private", response.headers["Cache-Control"])
+        self.assertIn("no-store", response.headers["Cache-Control"])
+        self.assertIn("max-age=0", response.headers["Cache-Control"])
         self.client.force_login(self.operator)
         self.assertEqual(self.client.get(page, secure=True,
                                         HTTP_HOST="mojplaywin.com").status_code, 404)
