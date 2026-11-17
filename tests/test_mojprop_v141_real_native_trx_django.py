@@ -325,11 +325,11 @@ class RealNativePaymentStorageTests(TestCase):
         body, receipt = self.proof(i)
         row = dict(body, block_timestamp=receipt["blockTimeStamp"])
         with patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
-                   return_value=("https://api.trongrid.io", "")), \\
+                   return_value=("https://api.trongrid.io", "")), \
              patch("prop_firm.plan1_v141_native_watcher._get_page",
-                   return_value=([row], {})), \\
+                   return_value=([row], {})), \
              patch("prop_firm.plan1_v141_native_checkout._query_solidified",
-                   side_effect=self.mock_sources(body, receipt)), \\
+                   side_effect=self.mock_sources(body, receipt)), \
              patch("prop_firm.plan1_v141_native_checkout.timezone.now",
                    return_value=i.issued_at + timedelta(seconds=10)):
             result = reconcile_pending_invoices()
@@ -343,9 +343,9 @@ class RealNativePaymentStorageTests(TestCase):
         body, receipt = self.proof(i)
         row = dict(body, block_timestamp=receipt["blockTimeStamp"])
         with patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
-                   return_value=("https://api.trongrid.io", "")), \\
+                   return_value=("https://api.trongrid.io", "")), \
              patch("prop_firm.plan1_v141_native_watcher._get_page",
-                   return_value=([row], {})), \\
+                   return_value=([row], {})), \
              patch("prop_firm.plan1_v141_native_checkout._query_solidified") as verify:
             result = reconcile_pending_invoices(dry_run=True)
         self.assertEqual(result["candidate_txids"], 1)
@@ -359,7 +359,7 @@ class RealNativePaymentStorageTests(TestCase):
         i2 = self.invoice()
         row = self.indexed_transfer(i1)
         with patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
-                   return_value=("https://api.trongrid.io", "")), \\
+                   return_value=("https://api.trongrid.io", "")), \
              patch("prop_firm.plan1_v141_native_watcher._get_page",
                    return_value=([row], {})):
             result = reconcile_pending_invoices()
@@ -371,7 +371,7 @@ class RealNativePaymentStorageTests(TestCase):
         i = self.invoice()
         row = self.indexed_transfer(i, recipient="41" + "b0" * 20)
         with patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
-                   return_value=("https://api.trongrid.io", "")), \\
+                   return_value=("https://api.trongrid.io", "")), \
              patch("prop_firm.plan1_v141_native_watcher._get_page",
                    return_value=([row], {})):
             result = reconcile_pending_invoices()
@@ -382,7 +382,7 @@ class RealNativePaymentStorageTests(TestCase):
         i = self.invoice()
         row = self.indexed_transfer(i, amount=30_000_001)
         with patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
-                   return_value=("https://api.trongrid.io", "")), \\
+                   return_value=("https://api.trongrid.io", "")), \
              patch("prop_firm.plan1_v141_native_watcher._get_page",
                    return_value=([row], {})):
             result = reconcile_pending_invoices()
@@ -391,9 +391,9 @@ class RealNativePaymentStorageTests(TestCase):
     def test_watcher_missing_full_page_cursor_fails_closed(self):
         i = self.invoice()
         row = self.indexed_transfer(i)
-        with patch("prop_firm.plan1_v141_native_watcher.PAGE_LIMIT", 1), \\
+        with patch("prop_firm.plan1_v141_native_watcher.PAGE_LIMIT", 1), \
              patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
-                   return_value=("https://api.trongrid.io", "")), \\
+                   return_value=("https://api.trongrid.io", "")), \
              patch("prop_firm.plan1_v141_native_watcher._get_page",
                    return_value=([row], {})):
             with self.assertRaises(CheckoutRejected):
@@ -403,9 +403,9 @@ class RealNativePaymentStorageTests(TestCase):
     def test_watcher_repeated_cursor_fails_closed(self):
         i = self.invoice()
         row = self.indexed_transfer(i)
-        with patch("prop_firm.plan1_v141_native_watcher.PAGE_LIMIT", 1), \\
+        with patch("prop_firm.plan1_v141_native_watcher.PAGE_LIMIT", 1), \
              patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
-                   return_value=("https://api.trongrid.io", "")), \\
+                   return_value=("https://api.trongrid.io", "")), \
              patch("prop_firm.plan1_v141_native_watcher._get_page",
                    return_value=([row], {"fingerprint": "abcabcabcabc"})):
             with self.assertRaises(CheckoutRejected):
@@ -414,7 +414,7 @@ class RealNativePaymentStorageTests(TestCase):
 
     def test_watcher_release_off_never_queries_indexer(self):
         self.invoice()
-        with override_settings(MOJPROP_TRX_GLOBAL_LEDGER_RECONCILED=False), \\
+        with override_settings(MOJPROP_TRX_GLOBAL_LEDGER_RECONCILED=False), \
              patch("prop_firm.plan1_v141_native_watcher._get_page") as network:
             with self.assertRaises(CheckoutRejected):
                 reconcile_pending_invoices()
