@@ -60,7 +60,7 @@ def safe_regular(path: Path, owner: int, *, size: int = MAX_HTML_BYTES) -> bool:
 
 def git_blob_id(data: bytes) -> str:
     return hashlib.sha1(
-        b"blob " + str(len(data)).encode("ascii") + b"\\0" + data
+        b"blob " + str(len(data)).encode("ascii") + b"\0" + data
     ).hexdigest()
 
 
@@ -203,7 +203,7 @@ def install(identity: str, *, home: Path = HOME, parent: Path = PARENT,
                 # Link requires destination not to exist; NO REPLACE of owner bytes.
                 os.link(tmp, "index.html", src_dir_fd=sfd, dst_dir_fd=sfd,
                         follow_symlinks=False)
-                os.chmod("index.html", 0o644, dir_fd=sfd, follow_symlinks=False)
+                os.chmod("index.html", 0o644, dir_fd=sfd)
                 os.unlink(tmp, dir_fd=sfd)  # only our new private-mode temp file
                 if status_at_parent(fd, data) != "already_identical":
                     raise RuntimeError("New page failed exact readback verification")
