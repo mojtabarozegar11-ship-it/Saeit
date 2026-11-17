@@ -95,7 +95,7 @@ def inspect(parent: Path = PARENT, getter=get_http_status) -> dict:
         "schema": "mojprop.sidecar.owner_route_vacancy.readonly.v1",
         "route_status": value,
         "public_http_status": code,
-        "vacant_for_new_additive_source": value in ("safe_absent", "safe_empty_directory"),
+        "vacant_for_new_additive_source": value == "safe_absent",
         "read_only": True,
         "existing_home_contact_preserved": True,
         "no_file_data_or_customer_data_read": True,
