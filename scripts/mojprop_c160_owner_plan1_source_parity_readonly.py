@@ -94,7 +94,16 @@ def file_parity(root, relative, expected_sha, uid):
     target = root / relative
     parent = target.parent
     while parent != root:
-        if root not in parent.parents or not safe_owner_dir(parent,uid):
+        if root not in parent.parents:
+            return "unsafe"
+        try:
+            parent_st = parent.lstat()
+        except FileNotFoundError:
+            return "missing"
+        except OSError:
+            return "unavailable"
+        if (not stat.S_ISDIR(parent_st.st_mode)
+                or parent_st.st_uid != uid or parent_st.st_mode & 0o022):
             return "unsafe"
         parent = parent.parent
     try:
