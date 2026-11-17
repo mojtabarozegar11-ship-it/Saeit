@@ -107,6 +107,48 @@ def _from_decision(value, label):
     return _time(parsed, label)
 
 
+def calculate_v141_receipt_sha256(
+    *, challenge_ref: str, sequence: int,
+    manifest_sha256: str, replay_sha256: str,
+    previous_receipt_sha256: str,
+    reported_engine_state: str, as_of_utc: datetime,
+) -> str:
+    """Pure canonical digest for BOTH new receipts and database read-back.
+
+    This authenticates mathematical receipt metadata against a stored hash,
+    but a database administrator could rewrite an entire unanchored chain.
+    An immutable off-host archive and independent checkpoints remain necessary.
+    """
+    if (type(challenge_ref) is not str
+            or re.fullmatch(r"CHALLENGE-[A-Z0-9]{16,40}", challenge_ref) is None):
+        raise JournalTransitionRejected("invalid receipt challenge reference")
+    if type(sequence) is not int or not 1 <= sequence <= 1_000_000_000:
+        raise JournalTransitionRejected("receipt sequence outside permitted range")
+    for value, label in (
+        (manifest_sha256, "manifest"),
+        (replay_sha256, "replay"),
+        (previous_receipt_sha256, "previous receipt"),
+    ):
+        if type(value) is not str or _SHA.fullmatch(value) is None:
+            raise JournalTransitionRejected(label + " SHA256 is not canonical")
+    if (type(reported_engine_state) is not str
+            or reported_engine_state not in _RECORDED_STATES):
+        raise JournalTransitionRejected("unknown recorded simulator state")
+    assessment = _time(as_of_utc, "receipt assessment")
+    blob = dict(
+        domain="mojprop.v141.simulated-receipt-chain.v1",
+        challenge_ref=challenge_ref, sequence=sequence,
+        manifest_sha256=manifest_sha256, replay_sha256=replay_sha256,
+        previous_receipt_sha256=previous_receipt_sha256,
+        reported_engine_state=reported_engine_state,
+        as_of_utc=assessment.isoformat(),
+    )
+    return sha256(json.dumps(
+        blob, sort_keys=True, separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")).hexdigest()
+
+
 def decide_next_signed_replay_receipt(*, previous: PreviousReplayState,
                                       calculated: ChallengeReplayDecision,
                                       manifest_sha256: str,
@@ -233,17 +275,13 @@ def decide_next_signed_replay_receipt(*, previous: PreviousReplayState,
             or calculated.fee_collection_authorized is not False
             or calculated.payout_authorized is not False):
         raise JournalTransitionRejected("a DEMO calculation cannot carry financial authorization")
-    blob = dict(
-        domain="mojprop.v141.simulated-receipt-chain.v1",
+    digest = calculate_v141_receipt_sha256(
         challenge_ref=previous.challenge_ref,
         sequence=requested_sequence, manifest_sha256=manifest_sha256,
         replay_sha256=calculated.snapshot_sha256,
         previous_receipt_sha256=prior_hash,
-        reported_engine_state=calculated.state,
-        as_of_utc=assessed.isoformat(),
+        reported_engine_state=calculated.state, as_of_utc=assessed,
     )
-    digest = sha256(json.dumps(blob, sort_keys=True, separators=(",", ":"),
-                               ensure_ascii=True).encode("utf-8")).hexdigest()
     return ReviewedReceiptTransition(
         new_sequence=requested_sequence, manifest_sha256=manifest_sha256,
         replay_sha256=calculated.snapshot_sha256,
