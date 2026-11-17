@@ -66,7 +66,7 @@ class _ContactDocument(HTMLParser):
         if tag == "meta" and "http-equiv" in attrs:
             self.unsafe_features += 1
         if tag == "link" and not (
-            attrs.get("rel", "").lower() == "canonical"
+            attrs.get("rel") == "canonical"
             and attrs.get("href") == "https://mojplaywin.com/moj-prop/contact/"
         ):
             self.unsafe_features += 1
