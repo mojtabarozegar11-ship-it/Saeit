@@ -398,5 +398,73 @@ class FactoryCpanelOldBackupTransportTests(unittest.TestCase):
         self.assertTrue(calls[0][0].startswith("factory-historical-"))
 
 
+    def _ephemeral_args(self, binary=None):
+        return SimpleNamespace(mode="transfer",snapshot="nov5-b",
+                ssh_config="/PRIVATE/ssh-config",known_hosts="/PRIVATE/known",
+                public_pem="/PRIVATE/recovery-public",
+                rclone_config="/PRIVATE/rclone.conf",rclone_exe=binary,
+                trusted_public_spki_sha256="a"*64)
+
+    def test_43_ephemeral_never_downloads_without_private_oauth_config(self):
+        args=self._ephemeral_args()
+        with patch.object(m.os,"geteuid",return_value=1001), \
+             patch.object(m,"probe_source",return_value=self.fake_probe()), \
+             patch.object(m,"_secure_file",return_value=b"owner-public-key"), \
+             patch.object(m,"_mode_secure_file",return_value=False), \
+             patch.object(m,"provision_verified_rclone",side_effect=AssertionError("NO_BINARY_DOWNLOAD")):
+            with self.assertRaisesRegex(m.TransferHold,"OWNER_RCLONE_OAUTH_CONFIG_NOT_PRESENT"):
+                m.run_export(args)
+
+    def test_44_ephemeral_rejects_unverified_local_temp_before_download(self):
+        args=self._ephemeral_args()
+        with patch.object(m.os,"geteuid",return_value=1001), \
+             patch.object(m,"probe_source",return_value=self.fake_probe()), \
+             patch.object(m,"_secure_file",return_value=b"owner-public-key"), \
+             patch.object(m,"_mode_secure_file",return_value=True), \
+             patch.dict(m.os.environ,{"RUNNER_TEMP":"relative"},clear=True), \
+             patch.object(m,"provision_verified_rclone",side_effect=AssertionError("NO_BINARY_DOWNLOAD")):
+            with self.assertRaisesRegex(m.TransferHold,"OWNER_RUNNER_TEMP_UNAVAILABLE"):
+                m.run_export(args)
+
+    def test_45_verified_ephemeral_client_passed_to_transport_before_source(self):
+        from contextlib import nullcontext
+        args=self._ephemeral_args()
+        seen=[]
+        class FakeTransport:
+            def __init__(self,*a,**kw):
+                seen.append(kw["rclone_exe"])
+            def preflight(self):
+                raise m.TransferHold("NO_PROVIDER_OAUTH")
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(m.os,"geteuid",return_value=1001), \
+             patch.object(m,"probe_source",return_value=self.fake_probe()), \
+             patch.object(m,"_secure_file",return_value=b"owner-public-key"), \
+             patch.object(m,"_mode_secure_file",return_value=True), \
+             patch.dict(m.os.environ,{"RUNNER_TEMP":tmp}), \
+             patch.object(m,"provision_verified_rclone",return_value=nullcontext("/signed-temp/rclone")) as binary, \
+             patch.object(m,"RcloneDualStore",FakeTransport), \
+             patch.object(m,"VerifiedCpanelStream",side_effect=AssertionError("NO_SOURCE_READ_BEFORE_OAUTH")):
+            with self.assertRaisesRegex(m.TransferHold,"NO_PROVIDER_OAUTH"):
+                m.run_export(args)
+        self.assertEqual(seen,["/signed-temp/rclone"])
+        binary.assert_called_once_with(Path(tmp))
+
+    def test_46_explicit_owner_binary_does_not_download_client(self):
+        args=self._ephemeral_args(binary="/verified-local/rclone")
+        seen=[]
+        class FakeTransport:
+            def __init__(self,*a,**kw):seen.append(kw["rclone_exe"])
+            def preflight(self):raise m.TransferHold("PROVIDER_GATE")
+        with patch.object(m.os,"geteuid",return_value=1001), \
+             patch.object(m,"probe_source",return_value=self.fake_probe()), \
+             patch.object(m,"_secure_file",return_value=b"owner-public-key"), \
+             patch.object(m,"provision_verified_rclone",side_effect=AssertionError("EXPLICIT_BINARY_MUST_NOT_DOWNLOAD")), \
+             patch.object(m,"RcloneDualStore",FakeTransport), \
+             patch.object(m,"VerifiedCpanelStream",side_effect=AssertionError("NO_SOURCE_READ")):
+            with self.assertRaisesRegex(m.TransferHold,"PROVIDER_GATE"):
+                m.run_export(args)
+        self.assertEqual(seen,["/verified-local/rclone"])
+
+
 if __name__=="__main__":
     unittest.main()
