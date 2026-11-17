@@ -21,7 +21,7 @@ class ActualCpanelQuotaFallbackTests(unittest.TestCase):
     def test_01_readonly_exact_statsbar_commands(self):
         self.assertEqual(set(q.CALLS),{"uapi_statsbar","cpapi2_statsbar"})
         self.assertEqual(q.CALLS["uapi_statsbar"],
-            [q.UAPI,"--output=json","StatsBar","get_stats",
+            [q.UAPI,"--output=json","--user=zomorod2","StatsBar","get_stats",
              "display=diskusage|mysqldiskusage"])
         self.assertEqual(q.CALLS["cpapi2_statsbar"][2],"--user=zomorod2")
         self.assertNotIn("setquota",str(q.CALLS).lower())
