@@ -33,6 +33,7 @@ REQUIRED_TEST_MODULES = (
     ("tests.test_plan1_v141_precontract_boundary", 33),
     ("tests.test_mojprop_v141_prelaunch_copy", 30),
     ("tests.test_mojprop_v141_info_url_source", 20),
+    ("tests.test_mojprop_v141_private_portfolio_source", 20),
     ("tests.test_plan1_v141_simulated_challenge_engine", 73),
     ("tests.test_plan1_v141_demo_order_risk_review", 28),
     ("tests.test_plan1_v141_signed_simulator_manifest", 40),
@@ -45,7 +46,7 @@ REQUIRED_TEST_MODULES = (
 )
 LEGACY_TEST_MODULE = "tests.test_prop_firm_policy"
 EXPECTED_V13_TESTS = 194
-EXPECTED_V14_TESTS = 564
+EXPECTED_V14_TESTS = 584
 EXPECTED_ALL_TESTS = EXPECTED_V13_TESTS + EXPECTED_V14_TESTS
 
 
@@ -75,7 +76,8 @@ def run_full_review() -> int:
     v14_modules = {name: count for name, count in observed.items()
                    if name.startswith("tests.test_plan1_v14")
                    or name in ("tests.test_mojprop_v141_prelaunch_copy",
-                               "tests.test_mojprop_v141_info_url_source")}
+                               "tests.test_mojprop_v141_info_url_source",
+                               "tests.test_mojprop_v141_private_portfolio_source")}
     if (sum(v13_modules.values()) != EXPECTED_V13_TESTS
             or sum(v14_modules.values()) != EXPECTED_V14_TESTS):
         print("Version-specific unit test inventory drift; fail closed", file=sys.stderr)
