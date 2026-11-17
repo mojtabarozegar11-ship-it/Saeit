@@ -56,10 +56,71 @@ def get_largest_db():
     return size, name, len(values)
 
 
+
+def verified_local_app_connection(db):
+    """Load an existing *local* DB DSN in cPanel memory only; never log it.
+
+    Adapted from the repository's existing
+    mojplaywin_consistent_db_preflight_readonly.py / backup stream source.
+    """
+    import urllib.parse
+    root = Path("/home/zomorod2")
+    candidates = [
+        root/"Saeit-staging/.env",
+        root/"Saeit-staging/.env.production",
+        root/"Saeit-staging/.env.local",
+        root/"mojplaywin.com/.env",
+        root/"Saeit/.env",
+        root/"Saeit/.env.production",
+    ]
+    found = set()
+    count_matching = 0
+    for path in candidates:
+        try:
+            st = path.lstat()
+            import stat
+            if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid()
+                    or st.st_size > 65536):
+                continue
+            source = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line in source.splitlines():
+            match = re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$", line)
+            if match is None:
+                continue
+            raw = match.group(1).strip().strip('"').strip("'")
+            try:
+                parsed = urllib.parse.urlsplit(raw)
+                if parsed.scheme.lower() not in ("mysql", "mariadb", "mysql2"):
+                    continue
+                actual_db = urllib.parse.unquote(parsed.path.lstrip("/"))
+                if actual_db != db:
+                    continue
+                count_matching += 1
+                user = urllib.parse.unquote(parsed.username or "")
+                password = urllib.parse.unquote(parsed.password or "")
+                host = (parsed.hostname or "localhost").lower()
+                port = parsed.port
+                if (not user or not password or host not in ("localhost","127.0.0.1")
+                        or port not in (None,3306)):
+                    continue
+                found.add((user,password,host,port))
+            except (ValueError,TypeError):
+                continue
+    if len(found) != 1:
+        return None, ("LARGEST_DATABASE_LOCAL_DSN_NOT_FOUND_OR_AMBIGUOUS"
+                      if count_matching else "NO_MATCHING_LOCAL_DSN")
+    return next(iter(found)), "OK"
+
 def census_table_stats(db):
     exe = shutil.which("mariadb") or shutil.which("mysql")
     if not exe:
         return {"available": False, "reason": "LOCAL_MYSQL_CLIENT_NOT_INSTALLED"}
+    verified, reason = verified_local_app_connection(db)
+    if verified is None:
+        return {"available": False, "reason": reason}
+    user, password, host, port = verified
     # Safe quoted name, verified by DBNAME above. No application row data
     # are returned: this query accesses system table statistics only.
     query = (
@@ -74,9 +135,12 @@ def census_table_stats(db):
     env = dict(os.environ)
     env["MYSQL_HISTFILE"] = os.devnull
     env["HISTFILE"] = os.devnull
+    # Never pass password through argv, output, artifacts or remote SSH.
+    env["MYSQL_PWD"] = password
     try:
         p = subprocess.run(
-            [exe, "--protocol=SOCKET", "--connect-timeout=8",
+            [exe, "--no-defaults", "--host="+host, "--user="+user,
+             "--database="+db, "--connect-timeout=8",
              "--batch", "--raw", "--skip-column-names",
              "--skip-auto-rehash", "--execute", query],
             stdout=subprocess.PIPE,
