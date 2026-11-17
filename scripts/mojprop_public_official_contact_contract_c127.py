@@ -102,9 +102,11 @@ def _passive_markup_only(page: _ContactDocument) -> bool:
     css = "".join(page.style_text).lower()
     # The reviewed CSS needs none of these. Reject escaped CSS as well.
     unsafe_css = any(part in css for part in (
-        "@import", "url(", "expression(", "behavior:", "-moz-binding",
+        "@import", "url(", "expression(", "-moz-binding",
         "@font-face", "javascript:", "\\",
     ))
+    # A genuine CSS behavior property is active, but scroll-behavior is safe.
+    unsafe_css = unsafe_css or bool(re.search(r"(?:^|[;{])\s*behavior\s*:", css))
     return page.unsafe_features == 0 and not unsafe_css
 
 
