@@ -1,0 +1,78 @@
+name: MOJ PROP C168 real staging MySQL engine consistency inventory read-only
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mojprop-c168-mysql-engine-consistency-readonly.yml'
+      - 'scripts/mojprop_c168_owner_mysql_engine_inventory_readonly.py'
+      - 'tests/test_mojprop_c168_owner_mysql_engine_inventory_readonly.py'
+permissions:
+  contents: read
+jobs:
+  offline-regression:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Check no-follow source, pinned SHA and 17+ safety tests
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_c168_owner_mysql_engine_inventory_readonly.py
+          test ! -L tests/test_mojprop_c168_owner_mysql_engine_inventory_readonly.py
+          test "$(git hash-object scripts/mojprop_c168_owner_mysql_engine_inventory_readonly.py)" = 'd9aeca1be5e387213c0b1105919d805dcc3b8197'
+          test "$(git hash-object tests/test_mojprop_c168_owner_mysql_engine_inventory_readonly.py)" = '55fa85d9de43d2272d173995b9fa63601389760a'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_mojprop_c168_owner_mysql_engine_inventory_readonly
+          echo 'C168_OFFLINE_READONLY_REGRESSIONS=PASSED' >> "$GITHUB_STEP_SUMMARY"
+  one-owner-staging-engine-metadata-select:
+    needs: offline-regression
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Refuse changed script/test and checkout tampering
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_c168_owner_mysql_engine_inventory_readonly.py
+          test ! -L tests/test_mojprop_c168_owner_mysql_engine_inventory_readonly.py
+          test "$(git hash-object scripts/mojprop_c168_owner_mysql_engine_inventory_readonly.py)" = 'd9aeca1be5e387213c0b1105919d805dcc3b8197'
+          test "$(git hash-object tests/test_mojprop_c168_owner_mysql_engine_inventory_readonly.py)" = '55fa85d9de43d2272d173995b9fa63601389760a'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_mojprop_c168_owner_mysql_engine_inventory_readonly
+      - name: Pin owner-only SSH relay to cPanel; query one SQL metadata statement only
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY" || exit 65
+          umask 077
+          work="$RUNNER_TEMP/mojprop-c168"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 45s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
+          timeout 60s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c168_owner_mysql_engine_inventory_readonly.py \
+            | python3 -c 'import json,sys; data=sys.stdin.read(5000); p="MOJPROP_C168_MYSQL_ENGINE_INVENTORY_READONLY="; a=[l for l in data.splitlines() if l.startswith(p)]; assert len(a)==1,"MISSING_SANITIZED_C168_RESULT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.mysql_engine_inventory.readonly.c168.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["staging_source_safe"] is True and d["configured_backend_mysql"] is True and d["status"]=="engine_aggregate_read_success","C168_ENGINE_INVENTORY_HALT"; assert all(d[k] is False for k in ("table_names_or_rows_read","db_name_or_credentials_exposed","production_passenger_db_identity_proven","database_backup_created","independent_full_restore_verified","production_release_authorized","payment_created","cost_incurred")); v=d["engine_aggregate"]; assert v["visible_base_tables"]==v["innodb_tables"]+v["other_engine_tables"]+v["unknown_engine_tables"] and 1<=v["visible_base_tables"]<=200000; assert v["consistent_snapshot_proven"] is False and v["production_identity_proven"] is False; print(a[0]); print("C168_BACKUP_DECISION="+("ALL_INNODB_CANDIDATE_ONLY" if v["single_transaction_candidate_only"] else "NONTRANSACTIONAL_OR_UNKNOWN_ENGINE_HOLD"))'
+          echo 'C168_STAGING_MYSQL_ENGINE_METADATA_REAL_QUERY=COMPLETE_NOT_A_BACKUP' >> "$GITHUB_STEP_SUMMARY"
