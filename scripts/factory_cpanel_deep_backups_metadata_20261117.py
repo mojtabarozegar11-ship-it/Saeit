@@ -8,7 +8,7 @@ import json,os,pwd,stat,sys,time
 from pathlib import Path
 ROOT=Path("/home/zomorod2/.backups")
 MAX_ENTRIES=60000
-MAX_DEPTH=7
+MAX_DEPTH=32
 MAX_SECONDS=70
 SUFFIXES=(".sql.gz",".sql.zst",".sql.xz",".sql",".sqlite3",".sqlite",".tar.gz",
           ".tgz",".zip",".zst",".gz",".f01enc",".bak",".dump")
@@ -36,7 +36,10 @@ def census():
             complete=False;data["stop_reason"]="TIME_BUDGET";break
         parent,depth=pending.pop()
         if depth>=MAX_DEPTH:
-            complete=False;data["stop_reason"]="DEPTH_BUDGET";break
+            complete=False
+            data["stop_reason"]="DEPTH_BUDGET"
+            # Keep inspecting other branches, but never traverse deeper.
+            continue
         try:
             entries=os.scandir(parent)
             with entries as stream:
