@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title>Private MOJ PROP-01 TRX invoice / receipt</title>
+<style>
+:root{color-scheme:light}body{max-width:760px;margin:2rem auto;padding:0 1rem;
+font:16px/1.6 system-ui,sans-serif;background:#f6f7fb;color:#162136}
+main{background:#fff;border:1px solid #d6dce7;border-radius:16px;padding:26px}
+h1{font-size:1.5rem}p{overflow-wrap:anywhere}code{overflow-wrap:anywhere}
+dl{display:grid;grid-template-columns:140px 1fr;gap:10px}
+dt{font-weight:700}dd{margin:0}strong{color:#123955}
+.notice{border-left:4px solid #9d782b;background:#fff9e7;padding:12px}
+.paid{border-left:4px solid #236f54;background:#e9faf2;padding:12px}
+small{color:#596579}a{color:#135696}
+@media(max-width:480px){dl{display:block}dd{margin-bottom:12px}}
+</style>
+</head>
+<body><main>
+<h1>MOJ PROP — Private invoice and receipt</h1>
+<p><strong>Independent simulated trading evaluation — MOJ-PROP-01</strong></p>
+<dl>
+<dt>Invoice</dt><dd><code>{{ order.reference }}</code></dd>
+<dt>Status</dt><dd>{{ order.status }}</dd>
+<dt>Issued (UTC)</dt><dd>{{ order.issued_at|date:"Y-m-d H:i:s" }}</dd>
+<dt>Expires (UTC)</dt><dd>{{ order.expires_at|date:"Y-m-d H:i:s" }}</dd>
+<dt>Contract</dt><dd>{{ order.terms_version }}</dd>
+</dl>
+{% if ready_to_pay %}
+<section class="notice" aria-label="Private TRX payment instructions">
+<h2>Pay exactly 30 native TRX</h2>
+<p>Network: <strong>TRON Mainnet</strong>. Asset: <strong>TRX</strong>,
+not TRC-20 USDT or any other token.</p>
+<dl>
+<dt>Amount</dt><dd><strong>{{ amount_trx }} TRX</strong></dd>
+<dt>Recipient</dt><dd><code>{{ receiver }}</code></dd>
+</dl>
+<p>Pay only from your verified payer wallet before the invoice expiry.
+Transfers from another wallet or for a different amount will not match
+this order. Never send wallet seed phrases or private keys.</p>
+<p>Your private receipt and simulated account will appear here only after
+server-side independent finality checks and successful database settlement.</p>
+</section>
+{% elif receipt %}
+<section class="paid" aria-label="Verified payment receipt">
+<h2>Payment confirmed</h2>
+<p>Receipt issued after independent solidified TRON evidence and
+one-time transaction ledger reservation.</p>
+<dl>
+<dt>Network</dt><dd>TRON Mainnet</dd>
+<dt>Transaction ID</dt><dd><code>{{ receipt.settlement.txid }}</code></dd>
+<dt>Confirmed at (UTC)</dt><dd>{{ receipt.confirmed_at|date:"Y-m-d H:i:s" }}</dd>
+<dt>Simulated account</dt><dd><code>{{ receipt.state.challenge_ref }}</code></dd>
+</dl>
+{% if challenge_statement_enabled %}
+<p><a href="{% url 'moj_prop_v141_private_statement' challenge_ref=receipt.state.challenge_ref %}">
+Open your private simulated challenge statement</a></p>
+{% else %}
+<p>Your account is registered. The private statement interface is
+currently unavailable; contact the merchant for access or refund assistance.</p>
+{% endif %}
+</section>
+{% else %}
+<section class="notice"><h2>Payment not available</h2>
+<p>This private invoice is expired, paused, or not yet verified.
+Do not send TRX to an expired invoice. Contact the merchant to resolve it.</p>
+</section>
+{% endif %}
+<hr>
+<small>Private buyer-only document. This evaluation does not guarantee hiring,
+funded trading capital, profits or employment. No customer funds are invested.
+Keep your invoice reference and payment transaction ID as evidence.</small>
+</main></body></html>
