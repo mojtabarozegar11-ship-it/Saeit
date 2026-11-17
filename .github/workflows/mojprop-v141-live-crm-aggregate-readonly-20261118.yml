@@ -232,6 +232,47 @@ jobs:
               'email_sent':False,'payment_enabled':False
           },sort_keys=True))
           PY
+      - name: Verify official public contact mailto destination matches connected sales mailbox
+        shell: bash
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          import json
+          from html.parser import HTMLParser
+          from urllib.parse import unquote
+          from urllib.request import Request,build_opener,HTTPRedirectHandler
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          class Extract(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.contacts=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag!='a':return
+                  href=dict(attrs).get('href','')
+                  if href.lower().startswith('mailto:'):
+                      address=unquote(href.split(':',1)[-1].split('?',1)[0]).strip().lower()
+                      if address and len(address)<255:self.contacts.append(address)
+          host='https://mojplaywin.com/moj-prop/contact/'
+          with build_opener(NoRedirect).open(
+              Request(host,method='GET',headers={'Accept':'text/html',
+                  'User-Agent':'MOJPROP-owner-contact-mailto-verification/1.0'}),timeout=15) as resp:
+              content=resp.read(65001);code=resp.status
+          parser=Extract()
+          if len(content)<=65000 and code==200:
+              parser.feed(content.decode('utf-8'))
+          connected={'mojplaywin@gmail.com'}
+          result={
+              'public_contact_http_status':code,
+              'public_mailto_link_count':len(parser.contacts),
+              'unique_mailto_destinations':len(set(parser.contacts)),
+              'directly_matches_connected_mojplaywin_gmail':bool(set(parser.contacts)&connected),
+              'all_mailtos_directly_match_connected_mojplaywin_gmail':bool(parser.contacts and set(parser.contacts)<=connected),
+              'destination_addresses_logged':False,'messages_sent':False,
+              'mailbox_forwarding_verified':False,
+              'production_site_modified':False,
+          }
+          print('MOJPROP_VERIFIED_PUBLIC_MAILTO_ROUTE='+json.dumps(result,sort_keys=True))
+          PY
       - name: Declare no release or buyer simulation
         if: always()
         run: |
