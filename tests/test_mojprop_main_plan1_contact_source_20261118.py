@@ -132,6 +132,23 @@ class MainlinePlanOneContactGuards(unittest.TestCase):
         self.assertIn("not MOJPROP-STARTER30", self.plan)
         self.assertIn("two-stage trading evaluation", self.text.lower())
 
+    def test_24_primary_hero_sales_cta_is_real_plan1_contact(self):
+        self.assertIn('class="btn primary" href="/moj-prop/contact/">Ask about real Plan 1', self.text)
+        self.assertIn("MOJPLAYWIN / MOJ-PROP-01 / PRELAUNCH", self.text)
+
+    def test_25_old_catalog_is_secondary_not_first_sales_cta(self):
+        hero = self.text[self.text.index('<section class="hero">'):self.text.index('</section>', self.text.index('<section class="hero">'))]
+        self.assertLess(hero.index('href="/moj-prop/contact/"'), hero.index('href="/moj-prop/catalog/"'))
+
+    def test_26_no_unearned_100_percent_risk_or_payment_bars(self):
+        hero = self.text[self.text.index('<section class="hero">'):self.text.index('</section>', self.text.index('<section class="hero">'))]
+        self.assertNotIn("<b>100%</b>", hero)
+        self.assertNotIn('--w:28%', hero)
+        self.assertIn("UNDER REVIEW", hero)
+
+    def test_27_educational_sku_is_separate_and_clearly_labeled(self):
+        self.assertIn("SEPARATE EDUCATIONAL SKU · NOT MOJ-PROP-01", self.text)
+
     def test_24_html_parses_and_main_stays(self):
         self.assertIn("<main", self.text)
         self.assertIn("</main>", self.text)
