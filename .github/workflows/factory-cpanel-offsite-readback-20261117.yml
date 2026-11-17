@@ -109,6 +109,29 @@ jobs:
                   "source_files_deleted":0,"cpanel_files_deleted":0,"files_created":0}
           print("MOJ_CPANEL_OFFSITE_READBACK="+json.dumps(report,sort_keys=True),flush=True)
           if not report["both_hashes_match"]:raise SystemExit("OFFSITE_HASH_MISMATCH")
+          # cPanel account quota is separate from filesystem statvfs; never infer from host free bytes.
+          import subprocess
+          try:
+              p=subprocess.run(["uapi","--output=json","Quota","get_quota_info"],
+                               capture_output=True,text=True,timeout=25,check=False)
+              reply=json.loads(p.stdout).get("result",{}) if p.stdout else {}
+              data=reply.get("data") if isinstance(reply,dict) else None
+              safe={}
+              if isinstance(data,dict):
+                  for key,value in data.items():
+                      k=str(key).lower()
+                      if any(word in k for word in ("quota","limit","used","free","space","megabyte","byte")):
+                          if isinstance(value,(int,float)) and not isinstance(value,bool):
+                              safe[str(key)[:45]]=value
+                          elif isinstance(value,str) and len(value)<=24 and (value.replace(".","",1).isdigit() or value.lower() in {"unlimited","none"}):
+                              safe[str(key)[:45]]=value
+              print("MOJ_CPANEL_ACCOUNT_QUOTA="+json.dumps({
+                  "available":p.returncode==0 and reply.get("status")==1 if isinstance(reply,dict) else False,
+                  "quota_fields":safe,
+                  "quota_observed":bool(safe),
+                  "disk_free_is_not_account_quota":True},sort_keys=True),flush=True)
+          except Exception as exc:
+              print("MOJ_CPANEL_ACCOUNT_QUOTA="+json.dumps({"available":False,"error":type(exc).__name__,"disk_free_is_not_account_quota":True}),flush=True)
           PY
           echo CPANEL_OFFSITE_SNAPSHOTS_RECHECK_PASSED=true
       - name: Preserve short offsite proof only
