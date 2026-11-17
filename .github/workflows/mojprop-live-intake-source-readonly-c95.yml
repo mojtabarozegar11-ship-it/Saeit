@@ -13,6 +13,8 @@ on:
       - "tests/test_mojprop_owner_local_archive_readonly_c120.py"
       - "scripts/mojprop_starter30_public_presence_readonly_c122.py"
       - "tests/test_mojprop_starter30_public_presence_readonly_c122.py"
+      - "scripts/mojprop_c146_live_plan1_runtime_source_readonly.py"
+      - "tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py"
 
 permissions:
   contents: read
@@ -46,6 +48,12 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_owner_local_archive_readonly_c120 -q
           python3 -B -m py_compile scripts/mojprop_starter30_public_presence_readonly_c122.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_starter30_public_presence_readonly_c122 -q
+          python3 -B -m py_compile scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c146_live_plan1_runtime_source_readonly -q
+          test ! -L scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c146_live_plan1_runtime_source_readonly.py)" = "198d3c2b4f8de90504002f95148c370604716cb9"
+          test ! -L tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py)" = "8bbeac081bddca87eca58dde435e93f65c473e2a"
           test ! -L scripts/mojprop_starter30_public_presence_readonly_c122.py
           test "$(git hash-object -- scripts/mojprop_starter30_public_presence_readonly_c122.py)" = "6e7fb0c7d7f96f9af10c67201f267b7cbc58a09a"
           test ! -L scripts/mojprop_owner_local_archive_readonly_c120.py
@@ -125,6 +133,16 @@ jobs:
             < scripts/mojprop_starter30_public_presence_readonly_c122.py \
             | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C122_STATIC_OWNER_READONLY="; rows=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(rows)==1,"MISSING_SANITIZED_C122"; d=json.loads(rows[0][len(prefix):]); assert d["schema"]=="mojprop.owner_starter30_public_static.readonly.c122.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["no_payment_scope"] is True; assert set(d["assets"])=={"index.html","journal-template.csv","journal-guide.txt"}; assert all(v in ("reviewed_exact","unreviewed_bytes","missing","unsafe","unavailable") for v in d["assets"].values()); assert all(d[k] is False for k in ("http_public_delivery_proven","email_lead_received","database_accessed","customer_data_accessed","trx_payment_collected","funded_prop_challenge_available","production_deployment_authorized","new_cost_incurred")); assert not set(d).intersection({"email","customer_id","file_path","file_content","secret","trx_address"}); print(rows[0])'
           echo 'MOJPROP_C122_PUBLIC_ASSET_DISK_IDENTITY_READONLY=COMPLETE_NOT_HTTP_OR_PAYMENT' >> "$GITHUB_STEP_SUMMARY"
+      - name: C146 pinpoint actual Plan1 route and Passenger staging drift (strict read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 80s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c146_live_plan1_runtime_source_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(9000); prefix="MOJPROP_C146_PLAN1_LIVE_SOURCE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(a)==1,"MISSING_SANITIZED_PLAN1_PROBE"; d=json.loads(a[0][len(prefix):]); assert d["schema"]=="mojprop.plan1.live_source.readonly.c146.v1" and d["read_only"] is True and d["production_change_or_cost_authorized"] is False; assert set(d["source_identity"])=={"config/urls.py","core/moj_prop_views.py","core/templates/mojplaywin/moj_prop_interest_form_d.html","prop_firm/lead_models.py"}; assert all(v in ("matches","drifted","missing","unsafe","unavailable") for v in d["source_identity"].values()); assert set(d["static_urlconf_declares"])=={"browser_get","consent_post"} and all(type(x) is bool for x in d["static_urlconf_declares"].values()); assert all(d[k] is False for k in ("actual_passenger_worker_source_proven","public_plan1_get_verified","full_app_db_media_restore_proven","payment_or_enrollment_proven","customer_data_accessed","database_accessed","external_network_called","production_change_or_cost_authorized")); assert not set(d).intersection({"email","customer_id","db_password","api_key","wallet","customer_name","token"}); print(a[0])'
+          echo 'C146_SOURCE_ONLY_PASSED_NO_DEPLOY_OR_BACKUP_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
