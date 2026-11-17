@@ -8,14 +8,6 @@ on:
       - "scripts/zomorod_auctions_72_deploy.py"
       - "tests/test_zomorod_auctions_72_publication.py"
       - ".github/workflows/zomorod-auctions-72-static-release.yml"
-  push:
-    branches: [main]
-    paths:
-      - "public/auctions/**"
-      - "public/sitemap-auctions.xml"
-      - "content/auctions-72/**"
-      - "scripts/zomorod_auctions_72_deploy.py"
-      - ".github/workflows/zomorod-auctions-72-static-release.yml"
   workflow_dispatch:
 permissions:
   contents: read
@@ -58,7 +50,7 @@ jobs:
   publish:
     name: Protected additive publication to Zomorod cPanel
     needs: validate
-    if: ${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    if: ${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 22
     steps:
