@@ -30,4 +30,13 @@ def get_public_procurement_notices():
         grouped[kind].append(notice)
     if any(len(items) != EXPECTED_PER_KIND for items in grouped.values()):
         raise ValueError("Exactly 36 notices are required in each kind")
+    # Source-of-truth planned numbers follow the last verified live public ad #349.
+    # They remain proposals until actual database reservation is completed.
+    planned = [item.get("proposed_public_number")
+               for kind in ("supply", "equipment") for item in grouped[kind]]
+    if planned != list(range(350, 422)):
+        raise ValueError("Planned public-ad numbers must be 350..421 in supply-then-equipment order")
+    numbering = data.get("proposed_numbering", {})
+    if numbering.get("highest_verified_public_number") != 349:
+        raise ValueError("The prior live advertisement baseline must be #349")
     return grouped, data["policy"]
