@@ -33,15 +33,23 @@ jobs:
           else
             echo "FACTORY_KNOWN_GITHUBOPS_RUNTIME_EXISTS=false"
           fi
-          if [[ "$(id -un)" != "githubops" ]]; then
-            echo "FACTORY_LOCAL_READONLY=BLOCKED_UNEXPECTED_USER"
+          case "$(id -un)" in
+            githubops)
+              echo "FACTORY_RUNNER_PRIVILEGE=ORIGINAL_GITHUBOPS"
+              ;;
+            githubrunner)
+              echo "FACTORY_RUNNER_PRIVILEGE=SEPARATE_UNPRIVILEGED_RUNNER"
+              ;;
+            *)
+              echo "FACTORY_LOCAL_READONLY=BLOCKED_UNEXPECTED_USER"
+              exit 1
+              ;;
+          esac
+          if [[ ! -d /home/githubops/factory-runtime || -L /home/githubops/factory-runtime ]]; then
+            echo "FACTORY_LOCAL_READONLY=BLOCKED_UNVERIFIED_KNOWN_FACTORY_ROOT"
             exit 1
           fi
-          if [[ ! -d "$HOME/factory-runtime" || -L "$HOME/factory-runtime" ]]; then
-            echo "FACTORY_LOCAL_READONLY=BLOCKED_UNVERIFIED_ROOT"
-            exit 1
-          fi
-          echo "FACTORY_SELFHOSTED_RUNNER_IDENTITY=verified"
+          echo "FACTORY_SELFHOSTED_RUNNER_ENVIRONMENT=verified_for_readonly_checks"
           echo "FACTORY_LOCAL_CHECKOUT_CREATED=false"
           echo "FACTORY_SQL_MODIFIED=false"
       - name: Measure VPS off-host backup and recovery-key metadata in place (no secrets, no write)
@@ -51,7 +59,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
           from pathlib import Path
           import os,stat,re,json
-          h=Path.home()
+          h=Path('/home/githubops')
           d=h/'.private-mojplaywin-offhost-backups'
           k=h/'.config'/'mojplaywin-backup-recovery'/'recovery-key.bin'
           def safe_private_file(p):
@@ -92,7 +100,9 @@ jobs:
           except OSError: key_is_valid=False
           free=os.statvfs(h)
           print('VPS_LOCAL_PUBLIC_FIELDS='+json.dumps({
-              'private_backup_directory_verified':owner_private_directory(d),
+              'private_backup_directory_verified_for_runner_user':owner_private_directory(d),
+              'backup_directory_metadata_observable':d.exists() and not d.is_symlink(),
+              'backup_directory_readable_to_runner':os.access(d,os.R_OK | os.X_OK),
               'inventory_complete':complete,
               'regular_pair_with_four_files_count':candidates,
               'partial_file_names_count':partials,
