@@ -66,19 +66,20 @@ class VerifiedPrivateHandoff:
     funded_account_created: bool = False
 
 
-def review_existing_interest(*, actor, interest_pk, inquiry, consent_attestation,
-                             consent_tag_hex, consent_key, request_ref,
-                             inquiry_sha256, consent_evidence_sha256,
-                             private_order_draft):
-    """Return a PII-free consent link, not an enrollment or payment approval.
+def review_signed_existing_consent(*, actor, interest_pk, inquiry,
+                                   consent_attestation, consent_tag_hex,
+                                   consent_key, request_ref, inquiry_sha256,
+                                   consent_evidence_sha256):
+    """Read-only existing opt-in + independent consent provenance only.
 
-    An external, trusted consent registry supplies the HMAC attestation. This
-    method does not fabricate consent or accept unsigned browser submissions.
-    The caller must recheck withdrawal immediately before any later contact.
+    This is the lightweight pre-KYC DEMO interest boundary; it does NOT
+    require a signed buyer purchase contract or the twenty purchase gates.
+    The shared PropInterest row must be NEW and not withdrawn or contacted.
+    No customer contact, email send, payment, or marketing permission follows.
     """
     _require_authorized_staff(actor)
     if type(interest_pk) is not int or interest_pk <= 0:
-        raise Plan1OrderGateClosed("invalid canonical interest identifier")
+        raise Plan1OrderGateClosed("invalid canonical consent record identifier")
     with transaction.atomic():
         row = (PropInterest.objects.select_for_update()
                .filter(pk=interest_pk).values(
@@ -86,7 +87,7 @@ def review_existing_interest(*, actor, interest_pk, inquiry, consent_attestation
                    "source_language", "status").first())
         if row is None:
             raise Plan1OrderGateClosed("canonical consent record unavailable")
-        link = bind_canonical_interest_to_private_inquiry(
+        return bind_canonical_interest_to_private_inquiry(
             canonical_interest=row, inquiry=inquiry,
             trusted_consent_attestation=consent_attestation,
             signed_consent_tag_hex=consent_tag_hex,
@@ -96,8 +97,31 @@ def review_existing_interest(*, actor, interest_pk, inquiry, consent_attestation
             expected_inquiry_sha256=inquiry_sha256,
             expected_consent_evidence_sha256=consent_evidence_sha256,
         )
+
+
+def review_existing_interest(*, actor, interest_pk, inquiry, consent_attestation,
+                             consent_tag_hex, consent_key, request_ref,
+                             inquiry_sha256, consent_evidence_sha256,
+                             private_order_draft):
+    """Purchase-case PRIVATE reviewer: requires both consent and signed draft.
+
+    Do not reuse the stricter purchase-review path for light email-only
+    interest registration. This method cannot issue an invoice.
+    """
+    _require_authorized_staff(actor)
+    if type(interest_pk) is not int or interest_pk <= 0:
+        raise Plan1OrderGateClosed("invalid canonical interest identifier")
+    with transaction.atomic():
+        link = review_signed_existing_consent(
+            actor=actor, interest_pk=interest_pk, inquiry=inquiry,
+            consent_attestation=consent_attestation,
+            consent_tag_hex=consent_tag_hex, consent_key=consent_key,
+            request_ref=request_ref, inquiry_sha256=inquiry_sha256,
+            consent_evidence_sha256=consent_evidence_sha256,
+        )
         return match_private_review_to_canonical_interest(
             consent_link=link, private_order_draft=private_order_draft)
+
 
 
 def review_verified_precontract_for_interest(
@@ -182,7 +206,7 @@ def review_verified_precontract_for_interest(
 def review_email_verified_existing_interest(
     *, actor, interest_pk, inquiry, consent_attestation, consent_tag_hex,
     consent_key, request_ref, inquiry_sha256, consent_evidence_sha256,
-    private_order_draft, signed_otp_receipt, signed_otp_tag_hex,
+    signed_otp_receipt, signed_otp_tag_hex,
     trusted_otp_service_key, declared_country, age_18_self_attested,
 ):
     """Verify OTP for an existing consented CRM prospect, never for payment.
@@ -200,13 +224,12 @@ def review_email_verified_existing_interest(
     if type(interest_pk) is not int or interest_pk <= 0:
         raise Plan1OrderGateClosed("valid canonical interest identifier required")
     with transaction.atomic():
-        link = review_existing_interest(
+        link = review_signed_existing_consent(
             actor=actor, interest_pk=interest_pk, inquiry=inquiry,
             consent_attestation=consent_attestation,
             consent_tag_hex=consent_tag_hex, consent_key=consent_key,
             request_ref=request_ref, inquiry_sha256=inquiry_sha256,
             consent_evidence_sha256=consent_evidence_sha256,
-            private_order_draft=private_order_draft,
         )
         now = timezone.now()
         if now.tzinfo is None or now.utcoffset() is None:
