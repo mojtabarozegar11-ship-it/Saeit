@@ -28,7 +28,12 @@ def exact(value, *, allow_zero=False):
         number = Decimal(str(value))
     except (InvalidOperation, ValueError) as exc:
         raise ValueError("invalid decimal") from exc
-    if (not number.is_finite() or number < 0 or
+    if not number.is_finite():
+        raise ValueError("non-finite risk input")
+    if (len(number.as_tuple().digits) > 28 or
+            not -18 <= number.as_tuple().exponent <= 18):
+        raise ValueError("decimal precision or exponent exceeds risk-input bounds")
+    if (number < 0 or
             number > Decimal("1000000000") or (number == 0 and not allow_zero)):
         raise ValueError("invalid nonnegative bounded amount")
     return number
