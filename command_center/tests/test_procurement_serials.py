@@ -42,12 +42,25 @@ class ProcurementSerialRegistrationTests(TestCase):
         self.assertEqual([r.notice_key for r in rows[36:]], [f"ZM-EQP-{i:03d}" for i in range(1, 37)])
         self.assertGreater(rows[0].serial_number, old_ad.pk)
 
-    def test_auto_uses_larger_legacy_pk_even_if_supplied_floor_is_lower(self):
+    def test_private_auction_primary_key_is_not_public_ad_serial(self):
         user = get_user_model().objects.create_user("old-auction-number", password="nottestpassword")
-        old_ad = PrivateAuction.objects.create(title="Previous auction", created_by=user)
+        for i in range(3):
+            PrivateAuction.objects.create(title=f"Internal auction {i}", created_by=user)
         self.register(last=0, apply=True)
         first = PublicProcurementNumber.objects.get(notice_key="ZM-SUP-001")
-        self.assertEqual(first.serial_number, old_ad.pk + 1)
+        self.assertEqual(first.serial_number, 1)
+
+    def test_real_live_public_baseline_349_gives_350_through_421(self):
+        output = self.register(last=349)
+        self.assertIn("350..421", output)
+        self.assertEqual(PublicProcurementNumber.objects.count(), 0)
+        self.register(last=349, apply=True)
+        grouped = list(PublicProcurementNumber.objects.order_by("serial_number"))
+        self.assertEqual(grouped[0].serial_number, 350)
+        self.assertEqual(grouped[35].serial_number, 385)
+        self.assertEqual(grouped[36].serial_number, 386)
+        self.assertEqual(grouped[-1].serial_number, 421)
+        self.assertEqual(grouped[-1].notice_key, "ZM-EQP-036")
 
     def test_second_registration_does_not_reassign_or_duplicate_numbers(self):
         self.register(last=500, apply=True)
