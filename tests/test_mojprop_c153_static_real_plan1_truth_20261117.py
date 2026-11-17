@@ -40,7 +40,7 @@ class Plan1StaticTruth(unittest.TestCase):
             self.assertIn("prelaunch", page.lower())
             self.assertIn("no payment", page.lower())
         self.assertIn("independently verified capital", self.home)
-        self.assertIn("not a verified", self.home.lower())
+        self.assertIn("not an accepted plan 1 crm lead", self.home.lower())
 
     def test_03_no_clickable_known_unavailable_404_form(self):
         for page in (self.hlinks, self.clinks):
@@ -72,6 +72,8 @@ class Plan1StaticTruth(unittest.TestCase):
         self.assertIn("SOLE CURRENT PRODUCT", self.workflow)
         self.assertIn('"MOJ-PROP-01"', self.workflow)
         self.assertNotIn('"See service prices"', self.workflow)
+        self.assertIn('assert "SOLE CURRENT PRODUCT" in home', self.workflow)
+        self.assertIn('assert "MOJ-PROP-01" in home', self.workflow)
 
     def test_08_production_release_still_requires_owner_dispatch(self):
         self.assertIn("owner_approved_static_release", self.workflow)

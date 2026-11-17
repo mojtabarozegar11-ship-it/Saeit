@@ -293,7 +293,8 @@ jobs:
           catalog = Path(sys.argv[2]).read_text(encoding="utf-8")
           assert "<title>Moj Prop" in home
           assert 'href="/moj-prop/catalog/"' in home
-          assert "See service prices" in home
+          assert "SOLE CURRENT PRODUCT" in home
+          assert "MOJ-PROP-01" in home
           assert "/moj-prop-intake/" in home
           assert "Send request for review" in home
           assert "<title>Moj Prop Catalog" in catalog
