@@ -12,6 +12,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from .trade_count import count_challenge_trades
+from .xauusd_v13_cross_source_guard import assess_closed_position_source_conflicts
 from .xauusd_v13_draft_terms import draft_gold_terms_v13
 from .xauusd_v13_preflight import DRAFT_CONTRACT_VERSION, exact
 
@@ -96,6 +97,9 @@ def review_xauusd_v13_qualification(*, first: PhaseProof, second: PhaseProof,
         reconciled_executions, paid_at=evaluation_started_at,
         required=draft.min_closed_trades_total,
     )
+    source_collisions = assess_closed_position_source_conflicts(
+        reconciled_executions, evaluation_started_at=evaluation_started_at,
+    )
     reasons = list(p1) + list(p2)
     if immutable_ledger_complete is not True:
         reasons.append("immutable_closed_trade_ledger_incomplete")
@@ -103,6 +107,8 @@ def review_xauusd_v13_qualification(*, first: PhaseProof, second: PhaseProof,
         reasons.append("independent_ledger_origin_unverified")
     if not counts.sufficient:
         reasons.append("minimum_50_unique_closed_positions_total_not_met")
+    if source_collisions.collisions:
+        reasons.append("cross_source_duplicate_position_review_required")
     if not p1 and p2:
         reasons.append("phase_two_unmet_after_phase_one")
     # Counterparty, contract, capital and funding readiness NEVER get cleared.
