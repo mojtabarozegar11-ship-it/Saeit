@@ -480,5 +480,28 @@ class TwoStageEngineTests(unittest.TestCase):
         self.assertFalse(x.phase_math_complete)
 
 
+    def test_69_first_stage_digest_is_bound_to_accepted_evidence(self):
+        s=good_snapshot()
+        x=replay(s)
+        self.assertRegex(x.phase_one_frozen_evidence_sha256,r"^[0-9a-f]{64}$")
+        self.assertNotEqual(x.phase_one_frozen_evidence_sha256,x.snapshot_sha256)
+
+    def test_70_first_stage_fingerprint_stable_as_assessment_time_advances(self):
+        s=good_snapshot()
+        original=replay(s)
+        later=replay(replace(s,as_of=NOW+timedelta(days=1)))
+        self.assertNotEqual(original.snapshot_sha256,later.snapshot_sha256)
+        self.assertEqual(original.phase_one_frozen_evidence_sha256,
+                         later.phase_one_frozen_evidence_sha256)
+
+    def test_71_first_stage_unaccepted_has_no_frozen_fingerprint(self):
+        s=good_snapshot()
+        early=replace(s,phase_one_accepted_at=None,
+                      phase_two_started_at=None,phase_two_completed_at=None,
+                      as_of=at(1,23),closed_fills=s.closed_fills[:4],
+                      equity_marks=s.equity_marks[:2])
+        self.assertIsNone(replay(early).phase_one_frozen_evidence_sha256)
+
+
 if __name__=="__main__":
     unittest.main()
