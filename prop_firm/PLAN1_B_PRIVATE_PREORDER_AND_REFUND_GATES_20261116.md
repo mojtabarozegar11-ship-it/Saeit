@@ -1,5 +1,8 @@
 # MOJ-PROP-01 Plan 1 — private buyer contract and lawful first-sale gates
 
+> **HISTORICAL v1.2 REVIEW MATERIAL — NOT THE CURRENT PROSPECTIVE BUYER OFFER (2026-11-17).** The owner has specified a new, unsigned v1.4.1 draft for future customers: **at least 50 independently reconciled closed positions TOTAL across the two demo phases + at least one qualifying original post on EITHER Instagram OR Facebook, public for 28 consecutive days**. These clocks are independent; publishing on both platforms is NOT required. Canonical proposed text and acceptance: `prop_firm/plan1_v14_social_or_50_terms.py` and `prop_firm/plan1_v14_private_interest_review.py`, Draft PR #2681. Do NOT migrate historical signed acceptances, do NOT issue a v1.2 invoice using v1.4.1 intake, and do NOT claim the social condition is lawful before external review. **Paid enrollment/live trading remain DISABLED.**
+
+
 **Version controlled proposal for counsel and owner review: 2026-11-15/v1.2. NOT an active offer or legally approved consumer contract. No live checkout, KYC intake, broker trading, funded account or TRX invoice.**
 
 ## Product identity — prohibit educational Starter30 collision
