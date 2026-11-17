@@ -48,7 +48,7 @@ class MojPropManualSupportFallbackTests(unittest.TestCase):
         self.assertIn("/moj-prop/#plan-one", links.links)
         self.assertIn("/moj-prop-interest/form/", links.links)
         self.assertIn("no payment details or private credentials", page)
-        self.assertIn("no response time is promised", page)
+        self.assertIn("No guaranteed response time", page)
 
     def test_main_push_cannot_auto_publish_updated_static_pages(self):
         workflow = (ROOT / ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text()
