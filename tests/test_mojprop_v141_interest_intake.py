@@ -9,6 +9,7 @@ from django.core import mail
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.test import Client, TestCase, override_settings
+from django.utils.html import escape
 
 from prop_firm.models import (
     PropAccount, PropChallengeEnrollment, PropInterest, PropV141Interest,
@@ -68,7 +69,7 @@ class V141LeadIntakeTests(TestCase):
                 self.assertIn("Cookie", response.get("Vary", ""))
                 self.assertIn("frame-ancestors 'none'", response["Content-Security-Policy"])
                 self.assertContains(response, f'lang="{lang}" dir="{catalog[lang]["dir"]}"')
-                self.assertContains(response, catalog[lang]["title"])
+                self.assertContains(response, escape(catalog[lang]["title"]))
                 self.assertContains(response, 'name="language" value="' + lang + '"')
                 self.assertEqual(response.content.decode("utf-8").count('class="lang-nav"'), 1)
                 for language in SUPPORTED_CODES:
