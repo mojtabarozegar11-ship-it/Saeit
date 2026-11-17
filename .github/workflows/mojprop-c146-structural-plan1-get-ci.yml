@@ -1,0 +1,69 @@
+name: MOJ PROP C146 structural consent GET contract (test-only, no release)
+on:
+  push:
+    branches: [fix/mojprop-c148-surgical-consent-readiness-backport-20261117]
+  pull_request:
+    branches: [feature/prop-firm-policy-v11-20261114, integration/mojprop-c136-merged-main-prop-20261117]
+    paths:
+      - 'scripts/mojprop_c142_public_form_get_readonly.py'
+      - 'tests/test_mojprop_c142_public_form_get_readonly.py'
+      - '.github/workflows/mojprop-c146-structural-plan1-get-ci.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-c146-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  no-network-structural-proof:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fail on syntactic errors and ad hoc code injection
+        run: python3 -B -m py_compile scripts/mojprop_c142_public_form_get_readonly.py tests/test_mojprop_c142_public_form_get_readonly.py
+      - name: Run semantic adversarial no-network GET tests
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_c142_public_form_get_readonly
+          echo 'C146_FORM_FIELDS_PARSE_IN_ONE_VALIDATED_NONPAYABLE_POST=true'
+          echo 'C146_NETWORK_CUSTOMER_POST_EMAIL_PAYMENT_DEPLOY=false'
+
+  rendered-django-no-buyer-post:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SECRET_KEY: c146-render-only-synthetic-secret
+      DEBUG: 'true'
+      ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install actual project dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Verify current settings and schema source (no migrations)
+        run: |
+          set -euo pipefail
+          python3 manage.py check
+          python3 manage.py makemigrations --check --dry-run
+      - name: GET actual Django-rendered EN FA forms without any customer POST
+        run: |
+          set -euo pipefail
+          python3 -m pytest -q tests/test_mojprop_c146_rendered_consent_get.py
+          echo 'C146_DJANGO_RENDERED_EN_FA_CONSENT_STRUCTURAL_PROOF=true'
+          echo 'C146_NO_DATABASE_WRITE_CUSTOMER_EMAIL_PAYMENT_OR_DEPLOY=true'
