@@ -120,6 +120,25 @@ def buyer_no_social_post_amendment():
     return NoBuyerSocialPostAmendment(**payload, digest_sha256=digest)
 
 
+DEMO_TO_REAL_FA = (
+    "هر دو مرحله چالش تنها با حساب دمو و سرمایه مجازی اجرا می‌شوند. "
+    "برای ورود به مرحله اول یا دوم، افتتاح حساب ریل لایت‌فایننس یا "
+    "هر کارگزار دیگری شرط نیست. تنها پس از قبولی تأییدشده در هر دو مرحله، "
+    "بررسی افتتاح حساب ریل، احراز هویت کارگزاری، قرارداد حساب واقعی "
+    "و تأمین معتبر سرمایه ۱۰۰ دلاری آغاز می‌شود؛ این مراحل خودکار یا "
+    "تضمین‌شده نیستند. بررسی‌های الزامی قانونی و صلاحیت خرید چالش "
+    "از این تأخیر در احراز هویت حساب ریل مستثنی‌اند."
+)
+DEMO_TO_REAL_EN = (
+    "Both challenge stages use DEMO/simulated accounts with virtual funds. "
+    "Opening a live LiteFinance or other broker account is NOT a prerequisite "
+    "to enter or complete either stage. Only AFTER independently passing BOTH "
+    "stages may the trader apply for separate live-broker KYC, a real-account "
+    "agreement, and genuinely verified allocation of USD 100. "
+    "None of these actions is automatic or guaranteed. Any legally required "
+    "eligibility and screening to buy the evaluation still applies."
+)
+
 _HISTORICAL_POST_CLAUSE_FA = (
     "سیاست نسخه v1.2 برای کل چالش، یک پست اصیل اینستاگرام و یک پست اصیل فیس‌بوک "
     "را با افشای شفاف رابطه تبلیغاتی در نظر دارد؛ اجرای آن تابع قوانین قابل اعمال و "
@@ -173,6 +192,8 @@ def current_plan1_buyer_copy():
         _HISTORICAL_POST_CLAUSE_FA, waiver.fa + "\n", 1)
     en = historical.en.replace(
         _HISTORICAL_POST_CLAUSE_EN, waiver.en + "\n", 1)
+    fa = fa + "\n" + DEMO_TO_REAL_FA
+    en = en + "\n" + DEMO_TO_REAL_EN
     if (fa == historical.fa or en == historical.en
             or "یک پست اصیل اینستاگرام" in fa
             or "ONE original Instagram and ONE original Facebook" in en
