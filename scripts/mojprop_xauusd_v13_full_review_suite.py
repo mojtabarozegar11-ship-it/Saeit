@@ -30,10 +30,11 @@ REQUIRED_TEST_MODULES = (
     ("tests.test_plan1_v14_social_or_28d", 34),
     ("tests.test_plan1_v14_combined_qualification", 17),
     ("tests.test_plan1_v14_private_interest_review", 30),
+    ("tests.test_plan1_v141_precontract_boundary", 33),
 )
 LEGACY_TEST_MODULE = "tests.test_prop_firm_policy"
 EXPECTED_V13_TESTS = 194
-EXPECTED_V14_TESTS = 81
+EXPECTED_V14_TESTS = 114
 EXPECTED_ALL_TESTS = EXPECTED_V13_TESTS + EXPECTED_V14_TESTS
 
 
