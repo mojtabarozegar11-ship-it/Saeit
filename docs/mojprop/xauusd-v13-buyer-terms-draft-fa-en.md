@@ -14,7 +14,7 @@
 
 **الزام به انتشار پست یا لینک در اینستاگرام/فیس‌بوک وجود ندارد.** استفاده از حساب شخصی مالک نیز ممنوع است. رضایت تبلیغاتی اختیاری و مستقل است.
 
-**اختلاف حل‌نشده:** یک منبع شرایط پیش‌خرید «حداقل ۵۰ معامله بسته‌شده در هر مرحله» را می‌گوید، اما افشای تاریخی v1.2 و قواعد کد «۵۰ معامله در مجموع دو مرحله» را نشان می‌دهند. تا زمان تصمیم قراردادی شفاف، بازبینی حقوقی و هماهنگ‌شدن تست‌ها، این شرط برای خریدار جدید منتشر/اعمال نمی‌شود.
+**تصمیم پیشنهادی نسخه v1.3 (صرفاً داخلی):** حداقل **۵۰ معامله بسته‌شده و مستقل تأییدشده در مجموع دو مرحله**، با حداقل **۶ روز معاملاتی در هر مرحله**. این تفسیر با `rules.py` و افشای تاریخی هماهنگ است. بااین‌حال، متن پیش‌خرید v1.2 هنوز عبارت متعارض «۵۰ معامله در هر مرحله» دارد؛ تا اصلاح و بازبینی حقوقی و امضای شرایط جدید، هیچ‌کدام به‌عنوان شرط قابل‌فروش به مشتری عرضه نمی‌شود.
 
 ## English — proposed legal-review copy (not for sale)
 
@@ -28,7 +28,7 @@ After successful transition and independent reconciliation of actual realized ne
 
 **No mandatory Instagram or Facebook post or link.** Optional promotion requires separate consent; personal owner accounts are excluded.
 
-**Unresolved contract conflict:** existing pre-purchase copy says at least 50 independently verified closed positions **in each phase**; canonical historical v1.2 disclosure and rules specify 50 **in total across both phases**. Neither condition should be represented to a new buyer until independently resolved, versioned, legally reviewed and test-aligned.
+**Proposed v1.3 drafting decision (internal only):** at least **50 independently reconciled CLOSED positions TOTAL across both phases**, with at least **six verified trading days in EACH phase**. This follows the canonical evaluation engine and historical disclosure. The v1.2 pre-purchase text still contradicts it by requiring 50 in each phase; no buyer-facing, payable representation is approved until all versions are legally reconciled, contract-versioned, and signed.
 
 ## Hard release and evidence boundaries
 
