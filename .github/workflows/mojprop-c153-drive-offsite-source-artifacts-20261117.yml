@@ -3,11 +3,17 @@ on:
   push:
     branches:
       - offsite/mojprop-c153-source-recovery-drive-20261117
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+    paths: ['.github/workflows/mojprop-c153-drive-offsite-source-artifacts-20261117.yml']
 permissions:
   contents: read
 jobs:
   immutable-plan1-source-artifact:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
