@@ -30,6 +30,7 @@ class Migration(migrations.Migration):
                 ("terms_version", models.CharField(max_length=96)),
                 ("terms_sha256", models.CharField(max_length=64)),
                 ("consent_digest", models.CharField(max_length=64)),
+                ("payer_wallet_attestation_sha256", models.CharField(max_length=64)),
                 ("legal_clearance_digest", models.CharField(max_length=64)),
                 ("clearance_document_ref", models.CharField(max_length=128)),
                 ("issued_at", models.DateTimeField()),
