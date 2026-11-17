@@ -1,0 +1,52 @@
+name: MOJ PROP C144 educational SKU vs funded Plan1 boundary (NO RELEASE)
+on:
+  push:
+    branches: [fix/mojprop-c144-legacy-starter30-vs-plan1-boundary-20261117]
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-c144-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  provenance-and-no-payment:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SECRET_KEY: c144-synthetic-only
+      DEBUG: 'true'
+      ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install real pinned project dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Validate Django config and migration closure
+        run: |
+          set -euo pipefail
+          python3 manage.py check
+          python3 manage.py makemigrations --check --dry-run
+      - name: Run real browser VM and native CSRF/idempotent SKU test regressions
+        run: |
+          set -euo pipefail
+          python3 -m pytest -q \
+            core/test_mojprop_starter30_native_access_c104_20261116.py \
+            tests/test_mojprop_signal_plan_inquiry_20261115.py \
+            tests/test_mojprop_starter30_single_sku_contract_20261115.py \
+            tests/test_mojprop_v4_buyer_funnel_20261115.py
+          echo 'C144_NO_TRX_OR_TRADING_OPERATIONS=true'
+          echo 'C144_MAIN_PLAN1_IS_DISTINCT_FROM_STARTER30=true'
+          echo 'C144_EDUCATIONAL_NOJS_STILL_CSRF_IDEMPOTENT_AND_UNPAID=true'
+          echo 'C144_PRODUCTION_DEPLOYMENT=false'
