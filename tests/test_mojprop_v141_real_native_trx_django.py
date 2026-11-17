@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
+from services.mojprop_commercial_lanes import LegalEvidence
 from prop_firm.plan1_v141_native_checkout import (
     issue_private_foreign_invoice, confirm_native_trx_and_deliver,
     CheckoutRejected, RECEIVER, _addr_hex, _solidity_base_urls,
@@ -45,6 +46,28 @@ class RealNativePaymentStorageTests(TestCase):
         self.buyer = U.objects.create_user(
             username="foreign_customer_1", email="buyer@example.org")
 
+    @staticmethod
+    def legal_evidence(**changes):
+        from dataclasses import replace
+        evidence = LegalEvidence(
+            merchant_owner_verified=True, merchant_residence_country="IR",
+            buyer_residence_verified=True, buyer_residence_country="AE",
+            customer_country_permitted=True,
+            seller_cross_border_permission_verified=True,
+            fee_based_independent_evaluation_approved=True,
+            full_terms_accepted_and_verified=True,
+            refunds_and_consumer_rights_cleared=True,
+            authorized_receiving_account_verified=True,
+            payment_method_legally_cleared=True,
+            compliance_reference="EXTERNAL-REGULATOR-REFERENCE-001",
+            seller_role="natural_person_independent_service",
+            seller_role_verified=True,
+            iran_foreign_trx_receipt_rights_verified=True,
+            us_person_and_us_nexus_excluded=True,
+            relevant_sanctions_screen_verified=True,
+        )
+        return replace(evidence, **changes)
+
     def invoice(self, **changes):
         data = dict(
             operator=self.operator, buyer=self.buyer, foreign_country="AE",
@@ -53,7 +76,7 @@ class RealNativePaymentStorageTests(TestCase):
             compliance_document_sha256=D,
             compliance_ref="EXTERNAL-REGULATOR-REFERENCE-001",
             terms_version=VERSION, terms_sha256=D,
-            clearance_verified=True,
+            legal_evidence=self.legal_evidence(),
         )
         data.update(changes)
         return issue_private_foreign_invoice(**data)
@@ -108,7 +131,9 @@ class RealNativePaymentStorageTests(TestCase):
 
     def test_no_unpublished_terms_or_foreign_permission(self):
         for bad in (
-            dict(clearance_verified=False),
+            dict(legal_evidence=self.legal_evidence(iran_foreign_trx_receipt_rights_verified=False)),
+            dict(legal_evidence=self.legal_evidence(seller_role="licensed_crypto_broker")),
+            dict(legal_evidence=self.legal_evidence(relevant_sanctions_screen_verified=False)),
             dict(terms_version=VERSION + "-DRAFT"),
             dict(terms_sha256="0" * 64),
             dict(wallet_owner_attestation_sha256="bad"),
@@ -118,6 +143,17 @@ class RealNativePaymentStorageTests(TestCase):
         ):
             with self.assertRaises(CheckoutRejected, msg=str(bad)):
                 self.invoice(**bad)
+        self.assertEqual(PropV141NativeOrder.objects.count(), 0)
+
+    def test_customer_country_bound_to_verified_evidence(self):
+        with self.assertRaises(CheckoutRejected):
+            self.invoice(foreign_country="GB", legal_evidence=self.legal_evidence())
+        self.assertEqual(PropV141NativeOrder.objects.count(), 0)
+
+    def test_type2_crypto_broker_cannot_accept_native_payment(self):
+        with self.assertRaises(CheckoutRejected):
+            self.invoice(legal_evidence=self.legal_evidence(
+                seller_role="licensed_crypto_broker"))
         self.assertEqual(PropV141NativeOrder.objects.count(), 0)
 
     def test_invoice_fields_persist_exact_fee_wallet_legal_terms(self):
