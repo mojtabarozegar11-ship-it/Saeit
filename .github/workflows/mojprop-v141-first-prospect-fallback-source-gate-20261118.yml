@@ -1,0 +1,108 @@
+name: MOJ PROP — source-only first-prospect contact route quality gate (NO DEPLOY)
+on:
+  push:
+    branches: [audit/mojprop-v141-live-crm-readonly-business-gates-20261118]
+    paths:
+      - templates/moj-prop-v4/index.html
+      - tests/test_mojprop_v141_verified_contact_fallback_20261118.py
+      - .github/workflows/mojprop-v141-first-prospect-fallback-source-gate-20261118.yml
+permissions:
+  contents: read
+jobs:
+  first-contact-safe:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Get source without keeping credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate real MOJ-PROP-01 contact route and private receipt release guard
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
+            tests.test_mojprop_v141_verified_contact_fallback_20261118
+          echo "CONTACT_FALLBACK_STATIC_SOURCE_TESTS=PASS"
+          echo "BACKEND_DEPLOYED=false"
+      - name: Check embedded landing JavaScript syntax without executing it
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3.11 -B - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          class JS(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.active=False
+                  self.data=[]
+                  self.blocks=[]
+              def handle_starttag(self,name,attrs):
+                  if name=="script":
+                      values=dict(attrs)
+                      self.active=not values.get("src") and values.get("type","") not in ("application/ld+json",)
+                      self.data=[]
+              def handle_data(self,content):
+                  if self.active:self.data.append(content)
+              def handle_endtag(self,name):
+                  if name=="script":
+                      if self.active:self.blocks.append("".join(self.data))
+                      self.active=False
+          page=JS()
+          page.feed(Path("templates/moj-prop-v4/index.html").read_text(encoding="utf-8"))
+          assert page.blocks and all(len(block)<100000 for block in page.blocks)
+          import subprocess
+          for script in page.blocks:
+              result=subprocess.run(["node","--check","-"],input=script.encode("utf-8"),
+                                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                                    timeout=15)
+              if result.returncode!=0:raise SystemExit("EMBEDDED_STATIC_JS_INVALID")
+          print("EMBEDDED_LANDING_JAVASCRIPT_SYNTAX=PASS")
+          PY
+      - name: Validate actual public support contact path via HTTPS GET, without sending anything
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3.11 -B - <<'PY'
+          import json
+          from html.parser import HTMLParser
+          from urllib.request import Request,build_opener,HTTPRedirectHandler
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          class Links(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.mailto=0
+              def handle_starttag(self,name,attrs):
+                  if name=="a" and dict(attrs).get("href","").startswith("mailto:"):
+                      self.mailto+=1
+          request=Request("https://mojplaywin.com/moj-prop/contact/",
+                 method="GET",headers={"User-Agent":"MOJPROP-readonly-contact-source-gate/1.0",
+                                      "Accept":"text/html"})
+          with build_opener(NoRedirect).open(request,timeout=15) as r:
+              status=r.status
+              payload=r.read(65001)
+              ctype=r.headers.get("Content-Type","").lower()
+          check=Links()
+          if len(payload)<=65000 and status==200 and ctype.startswith("text/html"):
+              check.feed(payload.decode("utf-8"))
+          result={"http_status":status,"mailto_available":check.mailto>0,
+                  "server_customer_record_created":False,
+                  "customer_submission_sent":False,
+                  "revenue_collected":False}
+          print("LIVE_OFFICIAL_CONTACT_GET="+json.dumps(result,sort_keys=True))
+          assert status==200 and check.mailto>0 and len(payload)<=65000
+          PY
+      - name: Confirm no publication or paid promises
+        if: always()
+        run: |
+          echo "SOURCE_ONLY_CHANGE_NOT_DEPLOYED=true"
+          echo "BROKER_ORDER_CREATED=false"
+          echo "CUSTOMER_POST_CREATED=false"
+          echo "PAYMENT_COLLECTED=false"
+          echo "SOCIAL_POST_PUBLISHED=false"
