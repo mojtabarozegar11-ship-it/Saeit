@@ -12,6 +12,10 @@ class _Links(HTMLParser):
     def __init__(self):
         super().__init__()
         self.links = []
+        self.visible_words = []
+
+    def handle_data(self, data):
+        self.visible_words.append(data)
 
     def handle_starttag(self, tag, attrs):
         if tag == "a":
@@ -55,7 +59,7 @@ class MojPropManualSupportFallbackTests(unittest.TestCase):
             "mailto:support@mojplaywin.com?subject=MOJ-PROP-01%20Prelaunch%20Information%20Request",
             links.links,
         )
-        self.assertIn("not a verified Plan 1 lead", page)
+        self.assertIn("not a verified Plan 1 lead", " ".join(" ".join(links.visible_words).split()))
         self.assertIn("nothing is sent automatically", page)
         self.assertIn("MOJ-PROP-01", page)
         self.assertIn("no payment details or private credentials", page)
