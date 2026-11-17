@@ -28,7 +28,19 @@ jobs:
           from pathlib import Path
           html=Path('templates/moj-prop-v4/index.html').read_text(encoding='utf8')
           assert html.count('/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01') >= 3
-          assert '/moj-prop-interest/form/' not in html
+          # The dedicated candidate form is present, but the canonical
+          # PropInterest backend is still unmerged; do not confuse a link
+          # with a working CRM endpoint.
+          from scripts.mojprop_plan1_form_source_gate_c130 import evaluate
+          truth=evaluate(Path.cwd())
+          assert truth['landing_and_contact_query_contract']
+          assert 'href="/moj-prop-interest/form/"' in html
+          assert 'href="/moj-prop-interest/form/?lang=fa"' in html
+          assert '/moj-prop-interest/form/?service=' not in html
+          assert 'MOJPROP-STARTER30' not in html
+          assert 'MOJ-PROP-01' in html
+          print('PLAN1_DEDICATED_BACKEND_SOURCE_READY=' + str(truth['source_ready']).lower())
+          print('PLAN1_LIVE_CRM_AND_PAYMENT_NOT_PROVEN=true')
           assert 'if packages == ["moj-prop-01"]:' in Path('core/mojprop_accessible_intake.py').read_text(encoding='utf8')
           assert '/moj-prop/?service=blueprint&amp;package=moj-prop-01#request' not in html
           assert 'MOJPROP-STARTER30' not in html
