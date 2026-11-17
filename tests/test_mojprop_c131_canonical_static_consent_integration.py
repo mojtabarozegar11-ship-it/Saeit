@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 from scripts.mojprop_plan1_form_source_gate_c130 import (
-    FORM, _canonical_links, _source_routes, _view_guards, evaluate, KEYS
+    FORM, _canonical_links, _source_routes, _view_guards, _read as original_read, evaluate, KEYS
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,7 +64,7 @@ class CanonicalPlan1IntegrationTests(TestCase):
         self.assertIn("nothing is sent automatically", page)
         self.assertNotIn("<form", page)
         self.assertNotIn("<script", page)
-        self.assertIn("not a verified Plan 1 lead", " ".join(page.replace("<strong>","").replace("</strong>","").split()).lower())
+        self.assertIn("not a verified plan 1 lead", " ".join(page.replace("<strong>","").replace("</strong>","").split()).lower())
 
     def test_private_consent_form_uses_actual_post_and_csrf(self):
         template = FORM_TEMPLATE.read_text("utf-8")
@@ -149,12 +149,11 @@ class CanonicalPlan1IntegrationTests(TestCase):
         root=ROOT
         migrated = root / "prop_firm/migrations/0008_prospect_contact_intake.py"
         with patch("scripts.mojprop_plan1_form_source_gate_c130._read") as mocked:
-            actual = __import__("scripts.mojprop_plan1_form_source_gate_c130", fromlist=["_read"])._read
             # This override simulates only the missing migration.
             def read(root, relative):
                 if relative == "prop_firm/migrations/0008_prospect_contact_intake.py":
                     return ""
-                return actual(root, relative)
+                return original_read(root, relative)
             mocked.side_effect=read
             self.assertFalse(evaluate(root)["source_ready"])
 
