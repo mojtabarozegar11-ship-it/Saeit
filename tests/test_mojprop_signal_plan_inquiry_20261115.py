@@ -228,26 +228,34 @@ class SignalPlanInquiryTests(unittest.TestCase):
         home = HOME.read_text("utf-8")
         catalog = (ROOT / "templates/moj-prop-v4/catalog/index.html").read_text("utf-8")
         detail = (ROOT / "templates/moj-prop-v4/starter-30-trx/index.html").read_text("utf-8")
-        for page in (home, catalog, detail):
+        # The genuine Plan1 home may not pretend to be the distinct
+        # educational ten-session Starter30 product. The original catalog
+        # and detail must still preserve that historical nonpayable SKU.
+        for page in (catalog, detail):
             self.assertIn("30", page)
             self.assertIn("TRX", page)
             self.assertIn("starter-30-trx#request", page)
             self.assertNotIn("two-page risk-readiness", page.lower())
         self.assertIn("10 self-reported simulated sessions", catalog)
-        self.assertIn("ten-session", home)
         self.assertIn("MOJPROP-STARTER30", detail)
+        self.assertIn("MOJ-PROP-01", home)
+        self.assertIn('href="/moj-prop-interest/form/"', home)
+        self.assertNotIn("MOJPROP-STARTER30", home)
 
-    def test_canonical_starter_prefills_real_crm_and_private_receipt(self):
+    def test_legacy_starter_query_cannot_misrepresent_genuine_plan1_or_sell_education(self):
         state = self._browser("?service=blueprint&package=starter-30-trx")
         self.assertEqual(len(state["posted"]), 1)
         p = state["posted"][0]["body"]
         self.assertEqual(p["service"], "blueprint")
         self.assertIsNone(p["product_id"])
-        self.assertIn("MOJPROP-STARTER30", p["notes"])
-        self.assertIn("30 native TRX", p["notes"])
-        self.assertIn("NOT paid", p["notes"])
-        self.assertIn("MOJPROP-STARTER30", state["receipt"])
-        self.assertFalse(state["starterHidden"])
+        self.assertEqual(p["notes"], "A detailed educational research objective for gold.")
+        self.assertNotIn("MOJPROP-STARTER30", p["notes"])
+        self.assertNotIn("MOJ-PROP-01", p["notes"])
+        self.assertNotIn("30 native TRX", p["notes"])
+        self.assertNotIn("MOJPROP-STARTER30", state["receipt"])
+        self.assertTrue(state["starterHidden"])
+        # The generic enquiry may save its own legitimate private CRM ID;
+        # it must never claim a Starter30 purchase or Plan1 enrolment.
         self.assertTrue(state["downloadEnabled"])
 
     def test_wrong_and_unknown_package_codes_are_ignored(self):
@@ -269,8 +277,14 @@ class SignalPlanInquiryTests(unittest.TestCase):
         self.assertNotIn("MOJPROP-STARTER30", state["posted"][0]["body"]["notes"])
         self.assertTrue(state["hidden"])
 
-    def test_starter_note_prefix_cannot_exceed_server_max(self):
+    def test_legacy_starter_query_does_not_shrink_bounded_generic_notes(self):
         state = self._browser("?service=blueprint&package=starter-30-trx", notes="X"*4970)
+        self.assertEqual(len(state["posted"]), 1)
+        self.assertEqual(state["posted"][0]["body"]["notes"], "X"*4970)
+        self.assertTrue(state["starterHidden"])
+
+    def test_overlong_generic_notes_never_post_or_issue_receipt(self):
+        state = self._browser("?service=blueprint&package=starter-30-trx", notes="X"*5001)
         self.assertEqual(state["posted"], [])
         self.assertFalse(state["downloadEnabled"])
         self.assertIn("This submission was not accepted", state["receipt"])
