@@ -228,26 +228,36 @@ class SignalPlanInquiryTests(unittest.TestCase):
         home = HOME.read_text("utf-8")
         catalog = (ROOT / "templates/moj-prop-v4/catalog/index.html").read_text("utf-8")
         detail = (ROOT / "templates/moj-prop-v4/starter-30-trx/index.html").read_text("utf-8")
-        for page in (home, catalog, detail):
+        # Only the legacy educational catalog/detail may mention Starter30.
+        for page in (catalog, detail):
             self.assertIn("30", page)
             self.assertIn("TRX", page)
             self.assertIn("starter-30-trx#request", page)
             self.assertNotIn("two-page risk-readiness", page.lower())
         self.assertIn("10 self-reported simulated sessions", catalog)
-        self.assertIn("ten-session", home)
+        self.assertIn("Ten-session journal template", detail)
         self.assertIn("MOJPROP-STARTER30", detail)
+        # Plan1 is a distinct, nonpayable 30-TRX challenge proposal.
+        self.assertIn("MOJ-PROP-01", home)
+        self.assertIn('href="/moj-prop-interest/form/"', home)
+        self.assertNotIn("MOJPROP-STARTER30", home)
+        self.assertNotIn("package=starter-30-trx", home)
+        self.assertNotIn("two-page risk-readiness", home.lower())
 
-    def test_canonical_starter_prefills_real_crm_and_private_receipt(self):
+    def test_funded_home_cannot_misattribute_legacy_sku_to_general_lead(self):
+        # A URL query is untrusted. The Plan1 home must neither auto-sell
+        # the educational product nor forge a scoped educational request.
+        # The separate CSRF-protected no-JS Starter30 route is covered by C104.
         state = self._browser("?service=blueprint&package=starter-30-trx")
         self.assertEqual(len(state["posted"]), 1)
         p = state["posted"][0]["body"]
         self.assertEqual(p["service"], "blueprint")
         self.assertIsNone(p["product_id"])
-        self.assertIn("MOJPROP-STARTER30", p["notes"])
-        self.assertIn("30 native TRX", p["notes"])
-        self.assertIn("NOT paid", p["notes"])
-        self.assertIn("MOJPROP-STARTER30", state["receipt"])
-        self.assertFalse(state["starterHidden"])
+        self.assertNotIn("MOJPROP-STARTER30", p["notes"])
+        self.assertNotIn("30 native TRX", p["notes"])
+        self.assertNotIn("MOJPROP-STARTER30", state["receipt"])
+        self.assertIn("No payment was taken.", state["receipt"])
+        self.assertTrue(state["starterHidden"])
         self.assertTrue(state["downloadEnabled"])
 
     def test_wrong_and_unknown_package_codes_are_ignored(self):
@@ -269,8 +279,13 @@ class SignalPlanInquiryTests(unittest.TestCase):
         self.assertNotIn("MOJPROP-STARTER30", state["posted"][0]["body"]["notes"])
         self.assertTrue(state["hidden"])
 
-    def test_starter_note_prefix_cannot_exceed_server_max(self):
-        state = self._browser("?service=blueprint&package=starter-30-trx", notes="X"*4970)
+    def test_starter_url_cannot_bypass_server_note_length_limit(self):
+        # The removed educational prefix no longer increases body length.
+        # Test the actual server hard limit rather than a fictitious prefix.
+        under_limit = self._browser("?service=blueprint&package=starter-30-trx", notes="X"*4970)
+        self.assertEqual(len(under_limit["posted"]), 1)
+        self.assertNotIn("MOJPROP-STARTER30", under_limit["posted"][0]["body"]["notes"])
+        state = self._browser("?service=blueprint&package=starter-30-trx", notes="X"*5001)
         self.assertEqual(state["posted"], [])
         self.assertFalse(state["downloadEnabled"])
         self.assertIn("This submission was not accepted", state["receipt"])

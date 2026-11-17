@@ -144,3 +144,15 @@ urlpatterns += [
     path("moj-signal-free-confirm/<str:token>/", signal_free_confirm, name="moj_signal_free_confirm"),
     path("moj-signal-free-unsubscribe/<str:token>/", signal_free_unsubscribe, name="moj_signal_free_unsubscribe"),
 ]
+
+# C136: keep existing main public intake and add the independent consent-only
+# Moj Prop is a MojPlayWin-only informational division. Checkout and broker execution are disabled.
+from core.moj_prop_views import moj_prop_landing, moj_prop_dashboard, moj_prop_interest, moj_prop_interest_form
+urlpatterns += [
+    path("moj-prop-interest/", moj_prop_interest, name="moj_prop_interest"),
+    path("moj-prop-interest/form/", moj_prop_interest_form, name="moj_prop_interest_form"),
+    path("moj-prop/", moj_prop_landing, name="moj_prop_landing"),
+    path("moj-prop/dashboard/", moj_prop_dashboard, name="moj_prop_dashboard"),
+    path("moj-prop/<str:lang>/dashboard/", moj_prop_dashboard, name="moj_prop_language_dashboard"),
+    path("moj-prop/<str:lang>/", moj_prop_landing, name="moj_prop_language"),
+]

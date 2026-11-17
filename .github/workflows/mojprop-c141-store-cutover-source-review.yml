@@ -1,0 +1,41 @@
+name: MOJ PROP C141 retained safe store cutover proof no production write
+on:
+  push:
+    branches: [fix/mojprop-c141-integrated-store-cutover-source-pin-20261117]
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+permissions:
+  contents: read
+jobs:
+  cutover-source-review-only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SECRET_KEY: c141-ephemeral
+      DEBUG: 'true'
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install project dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Run all original owned-fallback and integrated source pin tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m pytest -q \
+            tests/test_mpw_cutover_current_catalog_guard_20261115.py \
+            tests/test_mojprop_c141_store_cutover_source_review.py
+          echo 'C141_FIVE_REVIEWED_SOURCE_BLOBS_CURRENT=true'
+          echo 'C141_NO_FAKE_TRX_CHECKOUT=true'
+          echo 'C141_NO_PRODUCTION_CUTOVER_OR_CUSTOMER_POST=true'

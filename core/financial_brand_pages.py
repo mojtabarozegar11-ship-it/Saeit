@@ -116,10 +116,16 @@ def financial_brand_page(request, brand, locale, page_type):
     destination_label = copy["signals_cta"] if page_type == "signals" else copy["cta"]
     free_destination_url = SIGNAL_FREE_PREVIEW_PATH if page_type == "signals" else ""
     free_destination_label = copy["signals_free_cta"] if page_type == "signals" else ""
+    # Read-only signal offer disclosure does not activate checkout.
+    signal_offer = None
+    if page_type == "signals":
+        from .signal_commercial_catalog import offer
+        signal_offer = offer(slug, locale)
     return render(request, "core/financial_brand_page.html", {
         "brand_name": name, "brand_slug": slug, "locale": locale,
         "page_type": page_type, "page_title": title, "page_intro": intro,
         "page_notice": notice, "copy": copy, "shop_url": shop_url,
+        "signal_offer": signal_offer,
         "destination_url": destination_url, "destination_label": destination_label,
         "free_destination_url": free_destination_url, "free_destination_label": free_destination_label,
         "page_palette": palette, "page_direction": "rtl" if locale in {"fa", "ar"} else "ltr",

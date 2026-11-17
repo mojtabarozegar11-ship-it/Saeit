@@ -300,23 +300,34 @@ def patch_commercial(namespace):
                         raise Http404("New TRX invoices unavailable")
                 response = _dispatch(request, view, args, kwargs, create=make_claim)
                 if view_name == "start_order":
-                    # Django responses expose status_code; the fallback keeps the
-                    # isolated adapter contract testable without faking a response.
-                    status_code = getattr(response, "status_code", 200)
-                    if 200 <= status_code < 300:
-                        # Order creation and its response are authoritative. The
-                        # separate analytics lookup may be absent or unavailable.
-                        try:
-                            from core.models import Product
-                            product = Product.objects.filter(
-                                pk=kwargs.get("product_id"), active=True,
-                            ).first()
-                            if product is not None:
-                                _record_funnel_event_best_effort(
-                                    request, "invoice_created", product,
-                                )
-                        except Exception:
-                            pass
+                    # Count invoice_created only when a COMMITTED order writer
+                    # redirects to its exact server-issued invoice URL.
+                    # A 503/review page or arbitrary redirect is not an invoice.
+                    try:
+                        import re
+                        location = (
+                            response.get("Location", "")
+                            if callable(getattr(response, "get", None)) else ""
+                        )
+                        if (
+                            getattr(response, "status_code", None) not in (302, 303)
+                            or type(location) is not str
+                            or re.fullmatch(
+                                r"/commerce/trx-easy/invoice/[1-9][0-9]{0,18}/",
+                                location,
+                            ) is None
+                        ):
+                            return response
+                        from core.models import Product
+                        product = Product.objects.filter(
+                            pk=kwargs.get("product_id"), active=True,
+                        ).first()
+                        if product is not None:
+                            _record_funnel_event_best_effort(
+                                request, "invoice_created", product,
+                            )
+                    except Exception:
+                        pass
                 return response
             wrapped.__name__ = view_name
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>تصمیم‌های تجاری | Mojtaba.bot.ai</title>
+<style>
+:root{color-scheme:dark;font-family:Tahoma,Arial,sans-serif;--bg:#0b0b0c;--fg:#faf4e7;--gold:#e6c889;--muted:#c7beb0;--line:#57472d}
+*{box-sizing:border-box}body{max-width:1440px;margin:auto;padding:clamp(14px,3vw,38px);background:radial-gradient(ellipse at top right,#372d17,#0b0b0c 60%);color:var(--fg)}
+a{color:var(--gold)}a:focus-visible{outline:3px solid #ffe3ab;outline-offset:3px}
+header{display:flex;gap:20px;justify-content:space-between;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--line);padding-bottom:24px}
+.logo{font-weight:900;letter-spacing:.18em;color:var(--gold);direction:ltr}
+h1{font-size:clamp(1.7rem,3vw,2.8rem);margin:10px 0}p{color:var(--muted);line-height:1.95}
+.banner{margin:25px 0;padding:20px 26px;border:1px solid var(--line);border-radius:16px;background:#19170f}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(265px,1fr));gap:18px}
+.card{background:linear-gradient(145deg,#1d1d1a,#101112);border:1px solid #574830;border-radius:18px;padding:24px;min-width:0}
+.card h2{font-size:1.1rem;color:var(--gold);direction:ltr;text-align:right}
+.card .state{display:block;color:#efc8a1;font-weight:700;font-size:.82rem;margin:10px 0}
+.card ul{padding-right:20px;color:#c9c4b8;line-height:1.9;font-size:.83rem}
+.card li{overflow-wrap:anywhere}
+progress{width:100%;height:10px;accent-color:#d8b36c;direction:ltr}
+.data{font-variant-numeric:tabular-nums;direction:ltr}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin:24px 0}
+.actions a{border:1px solid #8f713d;border-radius:10px;padding:11px 17px;text-decoration:none}
+footer{padding:24px 0;color:#aaa08b;font-size:.82rem}
+</style>
+</head>
+<body>
+<header><div><div class="logo">MOJTABA.BOT.AI / PRIVATE OPERATIONS</div>
+<h1>تعیین تکلیف تجاری — ۱۲ بخش</h1>
+<p>مالک و تیم مجاز | تصمیم بر اساس شواهد واقعی، نه صرفاً وجود کد، آزمون یا صفحه.</p></div>
+<div class="data">MOJ PROP / MOJPLAYWIN</div></header>
+<section class="banner" aria-label="محدودیت گزارش">
+<strong>وضعیت پذیرش وجه عمومی از این گزارش قابل تأیید نیست.</strong>
+<p>داده‌های تسویه TRX، حقوق فروش، موجودی مالی و قراردادهای خارجی باید مستقلاً احراز شوند. درصدهای هر کارت فقط میزان اثبات پیش‌نیازهای همان بخش است؛ عدد صفر به معنی عدم وجود پروژه یا درآمد قبلی نیست.</p>
+<p><strong>ممنوعیت مطلق:</strong> ارسال یا زمان‌بندی هرگونه پست برای Dr.mojtaba.rozegar.</p></section>
+<section class="banner" aria-label="اولویت قطعی مالک">
+<strong>ترتیب اجرا: ۱. MOJ PROP · ۲. فروش اشتراک سیگنال · ۳. درگاه چندسایتی TRON · ۴. فروشگاه MojPlayWin · ۵. بازی مج کوین</strong>
+<p>سایر بخش‌ها پس از پنج اولویت قطعی مالک و بر مبنای ظرفیت اجرا و شواهد مالی اولویت‌بندی می‌شوند. احراز فنی و قراردادها پیش‌نیاز دریافت وجه هستند؛ این صفحه هیچ خریدی را فعال نمی‌کند.</p>
+</section>
+<div class="actions">
+<a href="/staff/command-center/">بازگشت به مدیریت</a>
+<a href="/staff/command-center/api/commercialization/">گزارش تجمیعی فقط‌خواندنی JSON</a>
+</div>
+<main class="grid" aria-label="اولویت‌بندی تجاری مالک">
+{% for sector in sectors %}
+<article class="card">
+<h2>{{ sector.code }}</h2>
+<span class="state">نیازمند تکمیل مدارک و بررسی مجاز</span>
+<p class="data">{{ sector.complete }} / {{ sector.required }} verified release gates</p>
+<progress value="{{ sector.complete }}" max="{{ sector.required }}" aria-label="{{ sector.code }} release prerequisites"></progress>
+<h3>پیش‌نیازهای هنوز احرازشده‌نیستند:</h3>
+<ul>{% for missing in sector.missing %}<li>{{ missing }}</li>{% empty %}<li>تمام مستندات دریافت شدند؛ هنوز تأیید انتشار و دریافت وجه لازم است.</li>{% endfor %}</ul>
+</article>
+{% endfor %}
+</main>
+<footer>هیچ دکمه پرداخت، تأیید مالی، انتشار، معامله یا حذف اطلاعات در این صفحه وجود ندارد. اطلاعات خصوصی مشتری نمایش داده نمی‌شود.</footer>
+</body></html>

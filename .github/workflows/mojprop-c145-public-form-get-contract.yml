@@ -1,0 +1,35 @@
+name: MOJ PROP C145 public Plan1 GET truth gate - no customer POST or release
+on:
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+    paths:
+      - 'scripts/mojprop_c142_public_form_get_readonly.py'
+      - 'tests/test_mojprop_c142_public_form_get_readonly.py'
+      - '.github/workflows/mojprop-c145-public-form-get-contract.yml'
+permissions:
+  contents: read
+jobs:
+  public-get-classifier-local:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run no-network synthetic adversarial GET-only tests
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_c142_public_form_get_readonly
+  live-plan1-en-fa-get:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: GET only live Plan1 form EN and FA, fail closed when 404
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_c142_public_form_get_readonly.py

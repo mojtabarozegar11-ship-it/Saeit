@@ -1,0 +1,176 @@
+# Source-only Plan 1 order compliance regression CI.
+# No production secrets, checkout, migration, deploy, wallet or outbound email.
+name: MOJ PROP Plan1 B Source-Only Checks
+
+on:
+  push:
+    branches:
+      - cycle-b-contract-gates-20261116
+      - feature/prop-firm-policy-v11-20261114
+    paths:
+      - 'prop_firm/order_readiness.py'
+      - 'prop_firm/buyer_order_review.py'
+      - 'prop_firm/buyer_interest_form.py'
+      - 'prop_firm/buyer_precontract_chain.py'
+      - 'prop_firm/plan1_private_order_draft.py'
+      - 'prop_firm/plan1_intake_provenance.py'
+      - 'prop_firm/plan1_canonical_interest_bridge.py'
+      - 'prop_firm/plan1_buyer_no_social_amendment.py'
+      - 'prop_firm/plan1_phase_account_boundary.py'
+      - 'prop_firm/plan1_demo_email_interest.py'
+      - 'prop_firm/plan1_revised_buyer_terms_link.py'
+      - 'prop_firm/plan1_owner_held_litefinance_policy.py'
+      - 'prop_firm/plan1_owner_account_profit_preview.py'
+      - 'prop_firm/plan1_owner_profit_payout_gates.py'
+      - 'tests/test_prop_plan1_owner_profit_payout_gates.py'
+      - 'prop_firm/plan1_owner_account_buyer_copy.py'
+      - 'tests/test_prop_plan1_owner_held_litefinance_policy.py'
+      - 'tests/test_prop_plan1_owner_account_profit_preview.py'
+      - 'tests/test_prop_plan1_owner_account_buyer_copy.py'
+      - 'tests/test_prop_plan1_revised_buyer_terms_link.py'
+      - 'tests/test_prop_plan1_demo_to_real_boundary.py'
+      - 'tests/test_moj_prop_demo_to_real_db.py'
+      - 'tests/test_prop_plan1_demo_email_interest.py'
+      - 'tests/test_moj_prop_demo_otp_orm.py'
+      - 'tests/test_prop_plan1_no_buyer_social.py'
+      - 'prop_firm/plan1_orm_consent_review.py'
+      - 'tests/test_prop_plan1_orm_consent_review.py'
+      - 'tests/test_prop_plan1_orm_verified_handoff.py'
+      - 'tests/test_prop_order_readiness.py'
+      - 'tests/test_prop_buyer_order_review.py'
+      - 'tests/test_prop_buyer_interest_form.py'
+      - 'tests/test_prop_buyer_precontract_chain.py'
+      - 'tests/test_prop_plan1_private_order_draft.py'
+      - 'tests/test_prop_plan1_intake_provenance.py'
+      - 'tests/test_prop_plan1_canonical_interest_bridge.py'
+      - '.github/workflows/mojprop-plan1-b-source-only.yml'
+
+  pull_request:
+    branches:
+      - feature/prop-firm-policy-v11-20261114
+    paths:
+      - 'prop_firm/order_readiness.py'
+      - 'prop_firm/buyer_order_review.py'
+      - 'prop_firm/buyer_interest_form.py'
+      - 'prop_firm/buyer_precontract_chain.py'
+      - 'prop_firm/plan1_private_order_draft.py'
+      - 'prop_firm/plan1_intake_provenance.py'
+      - 'prop_firm/plan1_demo_email_interest.py'
+      - 'prop_firm/plan1_revised_buyer_terms_link.py'
+      - 'tests/test_prop_plan1_revised_buyer_terms_link.py'
+      - 'prop_firm/plan1_orm_consent_review.py'
+      - 'tests/test_moj_prop_demo_otp_orm.py'
+      - 'tests/test_prop_plan1_demo_email_interest.py'
+      - 'tests/test_prop_*.py'
+      - '.github/workflows/mojprop-plan1-b-source-only.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-plan1-b-source-only-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-only:
+    name: Plan 1 private-intake regression tests (NO RELEASE)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: .
+    steps:
+      - name: Checkout exact triggering commit read-only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Python runtime
+        run: python3 --version
+
+      - name: Compile only Plan 1 B-owned Python files
+        run: |
+          python3 -B -m py_compile \
+            prop_firm/order_readiness.py \
+            prop_firm/buyer_order_review.py \
+            prop_firm/buyer_interest_form.py \
+            prop_firm/buyer_precontract_chain.py \
+            prop_firm/plan1_private_order_draft.py \
+            prop_firm/plan1_intake_provenance.py \
+            prop_firm/plan1_canonical_interest_bridge.py \
+            tests/test_prop_order_readiness.py \
+            tests/test_prop_buyer_order_review.py \
+            tests/test_prop_buyer_interest_form.py \
+            tests/test_prop_buyer_precontract_chain.py \
+            tests/test_prop_plan1_private_order_draft.py \
+            tests/test_prop_plan1_intake_provenance.py \
+            tests/test_prop_plan1_canonical_interest_bridge.py
+
+      - name: Verify signed OTP demo-interest is nonpayable and not KYC
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_demo_email_interest.py' -v
+
+      - name: Verify demo-only challenges and separate real-broker transition
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_demo_to_real_boundary.py' -v
+
+      - name: Verify owner-held LiteFinance mandate, no principal transfer
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_owner_held_litefinance_policy.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_owner_account_profit_preview.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_owner_profit_payout_gates.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_owner_account_buyer_copy.py' -v
+
+      - name: Verify new owner no-social buyer clause is source-only
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_no_buyer_social.py' -v
+
+      - name: Read-only Plan 1 B contract / identity / consent tests
+        run: |
+          set -eu
+          python3 -B -m unittest discover -s tests -p 'test_prop_order_readiness.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_buyer_order_review.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_buyer_interest_form.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_buyer_precontract_chain.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_private_order_draft.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_intake_provenance.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_canonical_interest_bridge.py' -v
+
+  crm-signed-precontract:
+    name: Plan1 canonical ORM and signed-review bridge (nonpayable)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: ".:tests"
+      DEBUG: "False"
+      SECRET_KEY: "ephemeral-source-only-b-regression-never-live"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,mojplaywin.com"
+    steps:
+      - name: Checkout triggering commit with no retained credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.11 runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install declared project dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile B-only bridge and regression files
+        run: |
+          python -m py_compile prop_firm/plan1_orm_consent_review.py prop_firm/plan1_demo_email_interest.py tests/test_prop_plan1_orm_consent_review.py tests/test_prop_plan1_orm_verified_handoff.py tests/test_moj_prop_demo_otp_orm.py tests/test_prop_plan1_demo_email_interest.py prop_firm/plan1_revised_buyer_terms_link.py tests/test_prop_plan1_revised_buyer_terms_link.py prop_firm/plan1_owner_held_litefinance_policy.py prop_firm/plan1_owner_account_profit_preview.py prop_firm/plan1_owner_account_buyer_copy.py prop_firm/plan1_owner_profit_payout_gates.py tests/test_prop_plan1_owner_profit_payout_gates.py tests/test_prop_plan1_owner_held_litefinance_policy.py tests/test_prop_plan1_owner_account_profit_preview.py tests/test_prop_plan1_owner_account_buyer_copy.py
+      - name: Source-only CRM/signed-review integration regression
+        run: |
+          python manage.py test tests.test_prop_plan1_orm_consent_review tests.test_prop_plan1_orm_verified_handoff tests.test_moj_prop_demo_to_real_db tests.test_moj_prop_demo_otp_orm tests.test_prop_plan1_revised_buyer_terms_link --verbosity 2
+      - name: Assert no Plan1 payment or funding activation
+        run: |
+          python - <<'PY'
+          from prop_firm.plans import plan_for_code
+          from prop_firm.order_readiness import SKU, FEE_TRX, TERMS_VERSION
+          p=plan_for_code(SKU)
+          assert SKU == "MOJ-PROP-01"
+          assert str(FEE_TRX) == "30"
+          assert TERMS_VERSION == "2026-11-15/v1.2"
+          assert p.checkout_enabled is False and p.account_activation_enabled is False
+          print("CYCLE_B_NONPAYABLE_SOURCE_ONLY=PASS")
+          PY

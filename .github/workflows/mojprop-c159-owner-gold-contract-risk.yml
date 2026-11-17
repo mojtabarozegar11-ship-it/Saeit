@@ -1,0 +1,59 @@
+name: MOJ PROP C159 owner prospective XAUUSD 3-8 risk, immutable old contracts
+on:
+  pull_request:
+    branches:
+      - integration/mojprop-c136-merged-main-prop-20261117
+    paths:
+      - "prop_firm/rules.py"
+      - "prop_firm/owner_gold_risk_v13.py"
+      - "prop_firm/plan1_gold_disclosure_v13.py"
+      - "tests/test_mojprop_c159_owner_gold_risk_contract_v13.py"
+      - ".github/workflows/mojprop-c159-owner-gold-contract-risk.yml"
+permissions:
+  contents: read
+jobs:
+  nonpayable-versioned-risk-contract:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout owner-authored PR, no persisted GitHub token
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.11 for source-only legal-contract safety checks
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax and exact prospective 3pct/8pct gold contract protections
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile prop_firm/rules.py \
+            prop_firm/owner_gold_risk_v13.py \
+            prop_firm/plan1_gold_disclosure_v13.py \
+            tests/test_mojprop_c159_owner_gold_risk_contract_v13.py
+          python3 -B -m unittest -v tests.test_mojprop_c159_owner_gold_risk_contract_v13
+          python3 - <<'PY'
+          from decimal import Decimal
+          from prop_firm.rules import POLICY
+          from prop_firm.owner_gold_risk_v13 import OWNER_GOLD_V13
+          from prop_firm.plan1_gold_disclosure_v13 import proposed_disclosure_v13
+          from prop_firm.policy_integrity import policy_drift_defects
+          assert POLICY.order_risk_pct == Decimal('0.8')
+          assert POLICY.aggregate_risk_pct == Decimal('1.6')
+          assert OWNER_GOLD_V13.max_per_order_risk_pct == Decimal('3')
+          assert OWNER_GOLD_V13.max_aggregate_open_risk_pct == Decimal('8')
+          assert OWNER_GOLD_V13.exact_broker_symbol == 'XAUUSD'
+          assert not policy_drift_defects()
+          d = proposed_disclosure_v13()
+          assert not d.payment_enabled and not d.actual_order_enabled
+          assert len(d.sha256_digest) == 64
+          print('C159_PROSPECTIVE_V13_GOLD_RISK_CONTRACT_SOURCE=VALID')
+          print('C159_HISTORICAL_V12_RISK_TERMS=UNCHANGED')
+          print('C159_REAL_TRADING_AND_CHECKOUT=DISABLED')
+          PY

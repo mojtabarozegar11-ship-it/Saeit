@@ -1,0 +1,82 @@
+name: MOJ PROP C153 offsite SOURCE-only recovery artifacts (no deploy or customer data)
+on:
+  push:
+    branches:
+      - offsite/mojprop-c153-source-recovery-drive-20261117
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+    paths: ['.github/workflows/mojprop-c153-drive-offsite-source-artifacts-20261117.yml']
+permissions:
+  contents: read
+jobs:
+  immutable-plan1-source-artifact:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout audited branch without persist credentials
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Python no database, no cPanel
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Source-only closure 12 adversarial checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest -q tests.test_mojprop_c147_plan1_source_bundle
+      - name: Build known-good reproducible app source and manifest, not release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mojprop_c147_plan1_source_bundle.py --action package
+          root="$RUNNER_TEMP/mojprop-c147"
+          test -s "$root/mojprop-plan1-source-closure-c147.tar"
+          test -s "$root/mojprop-plan1-source-closure-c147.json"
+          python3 - <<'PY'
+          import hashlib,io,json,os,pathlib,tarfile
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'mojprop-c147'
+          raw=(root/'mojprop-plan1-source-closure-c147.tar').read_bytes()
+          actual=hashlib.sha256(raw).hexdigest()
+          expected='b6fb7a045e59ed903663b041b42dfa58d53a0e0f29298cf63c61ba59a30c6516'
+          assert actual==expected,(actual,'C147 reviewed package source moved')
+          manifest=json.loads((root/'mojprop-plan1-source-closure-c147.json').read_text('utf-8'))
+          assert manifest['schema']=='mojprop.plan1.source_closure.c147.v1'
+          assert manifest['file_count']==57
+          assert manifest['db_app_media_restore_verified'] is False
+          assert manifest['merchant_authorized'] is False
+          assert manifest['production_deploy_authorized'] is False
+          assert manifest['customer_consent_post_executed'] is False
+          with tarfile.open(fileobj=io.BytesIO(raw),mode='r:') as archive:
+              members=archive.getmembers()
+              assert len(members)==57
+              assert all(t.isfile() and not t.issym() and t.size < 393216 for t in members)
+          print('C153_SOURCE_TARBALL_BYTES='+str(len(raw)))
+          print('C153_SOURCE_TARBALL_SHA256='+actual)
+          print('C153_SOURCE_BACKUP_SCOPE=REPO_SOURCE_ONLY_NOT_DATABASE_OR_MEDIA')
+          print('C153_RELEASE_AUTHORIZED=false')
+          PY
+      - name: Publish private first-party source tarball as separate GitHub artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojprop-plan1-c153-source-only-20261117
+          path: ${{ runner.temp }}/mojprop-c147/mojprop-plan1-source-closure-c147.tar
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 2
+      - name: Publish private integrity manifest as separate GitHub artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojprop-plan1-c153-source-sha256-manifest-20261117
+          path: ${{ runner.temp }}/mojprop-c147/mojprop-plan1-source-closure-c147.json
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 2

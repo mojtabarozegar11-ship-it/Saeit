@@ -1,0 +1,99 @@
+{% extends "mojplaywin/site_base.html" %}
+{% load static %}
+{% block html_lang %}{{ code }}{% endblock %}
+{% block html_dir %}{{ direction }}{% endblock %}
+{% block body_class %}mojplaywin-prop{% endblock %}
+{% block title %}{{ labels.0 }} | Moj Prop · MojPlayWin{% endblock %}
+{% block meta_description %}{{ labels.1 }}{% endblock %}
+{% block page_head %}
+<meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="{% static 'site/moj_prop.css' %}">
+{% endblock %}
+{% block content %}
+<div class="mp-prop mp-desk" lang="{{ code }}" dir="{{ direction }}" data-availability="private-read-only">
+  <div class="mp-desk-nav">
+    <a href="{% if code == 'en' %}/moj-prop/{% else %}/moj-prop/{{ code }}/{% endif %}" class="mp-identity">
+      <span class="mp-identity-emblem" aria-hidden="true"><span>M</span></span>
+      <span class="mp-identity-copy"><strong>MOJ <i>PROP</i></strong><small>BY MOJPLAYWIN</small></span>
+    </a>
+    <details class="mp-language">
+      <summary aria-label="{{ lang_name }}">◎ {{ lang_name }} ⌄</summary>
+      <div class="mp-language-popup">
+        {% for item in locale_links %}
+        <a href="{{ item.url }}dashboard/" lang="{{ item.code }}" dir="auto"{% if item.active %} aria-current="page"{% endif %}>{{ item.name }}</a>
+        {% endfor %}
+      </div>
+    </details>
+  </div>
+  <header class="mp-desk-header">
+    <div><p class="mp-index">MOJ PROP · PRIVATE LEDGER</p><h1>{{ labels.0 }}</h1><p>{{ labels.1 }}</p></div>
+    <a class="mp-button mp-button-quiet" href="{% if code == 'en' %}/moj-prop/{% else %}/moj-prop/{{ code }}/{% endif %}">{{ labels.19 }}</a>
+  </header>
+  <div class="mp-availability mp-desk-notice" role="status">
+    <span class="mp-availability-mark" aria-hidden="true">●</span>
+    <div><strong>{{ labels.18 }}</strong><p>{{ footer.0 }}</p></div>
+  </div>
+  <section aria-labelledby="mp-account-title">
+    <h2 id="mp-account-title">{{ labels.2 }}</h2>
+    {% if not records %}
+      <div class="mp-desk-empty"><span aria-hidden="true">◇</span><p>{{ labels.3 }}</p></div>
+    {% else %}
+      {% for record in records %}
+      <article class="mp-account-card">
+        <div class="mp-account-header">
+          <div><p class="mp-index">#{{ forloop.counter|stringformat:"02d" }} · MOJ PROP</p>
+            <h3>{{ labels.4 }} {% if record.account.kind == "phase_one" %}I{% elif record.account.kind == "phase_two" %}II{% else %}{{ record.account.tier_index|add:"1" }}{% endif %}</h3></div>
+          <span class="mp-account-status">{% if record.verified %}✓ {{ labels.12 }}{% else %}◌ {{ labels.17 }}{% endif %}</span>
+        </div>
+        {% if record.selected_plan %}
+        <p class="mp-index" dir="ltr">{{ record.selected_plan.code }} ·
+          {{ plans_copy.starting }}: &#36;{{ record.selected_plan.starting_capital_usd }}
+          · {{ plans_copy.fee }}: {{ record.selected_plan.entry_fee_trx }} TRX
+        </p>
+        {% endif %}
+        <dl class="mp-account-metrics">
+          <div><dt>{{ labels.6 }}</dt><dd dir="ltr">${{ record.tier_capital|floatformat:"2" }}</dd></div>
+          <div><dt>{{ labels.7 }}</dt><dd dir="ltr">${{ record.net_profit|floatformat:"2" }}</dd></div>
+          <div><dt>{{ labels.8 }}</dt><dd>{{ record.trading_days }}</dd></div>
+          <div><dt>{{ labels.9 }}</dt><dd dir="ltr">${{ record.best_day|floatformat:"2" }}</dd></div>
+          <div><dt>{{ labels.10 }}</dt><dd dir="ltr">{% if record.last_equity is not None %}${{ record.last_equity|floatformat:"2" }}{% else %}—{% endif %}</dd></div>
+          <div><dt>{{ labels.11 }}</dt><dd>{% if record.verified %}✓{% else %}{{ labels.17 }}{% endif %}</dd></div>
+        </dl>
+        {% if record.challenge_trade_count %}
+        <section class="mp-desk-trades" aria-label="{{ trading.title }}">
+          <h4>{{ trading.title }}</h4>
+          <p dir="ltr">{{ record.challenge_trade_count.valid_closed_positions }} / {{ minimum_closed_trades }} verified closed trades</p>
+          <p>{{ trading.body }}</p>
+          <p>{{ trading.bots }}</p>
+          <p dir="ltr">MANUAL {{ record.challenge_trade_count.manual_positions }} ·
+             BOT {{ record.challenge_trade_count.bot_positions }} ·
+             UNKNOWN {{ record.challenge_trade_count.unknown_origin_positions }}</p>
+        </section>
+        {% endif %}
+        {% if record.social_posting and record.account.policy_version == policy_version %}
+        <section class="mp-desk-social" aria-label="{{ social.title }}">
+          <h4>{{ social.title }}</h4>
+          <p>{{ social.disclosure }}</p>
+          <p dir="ltr">Instagram: {{ record.social_posting.reviewed_instagram }} / {{ record.social_posting.required_instagram }} ·
+             Facebook: {{ record.social_posting.reviewed_facebook }} / {{ record.social_posting.required_facebook }}</p>
+          <p>{% if record.social_posting.satisfied %}✓ {% else %}◌ {% endif %}{{ social.body }}</p>
+        </section>
+        {% endif %}
+        <h4>{{ labels.13 }}</h4>
+        <div class="mp-account-tablewrap">
+        <table class="mp-account-table">
+          <thead><tr><th scope="col">{{ labels.14 }}</th><th scope="col">{{ labels.15 }}</th><th scope="col">{{ labels.16 }}</th></tr></thead>
+          <tbody>
+            {% for event in record.executions %}
+            <tr><td>{{ event.symbol }}</td><td dir="ltr">${{ event.net_realized_usd|floatformat:"2" }}</td><td><time datetime="{{ event.closed_at|date:'c' }}">{{ event.closed_at|date:"Y-m-d H:i" }}</time></td></tr>
+            {% empty %}<tr><td colspan="3">{{ labels.17 }}</td></tr>{% endfor %}
+          </tbody>
+        </table></div>
+        <p class="mp-desk-policy">MOJ PROP · {{ record.policy_version }} · {{ labels.18 }}</p>
+      </article>
+      {% endfor %}
+    {% endif %}
+  </section>
+  <footer class="mp-local-footer"><span>Moj Prop × MojPlayWin</span><span>{{ footer.1 }}</span><span>{{ policy_version }}</span></footer>
+</div>
+{% endblock %}

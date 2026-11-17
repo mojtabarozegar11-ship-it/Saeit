@@ -1,0 +1,45 @@
+name: MOJ PROP C139 isolate archived Starter30 publisher without touching Plan1 home
+on:
+  push:
+    branches: [fix/mojprop-c139-separate-legacy-starter30-ci-20261117]
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-c139-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  archived-publisher-no-release:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      SECRET_KEY: c139-synthetic-only
+      DEBUG: 'true'
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install pinned real project dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Exercise historical publisher rollback in temporary docroot only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m pytest -q \
+            tests/test_mojprop_commercial_samples_release.py \
+            tests/test_mojprop_starter30_single_sku_contract_20261115.py
+          echo 'C139_LEGACY_EDUCATIONAL_FIXTURE_TEMP_ONLY=true'
+          echo 'C139_LIVE_PLAN1_HOME_HAS_NO_STARTER30_MARKETING=true'
+          echo 'C139_NO_PRODUCTION_DEPLOY_NO_TRX_NO_REAL_BUYER=true'

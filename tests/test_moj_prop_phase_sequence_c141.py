@@ -1,0 +1,326 @@
+"""C141: phase-two chronology cannot be approved by later or unrelated PASSED flags.
+
+All settlement flags here belong to synthetic isolated Django test fixtures.
+This suite does not represent actual on-chain payment, broker evidence or sale.
+"""
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+
+from prop_firm.models import (
+    PropAccount, PropChallengeEnrollment, PropTrader,
+    PropExecution, PropEquityObservation,
+)
+from prop_firm.portal import completed_paid_phase_one_before_stage_two
+from prop_firm.social_policy import LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION
+
+START = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
+DAY = timedelta(days=1)
+
+
+class CompletedPhaseOneChronologyTests(TestCase):
+    def setUp(self):
+        user = get_user_model().objects.create_user(
+            username="c141_owner_synthetic", password="ci-only-not-production"
+        )
+        self.trader = PropTrader.objects.create(user=user)
+        self.purchase = PropChallengeEnrollment.objects.create(
+            trader=self.trader,
+            verified_invoice_ref="synthetic-C141-purchase-A",
+            plan_code="MOJ-PROP-01",
+            confirmed_at=START,
+            settlement_verified=True,
+            terms_version=NEW_CONTRACT_VERSION,
+        )
+        self.phase1 = PropAccount.objects.create(
+            trader=self.trader, kind=PropAccount.Kind.PHASE_ONE,
+            status=PropAccount.Status.PASSED,
+            reconciled_by_operator=True,
+            challenge_enrollment=self.purchase,
+            opened_at=START+DAY,
+            closed_at=START+timedelta(days=7),
+            policy_version=NEW_CONTRACT_VERSION,
+            tier_index=0, starting_capital_usd=Decimal("100.00"),
+        )
+        self.phase2 = PropAccount.objects.create(
+            trader=self.trader, kind=PropAccount.Kind.PHASE_TWO,
+            status=PropAccount.Status.ACTIVE,
+            reconciled_by_operator=True,
+            challenge_enrollment=self.purchase,
+            opened_at=START+timedelta(days=8),
+            policy_version=NEW_CONTRACT_VERSION,
+            tier_index=0, starting_capital_usd=Decimal("100.00"),
+        )
+        # Real qualification may not rely on PASSED and operator flags alone.
+        # These six fabricated CI days supply test-only independent-looking
+        # evidence; they are never a broker connection or funding proof.
+        for i in range(6):
+            start = START + DAY + timedelta(days=i)
+            opening = Decimal("100.00") + Decimal("1.60") * i
+            PropEquityObservation.objects.create(
+                account=self.phase1, external_event_id=f"c141-open-{i}",
+                data_source="CI-NOT-BROKER", observed_at=start,
+                equity_usd=opening, is_session_open=True,
+                reconciliation_status="verified",
+            )
+            PropExecution.objects.create(
+                account=self.phase1, external_event_id=f"c141-trade-{i}",
+                external_position_id=f"ci-c141-pos-{i}",
+                data_source="CI-NOT-BROKER", symbol="XAUUSD",
+                execution_origin="manual", closed_at=start + timedelta(hours=1),
+                gross_realized_usd=Decimal("1.60"),
+                total_fees_usd=Decimal("0"), reconciliation_status="verified",
+            )
+            PropEquityObservation.objects.create(
+                account=self.phase1, external_event_id=f"c141-close-{i}",
+                data_source="CI-NOT-BROKER",
+                observed_at=start + timedelta(hours=2),
+                equity_usd=opening + Decimal("1.60"),
+                is_session_open=False, reconciliation_status="verified",
+            )
+
+    def accepted(self):
+        return completed_paid_phase_one_before_stage_two(self.phase2)
+
+    def proved(self):
+        return completed_paid_phase_one_before_stage_two(
+            self.phase2, require_verified_assessment=True
+        )
+
+    def mutate(self, model, **changes):
+        type(model).objects.filter(pk=model.pk).update(**changes)
+        model.refresh_from_db()
+
+    def test_01_prior_reconciled_completed_same_purchase_is_eligible(self):
+        self.assertTrue(self.accepted())
+
+    def test_02_prior_closed_after_stage_two_started_denied(self):
+        self.mutate(self.phase1, closed_at=self.phase2.opened_at+DAY)
+        self.assertFalse(self.accepted())
+
+    def test_03_prior_not_closed_denied(self):
+        self.mutate(self.phase1, closed_at=None)
+        self.assertFalse(self.accepted())
+
+    def test_04_prior_not_opened_denied(self):
+        self.mutate(self.phase1, opened_at=None)
+        self.assertFalse(self.accepted())
+
+    def test_05_prior_opened_after_closed_denied(self):
+        self.mutate(self.phase1, opened_at=self.phase1.closed_at+DAY)
+        self.assertFalse(self.accepted())
+
+    def test_06_prior_reconciliation_flag_required(self):
+        self.mutate(self.phase1, reconciled_by_operator=False)
+        self.assertFalse(self.accepted())
+
+    def test_07_prior_status_must_be_passed(self):
+        self.mutate(self.phase1, status=PropAccount.Status.ACTIVE)
+        self.assertFalse(self.accepted())
+
+    def test_08_different_purchase_does_not_qualify(self):
+        other_purchase = PropChallengeEnrollment.objects.create(
+            trader=self.trader,
+            verified_invoice_ref="synthetic-C141-purchase-B",
+            plan_code="MOJ-PROP-01", confirmed_at=START,
+            settlement_verified=True, terms_version=NEW_CONTRACT_VERSION,
+        )
+        self.mutate(self.phase1, challenge_enrollment=other_purchase)
+        self.assertFalse(self.accepted())
+
+    def test_09_unsettled_purchase_denied(self):
+        self.mutate(self.purchase, settlement_verified=False)
+        self.assertFalse(self.accepted())
+
+    def test_10_stage_two_opened_after_day_28_denied(self):
+        self.mutate(self.phase2, opened_at=START+timedelta(days=28))
+        self.assertFalse(self.accepted())
+
+    def test_11_first_stage_opened_before_purchase_denied(self):
+        self.mutate(self.phase1, opened_at=START-DAY)
+        self.assertFalse(self.accepted())
+
+    def test_12_second_stage_without_opened_at_denied(self):
+        self.mutate(self.phase2, opened_at=None)
+        self.assertFalse(self.accepted())
+
+    def test_13_another_traders_passed_stage_does_not_qualify(self):
+        second_user = get_user_model().objects.create_user(
+            username="c141_other_synthetic", password="ci-only"
+        )
+        other = PropTrader.objects.create(user=second_user)
+        self.mutate(self.phase1, trader=other)
+        self.assertFalse(self.accepted())
+
+    def test_14_mismatched_stage_capital_denied(self):
+        self.mutate(self.phase1, starting_capital_usd=Decimal("200.00"))
+        self.assertFalse(self.accepted())
+
+    def test_15_mismatched_stage_tier_denied(self):
+        self.mutate(self.phase1, tier_index=1)
+        self.assertFalse(self.accepted())
+
+    def test_16_stage_two_started_before_purchase_denied(self):
+        self.mutate(self.phase2, opened_at=START-DAY)
+        self.assertFalse(self.accepted())
+
+    def test_17_untrusted_naive_opened_at_denied(self):
+        self.phase2.opened_at = datetime(2026, 11, 9)
+        self.assertFalse(self.accepted())
+
+    def test_18_future_evidence_cutoff_denies_retroactive_stage(self):
+        cutoff = START+timedelta(days=5)
+        self.assertFalse(completed_paid_phase_one_before_stage_two(
+            self.phase2, as_of=cutoff
+        ))
+
+    def test_19_valid_evidence_cutoff_accepts_prior_complete_stage(self):
+        cutoff = START+timedelta(days=10)
+        self.assertTrue(completed_paid_phase_one_before_stage_two(
+            self.phase2, as_of=cutoff
+        ))
+
+    def test_20_naive_evidence_cutoff_denied(self):
+        self.assertFalse(completed_paid_phase_one_before_stage_two(
+            self.phase2, as_of=datetime(2026, 11, 11)
+        ))
+
+    def test_21_phase_one_self_never_authorizes_phase_two(self):
+        self.assertFalse(completed_paid_phase_one_before_stage_two(self.phase1))
+
+    def test_22_missing_stage_pk_never_authorizes(self):
+        self.phase2.pk = None
+        self.assertFalse(self.accepted())
+
+    def test_23_breached_prior_stage_not_eligible(self):
+        self.mutate(self.phase1, status=PropAccount.Status.BREACHED)
+        self.assertFalse(self.accepted())
+
+    def test_24_close_exactly_at_phase_two_start_is_allowed(self):
+        self.mutate(self.phase1, closed_at=self.phase2.opened_at)
+        self.assertTrue(self.accepted())
+
+
+    def test_25_paid_stage_2_cannot_use_legacy_contract(self):
+        self.mutate(self.phase2, policy_version=LEGACY_CONTRACT_VERSION)
+        self.assertFalse(self.accepted())
+
+    def test_26_relabelled_both_paid_phases_cannot_downgrade(self):
+        self.mutate(self.phase1, policy_version=LEGACY_CONTRACT_VERSION)
+        self.mutate(self.phase2, policy_version=LEGACY_CONTRACT_VERSION)
+        self.assertFalse(self.accepted())
+
+    def test_27_relabelled_purchase_and_both_paid_phases_cannot_downgrade(self):
+        self.mutate(self.phase1, policy_version=LEGACY_CONTRACT_VERSION)
+        self.mutate(self.phase2, policy_version=LEGACY_CONTRACT_VERSION)
+        self.mutate(self.purchase, terms_version=LEGACY_CONTRACT_VERSION)
+        # Clear the cached relation: simulate a fresh request loaded from SQL.
+        self.phase2.refresh_from_db()
+        self.assertFalse(self.accepted())
+
+    def test_28_new_terms_cannot_be_replaced_by_legacy_receipt(self):
+        self.mutate(self.purchase, terms_version=LEGACY_CONTRACT_VERSION)
+        self.phase2.refresh_from_db()
+        self.assertFalse(self.accepted())
+
+    def test_29_historical_unpurchased_legacy_trial_is_not_treated_as_new_sale(self):
+        prior = PropAccount.objects.create(
+            trader=self.trader, kind=PropAccount.Kind.PHASE_ONE,
+            status=PropAccount.Status.PASSED,
+            reconciled_by_operator=True,
+            challenge_enrollment=None,
+            opened_at=START+DAY,
+            closed_at=START+timedelta(days=2),
+            policy_version=LEGACY_CONTRACT_VERSION,
+        )
+        phase2 = PropAccount.objects.create(
+            trader=self.trader, kind=PropAccount.Kind.PHASE_TWO,
+            challenge_enrollment=None,
+            opened_at=START+timedelta(days=3),
+            policy_version=LEGACY_CONTRACT_VERSION,
+        )
+        self.assertTrue(completed_paid_phase_one_before_stage_two(phase2))
+        self.assertIsNone(prior.challenge_enrollment_id)
+
+
+    def test_30_passed_flag_without_reconciled_trades_is_not_prior_pass(self):
+        PropExecution.objects.filter(account=self.phase1).delete()
+        self.assertTrue(self.accepted())  # Chronology alone is still valid.
+        self.assertFalse(self.proved())  # Evidence qualification is not.
+
+    def test_31_six_day_goal_shortfall_denies_prior_even_when_flag_passed(self):
+        PropExecution.objects.filter(account=self.phase1).update(
+            gross_realized_usd=Decimal("1.50")
+        )
+        self.assertFalse(self.proved())
+
+    def test_32_missing_day_open_equity_denies_prior_verified_pass(self):
+        PropEquityObservation.objects.filter(
+            account=self.phase1, external_event_id="c141-open-3"
+        ).delete()
+        self.assertFalse(self.proved())
+
+    def test_33_pending_trade_cannot_complete_six_day_prior_assessment(self):
+        PropExecution.objects.filter(
+            account=self.phase1, external_event_id="c141-trade-5"
+        ).update(reconciliation_status="pending")
+        self.assertFalse(self.proved())
+
+    def test_34_single_profitable_day_over_32_percent_denies_prior(self):
+        # 6.00 + 5*(0.72) == 9.60 but day one represents 62.5% of profit.
+        PropExecution.objects.filter(
+            account=self.phase1, external_event_id="c141-trade-0"
+        ).update(gross_realized_usd=Decimal("6.00"))
+        PropExecution.objects.filter(account=self.phase1).exclude(
+            external_event_id="c141-trade-0"
+        ).update(gross_realized_usd=Decimal("0.72"))
+        self.assertFalse(self.proved())
+
+    def _stage_two_projection(self):
+        from prop_firm.portal import account_projection
+        at = self.phase2.opened_at
+        PropEquityObservation.objects.create(
+            account=self.phase2, external_event_id="c141-stage2-open",
+            data_source="CI-NOT-BROKER", observed_at=at,
+            equity_usd=Decimal("100"), is_session_open=True,
+            reconciliation_status="verified",
+        )
+        PropExecution.objects.create(
+            account=self.phase2, external_event_id="c141-stage2-trade",
+            external_position_id="c141-stage2-position",
+            data_source="CI-NOT-BROKER", symbol="XAUUSD",
+            execution_origin="bot", closed_at=at + timedelta(hours=1),
+            gross_realized_usd=Decimal("1"), total_fees_usd=Decimal("0"),
+            reconciliation_status="verified",
+        )
+        PropEquityObservation.objects.create(
+            account=self.phase2, external_event_id="c141-stage2-close",
+            data_source="CI-NOT-BROKER", observed_at=at + timedelta(hours=2),
+            equity_usd=Decimal("101"), reconciliation_status="verified",
+            is_session_open=False,
+        )
+        return account_projection(self.phase2)
+
+    def test_35_stage_two_receives_proven_prior_not_status_only(self):
+        projected = self._stage_two_projection()
+        self.assertTrue(projected["purchase_window_valid"])
+        self.assertIsNotNone(projected["assessment"])
+        self.assertNotIn("phase_one_pass_required", projected["assessment"].reasons)
+        # Still not passed: one simulated day cannot satisfy stage-two terms.
+        self.assertFalse(projected["assessment"].passed)
+
+    def test_36_stage_two_rejects_flagged_prior_without_9_6_percent_proof(self):
+        PropExecution.objects.filter(account=self.phase1).update(
+            gross_realized_usd=Decimal("0.50")
+        )
+        projected = self._stage_two_projection()
+        self.assertIsNotNone(projected["assessment"])
+        self.assertIn("phase_one_pass_required", projected["assessment"].reasons)
+        self.assertFalse(projected["assessment"].passed)
+
+
+if __name__ == "__main__":
+    import unittest
+    unittest.main()

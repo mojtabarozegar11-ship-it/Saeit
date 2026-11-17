@@ -13,6 +13,36 @@ on:
       - "tests/test_mojprop_owner_local_archive_readonly_c120.py"
       - "scripts/mojprop_starter30_public_presence_readonly_c122.py"
       - "tests/test_mojprop_starter30_public_presence_readonly_c122.py"
+      - "scripts/mojprop_c146_live_plan1_runtime_source_readonly.py"
+      - "tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py"
+      - "scripts/mojprop_c148_owner_restore_storage_readonly.py"
+      - "tests/test_mojprop_c148_owner_restore_storage_readonly.py"
+      - "scripts/mojprop_c149_existing_backup_root_readonly.py"
+      - "tests/test_mojprop_c149_existing_backup_root_readonly.py"
+      - "scripts/mojprop_c150_owner_rollback_manifest_shape_readonly.py"
+      - "tests/test_mojprop_c150_owner_rollback_manifest_shape_readonly.py"
+      - "scripts/mojprop_c151_owner_manifest_format_readonly.py"
+      - "tests/test_mojprop_c151_owner_manifest_format_readonly.py"
+      - "scripts/mojprop_c152_legacy_source_backup_sha256_readonly.py"
+      - "tests/test_mojprop_c152_legacy_source_backup_sha256_readonly.py"
+      - "scripts/mojprop_c154_cpanel_quota_uapi_readonly.py"
+      - "tests/test_mojprop_c154_cpanel_quota_uapi_readonly.py"
+      - "scripts/mojprop_c155_cpanel_statsbar_quota_readonly.py"
+      - "tests/test_mojprop_c155_cpanel_statsbar_quota_readonly.py"
+      - "scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py"
+      - "tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py"
+      - "scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py"
+      - "tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py"
+      - "scripts/mojprop_c158_cpanel_single_stats_readonly.py"
+      - "tests/test_mojprop_c158_cpanel_single_stats_readonly.py"
+      - "scripts/mojprop_c157_offhost_stream_preflight_readonly.py"
+      - "tests/test_mojprop_c157_offhost_stream_preflight_readonly.py"
+      - "scripts/mojprop_c160_owner_plan1_source_parity_readonly.py"
+      - "tests/test_mojprop_c160_owner_plan1_source_parity_readonly.py"
+      - "scripts/mojprop_c161_owner_effective_django_db_media_readonly.py"
+      - "tests/test_mojprop_c161_owner_effective_django_db_media_readonly.py"
+      - "scripts/mojprop_c162_owner_mysql_metadata_size_readonly.py"
+      - "tests/test_mojprop_c162_owner_mysql_metadata_size_readonly.py"
 
 permissions:
   contents: read
@@ -46,6 +76,95 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_owner_local_archive_readonly_c120 -q
           python3 -B -m py_compile scripts/mojprop_starter30_public_presence_readonly_c122.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_starter30_public_presence_readonly_c122 -q
+          python3 -B -m py_compile scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c146_live_plan1_runtime_source_readonly -q
+          python3 -B -m py_compile scripts/mojprop_c148_owner_restore_storage_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c148_owner_restore_storage_readonly -q
+          test ! -L scripts/mojprop_c148_owner_restore_storage_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c148_owner_restore_storage_readonly.py)" = "747a87f6e8c3e915e11f63931e078f97c2a83844"
+          test ! -L tests/test_mojprop_c148_owner_restore_storage_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c148_owner_restore_storage_readonly.py)" = "f6163ed3cd077989272a73e8ab11978758794a9e"
+          python3 -B -m py_compile scripts/mojprop_c149_existing_backup_root_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c149_existing_backup_root_readonly -q
+          test ! -L scripts/mojprop_c149_existing_backup_root_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c149_existing_backup_root_readonly.py)" = "608f9e93c2475ccaea75d3a4d23c936674865239"
+          test ! -L tests/test_mojprop_c149_existing_backup_root_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c149_existing_backup_root_readonly.py)" = "8aac9932328732fbb8beccbf7c1b8db67439e384"
+          python3 -B -m py_compile scripts/mojprop_c150_owner_rollback_manifest_shape_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c150_owner_rollback_manifest_shape_readonly -q
+          test ! -L scripts/mojprop_c150_owner_rollback_manifest_shape_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c150_owner_rollback_manifest_shape_readonly.py)" = "944aec433d1b34fb9868dd501c3caf397429d0c8"
+          test ! -L tests/test_mojprop_c150_owner_rollback_manifest_shape_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c150_owner_rollback_manifest_shape_readonly.py)" = "ed6e72bcafd1b83c3909cc1818f10815242c5f99"
+          python3 -B -m py_compile scripts/mojprop_c151_owner_manifest_format_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c151_owner_manifest_format_readonly -q
+          test ! -L scripts/mojprop_c151_owner_manifest_format_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c151_owner_manifest_format_readonly.py)" = "cd133b66cc933faa774a2a2961cd5e77edf9e478"
+          test ! -L tests/test_mojprop_c151_owner_manifest_format_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c151_owner_manifest_format_readonly.py)" = "45f4cd38eefcea5a79cb623eb434020e8f9a7592"
+          python3 -B -m py_compile scripts/mojprop_c152_legacy_source_backup_sha256_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c152_legacy_source_backup_sha256_readonly -q
+          test ! -L scripts/mojprop_c152_legacy_source_backup_sha256_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c152_legacy_source_backup_sha256_readonly.py)" = "b8aadf75c6c243988be9fdc4bd29a6a8b8606cc4"
+          test ! -L tests/test_mojprop_c152_legacy_source_backup_sha256_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c152_legacy_source_backup_sha256_readonly.py)" = "bf7547e73340232915959954a5a65537f31b067f"
+          python3 -B -m py_compile scripts/mojprop_c154_cpanel_quota_uapi_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c154_cpanel_quota_uapi_readonly -q
+          test ! -L scripts/mojprop_c154_cpanel_quota_uapi_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c154_cpanel_quota_uapi_readonly.py)" = "68f8679667a1fbaa79a572a0076a8b166d225ed4"
+          test ! -L tests/test_mojprop_c154_cpanel_quota_uapi_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c154_cpanel_quota_uapi_readonly.py)" = "1b41fbdd3a0f8f6de332c3be771255aab89d5cbf"
+          python3 -B -m py_compile scripts/mojprop_c155_cpanel_statsbar_quota_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c155_cpanel_statsbar_quota_readonly -q
+          test ! -L scripts/mojprop_c155_cpanel_statsbar_quota_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c155_cpanel_statsbar_quota_readonly.py)" = "f7a368265e5e52cc1370b2930cd796297d4d9526"
+          test ! -L tests/test_mojprop_c155_cpanel_statsbar_quota_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c155_cpanel_statsbar_quota_readonly.py)" = "0612c3240d88537be677ea705ff6021eb15a55d6"
+          python3 -B -m py_compile scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly -q
+          test ! -L scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py)" = "41e9dc8523da3536460a2b3b6ff94fb049d2e03c"
+          test ! -L tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py)" = "fdd68d71da6d0cbe2a1a91153758e87bb4c3d3f7"
+          python3 -B -m py_compile scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c157_cpanel_statsbar_shape_readonly -q
+          test ! -L scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py)" = "c950f3f95d6a6e0d1b1eeb97089cdabe80a3a01a"
+          test ! -L tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py)" = "57f074159ef00c44cdf83be92e7acb194e9bf5a2"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c158_cpanel_single_stats_readonly -q
+          test ! -L scripts/mojprop_c158_cpanel_single_stats_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c158_cpanel_single_stats_readonly.py)" = "fddb72182b19cc2487077aa40f5acf63030d299a"
+          test ! -L tests/test_mojprop_c158_cpanel_single_stats_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c158_cpanel_single_stats_readonly.py)" = "dba7a0e414f0dbaf2f8aa925a81b725182b29b38"
+          python3 -B -m py_compile scripts/mojprop_c157_offhost_stream_preflight_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c157_offhost_stream_preflight_readonly -q
+          test ! -L scripts/mojprop_c157_offhost_stream_preflight_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c157_offhost_stream_preflight_readonly.py)" = "6628a2463055bcc01b893faeaf54c705f55f9568"
+          test ! -L tests/test_mojprop_c157_offhost_stream_preflight_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c157_offhost_stream_preflight_readonly.py)" = "561f00e91020d361dc2ce6ca62d59980f422394d"
+          python3 -B -m py_compile scripts/mojprop_c160_owner_plan1_source_parity_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c160_owner_plan1_source_parity_readonly -q
+          test ! -L scripts/mojprop_c160_owner_plan1_source_parity_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c160_owner_plan1_source_parity_readonly.py)" = "9436b5a83bb8f5e9c8c7417836019b47bc9c07e2"
+          test ! -L tests/test_mojprop_c160_owner_plan1_source_parity_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c160_owner_plan1_source_parity_readonly.py)" = "da19eb8a0c5a499baaf099470a5753c34a195755"
+          python3 -B -m py_compile scripts/mojprop_c161_owner_effective_django_db_media_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c161_owner_effective_django_db_media_readonly -q
+          test ! -L scripts/mojprop_c161_owner_effective_django_db_media_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c161_owner_effective_django_db_media_readonly.py)" = "961fc3f8a0c0194ff4b13d5ec680aeadfa1c5f20"
+          test ! -L tests/test_mojprop_c161_owner_effective_django_db_media_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c161_owner_effective_django_db_media_readonly.py)" = "9f93193ef358f2a8b5c37038cc1c8be1e15021c3"
+          python3 -B -m py_compile scripts/mojprop_c162_owner_mysql_metadata_size_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c162_owner_mysql_metadata_size_readonly -q
+          test ! -L scripts/mojprop_c162_owner_mysql_metadata_size_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c162_owner_mysql_metadata_size_readonly.py)" = "2606637cb057a085d385384ea8565ff12ec0f167"
+          test ! -L tests/test_mojprop_c162_owner_mysql_metadata_size_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c162_owner_mysql_metadata_size_readonly.py)" = "677f33b953b710aa24f15325276253d7e7a5e77e"
+          test ! -L scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c146_live_plan1_runtime_source_readonly.py)" = "198d3c2b4f8de90504002f95148c370604716cb9"
+          test ! -L tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py)" = "8bbeac081bddca87eca58dde435e93f65c473e2a"
           test ! -L scripts/mojprop_starter30_public_presence_readonly_c122.py
           test "$(git hash-object -- scripts/mojprop_starter30_public_presence_readonly_c122.py)" = "6e7fb0c7d7f96f9af10c67201f267b7cbc58a09a"
           test ! -L scripts/mojprop_owner_local_archive_readonly_c120.py
@@ -55,7 +174,7 @@ jobs:
           test ! -L scripts/mojprop_passenger_source_readonly_c118.py
           test "$(git hash-object -- scripts/mojprop_passenger_source_readonly_c118.py)" = "f6507179c762bdea1e1bb28ea17d5e420e2b4dcb"
           test ! -L scripts/mojprop_live_intake_source_drift_readonly_c95.py
-          test "$(git hash-object -- scripts/mojprop_live_intake_source_drift_readonly_c95.py)" = "4a467a4472c748ef134a2aa29df9a58a2b8be885"
+          test "$(git hash-object -- scripts/mojprop_live_intake_source_drift_readonly_c95.py)" = "877d7a76b7b09a49b95d20d1f815ec5f218e707a"
       - name: Connect only through pinned factory runner to the existing cPanel
         shell: bash
         env:
@@ -75,6 +194,7 @@ jobs:
           chmod 600 "$work/config"
           timeout 40s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
       - name: Verify deployed source and Django routes without opening a customer session
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -86,6 +206,7 @@ jobs:
           echo 'LIVE_MOJPROP_INTAKE_SOURCE_DIAGNOSTIC=PASS'
           echo 'No POST, customer data, payment, database migration or site release; this scan only identifies version and routing.' >> "$GITHUB_STEP_SUMMARY"
       - name: Classify exact Passenger entrypoint AST and absent staging modules — no writes
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -96,6 +217,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(7000); prefix="MOJPROP_C118_PASSENGER_SOURCE_READONLY="; lines=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_C118"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.passenger.source_identity.readonly.c118.v1" and d["read_only"] is True and d["crm_lead_created"] is False and d["payment_created"] is False and d["email_sent"] is False and d["deploy_authorized"] is False and d["runtime_worker_identity_proven"] is False and d["full_db_app_media_restore_proven"] is False; assert set(d["staging_sources"])=={"core/mojprop_views.py","core/mojprop_receipts.py","core/mojprop_accessible_intake.py","config/urls.py","core/management/commands/mojprop_sales_action_queue.py"}; assert all(v in ("present","missing","unsafe","unavailable") for v in d["staging_sources"].values()); print(lines[0])'
           echo 'C118_OWNER_PASSENGER_AST_READONLY=COMPLETE_NOT_DEPLOY_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: Inventory only existing account backup metadata via documented UAPI — no restoration
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -106,6 +228,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C120_BACKUP_CATALOG_READONLY="; rows=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(rows)==1,"MISSING_SANITIZED_BACKUP_RESULT"; d=json.loads(rows[0][len(prefix):]); assert d["schema"]=="mojprop.owner_backup_catalog.readonly.c120.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert all(d[k] is False for k in ("backup_files_opened_or_downloaded","customer_records_accessed","database_accessed","provider_offhost_backup_verified","independent_encrypted_full_restore_proven","production_release_authorized","cost_incurred")); assert type(d["backup_entries_reported"]) is int and 0 <= d["backup_entries_reported"] <= 100; assert type(d["possible_local_account_archive_present"]) is bool; assert not set(d).intersection({"file","path","token","email","username","database_name","customer_id"}); print(rows[0])'
           echo 'MOJPROP_C120_EXISTING_BACKUP_METADATA_READONLY=COMPLETE_NO_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: Check fixed owner home backup tarball metadata only — zero content reads
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -116,6 +239,7 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C120_LOCAL_ARCHIVE_METADATA_READONLY="; lines=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_LOCAL_ARCHIVE"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.owner_local_archive_metadata.readonly.c120.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert type(d["home_metadata_scan_completed"]) is bool; assert type(d["local_archive_candidates_count"]) is int and 0<=d["local_archive_candidates_count"]<=2048; assert all(d[k] is False for k in ("local_archive_content_read","archive_downloaded","app_or_db_accessed","customer_data_accessed","independent_encrypted_full_restore_proven","provider_offhost_backup_verified","production_deployment_authorized","new_cost_incurred")); assert not set(d).intersection({"file","path","email","secret","filename","archive_name"}); print(lines[0])'
           echo 'MOJPROP_C120_LOCAL_ARCHIVE_METADATA_READONLY=COMPLETE_NO_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: Observe only exact Starter30 public static file identity under owner docroot
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -125,6 +249,187 @@ jobs:
             < scripts/mojprop_starter30_public_presence_readonly_c122.py \
             | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C122_STATIC_OWNER_READONLY="; rows=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(rows)==1,"MISSING_SANITIZED_C122"; d=json.loads(rows[0][len(prefix):]); assert d["schema"]=="mojprop.owner_starter30_public_static.readonly.c122.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["no_payment_scope"] is True; assert set(d["assets"])=={"index.html","journal-template.csv","journal-guide.txt"}; assert all(v in ("reviewed_exact","unreviewed_bytes","missing","unsafe","unavailable") for v in d["assets"].values()); assert all(d[k] is False for k in ("http_public_delivery_proven","email_lead_received","database_accessed","customer_data_accessed","trx_payment_collected","funded_prop_challenge_available","production_deployment_authorized","new_cost_incurred")); assert not set(d).intersection({"email","customer_id","file_path","file_content","secret","trx_address"}); print(rows[0])'
           echo 'MOJPROP_C122_PUBLIC_ASSET_DISK_IDENTITY_READONLY=COMPLETE_NOT_HTTP_OR_PAYMENT' >> "$GITHUB_STEP_SUMMARY"
+      - name: C146 pinpoint actual Plan1 route and Passenger staging drift (strict read-only)
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 80s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c146_live_plan1_runtime_source_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(9000); prefix="MOJPROP_C146_PLAN1_LIVE_SOURCE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(a)==1,"MISSING_SANITIZED_PLAN1_PROBE"; d=json.loads(a[0][len(prefix):]); assert d["schema"]=="mojprop.plan1.live_source.readonly.c146.v1" and d["read_only"] is True and d["production_change_or_cost_authorized"] is False; assert set(d["source_identity"])=={"config/urls.py","core/moj_prop_views.py","core/templates/mojplaywin/moj_prop_interest_form_d.html","prop_firm/lead_models.py"}; assert all(v in ("matches","drifted","missing","unsafe","unavailable") for v in d["source_identity"].values()); assert set(d["static_urlconf_declares"])=={"browser_get","consent_post"} and all(type(x) is bool for x in d["static_urlconf_declares"].values()); assert all(d[k] is False for k in ("actual_passenger_worker_source_proven","public_plan1_get_verified","full_app_db_media_restore_proven","payment_or_enrollment_proven","customer_data_accessed","database_accessed","external_network_called","production_change_or_cost_authorized")); assert not set(d).intersection({"email","customer_id","db_password","api_key","wallet","customer_name","token"}); print(a[0])'
+          echo 'C146_SOURCE_ONLY_PASSED_NO_DEPLOY_OR_BACKUP_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: C148 owner-only fixed path permission, disk and restore-case metadata (no writes)
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 45s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c148_owner_restore_storage_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C148_OWNER_DISK_RESTORE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C148_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.owner.cpanel.disk_restore_metadata.readonly.c148.v1" and d["read_only"] is True; assert d["owner_identity_verified"] is True; assert set(d["fixed_path_states"])=={"home","staging","webroot","prop_firm_dir","prop_interest_model_file","local_plan1_backup_dir","independent_restore_evidence_dir"}; assert all(v in ("safe","missing","symlink","wrong_owner","world_writable","group_writable","not_regular_file","not_directory","hardlinked","unavailable") for v in d["fixed_path_states"].values()); assert all(d[k] is False for k in ("account_quota_verified","offhost_backup_verified","full_app_db_media_restore_verified","customer_data_accessed","backup_content_read","database_accessed","external_network_called","payment_created","production_deployment_authorized","cost_incurred")); assert type(d["case_metadata"]["matching_owner_private_case_dirs"]) is int and 0<=d["case_metadata"]["matching_owner_private_case_dirs"]<=128; assert d["case_metadata"]["read_any_receipt_or_backup"] is False and d["case_metadata"]["independent_restore_proven"] is False; assert not set(d).intersection({"email","database_name","filename","path","secret","password","token","buyer","wallet","private_key"}); print(a[0])'
+          echo 'C148_OWNER_STORAGE_PERMISSIONS_AND_RESTORE_METADATA_READONLY=COMPLETE_NOT_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: C149 actual existing Plan1 backup-root archive and manifest metadata inventory
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 45s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c149_existing_backup_root_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C149_BACKUP_ROOT_METADATA_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C149_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.existing_backup_root.metadata.c149.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; inv=d["inventory"]; assert inv["metadata_only"] is True and inv["backup_content_read"] is False and inv["restore_rehearsal_verified"] is False and inv["independent_full_app_db_media_restore_proven"] is False; assert type(inv["direct_entries_scanned"]) is int and 0<=inv["direct_entries_scanned"]<=128; assert type(inv["owner_private_regular_archives"]) is int and 0<=inv["owner_private_regular_archives"]<=128; assert type(inv["owner_private_manifest_metadata_files"]) is int and 0<=inv["owner_private_manifest_metadata_files"]<=256; assert all(d[k] is False for k in ("provider_offhost_backup_proven","offhost_capacity_proven","database_restore_verified","application_restore_verified","media_restore_verified","tenant_quota_verified","customer_data_accessed","backup_downloaded_or_created","database_accessed","external_network_called","production_release_authorized","cost_incurred")); assert not set(d).intersection({"file","filename","archive_name","email","password","token","customer","wallet","database_name","secret"}); print(a[0])'
+          echo 'C149_EXISTING_OWNER_BACKUP_ROOT_METADATA_ONLY=COMPLETE_NOT_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: C150 inspect only exact, bounded source rollback manifest shapes (not backup contents)
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c150_owner_rollback_manifest_shape_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C150_ROLLBACK_MANIFEST_SHAPE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C150_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.local_rollback_manifest_shape.c150.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; v=d["inventory"]; assert v["owner_root_verified"] is True; assert all(type(v[k]) is int and 0 <= v[k] <= 8192 for k in ("case_directories_checked","manifest_read_attempts","source_only_rollback_manifests","unknown_or_invalid_manifest_shapes","source_files_declared_total","source_existing_files_declared_total","manifests_marking_migration_attempted")); assert v["read_any_database_or_media"] is False and v["read_any_backup_saved_file"] is False and v["independent_restore_verified"] is False and v["tenant_rollback_authorized"] is False; assert all(d[k] is False for k in ("db_snapshot_read","backup_content_read","customer_data_accessed","independent_offhost_backup_verified","app_db_media_restore_proven","payment_collected","production_release_authorized","cost_incurred")); assert not set(d).intersection({"path","file","filename","customer","wallet","secret","database_name","archive_name","sha256","token","email"}); print(a[0])'
+          echo 'C150_OWNER_BACKUP_MANIFEST_METADATA_SHAPE_ONLY_NOT_FULL_RESTORE=COMPLETE' >> "$GITHUB_STEP_SUMMARY"
+      - name: C151 aggregate-only structural fingerprint of historic owner manifests
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c151_owner_manifest_format_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C151_OWNER_MANIFEST_FORMAT_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C151_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.local_manifest_shape_features.c151.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; v=d["inventory"]; assert v["owner_root_verified"] is True and type(v["cases_checked"]) is int and 0<=v["cases_checked"]<=64; assert set(v["features"])=={"parsed_json_map","schema_string","matching_run_id","run_id_string_mismatch","commit_40hex","commit_sha_40hex","files_list_string","files_list_map","files_mapping","file_entries_absent_or_other","migration_flag_boolean","rolled_back_boolean","declared_first_party_source_list","original_file_metadata_dict_present","schema_contains_static_marker"}; assert all(type(n) is int and 0<=n<=64 for n in v["features"].values()); assert v["read_source_backup_contents"] is False and v["read_database_or_media"] is False and v["independent_restore_proven"] is False; assert all(d[k] is False for k in ("backup_file_content_read","customer_data_accessed","database_accessed","external_network_called","provider_offhost_backup_verified","app_db_media_restore_verified","production_release_authorized","cost_incurred")); assert not set(d).intersection({"path","file","filename","customer","wallet","secret","database_name","archive_name","sha256","run_id","email","token"}); print(a[0])'
+          echo 'C151_LEGACY_MANIFEST_STRUCTURE_AGGREGATE_ONLY_NO_RESTORE=COMPLETE' >> "$GITHUB_STEP_SUMMARY"
+      - name: C152 SHA256 verify bounded allowlisted archived source copies, never DB/media or restore
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 90s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c152_legacy_source_backup_sha256_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C152_LEGACY_SOURCE_SHA256_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C152_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.legacy_source_backup_sha256.c152.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; inv=d["inventory"]; assert inv["owner_root_verified"] is True; assert all(type(inv[k]) is int and 0<=inv[k]<=67108864 for k in ("legacy_manifest_cases_checked","legacy_manifest_cases_recognized","legacy_cases_with_all_allowed_source_hashes_matching","allowed_source_copies_with_matching_sha256","allowed_source_copies_missing_or_mismatched","sensitive_or_unreviewed_source_entries_not_opened","verified_read_bytes_bounded")); assert inv["saved_source_contents_disclosed"] is False and inv["customer_data_accessed"] is False and inv["database_or_media_backup_read"] is False and inv["source_only_is_full_restore"] is False and inv["independent_db_app_media_restore_proven"] is False; assert all(d[k] is False for k in ("customer_data_accessed","db_media_backup_content_read","offhost_independent_backup_proven","full_app_db_media_restore_proven","production_deployment_authorized","payment_created","cost_incurred")); assert not set(d).intersection({"file","path","filename","customer","wallet","secret","database_name","archive_name","sha256","run_id","email","token"}); print(a[0])'
+          echo 'C152_OLD_SOURCE_BACKUP_SHA256_READONLY=COMPLETE_NOT_DB_APP_MEDIA_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: C154 actual cPanel account vs local-node quota via documented read-only UAPI
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c154_cpanel_quota_uapi_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C154_CPIN_ACCOUNT_QUOTA_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C154_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.owner_quota.uapi.readonly.c154.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; allowed={"used","limit","quota","quota_used","quota_limit","disk_used","disk_limit","bytes_used","bytes_limit","megabytes_used","megabytes_limit","diskused","diskquota","quotaused","quotalimit","spaceused","spacelimit"}; assert set(d["whole_account"]["matched_numeric_fields"]) <= allowed; assert set(d["local_node"]["matched_numeric_fields"]) <= allowed; assert d["whole_account"]["account_write_headroom_proven"] is False and d["local_node"]["account_write_headroom_proven"] is False; assert all(d[k] is False for k in ("independent_restore_capacity_proven","full_app_db_media_restore_verified","backup_created_or_read","customer_data_accessed","database_accessed","external_network_called","production_deployment_authorized","payment_created","cost_incurred")); assert not set(d).intersection({"password","secret","token","email","customer","filename","path","api_key","wallet"}); print(a[0])'
+          echo 'C154_CPIN_OWNER_QUOTA_READ_ONLY=COMPLETE_NOT_BACKUP_WRITE_ADMISSION' >> "$GITHUB_STEP_SUMMARY"
+      - name: C155 owner cPanel read-only StatsBar diskusage and MySQL disk footprint
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c155_cpanel_statsbar_quota_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(9000); p="MOJPROP_C155_ACCOUNT_STATSBAR_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C155_STATSBAR_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.owner_statsbar_quota.readonly.c155.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; v=d["stats"]; assert set(v["requested_ids"])=={"diskusage","fileusage","mysqldiskusage"}; assert v["account_write_headroom_proven"] is False and v["full_database_media_backup_proven"] is False; allowed={"available","units","usage","maximum","percent_of_limit","account_write_headroom_proven"}; assert all(set(v[name])==allowed and v[name]["account_write_headroom_proven"] is False for name in ("diskusage","fileusage","mysqldiskusage")); assert all(d[k] is False for k in ("database_content_accessed","customer_data_accessed","file_or_backup_content_read","offhost_independent_backup_verified","full_app_db_media_restore_verified","production_release_authorized","payment_created","cost_incurred")); assert not set(d).intersection({"password","secret","token","email","customer","filename","path","domain","api_key","wallet"}); print(a[0])'
+          echo 'C155_OWNER_STATSBAR_QUOTA_READ_ONLY=COMPLETE_NOT_BACKUP_OR_RELEASE_APPROVAL' >> "$GITHUB_STEP_SUMMARY"
+      - name: C156 categorize real cPanel CLI and deprecated read-only API2 StatsBar fallback
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(9000); p="MOJPROP_C156_QUOTA_READONLY_DIAGNOSTIC="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C156_SANITIZED_QUOTA_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.quota_cli_diagnostic.readonly.c156.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; allow={"binary_missing","binary_not_regular_or_executable","process_failed","timeout_or_os_error","response_missing_or_oversize","invalid_json","schema_unrecognized","api_status_failed","success_no_matching_quota","success_numeric_quota"}; row={"found","unit","used","limit","percent_used"}; assert all(d[name]["diagnostic"] in allow and set(d[name])=={"diagnostic","account_disk","mysql_disk"} and all(set(d[name][k])==row for k in ("account_disk","mysql_disk")) for name in ("uapi_statsbar","cpapi2_statsbar")); assert all(d[k] is False for k in ("account_backup_write_authorized","offhost_independent_restore_verified","full_app_db_media_restore_proven","database_content_read","backup_content_read","customer_data_accessed","external_network_called","production_deployment_authorized","payment_created","cost_incurred")); assert not set(d).intersection({"username","password","secret","token","email","customer","filename","path","api_key","wallet","domain"}); print(a[0])'
+          echo 'C156_QUOTA_CLI_ERROR_CLASS_AND_SAFE_ACCOUNT_STATS=COMPLETE_NOT_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: C157 owner-only metadata on dump/crypto tools and bounded media directories
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c157_offhost_stream_preflight_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(9500); p="MOJPROP_C157_OFFHOST_STREAM_PREFLIGHT_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C157_SANITIZED_PREFLIGHT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.offhost_stream_tools.readonly.c157.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert set(d["installed_tool_capabilities"])=={"mariadb_dump","mysqldump","age","gpg","openssl","gzip"}; assert all(type(v) is bool for v in d["installed_tool_capabilities"].values()); assert set(d["fixed_media_candidates"])=={"staging_media","staging_uploads","webroot_media","webroot_uploads","public_html_media"}; assert all(v["recursive_media_scope_proven"] is False and v["media_content_read"] is False and type(v["direct_regular_files"]) is int and 0<=v["direct_regular_files"]<=64 and type(v["direct_subdirectories"]) is int and 0<=v["direct_subdirectories"]<=64 for v in d["fixed_media_candidates"].values()); assert all(d[k] is False for k in ("offhost_source_artifact_revalidated_in_this_probe","recipient_public_key_verified","database_connection_and_consistent_snapshot_verified","actual_live_media_root_verified","account_quota_verified","offhost_db_media_restore_proven","db_dump_executed","encryption_executed","database_or_media_contents_read","production_deployment_authorized","cost_incurred")); assert not set(d).intersection({"password","secret","token","email","customer","filename","path","api_key","wallet","domain"}); print(a[0])'
+          echo 'C157_METADATA_ONLY_STREAMING_TOOL_PREFLIGHT_NOT_DB_BACKUP_OR_RESTORE=COMPLETE' >> "$GITHUB_STEP_SUMMARY"
+      - name: C157 exact sanitized UAPI StatsBar structural fingerprint (no values)
+        if: github.head_ref != 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(9500); p="MOJPROP_C157_UAPI_SHAPE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C157_SANITIZED_UAPI_SHAPE"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.statsbar_uapi_shape.c157.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; q=d["payload_shape"]; ids={"diskusage","mysqldiskusage","fileusage"}; assert set(q["known_id_matches"])==ids and set(q["known_name_matches"])==ids; assert all(type(v) is int and 0<=v<=128 for v in q["known_id_matches"].values()) and all(type(v) is int and 0<=v<=128 for v in q["known_name_matches"].values()); assert type(q["row_count"]) is int and 0<=q["row_count"]<=128; assert q["actual_account_quota_proven"] is False; assert all(d[k] is False for k in ("db_or_customer_content_accessed","provider_payload_logged","backup_created","offhost_backup_verified","independent_restore_verified","production_deploy_authorized","cost_incurred")); assert not set(d).intersection({"password","secret","token","email","customer","filename","path","api_key","wallet","domain","name","value","count","reason","errors"}); print(a[0])'
+          echo 'C157_UAPI_STATS_STRUCTURE_ONLY_NO_VALUES_OR_QUOTA_CLAIM' >> "$GITHUB_STEP_SUMMARY"
+      - name: C158 parse official owner StatsBar usage with inline GB units (read only)
+        if: github.head_ref == 'audit/mojprop-c158-cpanel-single-shot-usage-readonly-20261117'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 48s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c158_cpanel_single_stats_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(6000); p="MOJPROP_C158_SINGLE_STATS_READONLY="; lines=[x for x in raw.splitlines() if x.startswith(p)]; assert len(lines)==1,"MISSING_C158_SANITIZED_REPORT"; d=json.loads(lines[0][len(p):]); assert d["schema"]=="mojprop.cpanel.single_stats_uapi.readonly.c158.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert set(d["usage"])=={"api_success","valid_list","items_count","diskusage","mysqldiskusage","quota_verified_for_backup_writes"}; assert all(d[k] is False for k in ("account_quota_confirmed_current","offhost_independent_app_db_media_restore_verified","database_or_customer_data_read","source_or_backup_written","public_form_deployed","production_deployment_authorized","cost_incurred")); assert d["usage"]["quota_verified_for_backup_writes"] is False; assert not set(d).intersection({"email","password","secret","user","host","path","token","wallet","customer","raw_response"}); print(lines[0])'
+          echo 'C158_UAPI_SINGLE_READ_NOT_DB_RESTORE_OR_PRODUCTION_RELEASE' >> "$GITHUB_STEP_SUMMARY"
+      - name: C160 compare all actual owner staging Plan1 sources to exact reviewed CI checkout (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import os,pathlib
+          from scripts.mojprop_c147_plan1_source_bundle import collect,manifest
+          package=manifest(collect())
+          source_map={f["path"]:f["sha256"] for f in package["files"]}
+          assert 50<=len(source_map)<=128
+          assert source_map["core/moj_prop_views.py"]
+          assert source_map["prop_firm/migrations/0008_prospect_contact_intake.py"]
+          base=pathlib.Path("scripts/mojprop_c160_owner_plan1_source_parity_readonly.py").read_text("utf-8")
+          needle="EMBEDDED_MANIFEST = None"
+          assert base.count(needle)==1
+          injected=base.replace(needle,"EMBEDDED_MANIFEST = "+repr(source_map),1)
+          target=pathlib.Path(os.environ["RUNNER_TEMP"])/"mojprop-c160-source-parity-ephemeral.py"
+          assert not target.exists()
+          target.write_text(injected,encoding="utf-8")
+          print("C160_BOUND_REVIEWED_SOURCE_MANIFEST_MEMBERS="+str(len(source_map)))
+          print("C160_EPHEMERAL_RUNNER_SCRIPT_ONLY=true")
+          PY
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 75s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < "$RUNNER_TEMP/mojprop-c160-source-parity-ephemeral.py" \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(12000); prefix="MOJPROP_C160_FULL_SOURCE_PARITY_READONLY="; x=[line for line in raw.splitlines() if line.startswith(prefix)]; assert len(x)==1,"C160_MISSING_SANITIZED_REPORT"; d=json.loads(x[0][len(prefix):]); assert d["schema"]=="mojprop.owner.cpanel.source_bundle_parity.c160.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["comparison_completed"] is True; r=d["result"]; assert type(r["file_count"]) is int and 50<=r["file_count"]<=128; allowed={"matches","missing","drifted","unsafe","unavailable","withheld"}; assert set(r["total_counts"])==allowed and sum(r["total_counts"].values())==r["file_count"]; assert set(r["group_counts"])=={"config_reference","core_views","core_templates","prop_app","prop_migrations","excluded_secrets"}; assert all(set(x)==allowed for x in r["group_counts"].values()); assert r["total_counts"]["withheld"]==1; assert all(d[k] is False for k in ("account_quota_proven","independent_full_app_db_media_restore_proven","public_form_get_verified","customer_data_accessed","backup_contents_read","database_accessed","external_network_called","production_deployment_authorized","payment_created","cost_incurred")); assert all(r[k] is False for k in ("read_customer_or_database","server_source_contents_exposed","backup_or_restore_proven","production_deploy_authorized")); assert not set(d).intersection({"filename","path","customer","email","password","token","secret","wallet","sha256","raw_file","database_name"}); print(x[0])'
+          rm -f "$RUNNER_TEMP/mojprop-c160-source-parity-ephemeral.py"
+          echo 'C160_SOURCE_SHA256_PARITY_COMPLETED_NO_DEPLOY_OR_DB_ACCESS' >> "$GITHUB_STEP_SUMMARY"
+      - name: C161 effective Django configuration of DB engine and private media scope (owner read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c161_owner_effective_django_db_media_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(9000); prefix="MOJPROP_C161_EFFECTIVE_STAGING_DB_MEDIA_READONLY="; lines=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"C161_MISSING_SANITIZED_REPORT"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.cpanel.effective_django_db_media.readonly.c161.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; db=d["database"]; media=d["media"]; assert set(db)=={"configured","engine","name_configured","host_class","connection_opened","credentials_exposed"}; assert db["engine"] in ("unknown","mysql","postgresql","sqlite","oracle","other_or_unknown"); assert db["host_class"] in ("unknown","local_or_default","local_socket_or_path","remote_or_unknown"); assert db["connection_opened"] is False and db["credentials_exposed"] is False; assert set(media)=={"root_state","within_owner_home","within_staging","backend_kind","metadata","media_root_contents_opened","complete_media_inventory_proven"}; assert media["backend_kind"] in ("django_filesystem_storage","other_or_external_storage","unverified"); assert media["media_root_contents_opened"] is False and media["complete_media_inventory_proven"] is False; assert media["metadata"]["media_file_content_read"] is False and media["metadata"]["recursive_media_scope_proven"] is False; assert all(d[k] is False for k in ("db_connection_opened","db_dump_created","database_name_or_credentials_emitted","owner_secret_values_emitted","actual_live_passenger_worker_parity_proven","offhost_db_media_backup_verified","full_app_db_media_restore_verified","production_release_authorized","new_financial_commitment")); assert not set(d).intersection({"path","filename","customer","wallet","email","username","password","secret","token","database_name","db_host","url","db_password"}); print(lines[0])'
+          echo 'C161_EFFECTIVE_DJANGO_DB_BACKEND_AND_MEDIA_METADATA_ONLY_NO_BACKUP=COMPLETE' >> "$GITHUB_STEP_SUMMARY"
+      - name: C162 MySQL estimated size using one information_schema metadata SELECT only
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c162_owner_mysql_metadata_size_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(9000); prefix="MOJPROP_C162_MYSQL_METADATA_SIZE_READONLY="; out=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(out)==1,"C162_MISSING_SANITIZED_METADATA_RESULT"; d=json.loads(out[0][len(prefix):]); assert d["schema"]=="mojprop.owner.mysql_information_schema.readonly.c162.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["read_only_sql_metadata_only"] is True; assert d["metadata_status"] in ("not_attempted","wrong_or_unconfigured_backend","backend_mismatch","invalid_or_unavailable_aggregate","aggregate_read_success","connection_or_metadata_unavailable","settings_or_dependency_unavailable"); a=d["aggregate"]; assert a is None or (set(a)=={"visible_base_tables","approx_data_bytes","approx_index_bytes","approx_total_bytes","metadata_only","dump_size_predicted_exactly"} and a["metadata_only"] is True and a["dump_size_predicted_exactly"] is False and all(type(a[k]) is int and 0<=a[k]<=1099511627776000 for k in ("visible_base_tables","approx_data_bytes","approx_index_bytes","approx_total_bytes"))); assert all(d[k] is False for k in ("database_name_or_password_emitted","customer_table_data_read","mysql_dump_or_archive_created","mysql_consistent_snapshot_proven","offhost_encrypted_database_backup_verified","independent_full_db_app_media_restore_proven","actual_live_passenger_db_identity_proven","production_release_authorized","payment_created","cost_incurred")); assert not set(d).intersection({"path","file","filename","customer","database_name","db_password","username","secret","token","email","wallet","table_name"}); print(out[0])'
+          echo 'C162_MYSQL_DB_SIZE_FROM_INFORMATION_SCHEMA_ONLY_NO_SNAPSHOT=COMPLETE' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash

@@ -1,0 +1,99 @@
+name: MOJ PROP C131 canonical consent backend plus nonpayable static Plan1 integration
+on:
+  push:
+    branches: [integration/mojprop-c131-canonical-consent-static-20261117, feature/prop-firm-policy-v11-20261114]
+    paths:
+      - 'templates/moj-prop-v4/index.html'
+      - 'templates/moj-prop/contact/index.html'
+      - 'scripts/mojprop_plan1_form_source_gate_c130.py'
+      - 'tests/test_mojprop_c131_canonical_static_consent_integration.py'
+      - '.github/workflows/mojprop-c131-canonical-static-consent-integration-20261117.yml'
+      - 'core/moj_prop_views.py'
+      - 'core/templates/mojplaywin/moj_prop_interest_form_d.html'
+      - 'config/urls.py'
+      - 'config/settings.py'
+      - 'prop_firm/apps.py'
+      - 'prop_firm/models.py'
+      - 'prop_firm/lead_models.py'
+      - 'prop_firm/migrations/0007_equity_broker_source.py'
+      - 'prop_firm/migrations/0008_prospect_contact_intake.py'
+      - 'tests/test_moj_prop_interest_intake.py'
+  pull_request:
+    branches: [feature/prop-firm-policy-v11-20261114]
+permissions:
+  contents: read
+concurrency:
+  group: c131-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  static-and-backend-source-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify exact canonical route, model and honest public CTA
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python -B -m unittest -v tests.test_mojprop_c131_canonical_static_consent_integration
+          python -B scripts/mojprop_plan1_form_source_gate_c130.py --require-source-ready
+      - name: Verify no payment or automatic buyer submission in public assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          landing=Path('templates/moj-prop-v4/index.html').read_text('utf-8')
+          contact=Path('templates/moj-prop/contact/index.html').read_text('utf-8')
+          assert 'MOJ-PROP-01' in landing and 'MOJPROP-STARTER30' not in landing
+          assert 'href="/moj-prop-interest/form/?lang=fa"' in landing
+          assert '/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01' not in landing
+          assert '<script' not in contact.lower() and '<form' not in contact.lower()
+          inline=re.findall(r'<script>(.*?)</script>', landing, re.I|re.S)
+          assert len(inline)==1
+          Path('/tmp/mojprop-c131-static-syntax.js').write_text(inline[0])
+          print('MOJPROP_C131_SOURCE_WITH_CANONICAL_CONSENT=true')
+          print('MOJPROP_C131_NO_PAYMENT_OR_CUSTOMER_POST=true')
+          print('MOJPROP_C131_LIVE_RELEASE_AUTHORIZED=false')
+          PY
+          node --check /tmp/mojprop-c131-static-syntax.js
+
+  django-consent-migration-and-ephemeral-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SECRET_KEY: c131-github-ci-synthetic-only-not-production
+      DEBUG: "true"
+      ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install same pinned project requirements as main Django CI
+        run: python -m pip install -r requirements.txt
+      - name: Verify Django config and canonical PropInterest migration consistency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python manage.py check
+          python manage.py makemigrations --check --dry-run prop_firm
+      - name: Prove synthetic consent POST storage, CSRF, withdrawal and no paid side effects
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Django test runner creates/destroys its OWN temporary test DB;
+          # this does not connect to the live MojPlayWin/cPanel database.
+          python manage.py test tests.test_moj_prop_interest_intake --verbosity 1
+          echo 'MOJPROP_C131_SYNTHETIC_DB_ONLY=true'
+          echo 'MOJPROP_C131_NO_PRODUCTION_POST_NO_PAYMENT_NO_DEPLOY=true'

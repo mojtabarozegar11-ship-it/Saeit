@@ -1,0 +1,49 @@
+# Read-only acceptance tests for transparent MOJ-PROP-01 pre-contract wording.
+# NO keys, DB, user/customer data, payments, trading, SMTP or deployment.
+name: MOJ PROP B Plan1 v1.2 Buyer Copy Integrity
+
+on:
+  push:
+    branches:
+      - cycle-b-plan1-versioned-buyer-disclosure-20261117
+    paths:
+      - 'prop_firm/plan1_buyer_disclosure_v12.py'
+      - 'tests/test_prop_plan1_buyer_disclosure_v12.py'
+      - '.github/workflows/mojprop-plan1-b-buyer-copy-integrity.yml'
+  pull_request:
+    branches:
+      - feature/prop-firm-policy-v11-20261114
+    paths:
+      - 'prop_firm/plan1_buyer_disclosure_v12.py'
+      - 'tests/test_prop_plan1_buyer_disclosure_v12.py'
+      - '.github/workflows/mojprop-plan1-b-buyer-copy-integrity.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-plan1-b-buyer-copy-branch
+  cancel-in-progress: true
+
+jobs:
+  buyer-copy:
+    name: Exact v1.2 Plan1 buyer copy (NO RELEASE)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: .
+    steps:
+      - name: Read-only checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python runtime
+        run: python3 --version
+      - name: Syntax integrity
+        run: |
+          python3 -B -m py_compile \
+            prop_firm/plan1_buyer_disclosure_v12.py \
+            tests/test_prop_plan1_buyer_disclosure_v12.py
+      - name: Bilingual disclosures, exact fee, simulations, refund and contract boundaries
+        run: python3 -B -m unittest discover -s tests -p 'test_prop_plan1_buyer_disclosure_v12.py' -v

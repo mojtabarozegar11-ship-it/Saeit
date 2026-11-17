@@ -78,7 +78,10 @@ jobs:
               Check().feed(html)
           home = (root / "index.html").read_text(encoding="utf-8")
           catalog = (root / "catalog/index.html").read_text(encoding="utf-8")
-          home_required = ["<title>Moj Prop", 'href="/moj-prop/catalog/"', '/moj-prop-intake/', "See service prices", "Send request for review"]
+          # Plan 1 is the sole prelaunch funded challenge; no Starter30 home substitution.
+          home_required = ["<title>Moj Prop", 'href="/moj-prop/catalog/"', '/moj-prop-intake/', "Send request for review", "MOJ-PROP-01", "/moj-prop-interest/form/", "PRELAUNCH"]
+          if "MOJPROP-STARTER30" in home or 'href="/moj-prop-intake/?format=html"' in home:
+              raise SystemExit("MOJ_PROP_PLAN1_LEGACY_BUYER_ROUTE_DENIED")
           catalog_required = ["<title>Moj Prop Catalog", "From US$149", "From US$249"] + ["/moj-prop/samples/" + slug + "/" for slug in ("prop-blueprint", "gold-market-brief", "educational-signal", "commercial-gate-audit")]
           missing = [item for item in home_required + catalog_required if item not in home + catalog]
           if missing:

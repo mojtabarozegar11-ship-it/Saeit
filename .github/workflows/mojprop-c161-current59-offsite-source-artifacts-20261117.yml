@@ -1,0 +1,86 @@
+name: MOJ PROP C161 actual current 59-file source-only offsite Drive handoff, no deployment
+on:
+  push:
+    branches: [offsite/mojprop-c161-current59-source-drive-20261117]
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+    paths:
+      - '.github/workflows/mojprop-c161-current59-offsite-source-artifacts-20261117.yml'
+permissions:
+  contents: read
+jobs:
+  latest-plan1-source-only-archive:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate original C147 and full C160 privacy and source integrity regression suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest -q tests.test_mojprop_c147_plan1_source_bundle tests.test_mojprop_c160_owner_plan1_source_parity_readonly
+      - name: Create exact 59-source archive and verify deterministic hashes in CI temp only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mojprop_c147_plan1_source_bundle.py --action package
+          python3 - <<'PY'
+          import hashlib,io,json,os,pathlib,tarfile
+          root=pathlib.Path(os.environ["RUNNER_TEMP"])/"mojprop-c147"
+          tar=root/"mojprop-plan1-source-closure-c147.tar"
+          meta=root/"mojprop-plan1-source-closure-c147.json"
+          raw=tar.read_bytes()
+          manifest=json.loads(meta.read_text("utf-8"))
+          assert manifest["schema"]=="mojprop.plan1.source_closure.c147.v1"
+          assert manifest["file_count"]==59, ("SOURCE_COUNT_CHANGED_HALT",manifest["file_count"])
+          assert manifest["product"]=="MOJ-PROP-01"
+          assert manifest["production_deploy_authorized"] is False
+          assert manifest["db_app_media_restore_verified"] is False
+          assert manifest["merchant_authorized"] is False
+          assert manifest["customer_consent_post_executed"] is False
+          names={f["path"]:f["sha256"] for f in manifest["files"]}
+          assert len(names)==59
+          assert "config/settings.py" in names
+          assert "core/moj_prop_views.py" in names
+          assert "core/templates/mojplaywin/moj_prop_interest_form_d.html" in names
+          assert "prop_firm/migrations/0008_prospect_contact_intake.py" in names
+          with tarfile.open(fileobj=io.BytesIO(raw),mode="r:") as bundle:
+              actual={t.name:hashlib.sha256(bundle.extractfile(t).read()).hexdigest()
+                      for t in bundle.getmembers() if t.isfile() and not t.issym()}
+          assert actual==names, "SOURCE_MEMBER_HASH_MISMATCH"
+          digest=hashlib.sha256(raw).hexdigest()
+          assert len(digest)==64 and len(raw)<1200000
+          print("MOJPROP_C161_CURRENT_SOURCE_COUNT="+str(len(actual)))
+          print("MOJPROP_C161_REVIEWED_SOURCE_SHA256="+digest)
+          print("MOJPROP_C161_SOURCE_BYTES="+str(len(raw)))
+          print("MOJPROP_C161_RESTORE_PROVEN=false")
+          print("MOJPROP_C161_PRODUCTION_DEPLOY_AUTHORIZED=false")
+          PY
+      - name: Publish private source ZIP artifact for explicit external Drive connector handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojprop-current59-c161-source-only-20261117
+          path: ${{ runner.temp }}/mojprop-c147/mojprop-plan1-source-closure-c147.tar
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 2
+      - name: Publish separate source integrity manifest for independent offsite verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojprop-current59-c161-integrity-manifest-20261117
+          path: ${{ runner.temp }}/mojprop-c147/mojprop-plan1-source-closure-c147.json
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 2

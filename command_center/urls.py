@@ -19,6 +19,7 @@ from .controls import controls_summary
 from .integrated_views import integrated_dashboard
 from .integrated_ledger_api import integrated_ledger_api
 from .commerce_funnel import commerce_funnel_api
+from .commercialization_board import commercialization_board_api, commercialization_board_page
 
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
@@ -34,6 +35,8 @@ urlpatterns = [
     path("integrated/", integrated_dashboard, name="command_center_integrated_dashboard"),
     path("api/integrated-ledger/", integrated_ledger_api, name="command_center_integrated_ledger_api"),
     path("api/commerce-funnel/", commerce_funnel_api, name="command_center_commerce_funnel_api"),
+    path("api/commercialization/", commercialization_board_api, name="command_center_commercialization_api"),
+    path("commercialization/", commercialization_board_page, name="command_center_commercialization_page"),
     path("api/agents/", metrics, name="command_center_agent_metrics_api"),
     path("api/agents/directory/", directory, name="command_center_agent_directory_api"),
     path("api/agents/proposals/", propose, name="command_center_agent_proposals_api"),
