@@ -7,7 +7,7 @@ def evidence(**changes):
                          True, True, True, "COUNSEL-SIGNED-2026-123",
                          seller_role="natural_person_independent_service",
                          seller_role_verified=True,
-                         iran_foreign_trx_receipt_rights_verified=True,
+                         iran_foreign_trx_settlement_lawfulness_reviewed=True,
                          us_person_and_us_nexus_excluded=True,
                          relevant_sanctions_screen_verified=True)
     return replace(base, **changes)
@@ -35,7 +35,7 @@ class CommercialLanesTests(unittest.TestCase):
     def test_missing_evidence_fails_closed(self):
         for missing in ("merchant_owner_verified", "buyer_residence_verified",
                         "customer_country_permitted", "fee_based_independent_evaluation_approved",
-                        "seller_cross_border_permission_verified", "full_terms_accepted_and_verified",
+                        "seller_cross_border_lawful_basis_reviewed", "full_terms_accepted_and_verified",
                         "refunds_and_consumer_rights_cleared", "payment_method_legally_cleared",
                         "authorized_receiving_account_verified"):
             r = decide_preinvoice(Lane.EVALUATION, PaymentMethod.NATIVE_TRX,
@@ -58,7 +58,7 @@ class CommercialLanesTests(unittest.TestCase):
                 Lane.EVALUATION, PaymentMethod.NATIVE_TRX, e).eligible_for_next_step)
 
     def test_foreign_trx_and_sanctions_evidence_required(self):
-        for missing in ("iran_foreign_trx_receipt_rights_verified",
+        for missing in ("iran_foreign_trx_settlement_lawfulness_reviewed",
                         "us_person_and_us_nexus_excluded",
                         "relevant_sanctions_screen_verified"):
             decision = decide_preinvoice(Lane.EVALUATION, PaymentMethod.NATIVE_TRX,
