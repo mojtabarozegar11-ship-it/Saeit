@@ -49,6 +49,8 @@ class SafeStaticReleaseTests(unittest.TestCase):
         self.uid=os.geteuid()
 
     def call(self, mode, **kw):
+        if mode == "rollback" and "owner_ack" not in kw:
+            kw["owner_ack"]=m.OWNER_ROLLBACK_ACK
         return m.transact(mode,live=self.live,backup=self.backup,
                           candidate=self.candidate,uid=self.uid,**kw)
 
@@ -286,6 +288,27 @@ class SafeStaticReleaseTests(unittest.TestCase):
     def test_42_no_owner_guards_can_be_satisfied_with_nonbool(self):
         v=m.ReleaseReviews(True,True,True,True,1)
         self.assertFalse(v.approved())
+
+    def test_43_rollback_requires_owner_ack_even_with_valid_backup(self):
+        self.call("install",reviews=self.approve(),owner_ack=m.OWNER_ACK)
+        with self.assertRaisesRegex(m.ExactStaticReleaseDenied,"ROLLBACK_OWNER_APPROVAL_REQUIRED"):
+            m.transact("rollback",live=self.live,backup=self.backup,
+                       candidate=None,uid=self.uid)
+        self.assertEqual(self.live.read_bytes(),NEW)
+
+    def test_44_rollback_wrong_ack_denied_without_side_effects(self):
+        self.call("install",reviews=self.approve(),owner_ack=m.OWNER_ACK)
+        with self.assertRaisesRegex(m.ExactStaticReleaseDenied,"ROLLBACK_OWNER_APPROVAL_REQUIRED"):
+            self.call("rollback",owner_ack=m.OWNER_ACK)
+        self.assertEqual(self.live.read_bytes(),NEW)
+
+    def test_45_cli_entrypoint_omits_install_and_rollback_dispatch(self):
+        from inspect import getsource
+        source=getsource(m.main)
+        self.assertIn('if mode != "preflight":',source)
+        self.assertIn("MOJPROP_STATIC_CLI_WRITES_NOT_EXPOSED",source)
+        self.assertNotIn('transact("install"',source)
+        self.assertNotIn('transact("rollback"',source)
 
 
 if __name__=="__main__":
