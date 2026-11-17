@@ -11,6 +11,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inspect:
+    # FAIL-CLOSED: cPanel account has only ~1.07GiB remaining quota and this
+    # legacy job creates a MySQL dump inside the same quota-limited home.
+    # A streamed, independently restorable offsite plan is required first.
+    # Do not remove this hold without an owner-reviewed recovery-gated PR.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
