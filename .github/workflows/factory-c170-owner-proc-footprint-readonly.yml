@@ -28,7 +28,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
           fetch-depth: 1
-      - name: SHA-pinned C170 20 + C171 32 offline identity and privacy tests
+      - name: SHA-pinned C170 20 + C171 42 offline registry, filesystem and privacy cases
         shell: bash
         run: |
           set -euo pipefail
@@ -39,8 +39,8 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_c170_owner_proc_footprint_readonly.py' -q
           test ! -L scripts/factory_c171_passenger_uapi_readonly.py
           test ! -L tests/test_factory_c171_passenger_uapi_readonly.py
-          test "$(git hash-object scripts/factory_c171_passenger_uapi_readonly.py)" = '912ac20c17505767b284e784db2b714889d10d9e'
-          test "$(git hash-object tests/test_factory_c171_passenger_uapi_readonly.py)" = '8077c1d1be51dfdd8e23ed4aace976aaac6dccf4'
+          test "$(git hash-object scripts/factory_c171_passenger_uapi_readonly.py)" = 'd483fa106628afc265dc4850efd1e63130032caf'
+          test "$(git hash-object tests/test_factory_c171_passenger_uapi_readonly.py)" = 'b3c0182ffcfb90ff6e7d7747a1dcba3da123e7b8'
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_c171_passenger_uapi_readonly.py' -q
       - name: One owner-only cPanel process-name and cwd hint observation
         env:
@@ -70,4 +70,4 @@ jobs:
           timeout 80s ssh -T -F "$work/config" cpanel \
             'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
             < scripts/factory_c171_passenger_uapi_readonly.py \
-            | python3 -c 'import sys,json; s=sys.stdin.read(8192); p="FACTORY_C171_PASSENGER_UAPI_READONLY="; a=[v for v in s.splitlines() if v.startswith(p)]; assert len(a)==1,"NO_C171_SAFE_OUTPUT"; d=json.loads(a[0][len(p):]); assert set(d)=={"schema","read_only","owner_verified","uapi_query_completed","registry_status","registered_apps","enabled_apps","staging_app_roots","webroot_app_roots","other_owner_app_roots","outside_owner_app_roots","unverified_app_roots","target_domain_registrations","target_domain_staging_paths","target_domain_webroot_paths","target_domain_other_paths","uapi_response_size_exceeded","uapi_timeout","registered_metadata_not_runtime_attestation","live_passenger_worker_identity_proven","live_database_identity_proven","complete_media_scope_proven","envvars_output","file_contents_read","mysql_connected","current_backup_created","production_modified"},"C171_UNEXPECTED_PROVIDER_FIELDS"; assert d["schema"]=="factory.cpanel.passenger-uapi.readonly.c171.v1" and d["owner_verified"] is True and d["read_only"] is True,"C171_WRONG_OWNER"; assert all(d[k] is False for k in ("envvars_output","file_contents_read","mysql_connected","current_backup_created","production_modified","live_passenger_worker_identity_proven","live_database_identity_proven","complete_media_scope_proven")),"UNSAFE_C171_CLAIM"; print(a[0]); print("C171_DECISION=REGISTRATION_METADATA_ONLY_NO_RUNTIME_DB_OR_BACKUP")'
+            | python3 -c 'import sys,json; s=sys.stdin.read(8192); p="FACTORY_C171_PASSENGER_UAPI_READONLY="; a=[v for v in s.splitlines() if v.startswith(p)]; assert len(a)==1,"NO_C171_SAFE_OUTPUT"; d=json.loads(a[0][len(p):]); assert set(d)=={"schema","read_only","owner_verified","uapi_query_completed","registry_status","registered_apps","enabled_apps","staging_app_roots","webroot_app_roots","other_owner_app_roots","outside_owner_app_roots","unverified_app_roots","target_domain_registrations","target_domain_staging_paths","target_domain_webroot_paths","target_domain_other_paths","uapi_response_size_exceeded","uapi_timeout","registered_metadata_not_runtime_attestation","live_passenger_worker_identity_proven","live_database_identity_proven","complete_media_scope_proven","registered_root_census_attempted","registered_root_secure_dirs","registered_root_unverified_dirs","registered_root_wsgi_metadata","registered_root_manage_metadata","registered_root_media_metadata","registered_root_uploads_metadata","envvars_output","file_contents_read","mysql_connected","current_backup_created","production_modified"},"C171_UNEXPECTED_PROVIDER_FIELDS"; assert d["schema"]=="factory.cpanel.passenger-uapi.readonly.c171.v1" and d["owner_verified"] is True and d["read_only"] is True,"C171_WRONG_OWNER"; assert all(d[k] is False for k in ("envvars_output","file_contents_read","mysql_connected","current_backup_created","production_modified","live_passenger_worker_identity_proven","live_database_identity_proven","complete_media_scope_proven")),"UNSAFE_C171_CLAIM"; print(a[0]); print("C171_DECISION=REGISTRATION_METADATA_ONLY_NO_RUNTIME_DB_OR_BACKUP")'
