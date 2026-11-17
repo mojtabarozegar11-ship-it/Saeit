@@ -21,7 +21,7 @@ _SUPPLEMENT = ("fa",)
 _RTL = frozenset(("ar", "arz", "ur", "fa"))
 _FIELDS = frozenset((
     "name", "direction", "headline", "intro", "prop_title", "prop_body",
-    "payment_notice", "prop_link", "fallback_notice", "language_label", "sections",
+    "payment_notice", "prop_link", "fallback_notice", "language_label", "contact_label", "sections",
 ))
 _SECTION_KEYS = ("prop", "store", "games", "research", "learning", "ai", "company")
 _SECTION_PATHS = (
