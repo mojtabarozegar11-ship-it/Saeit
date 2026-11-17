@@ -1,0 +1,49 @@
+name: Factory F01V2 owner Drive chunk transport (READ ONLY)
+on:
+  pull_request:
+    paths:
+      - 'scripts/factory_rclone_dual_parts.py'
+      - 'tests/test_factory_rclone_dual_parts.py'
+      - 'docs/factory_rclone_two_drive_multipart_README.md'
+      - '.github/workflows/factory-f01v2-rclone-owner-part-transport-readonly-ci.yml'
+permissions:
+  contents: read
+jobs:
+  offline-owner-transport-and-metadata:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Reject unexpected source/test modifications
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/factory_rclone_dual_parts.py
+          test ! -L tests/test_factory_rclone_dual_parts.py
+          test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = '0545bdf88852565b2aede6814de48431249e3895'
+          test "$(git hash-object tests/test_factory_rclone_dual_parts.py)" = 'dda94008c6d20e0e8ea01f11d47b1e7b037cea52'
+      - name: Run 40 offline fail-closed multipart transport cases
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          PYTHONPATH=scripts python3 -B -m unittest -q tests.test_factory_rclone_dual_parts
+      - name: Read ONLY local rclone installation and safe-config existence
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          PYTHONPATH=scripts python3 -B scripts/factory_rclone_dual_parts.py \
+            | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["schema"]=="factory.rclone.runner-readiness.readonly.v1"; assert all(d[k] is False for k in ("oauth_tokens_read","provider_queried","provider_free_quota_verified","new_backup_created","production_modified","two_independent_remotes_verified")); print("OWNER_RCLONE_SAFE_METADATA="+json.dumps(d,sort_keys=True,separators=(",",":")))'
+          echo 'F01V2_OWNER_TRANSPORT_READONLY_NO_UPLOAD_NO_SQL_NO_OAUTH_TOKEN_EXPOSURE' >> "$GITHUB_STEP_SUMMARY"
