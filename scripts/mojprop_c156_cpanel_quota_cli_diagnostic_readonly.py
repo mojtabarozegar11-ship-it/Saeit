@@ -110,7 +110,21 @@ def _one(name):
         raise ValueError("unknown program")
     binary=CALLS[name][0]
     try:
-        st=os.stat(binary,follow_symlinks=False)
+        link=os.lstat(binary)
+        if stat.S_ISLNK(link.st_mode):
+            # cPanel distributors often install uapi/cpapi2 as root-owned
+            # symlinks. Resolve ONLY inside trusted /usr/local/cpanel/.
+            target=os.path.realpath(binary)
+            if (not target.startswith("/usr/local/cpanel/")
+                    or target==binary or link.st_uid!=0):
+                out["diagnostic"]="binary_not_regular_or_executable"
+                return out
+            st=os.stat(target)
+            if st.st_uid!=0 or st.st_mode & 0o022:
+                out["diagnostic"]="binary_not_regular_or_executable"
+                return out
+        else:
+            st=link
         if (not stat.S_ISREG(st.st_mode) or not os.access(binary,os.X_OK)):
             out["diagnostic"]="binary_not_regular_or_executable"
             return out
