@@ -7,6 +7,9 @@ on:
       - '.github/workflows/zomorod-mysql-lossless-page-compression.yml'
       - '.github/workflows/zomorod-live-mysql-precompression-backup.yml'
       - '.github/workflows/zomorod-relocate-verified-legacy-backups-20261104.yml'
+      - '.github/workflows/zomorod-live-full-tables-archive-20261104.yml'
+      - '.github/workflows/zomorod-live-segmented-archive-20261104.yml'
+      - '.github/workflows/zomorod-agenttask-part6-recovery-20261104.yml'
       - '.github/workflows/vps-controlled-old-sqlite-cleanup-20261107.yml'
       - '.github/workflows/factory-legacy-backup-hold-contract-ci.yml'
   push:
@@ -17,6 +20,9 @@ on:
       - '.github/workflows/zomorod-mysql-lossless-page-compression.yml'
       - '.github/workflows/zomorod-live-mysql-precompression-backup.yml'
       - '.github/workflows/zomorod-relocate-verified-legacy-backups-20261104.yml'
+      - '.github/workflows/zomorod-live-full-tables-archive-20261104.yml'
+      - '.github/workflows/zomorod-live-segmented-archive-20261104.yml'
+      - '.github/workflows/zomorod-agenttask-part6-recovery-20261104.yml'
       - '.github/workflows/vps-controlled-old-sqlite-cleanup-20261107.yml'
       - '.github/workflows/factory-legacy-backup-hold-contract-ci.yml'
 permissions:
