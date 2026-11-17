@@ -45,7 +45,8 @@ def packet(h=None):
         "schema":SCHEMA,"purpose":PURPOSE,
         "interest_pk":h.interest_pk,
         "request_ref":h.request_ref,"buyer_ref":h.buyer_ref,
-        "seller_ref":h.seller_ref,"sku":"MOJ-PROP-01",
+        "seller_ref":h.seller_ref,"prior_review_ref":h.private_review_ref,
+        "sku":"MOJ-PROP-01",
         "historical_terms_version":"2026-11-15/v1.2",
         "amendment_version":w.amendment_version,
         "prior_contract_pdf_sha256":h.contract_pdf_sha256,
@@ -269,3 +270,18 @@ class RevisedBuyerTermsLinkTests(unittest.TestCase):
 
     def test_end_to_end_is_only_private_provenance(self):
         self.assertEqual(review().status,"PRIVATE_BUYER_TERMS_PROVENANCE_REVIEW_ONLY")
+
+    def test_accepted_terms_require_exact_private_review_reference(self):
+        self.mutate_packet("prior_review_ref","PROP1-REVIEW-"+"F"*32)
+
+    def test_missing_private_review_reference_is_denied(self):
+        self.mutate_packet("prior_review_ref",None)
+
+    def test_new_pdf_cannot_equal_old_signed_historical_contract(self):
+        self.denied(expected_accepted_pdf_sha256=PRIOR_DOC)
+
+    def test_amendment_signature_proof_cannot_reuse_original_legacy_signature(self):
+        self.denied(expected_buyer_signature_proof_sha256=handoff().buyer_signature_proof_sha256)
+
+    def test_invalid_private_review_reference_is_denied(self):
+        self.denied(existing_private_handoff=replace(handoff(),private_review_ref="REVIEW-UNBOUND"))
