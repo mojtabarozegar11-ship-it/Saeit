@@ -42,7 +42,8 @@ def moj_prop_v141_public_info(request):
     else:
         response = render(
             request, "moj-prop-plan1-v141-prelaunch/index.html",
-            {"interest_enabled": getattr(settings, "MOJ_PROP_V141_INTEREST_ENABLED", False) is True},
+            {"interest_enabled": getattr(settings, "MOJ_PROP_V141_INTEREST_ENABLED", False) is True,
+             "language_options": info_context("en")["language_options"]},
             content_type="text/html; charset=utf-8",
         )
     response["Cache-Control"] = "private, no-store, max-age=0"
