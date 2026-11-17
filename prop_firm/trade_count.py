@@ -52,9 +52,21 @@ def count_challenge_trades(executions, *, paid_at, required=50):
         key = (source.strip(), position.strip())
         # Any duplicated close/fill shares the same position key, even when
         # the duplicate is booked in a separate phase account.
+        origin = getattr(event, "execution_origin", "unknown")
+        origin = origin if origin in ("manual", "bot", "unknown") else "unknown"
         if key not in positions:
-            origin = getattr(event, "execution_origin", "unknown")
-            positions[key] = origin if origin in ("manual", "bot") else "unknown"
+            positions[key] = origin
+        elif positions[key] != origin:
+            # A single broker position must have one attributable execution
+            # origin. Contradictory independently reconciled fills cannot
+            # be classified by whichever row happens to arrive first.
+            # Exclude the whole position from qualification until the
+            # provider resolves its identity; never trust iterator order.
+            positions[key] = "conflicting"
+    conflicted = sum(origin == "conflicting" for origin in positions.values())
+    uncountable += conflicted
+    positions = {key: origin for key, origin in positions.items()
+                 if origin != "conflicting"}
     count = len(positions)
     return ChallengeTradeCount(
         valid_closed_positions=count,
