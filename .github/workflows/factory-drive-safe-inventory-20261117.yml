@@ -119,6 +119,51 @@ jobs:
                   return {'status':'time_budget'}
           data['home_usage']=breakdown(pathlib.Path('/home/githubops'),'home')
           data['operations_usage']=breakdown(backup.parent,'operations')
+          # Bounded, metadata-only backup subdirectory classification: no content reads.
+          def classify_backup_tree(top, limit=12000, max_depth=4):
+              if status(top)!='directory':return {'status':'unsafe_or_absent'}
+              from collections import defaultdict
+              stacks=[(top,0)]
+              visited=0
+              categories=defaultdict(lambda:{'files':0,'logical_bytes':0,'allocated_bytes':0,'old_files':0,'old_bytes':0})
+              kinds=defaultdict(lambda:{'files':0,'logical_bytes':0})
+              oldest=9999999999
+              now=datetime.datetime.now(datetime.timezone.utc).timestamp()
+              errors=0
+              while stacks and visited<limit:
+                  folder,depth=stacks.pop()
+                  if depth>max_depth:continue
+                  try:
+                      with os.scandir(folder) as it:ents=list(it)
+                  except OSError:
+                      errors+=1;continue
+                  for e in ents:
+                      visited+=1
+                      if visited>limit:break
+                      try:
+                          v=e.stat(follow_symlinks=False)
+                          if stat.S_ISLNK(v.st_mode):continue
+                          if stat.S_ISDIR(v.st_mode):
+                              if depth<max_depth:stacks.append((pathlib.Path(e.path),depth+1))
+                              continue
+                          if not stat.S_ISREG(v.st_mode):continue
+                          rel=pathlib.Path(e.path).relative_to(top)
+                          bucket=rel.parts[0] if len(rel.parts)>1 else '(root)'
+                          b=categories[bucket]
+                          b['files']+=1;b['logical_bytes']+=v.st_size
+                          b['allocated_bytes']+=getattr(v,'st_blocks',0)*512
+                          age=max(0,now-v.st_mtime)
+                          if age>14*86400:
+                              b['old_files']+=1;b['old_bytes']+=v.st_size
+                          suffix=pathlib.Path(e.name).suffix.lower()
+                          if suffix in {'.sqlite3','.json','.gz','.tar','.log','.zip','.f01enc'}:category=suffix
+                          else:category='other'
+                          k=kinds[category];k['files']+=1;k['logical_bytes']+=v.st_size
+                      except (OSError,ValueError):errors+=1
+              entries=[{'id':hashlib.sha256(k.encode()).hexdigest()[:12],'root' :k=='(root)',**v} for k,v in categories.items()]
+              entries.sort(key=lambda x:x['logical_bytes'],reverse=True)
+              return {'status':'complete' if not stacks and visited<=limit else 'truncated','visited':visited,'errors':errors,'buckets':entries[:16],'suffixes':dict(kinds)}
+          data['backup_tree']=classify_backup_tree(backup)
           print('MOJ_FACTORY_BACKUP_INVENTORY='+json.dumps(data,sort_keys=True))
           PY
           echo MOJ_FACTORY_READONLY_AUDIT_COMPLETE=true
