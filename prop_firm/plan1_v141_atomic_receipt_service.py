@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from hashlib import sha256
 import json
 import re
 
@@ -24,12 +23,11 @@ from .plan1_v141_signed_simulator_manifest import (
     verify_and_replay_signed_simulator_manifest,
 )
 from .plan1_v14_social_or_50_terms import review_prospective_terms
+from .plan1_v141_replay_journal_policy import (
+    JournalTransitionRejected, PreviousReplayState,
+    decide_next_signed_replay_receipt,
+)
 
-_TERMINAL = frozenset((
-    "SIMULATED_RISK_BREACHED",
-    "SIMULATED_EVALUATION_EXPIRED",
-    "BOTH_MATH_REVIEWS_PASSED_EXTERNAL_PROOF_REQUIRED",
-))
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
 MAX_RAW = 3_000_000
 
@@ -57,22 +55,6 @@ class StoredSimReplayResult:
     enrollment_authorized: bool = False
     real_trading_authorized: bool = False
     payout_authorized: bool = False
-
-
-def _receipt_hash(*, challenge_ref, sequence, manifest_sha, replay_sha,
-                  previous_sha, state_name, assessment_utc):
-    doc = dict(
-        domain="mojprop.v141.simulated-receipt-chain.v1",
-        challenge_ref=challenge_ref,
-        sequence=sequence,
-        manifest_sha256=manifest_sha,
-        replay_sha256=replay_sha,
-        previous_receipt_sha256=previous_sha,
-        reported_engine_state=state_name,
-        as_of_utc=assessment_utc,
-    )
-    return sha256(json.dumps(doc, sort_keys=True, separators=(",", ":"),
-                             ensure_ascii=True).encode("utf-8")).hexdigest()
 
 
 def _manifest_claims(raw):
@@ -120,8 +102,6 @@ def store_signed_v141_demo_manifest(*, state_pk: int, raw_manifest: bytes,
     if (type(state.last_sequence) is not int or state.last_sequence < 0
             or state.last_sequence > 1_000_000_000):
         raise DurableSimReplayRejected("invalid persisted replay sequence")
-    if state.last_engine_state in _TERMINAL:
-        raise DurableSimReplayRejected("completed, expired or breached challenge is immutable")
     if (state.last_sequence == 0 and
             (state.last_manifest_sha256 or state.last_receipt_sha256 or state.last_as_of)):
         raise DurableSimReplayRejected("initial journal state corrupted")
@@ -166,57 +146,42 @@ def store_signed_v141_demo_manifest(*, state_pk: int, raw_manifest: bytes,
             mathematical_state=old.reported_engine_state,
             idempotent_replay=True,
         )
-    stamp = datetime.fromisoformat(calc.assessment_utc)
-    if state.last_as_of is not None and stamp <= state.last_as_of:
-        raise DurableSimReplayRejected("assessment must advance from last stored snapshot")
-    first_transition = (datetime.fromisoformat(calc.phase_one_accepted_at_utc)
-                        if calc.phase_one_accepted_at_utc else None)
-    second_transition = (datetime.fromisoformat(calc.phase_two_started_at_utc)
-                         if calc.phase_two_started_at_utc else None)
-    completed_transition = (datetime.fromisoformat(calc.phase_two_completed_at_utc)
-                            if calc.phase_two_completed_at_utc else None)
-    # A later signed full snapshot cannot rewrite or erase a previously
-    # persisted stage transition, even under the same configured adapter key.
-    for historical, proposed, field in (
-        (state.last_phase_one_accepted_at, first_transition, "phase-one acceptance"),
-        (state.last_phase_two_started_at, second_transition, "phase-two start"),
-        (state.last_phase_two_completed_at, completed_transition, "phase-two completion"),
-    ):
-        if historical is not None and historical != proposed:
-            raise DurableSimReplayRejected(field + " cannot be revised")
-    # A first-stage acceptance must be observed as a SEPARATE checkpoint
-    # before phase two can be recorded; source HMAC cannot skip this step.
-    if (calc.phase_two.verified_closed_positions
-            or calc.state in ("SIMULATED_STAGE_TWO_IN_REVIEW",
-                              "TRADING_MATH_COMPLETE_WAITING_SOCIAL_CLOCK",
-                              "BOTH_MATH_REVIEWS_PASSED_EXTERNAL_PROOF_REQUIRED")):
-        if state.last_engine_state not in (
-            "SIMULATED_STAGE_ONE_MATH_PASSED_WAITING_TRANSITION",
-            "SIMULATED_STAGE_TWO_IN_REVIEW",
-            "TRADING_MATH_COMPLETE_WAITING_SOCIAL_CLOCK",
-        ):
-            raise DurableSimReplayRejected("stage two requires a prior durable successful stage-one checkpoint")
-    previous = state.last_receipt_sha256 or "0" * 64
-    receipt_digest = _receipt_hash(
-        challenge_ref=state.challenge_ref, sequence=claimed_sequence,
-        manifest_sha=digest, replay_sha=calc.snapshot_sha256,
-        previous_sha=previous, state_name=calc.state,
-        assessment_utc=calc.assessment_utc,
-    )
+    try:
+        next_receipt = decide_next_signed_replay_receipt(
+            previous=PreviousReplayState(
+                challenge_ref=state.challenge_ref,
+                contract_sha256=state.terms_sha256,
+                sequence=state.last_sequence,
+                engine_state=state.last_engine_state,
+                last_assessment_utc=state.last_as_of,
+                last_phase_one_accepted_utc=state.last_phase_one_accepted_at,
+                last_phase_two_started_utc=state.last_phase_two_started_at,
+                last_phase_two_completed_utc=state.last_phase_two_completed_at,
+                previous_receipt_sha256=state.last_receipt_sha256,
+            ),
+            calculated=calc,
+            manifest_sha256=digest,
+            requested_sequence=claimed_sequence,
+        )
+    except JournalTransitionRejected as exc:
+        raise DurableSimReplayRejected("durable state transition rejected") from exc
+    stamp = next_receipt.assessment_utc
+    receipt_digest = next_receipt.receipt_sha256
+    previous = next_receipt.previous_receipt_sha256
     record = PropV141SimReceipt.objects.create(
         state=state, sequence=claimed_sequence, manifest_id=claimed_id,
         raw_manifest_sha256=digest, replay_sha256=calc.snapshot_sha256,
         previous_receipt_sha256=previous, receipt_sha256=receipt_digest,
-        reported_engine_state=calc.state, as_of=stamp,
+        reported_engine_state=next_receipt.resulting_engine_state, as_of=stamp,
     )
     state.last_sequence = claimed_sequence
     state.last_manifest_sha256 = digest
     state.last_replay_sha256 = calc.snapshot_sha256
     state.last_as_of = stamp
-    state.last_phase_one_accepted_at = first_transition
-    state.last_phase_two_started_at = second_transition
-    state.last_phase_two_completed_at = completed_transition
-    state.last_engine_state = calc.state
+    state.last_phase_one_accepted_at = next_receipt.phase_one_accepted_utc
+    state.last_phase_two_started_at = next_receipt.phase_two_started_utc
+    state.last_phase_two_completed_at = next_receipt.phase_two_completed_utc
+    state.last_engine_state = next_receipt.resulting_engine_state
     state.last_receipt_sha256 = receipt_digest
     state.save(update_fields=(
         "last_sequence", "last_manifest_sha256", "last_replay_sha256",
@@ -229,5 +194,5 @@ def store_signed_v141_demo_manifest(*, state_pk: int, raw_manifest: bytes,
         challenge_ref=state.challenge_ref,
         sequence=claimed_sequence, replay_sha256=calc.snapshot_sha256,
         receipt_sha256=receipt_digest,
-        mathematical_state=calc.state, idempotent_replay=False,
+        mathematical_state=next_receipt.resulting_engine_state, idempotent_replay=False,
     )
