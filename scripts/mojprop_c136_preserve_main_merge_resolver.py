@@ -145,6 +145,7 @@ def resolve_source(path: str, main: str, canonical: str) -> str:
     if path == "services/mpw_trx_guest_commerce.py":
         require(main, (
             "def _new_trx_merchant_canary_is_true(config) -> bool:",
+            'MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED", False) is True',
             "if not _new_trx_merchant_canary_is_true(settings):",
             "raise Http404(\"New TRX invoices unavailable\")",
         ), "main merchant payment hold")
