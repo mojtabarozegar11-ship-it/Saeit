@@ -1,5 +1,6 @@
 """Real Django HTTP and SEO regression coverage for twenty + Persian locale paths."""
 from pathlib import Path
+import xml.etree.ElementTree as ET
 from django.test import SimpleTestCase, override_settings
 from django.utils.html import escape
 
@@ -106,3 +107,46 @@ class World20HTTPTests(SimpleTestCase):
         self.assertIn('Explore MOJ PROP challenges', homepage)
         self.assertIn('20 world languages + Persian', homepage)
         self.assertIn('Moj Prop', (base / "core/world20_catalog.json").read_text("utf-8"))
+
+    def test_08_host_scoped_sitemap_contains_exact_21_language_urls(self):
+        response = self.get("/sitemap.xml")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"].split(";")[0], "application/xml")
+        root = ET.fromstring(response.content)
+        ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9",
+              "x": "http://www.w3.org/1999/xhtml"}
+        urls = root.findall("s:url", ns)
+        self.assertEqual(len(urls), 30)
+        locs = [item.find("s:loc", ns).text for item in urls]
+        self.assertEqual(len(locs), len(set(locs)))
+        self.assertIn("https://mojplaywin.com/moj-prop/", locs)
+        self.assertIn("https://mojplaywin.com/world/", locs)
+        for lang in _RANKED + _SUPPLEMENT:
+            url = "https://mojplaywin.com/world/" + lang + "/"
+            self.assertIn(url, locs)
+            entry = urls[locs.index(url)]
+            alternate = entry.findall("x:link", ns)
+            self.assertEqual(len(alternate), 22)
+            self.assertIn(("x-default", "https://mojplaywin.com/world/"),
+                          [(x.attrib["hreflang"], x.attrib["href"]) for x in alternate])
+        self.assertFalse(any("zomorodmelal.ir" in loc for loc in locs))
+        self.assertEqual(self.client.get(
+            "/sitemap.xml", secure=True, HTTP_HOST="zomorodmelal.ir").status_code, 404)
+
+    def test_09_robots_points_at_mojplaywin_and_excludes_private_client_data(self):
+        response = self.get("/robots.txt")
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode("utf-8")
+        self.assertIn("Sitemap: https://mojplaywin.com/sitemap.xml", body)
+        self.assertIn("Disallow: /api/", body)
+        self.assertIn("Disallow: /moj-prop-v141/statement/", body)
+        self.assertNotIn("Sitemap: https://zomorodmelal.ir", body)
+        self.assertEqual(self.client.get(
+            "/robots.txt", secure=False, HTTP_HOST=self.HOST).status_code, 404)
+
+    def test_10_existing_company_sitemap_and_robots_are_preserved_by_host(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  "core/seo_views.py").read_text("utf-8")
+        self.assertIn("return mojplaywin_world_sitemap(request)", source)
+        self.assertIn("return mojplaywin_world_robots(request)", source)
+        self.assertIn('https://zomorodmelal.ir', source)
