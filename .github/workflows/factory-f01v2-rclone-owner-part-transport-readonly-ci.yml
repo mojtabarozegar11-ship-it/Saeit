@@ -29,9 +29,9 @@ jobs:
           set -euo pipefail
           test ! -L scripts/factory_rclone_dual_parts.py
           test ! -L tests/test_factory_rclone_dual_parts.py
-          test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = '890c963cead7d0ff2dfe13c8883618178ce5d62f'
-          test "$(git hash-object tests/test_factory_rclone_dual_parts.py)" = 'da79f9f3a0b2d3a5b0742ea06e06713df75819da'
-      - name: Run 46 offline fail-closed multipart transport cases
+          test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'ce833ac34bddf31d189d84951f906f7170543312'
+          test "$(git hash-object tests/test_factory_rclone_dual_parts.py)" = '2a82b75d2d5e7bfb86f8a8f3e54c3b63fff547cc'
+      - name: Run 55 offline fail-closed multipart transport cases
         shell: bash
         env:
           PYTHONDONTWRITEBYTECODE: '1'
