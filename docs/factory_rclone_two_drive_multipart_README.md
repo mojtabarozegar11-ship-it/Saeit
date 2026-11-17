@@ -88,3 +88,23 @@ mandatory. Provider rcat does not implement atomic no-overwrite; the fresh
 one-time run namespace remains mandatory. Nine independent adversarial cases
 were added (55 total); source-only CI run must pass before treating the
 candidate as reviewed. No live backup or cloud credential change is authorized.
+
+
+## Terminal manifest inventory binding (additional hardening)
+
+The provider adapter now also checks the **canonical F01V2 JSON manifest** before
+issuing either remote terminal-object write. It rejects duplicate keys,
+noncanonical byte encodings, unexpected fields, invalid run and part names,
+noncontiguous part indexes, unaccounted objects, wrong per-part SHA256/length,
+incorrect ciphertext/plain totals, an invalid number of owner pseudonyms,
+claiming that restore/source consistency was already verified, and divergent
+A/B terminal manifests. Both provider **manifest readbacks** must also match
+exact submitted bytes. This is defense in depth for accidental low-level
+callback misuse; it never substitutes for the manifest's secret-key MAC,
+per-chunk AES-GCM authentication, or an isolated full current restore.
+
+All checks run without revealing OAuth tokens or filenames from the live
+factory. Neither side is marked as having a complete **current** backup merely
+because the structural manifest passed. The source is still staged in a Draft
+PR; production backups remain forbidden until source identity, owner OAuth,
+provider storage quotas and independent key recovery are proven.
