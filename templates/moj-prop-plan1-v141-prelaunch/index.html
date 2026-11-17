@@ -23,7 +23,7 @@ p,li{color:var(--mute)}strong{color:var(--ink)}
 .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .metric{background:var(--panel);border:1px solid var(--stroke);padding:14px;border-radius:10px}
 .metric b{display:block;font-size:22px;color:var(--gold)}
-section{padding:30px 0}ul{padding-inline-start:23px}li{margin:8px 0}.interest-link{display:inline-block;padding:12px 18px;border:1px solid var(--gold);border-radius:9px;color:var(--gold);text-decoration:none;font-weight:750}.interest-link:hover,.interest-link:focus{outline:2px solid var(--gold);outline-offset:2px}
+section{padding:30px 0}.language-select{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}.language-select a{color:var(--gold);border:1px solid var(--stroke);padding:5px 10px;border-radius:7px;text-decoration:none}.language-select a:focus-visible{outline:2px solid var(--gold)}ul{padding-inline-start:23px}li{margin:8px 0}.interest-link{display:inline-block;padding:12px 18px;border:1px solid var(--gold);border-radius:9px;color:var(--gold);text-decoration:none;font-weight:750}.interest-link:hover,.interest-link:focus{outline:2px solid var(--gold);outline-offset:2px}
 [lang=fa]{font-family:Tahoma,system-ui,Arial,sans-serif}
 footer{border-top:1px solid var(--stroke);color:var(--mute);padding:30px 0 50px}
 @media(max-width:720px){.grid{grid-template-columns:1fr}.cards{grid-template-columns:repeat(2,1fr)}.hero{padding-top:35px}}
@@ -32,6 +32,11 @@ footer{border-top:1px solid var(--stroke);color:var(--mute);padding:30px 0 50px}
 <body>
 <main>
 <header>MOJ PROP / MOJPLAYWIN — PRELAUNCH REVIEW</header>
+<nav class="language-select" aria-label="Language selection / انتخاب زبان">
+{% for option in language_options %}
+<a href="/moj-prop-v141-info/?lang={{ option.code }}" lang="{{ option.code }}">{{ option.name }}</a>
+{% endfor %}
+</nav>
 <section class="hero" id="en" aria-label="MOJ PROP Plan 1 prospective terms">
 <div class="eyebrow">MOJ-PROP-01 / PROSPECTIVE v1.4.1-50-OR-28D-DRAFT</div>
 <h1>Two-stage trading evaluation, <em>not an active offer.</em></h1>
