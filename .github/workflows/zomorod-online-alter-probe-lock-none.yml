@@ -11,6 +11,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inspect:
+    # FAIL-CLOSED: legacy live cPanel probe creates, inserts, alters, and
+    # drops a temporary InnoDB table in the real production database.
+    # cPanel quota and independently restorable current backup gates remain
+    # unproven. Never execute this probe before separate owner review.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
