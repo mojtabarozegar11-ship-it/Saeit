@@ -82,7 +82,7 @@ def test_all_72_intake_forms_have_unique_number_and_declared_inputs():
 def test_no_exfiltration_or_false_submission_statuses():
     for n in range(350, 422):
         page = (PAGES / str(n) / "index.html").read_text(encoding="utf-8")
-        scripts = re.findall(r"<script(?:\\s[^>]*)?>([\\s\\S]*?)</script>", page)
+        scripts = re.findall(r"<script(?:\s[^>]*)?>([\s\S]*?)</script>", page)
         executable = [s for s in scripts if "rfq-offer-form-" in s]
         assert len(executable) == 1, n
         js = executable[0]
