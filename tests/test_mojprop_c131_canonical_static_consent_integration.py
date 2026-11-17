@@ -13,7 +13,8 @@ import subprocess
 import sys
 
 from scripts.mojprop_plan1_form_source_gate_c130 import (
-    FORM, _canonical_links, _source_routes, _view_guards, _read as original_read, evaluate, KEYS
+    FORM, _canonical_links, _source_routes, _view_guards, _read as original_read,
+    _installed_prop_app, _model_exported, _migration_depends_on_previous,\n    evaluate, KEYS
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -156,6 +157,48 @@ class CanonicalPlan1IntegrationTests(TestCase):
                 return original_read(root, relative)
             mocked.side_effect=read
             self.assertFalse(evaluate(root)["source_ready"])
+
+    def test_canonical_app_must_be_registered_not_mentioned_in_comment(self):
+        settings = (ROOT / "config/settings.py").read_text("utf-8")
+        apps = (ROOT / "prop_firm/apps.py").read_text("utf-8")
+        self.assertTrue(_installed_prop_app(settings, apps))
+        self.assertFalse(_installed_prop_app(
+            settings.replace('"prop_firm.apps.MojPropConfig",',
+                             '# "prop_firm.apps.MojPropConfig",'),
+            apps,
+        ))
+        self.assertFalse(_installed_prop_app(settings, apps.replace(
+            'name = "prop_firm"', 'name = "not_prop_firm"'
+        )))
+
+    def test_canonical_model_must_be_explicitly_exported(self):
+        source = (ROOT / "prop_firm/models.py").read_text("utf-8")
+        self.assertTrue(_model_exported(source))
+        self.assertFalse(_model_exported(source.replace(
+            "from .lead_models import PropInterest",
+            "# from .lead_models import PropInterest",
+        )))
+
+    def test_migration_0008_must_follow_exact_0007(self):
+        migration = (ROOT / "prop_firm/migrations/0008_prospect_contact_intake.py").read_text("utf-8")
+        self.assertTrue(_migration_depends_on_previous(migration))
+        self.assertFalse(_migration_depends_on_previous(
+            migration.replace('"0007_equity_broker_source"',
+                              '"0001_initial"')
+        ))
+
+    def test_missing_production_app_config_blocks_source_ready(self):
+        for missing in ("config/settings.py", "prop_firm/apps.py",
+                        "prop_firm/models.py",
+                        "prop_firm/migrations/0007_equity_broker_source.py"):
+            with self.subTest(missing=missing):
+                def read(root, relative):
+                    if relative == missing:
+                        return ""
+                    return original_read(root, relative)
+                with patch("scripts.mojprop_plan1_form_source_gate_c130._read",
+                           side_effect=read):
+                    self.assertFalse(evaluate(ROOT)["source_ready"])
 
     def test_no_network_or_payment_code_in_source_gate(self):
         src = RUNNER.read_text("utf-8")
