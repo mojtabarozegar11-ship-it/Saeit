@@ -53,7 +53,7 @@ class OrderDrawdownHeadroomTests(SimpleTestCase):
         self.assertTrue(self.review(equity="92.61", day_open_equity="95").allowed)
 
     def test_06_existing_open_position_risk_is_counted_with_new_order(self):
-        decision = self.review(equity="96.50", open_risk_before="0.2",
+        decision = self.review(equity="96.40", open_risk_before="0.2",
                                risk_at_stop="0.2")
         self.assertFalse(decision.allowed)
         self.assertIn("stop_risk_exceeds_drawdown_headroom", decision.reasons)
