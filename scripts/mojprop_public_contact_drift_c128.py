@@ -10,6 +10,11 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
+# Python direct-script execution has scripts/ on sys.path, not its parent.
+# Both `python scripts/...py` (read-only runner) and module import must work.
+if __package__ in ("", None):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from scripts.mojprop_public_official_contact_contract_c127 import (
     _ContactDocument, _GENERAL_MAILTO, _PLAN1_MAILTO, _SUPPORT,
     _MAX_HTML_BYTES, classify_contact, _safe_contact_href,
