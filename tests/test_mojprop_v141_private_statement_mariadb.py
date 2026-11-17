@@ -236,3 +236,15 @@ class PrivateStatementMariaDBTests(TransactionTestCase):
         html = self._call().content.decode("utf-8")
         self.assertIn("not live market equity", html.lower())
         self.assertNotIn("Congratulations, you passed", html)
+
+    def test_21_head_response_does_not_send_any_private_html_body(self):
+        response = self._call(method="HEAD")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"")
+        self.assertIn("no-store", response["Cache-Control"])
+
+    def test_22_real_utc_display_does_not_follow_tehran_timezone(self):
+        with override_settings(TIME_ZONE="Asia/Tehran"):
+            html = self._call().content.decode("utf-8")
+        expected = (self.start + timedelta(days=28)).strftime("%Y-%m-%d %H:%M:%S")
+        self.assertIn(expected, html)
