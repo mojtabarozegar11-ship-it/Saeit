@@ -44,9 +44,11 @@ class DualStoreReceipt:
     plaintext_bytes: int
     ciphertext_bytes: int
     parts: int
-    owner_a: str
-    owner_b: str
-    complete: bool = True
+    claimed_owner_a: str
+    claimed_owner_b: str
+    cipher_parts_mirrored_and_readback_verified: bool = True
+    cloud_account_identity_verified_by_this_code: bool = False
+    current_source_consistency_verified: bool = False
     restores_verified: bool = False
     commercial_release_authorized: bool = False
 
