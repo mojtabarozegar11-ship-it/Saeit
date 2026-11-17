@@ -20,6 +20,7 @@ import os
 from pathlib import Path
 import pwd
 import secrets
+import select
 import shlex
 import shutil
 import stat
@@ -50,6 +51,7 @@ PROOF_SHA256 = "753365e1584a228d4a4b60b1f7bc21dabdf9514dfc1fe362b5257326768233da
 CPANEL_HOST = "[zohal.pws-dns.net]:1396"
 PIN_SHA256 = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
 CHUNK_BYTES = 8 * 1024 * 1024
+SOURCE_IDLE_TIMEOUT_SECONDS = 150
 MIN_FREE_RESERVE = 1024 * 1024 * 1024
 
 # This string is passed as a shell-quoted python3 -c argument over the already
@@ -224,8 +226,14 @@ class VerifiedCpanelStream:
         if self.done:
             return b""
         try:
-            data = self.p.stdout.read(size)
-        except OSError:
+            readable, _, _ = select.select(
+                [self.p.stdout], [], [], SOURCE_IDLE_TIMEOUT_SECONDS)
+            if not readable:
+                raise TransferHold("CPANEL_SOURCE_READ_IDLE_TIMEOUT")
+            # Unbuffered fixed-size read: stdout PIPE cannot hang forever
+            # waiting for the requested (possibly large) buffer to fill.
+            data = os.read(self.p.stdout.fileno(), min(size, 1024 * 1024))
+        except (OSError, ValueError):
             raise TransferHold("CPANEL_SOURCE_PIPE_FAILURE") from None
         if type(data) is not bytes:
             raise TransferHold("CPANEL_NONBINARY_SOURCE")
