@@ -100,8 +100,8 @@ jobs:
           printf '%s\n' "$scan" > "$work/cpanel.known"
           chmod 600 "$work/cpanel.known" "$work/vps.known"
           test "$(ssh-keygen -lf "$work/cpanel.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/factory_cpanel_existing_nov5_two_drive.py --mode probe --snapshot nov5-a --ssh-config "$work/config" --known-hosts "$work/cpanel.known"
-          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/factory_cpanel_existing_nov5_two_drive.py --mode probe --snapshot nov5-b --ssh-config "$work/config" --known-hosts "$work/cpanel.known"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive --mode probe --snapshot nov5-a --ssh-config "$work/config" --known-hosts "$work/cpanel.known"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive --mode probe --snapshot nov5-b --ssh-config "$work/config" --known-hosts "$work/cpanel.known"
           echo FACTORY_EXISTING_CPANEL_NOV5_SNAPSHOTS_METADATA_ONLY=true
           echo FACTORY_RUNNING_PROCESSES_STARTED=0
           echo FACTORY_BACKUPS_UPLOADED=0
