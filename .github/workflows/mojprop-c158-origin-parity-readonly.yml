@@ -1,0 +1,65 @@
+name: MOJ PROP C158 cPanel origin-vs-live byte parity & sales markers GET ONLY
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/mojprop_c158_owner_origin_parity_readonly.py'
+      - 'tests/test_mojprop_c158_owner_origin_parity_readonly.py'
+      - '.github/workflows/mojprop-c158-origin-parity-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  owner-only-cpanel-static-source:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Pin exact reviewed read-only script and run synthetic protections
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_c158_owner_origin_parity_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c158_owner_origin_parity_readonly.py)" = "fc53c294fcd21de282009aa6a466c43701ce6521"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_c156_cpanel_static_source_bytes_readonly
+      - name: Install existing pinned cPanel SSH identity (never log key)
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/mojprop-c158-cpanel"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+      - name: Compare only two fixed HTTPS public GET responses with exact owner disk bytes; log approved booleans
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-c158-cpanel"
+          timeout 60s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c158_owner_origin_parity_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(5000); prefix="MOJPROP_C158_OWNER_ORIGIN_PARITY_READONLY="; lines=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"MISSING_SAFE_C158"; r=json.loads(lines[0][len(prefix):]); assert r["schema"]=="mojprop.cpanel.public_origin_parity.readonly.c158.v1" and r["read_only"] is True and r["commercial_readiness_verified"] is False and r["no_post_no_payment_no_email_no_release"] is True and r["not_full_db_app_media_restore_proof"] is True; assert set(r["pages"])=={"home","contact"}; states={"readable","missing","unsafe_file","unsafe_root","unsafe_parent","concurrent_change","unreadable_or_race"}; statuses={"exact_match","different_bytes","unavailable"}; flags={"funded_plan1_sku_marked","educational_starter30_sku_marked","prelaunch_word_present","known_unavailable_consent_link","official_support_mailto_present","generic_service_form_action","checkout_link_present"}; assert all(p["disk_status"] in states and p["http_vs_disk"] in statuses and type(p["http_status"]) is int and 0<=p["http_status"]<=599 and (p["disk_flags"] is None or (set(p["disk_flags"])==flags and all(type(v) is bool for v in p["disk_flags"].values()))) for p in r["pages"].values()); assert not set(r).intersection({"path","filename","hash","digest","source","customer","password","secret","token"}); print(lines[0])'
+          echo 'C158_REAL_CPANEL_ORIGIN_PARITY_PROBED_READ_ONLY=true'
+          echo 'C158_NO_DB_MEDIA_BUYER_POST_RELEASE_OR_PAYMENT=true'
+      - name: Wipe ephemeral SSH authentication material
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/mojprop-c158-cpanel"
+          if test -d "$work"; then rm -f "$work/host.key" "$work/known" "$work/config"; rmdir "$work" || true; fi
