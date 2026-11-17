@@ -20,7 +20,7 @@ class ReviewerAttestationClosed(ValueError):
 def verify_independent_reviewer(*, acceptance_digest, review_ref,
                                 reviewer_attestation, reviewer_hmac,
                                 reviewer_key, acceptance_provider_key,
-                                now_sec):
+                                now_sec, expected_reviewer_authority_ref):
     """Fail closed on unsigned, stale, replay-prone or unbound review evidence.
 
     This is a cryptographic check only. The caller must separately enforce
@@ -34,7 +34,10 @@ def verify_independent_reviewer(*, acceptance_digest, review_ref,
             or type(acceptance_provider_key) is not bytes
             or len(acceptance_provider_key) < 32
             or hmac.compare_digest(reviewer_key, acceptance_provider_key)
-            or type(now_sec) is not int or now_sec < 1735689600):
+            or type(now_sec) is not int or now_sec < 1735689600
+            or type(expected_reviewer_authority_ref) is not str
+            or not 8 <= len(expected_reviewer_authority_ref) <= 96
+            or expected_reviewer_authority_ref.strip() != expected_reviewer_authority_ref):
         raise ReviewerAttestationClosed("independent reviewer credentials missing")
     if type(reviewer_attestation) is not dict or set(reviewer_attestation) != {
         "schema", "sku", "review_ref", "acceptance_sha256",
@@ -49,7 +52,7 @@ def verify_independent_reviewer(*, acceptance_digest, review_ref,
             or a["acceptance_sha256"] != acceptance_digest
             or a["decision"] != "APPROVED_FOR_PRIVATE_REVIEW_ONLY"
             or type(a["reviewer_authority_ref"]) is not str
-            or not 8 <= len(a["reviewer_authority_ref"]) <= 96
+            or a["reviewer_authority_ref"] != expected_reviewer_authority_ref
             or type(a["issued_at_sec"]) is not int
             or type(a["expires_at_sec"]) is not int
             or not a["issued_at_sec"] <= now_sec < a["expires_at_sec"]
