@@ -80,7 +80,7 @@ class V141NonPayableLandingTests(unittest.TestCase):
     def test_30_trx_proposal_no_payment_directions(self):
         self.assertIn("30 TRX", self.html)
         self.assertIn("payment disabled", self.html)
-        self.assertIn("30 TRX بومی", self.html)
+        self.assertIn("۳۰ TRX بومی", self.html)
         self.assertIn("NO PAYMENT", self.html)
 
     def test_no_wallet_address_or_payment_uri(self):
