@@ -159,7 +159,7 @@ class C161EffectiveConfigPrivacy(unittest.TestCase):
                     "database_name_or_credentials_emitted"):
             self.assertFalse(out[key])
 
-    def test_16_no_sql_customer_file_media_content or backup write_calls(self):
+    def test_16_no_sql_customer_file_media_content_or_backup_write_calls(self):
         src=Path(c.__file__).read_text("utf-8")
         for forbidden in ("subprocess.", "requests.", "urllib.", "socket.",
                           "connection.cursor(", "sqlite3.connect(", "cursor(",
