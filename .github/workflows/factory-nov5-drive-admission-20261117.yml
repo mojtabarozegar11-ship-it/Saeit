@@ -1,0 +1,65 @@
+name: Factory Nov5 exact compression and Drive transport admission — owner-only read-only
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+concurrency:
+  group: factory-nov5-drive-admission-20261117
+  cancel-in-progress: false
+jobs:
+  admit:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.number == 1600 &&
+      !github.event.issue.pull_request &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'MOJ-FACTORY-NOV5-DRIVE-ADMISSION-20261117'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Inspect immutable backups with exact stream-only compression count
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d)"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 8 -p 22 -t rsa 127.0.0.1 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo FACTORY_PINNED_SSH=verified
+          timeout 950s ssh -T -i "$d/key" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" \
+            -o ConnectTimeout=10 -o ServerAliveInterval=20 \
+            -o ServerAliveCountMax=3 -o ForwardAgent=no \
+            githubops@127.0.0.1 \
+            'test "$(id -un)" = githubops && exec nice -n 19 python3 -B -' \
+            < scripts/factory_nov5_drive_admission_readonly_20261117.py \
+            | tee "$RUNNER_TEMP/factory-nov5-drive-admission-$GITHUB_RUN_ID.log"
+          grep -q '^MOJ_FACTORY_NOV5_DRIVE_ADMISSION=' "$RUNNER_TEMP/factory-nov5-drive-admission-$GITHUB_RUN_ID.log"
+      - name: Store only tiny evidence for offsite Drive readback
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-nov5-drive-admission-${{ github.run_id }}
+          path: ${{ runner.temp }}/factory-nov5-drive-admission-${{ github.run_id }}.log
+          if-no-files-found: error
+          retention-days: 2
+      - name: Clean runner proof
+        if: always()
+        shell: bash
+        run: rm -f -- "$RUNNER_TEMP/factory-nov5-drive-admission-$GITHUB_RUN_ID.log"
