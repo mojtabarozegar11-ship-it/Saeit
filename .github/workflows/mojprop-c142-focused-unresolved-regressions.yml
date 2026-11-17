@@ -76,3 +76,54 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_c142_public_form_get_readonly.py
+
+  full-repository-regression-after-focused-green:
+    needs: remaining-contracts
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      DEBUG: 'true'
+      SECRET_KEY: 'c142-full-repository-ci-ephemeral'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install actual project dependencies and approved PDF parser hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install -r requirements.txt
+          parser="$RUNNER_TEMP/mpw-pdf-parser"
+          install -d -m 700 "$parser"
+          python3 -m pip install --no-deps --require-hashes --target "$parser" -r .github/requirements/mpw-pdf-parser-ci.txt
+          echo "PYTHONPATH=$parser" >> "$GITHUB_ENV"
+      - name: Verify Django schema then build static manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 manage.py check
+          python3 manage.py makemigrations --check --dry-run
+          python3 manage.py collectstatic --noinput
+      - name: Run unfiltered ALL pytest modules for true global gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pytest -q --tb=short --disable-warnings
+      - name: Verify full migration chain on isolated local SQLite only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 manage.py migrate --noinput
+          echo 'C142_FULL_REPO_TESTS_AND_EPHEMERAL_MIGRATIONS_PASS=true'
+          echo 'C142_MAIN_MERGE_AND_PRODUCTION_DEPLOY=false'
