@@ -20,6 +20,10 @@ from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from services.mojprop_commercial_lanes import (
+    LegalEvidence, Lane, PaymentMethod, decide_preinvoice,
+)
+
 from .plan1_v141_native_payment_models import (
     PropV141NativeOrder, PropV141NativeReceipt, PropGlobalTRXSettlement,
 )
@@ -77,7 +81,7 @@ def issue_private_foreign_invoice(*, operator, buyer, foreign_country,
                                   payer_hex41, wallet_owner_attestation_sha256,
                                   buyer_contract_acceptance_sha256,
                                   compliance_document_sha256, compliance_ref,
-                                  terms_version, terms_sha256, clearance_verified):
+                                  terms_version, terms_sha256, legal_evidence):
     """Issue DB-bound invoice only after independent reviewed merchant evidence.
 
     Caller must be a private audited admin integration, NOT an HTTP customer.
@@ -90,8 +94,7 @@ def issue_private_foreign_invoice(*, operator, buyer, foreign_country,
             or buyer is None or buyer.is_active is not True
             or buyer.pk is None or operator.pk == buyer.pk):
         raise CheckoutRejected("Trusted independent back-office operator required")
-    if (clearance_verified is not True or
-            type(foreign_country) is not str or not REX_COUNTRY.fullmatch(foreign_country)
+    if (type(foreign_country) is not str or not REX_COUNTRY.fullmatch(foreign_country)
             or foreign_country in ("IR", "US")
             or type(payer_hex41) is not str or not REX_PAYER.fullmatch(payer_hex41)
             or type(compliance_ref) is not str or len(compliance_ref.strip()) < 12
@@ -101,6 +104,16 @@ def issue_private_foreign_invoice(*, operator, buyer, foreign_country,
             or terms_version != settings.MOJPROP_V141_NATIVE_TERMS_VERSION
             or terms_sha256 != getattr(settings, "MOJPROP_V141_NATIVE_TERMS_SHA256", None)):
         raise CheckoutRejected("Customer and export payment eligibility not verified")
+    if (type(legal_evidence) is not LegalEvidence or
+            legal_evidence.merchant_residence_country != "IR" or
+            legal_evidence.buyer_residence_country != foreign_country or
+            legal_evidence.compliance_reference != compliance_ref):
+        raise CheckoutRejected("Legal file does not bind the actual personal merchant/customer")
+    legal_route = decide_preinvoice(
+        Lane.EVALUATION, PaymentMethod.NATIVE_TRX, legal_evidence)
+    if (legal_route.eligible_for_next_step is not True or
+            legal_route.proposed_native_sun != AMOUNT_SUN):
+        raise CheckoutRejected("Merchant legally ineligible: " + legal_route.reason)
     _digest(wallet_owner_attestation_sha256)
     _digest(buyer_contract_acceptance_sha256)
     _digest(compliance_document_sha256)
