@@ -171,3 +171,28 @@ class NoBuyerPostingTests(unittest.TestCase):
 
     def test_current_copy_refers_to_buyer_waiver(self):
         self.assertIn("waives the earlier two-post obligation", self.current.en)
+
+    def test_facing_pre_purchase_copy_now_says_no_buyer_social_post(self):
+        from prop_firm.order_readiness import PREPURCHASE_DISCLOSURES
+        copy = " ".join(PREPURCHASE_DISCLOSURES)
+        self.assertIn("No Instagram or Facebook post", copy)
+
+    def test_facing_pre_purchase_copy_keeps_optional_social_consent_separate(self):
+        from prop_firm.order_readiness import PREPURCHASE_DISCLOSURES
+        copy = " ".join(PREPURCHASE_DISCLOSURES)
+        self.assertIn("Optional promotions", copy)
+
+    def test_facing_pre_purchase_copy_mentions_legacy_waiver(self):
+        from prop_firm.order_readiness import PREPURCHASE_DISCLOSURES
+        copy = " ".join(PREPURCHASE_DISCLOSURES)
+        self.assertIn("no-social-post waiver", copy)
+
+    def test_buyer_social_refusal_cannot_change_other_required_evidence_gates(self):
+        from prop_firm.order_readiness import REQUIRED
+        for gate in (
+            "buyer_kyc_verified", "buyer_country_permitted",
+            "buyer_age_verified", "terms_version_accepted",
+            "independent_funding_proof", "refund_policy_disclosed",
+        ):
+            with self.subTest(gate=gate):
+                self.assertIn(gate, REQUIRED)
