@@ -59,7 +59,7 @@ jobs:
     name: Protected additive publication to Zomorod cPanel
     needs: validate
     if: ${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 22
     steps:
       - uses: actions/checkout@v4
@@ -81,12 +81,12 @@ jobs:
           chmod 600 "$d/vps.key" "$d/host.key"
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          ssh-keyscan -T 12 -t rsa 127.0.0.1 > "$d/vps.known" 2>/dev/null
           test -s "$d/vps.known"
           test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           cat > "$d/config" <<EOF
           Host saeit-vps
-            HostName 178.239.147.150
+            HostName 127.0.0.1
             User githubops
             Port 22
             IdentityFile $d/vps.key
