@@ -324,6 +324,20 @@ def confirm_native_trx_and_deliver(*, reference, txid):
         )
         if locked_order_snapshot != immutable_order_snapshot:
             raise CheckoutRejected("Invoice changed during independent chain verification")
+        # Refuse replay of an OLD MojPlayWin walletless TRX receipt too.
+        # In production, both products use the same Django MariaDB. This
+        # read-side guard is in addition to (not a replacement for) migrating
+        # legacy payment writers to one global atomic unique TXID registry.
+        from django.apps import apps
+        if apps.is_installed("core"):
+            from core.models import LedgerEntry, PaymentWebhookEvent
+            if (LedgerEntry.objects.filter(
+                    reference="walletless:" + NETWORK + ":" + txid).exists()
+                    or PaymentWebhookEvent.objects.filter(
+                        provider="mpw_walletless_trx_v1",
+                        event_type="tron_finalized",
+                        event_id=txid, status="processed").exists()):
+                raise CheckoutRejected("Existing store payment already claimed this TXID")
         # Race-safe global unique reservation: no double-selling one txid.
         try:
             claim = PropGlobalTRXSettlement.objects.create(
