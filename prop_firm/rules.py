@@ -235,10 +235,27 @@ def authorize_funding(*, requested_capital, unencumbered_cash,
 def authorize_order(*, account_capital, equity, day_open_equity,
                     risk_at_stop, open_risk_before, broker_minimum_risk,
                     verified_stop=False, authoritative_snapshot=False,
-                    mode="real", execution_authorized=False):
+                    mode="real", execution_authorized=False,
+                    contract_version=None, broker_symbol=None,
+                    broker_symbol_verified=False):
     """Fail-closed preflight without broker operations or payment side effects."""
     if mode not in ("real", "challenge"):
         raise ValueError("invalid mode")
+    # Historical already-signed v1.2 terms are immutable. The prospective
+    # owner-approved gold limits apply ONLY with explicit v1.3 version;
+    # None/default and v1.2 calls retain the original 0.8 / 1.6 ceilings.
+    from .owner_gold_risk_v13 import OWNER_GOLD_CONTRACT_VERSION, OWNER_GOLD_V13
+    owner_gold_v13 = contract_version == OWNER_GOLD_CONTRACT_VERSION
+    if contract_version not in (None, POLICY.version, OWNER_GOLD_CONTRACT_VERSION):
+        raise ValueError("Unknown or unapproved risk contract version")
+    per_order_pct = (
+        OWNER_GOLD_V13.max_per_order_risk_pct
+        if owner_gold_v13 else POLICY.order_risk_pct
+    )
+    aggregate_pct = (
+        OWNER_GOLD_V13.max_aggregate_open_risk_pct
+        if owner_gold_v13 else POLICY.aggregate_risk_pct
+    )
     capital = _positive(account_capital, "account_capital")
     single = _nonnegative(risk_at_stop, "risk_at_stop")
     aggregate = _nonnegative(open_risk_before, "open_risk_before")
@@ -251,12 +268,19 @@ def authorize_order(*, account_capital, equity, day_open_equity,
         reasons.append("authoritative_broker_snapshot_required")
     if verified_stop is not True:
         reasons.append("stop_loss_required")
-    if single == 0 or single > percent(capital, POLICY.order_risk_pct):
+    if owner_gold_v13:
+        # Symbol strings from a buyer are not broker verification; require
+        # separately verified canonical instrument in the trusted snapshot.
+        if type(broker_symbol) is not str or broker_symbol != OWNER_GOLD_V13.exact_broker_symbol:
+            reasons.append("xauusd_exact_broker_symbol_required")
+        if broker_symbol_verified is not True:
+            reasons.append("broker_symbol_independent_verification_required")
+    if single == 0 or single > percent(capital, per_order_pct):
         reasons.append("per_order_risk_limit")
-    if aggregate + single > percent(capital, POLICY.aggregate_risk_pct):
+    if aggregate + single > percent(capital, aggregate_pct):
         reasons.append("aggregate_risk_limit")
-    # Static 0.8% / 1.6% caps do not protect a challenge that has already
-    # consumed nearly all of its 4% daily or 8% total drawdown allowance.
+    # Neither historical 0.8% / 1.6% nor prospective gold 3% / 8%
+    # static caps override the stricter 4% daily / 8% total drawdown floors.
     # The authoritative equity mark includes current floating P&L. The
     # aggregate known loss-at-stop (existing positions + proposed order)
     # must leave equity STRICTLY above both breach floors even at stop-out.
