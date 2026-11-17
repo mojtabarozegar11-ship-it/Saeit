@@ -3,7 +3,7 @@
 Never issues invoices, accepts payment, creates enrollments, migrates PII or
 claims an informational disclosure is a customer-signed agreement.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 import hmac
 import re
@@ -20,10 +20,12 @@ class BridgeClosed(ValueError):
 
 @dataclass(frozen=True)
 class ConsentReviewBridge:
-    interest_ref: str
-    interest_digest: str
-    buyer_ref: str
-    contract_sha256: str
+    # Private buyer binding, DB row identifier and attested digests must not
+    # appear in ordinary log/exception repr(). Internal properties are retained.
+    interest_ref: str = field(repr=False)
+    interest_digest: str = field(repr=False)
+    buyer_ref: str = field(repr=False)
+    contract_sha256: str = field(repr=False)
     missing_gates: tuple[str, ...]
     state: str = "private_review_only"
     invoice_authorized: bool = False

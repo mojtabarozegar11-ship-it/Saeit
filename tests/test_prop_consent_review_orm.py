@@ -47,16 +47,32 @@ class ConsentORMReviewTests(TestCase):
             review_existing_interest(**self.kw)
 
     def test_unknown_consent_version_denied(self):
-        self.lead.consent_version = "unknown"
-        self.lead.save()
+        # Simulate an already persisted historical row, NOT an illegal
+        # overwrite of immutable consent identity on the original record.
+        invalid = PropInterest.objects.create(
+            email="historical-consent@farmco.org", plan_code="MOJ-PROP-01",
+            consent_version="unknown", status="new",
+        )
         with self.assertRaises(BridgeClosed):
-            review_existing_interest(**self.kw)
+            review_existing_interest(**{
+                **self.kw, "interest_pk": invalid.pk,
+                "independently_verified_interest_pk": invalid.pk,
+            })
+        self.assertEqual(self.lead.consent_version, "moj-prop-interest-v1")
 
     def test_wrong_sku_denied(self):
-        self.lead.plan_code = "STARTER30"
-        self.lead.save()
+        # Bad legacy source is a distinct synthetic row; current provenance
+        # cannot be edited after its first consent record.
+        invalid = PropInterest.objects.create(
+            email="historical-sku@farmco.org", plan_code="STARTER30",
+            consent_version="moj-prop-interest-v1", status="new",
+        )
         with self.assertRaises(BridgeClosed):
-            review_existing_interest(**self.kw)
+            review_existing_interest(**{
+                **self.kw, "interest_pk": invalid.pk,
+                "independently_verified_interest_pk": invalid.pk,
+            })
+        self.assertEqual(self.lead.plan_code, "MOJ-PROP-01")
 
     def test_contract_mismatch_denied(self):
         with self.assertRaises(BridgeClosed):

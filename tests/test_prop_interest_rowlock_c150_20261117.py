@@ -120,6 +120,27 @@ class PropInterestTerminalConsentRowLockTests(TestCase):
         self.assertEqual(calls, [])
         self.assertEqual(PropInterest.objects.count(), 2)
 
+    def test_review_repr_redacts_authenticated_buyer_and_provenance(self):
+        from prop_firm.consent_review_orm import review_existing_interest
+        lead = self.lead
+        result = review_existing_interest(
+            interest_pk=lead.pk, authenticated_buyer_ref="verified-private-buyer-123",
+            independently_verified_interest_pk=lead.pk,
+            independent_buyer_link_verified=True,
+            signed_customer_terms_sha256="a" * 64,
+            trusted_contract_sha256="a" * 64,
+            trusted_gate_evidence={},
+        )
+        self.assertEqual(result.buyer_ref, "verified-private-buyer-123")
+        rendered = repr(result)
+        self.assertNotIn("verified-private-buyer-123", rendered)
+        self.assertNotIn(result.interest_digest, rendered)
+        self.assertNotIn(result.interest_ref, rendered)
+        self.assertNotIn(result.contract_sha256, rendered)
+        self.assertIn("private_review_only", rendered)
+        self.assertFalse(result.payment_authorized)
+        self.assertFalse(result.enrollment_authorized)
+
     def test_lock_never_modifies_identifiers_or_creates_financial_artifact(self):
         from prop_firm.models import PropAccount, PropChallengeEnrollment
         self.lead.status = "contacted"
