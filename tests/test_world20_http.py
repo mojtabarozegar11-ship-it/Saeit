@@ -9,7 +9,7 @@ from core.world20_views import _RANKED, _SUPPLEMENT, _RTL, world_catalog
 
 @override_settings(ALLOWED_HOSTS=[
     "mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir", "testserver",
-])
+], ROOT_URLCONF="config.world20_ci_urls")
 class World20HTTPTests(SimpleTestCase):
     HOST = "mojplaywin.com"
 
