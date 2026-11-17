@@ -348,5 +348,20 @@ class SignedReplayJournalPolicyTests(unittest.TestCase):
             policy(calculated=replace(calc,phase_one_frozen_evidence_sha256="b"*64))
 
 
+    def test_51_prior_unaccepted_stage_cannot_carry_frozen_hash(self):
+        old=good_previous(
+            sequence=1,engine_state="SIMULATED_STAGE_ONE_IN_REVIEW",
+            last_assessment_utc=at(1),previous_receipt_sha256=PREVIOUS,
+            last_phase_one_evidence_sha256="c"*64,
+        )
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=old,sequence=2)
+
+    def test_52_prior_stage_in_review_cannot_claim_acceptance(self):
+        old=replace(previous_phase_one_passed(),engine_state="SIMULATED_STAGE_ONE_IN_REVIEW")
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=old,calculated=replay_simulated_challenge(snapshot=good_snapshot()),sequence=2)
+
+
 if __name__=="__main__":
     unittest.main()
