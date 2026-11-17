@@ -11,7 +11,7 @@ import hmac
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.http import Http404
-from django.test import RequestFactory, TransactionTestCase, override_settings
+from django.test import Client, RequestFactory, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from core.mojprop_v141_private_statement_view import moj_prop_v141_private_statement
@@ -248,3 +248,71 @@ class PrivateStatementMariaDBTests(TransactionTestCase):
             html = self._call().content.decode("utf-8")
         expected = (self.start + timedelta(days=28)).strftime("%Y-%m-%d %H:%M:%S")
         self.assertIn(expected, html)
+
+    def test_23_authenticated_session_reaches_real_django_http_route(self):
+        client = Client()
+        client.force_login(self.owner)
+        result = client.get(f"/moj-prop-v141/statement/{CHALLENGE}/",
+                            secure=True, HTTP_HOST="mojplaywin.com")
+        self.assertEqual(result.status_code, 200)
+        self.assertIn(CHALLENGE.encode(), result.content)
+
+    def test_24_anonymous_real_django_http_route_redirects(self):
+        client = Client()
+        response = client.get(f"/moj-prop-v141/statement/{CHALLENGE}/",
+                              secure=True, HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response["Location"])
+
+    def test_25_other_session_cannot_reach_owners_html(self):
+        client = Client()
+        client.force_login(self.other)
+        result = client.get(f"/moj-prop-v141/statement/{CHALLENGE}/",
+                            secure=True, HTTP_HOST="mojplaywin.com")
+        self.assertEqual(result.status_code, 404)
+        self.assertNotIn(CHALLENGE.encode(), result.content)
+
+    def test_26_default_off_flag_closes_full_http_route(self):
+        client = Client()
+        client.force_login(self.owner)
+        with override_settings(MOJ_PROP_V141_PORTFOLIO_ENABLED=False):
+            result = client.get(f"/moj-prop-v141/statement/{CHALLENGE}/",
+                                secure=True, HTTP_HOST="mojplaywin.com")
+        self.assertEqual(result.status_code, 404)
+
+    def test_27_existing_private_json_and_html_share_owner_security(self):
+        client = Client()
+        client.force_login(self.owner)
+        response = client.get(f"/moj-prop-v141/portfolio/{CHALLENGE}/",
+                              secure=True, HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["challenge_ref"], CHALLENGE)
+        self.assertFalse(response.json()["paid_enrollment_active"])
+
+    def test_28_existing_json_denies_cross_tenant_authenticated_user(self):
+        client = Client()
+        client.force_login(self.other)
+        response = client.get(f"/moj-prop-v141/portfolio/{CHALLENGE}/",
+                              secure=True, HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 404)
+
+    def test_29_django_http_post_rejected_without_db_mutation(self):
+        client = Client()
+        client.force_login(self.owner)
+        response = client.post(f"/moj-prop-v141/statement/{CHALLENGE}/",
+                               {"action": "OPEN", "quantity": "1"},
+                               secure=True, HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(PropV141VirtualFill.objects.count(), 0)
+
+    def test_30_insecure_real_django_http_route_is_rejected(self):
+        client = Client()
+        client.force_login(self.owner)
+        response = client.get(f"/moj-prop-v141/statement/{CHALLENGE}/",
+                              secure=False, HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 404)
+
+    def test_31_test_session_cookie_has_secure_flag(self):
+        client = Client()
+        client.force_login(self.owner)
+        self.assertTrue(client.cookies["sessionid"]["secure"])
