@@ -121,3 +121,10 @@ class ProcurementSerialRegistrationTests(TestCase):
             self.register(last=349, apply=True)
         self.assertEqual(PublicProcurementNumber.objects.count(), 1)
         self.assertFalse(PublicProcurementNumber.objects.filter(notice_key="ZM-SUP-001").exists())
+
+    def test_existing_live_notices_346_349_and_supplier_kit_remain_accessible_from_index(self):
+        html = self.client.get("/auctions/").content.decode("utf-8")
+        for n in range(346, 350):
+            self.assertIn(f'href="/auctions/{n}/"', html)
+        self.assertIn('href="/auctions/supplier-kit/"', html)
+        self.assertIn("۳۴۶ تا ۳۴۹", html)
