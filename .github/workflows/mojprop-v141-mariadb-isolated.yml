@@ -1,0 +1,72 @@
+name: MOJ PROP v1.4.1 — isolated MariaDB Django transactional rehearsal
+
+on:
+  push:
+    branches:
+      - fix/mojprop-v141-stage-specific-28d-windows-20261117
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-mariadb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: ci-disposable-only
+          MARIADB_DATABASE: mojprop_v141_ci_only
+          MARIADB_ROOT_HOST: "%"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mariadb-admin ping -h 127.0.0.1 -uroot -pci-disposable-only"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      GITHUB_ACTIONS: "true"
+      MOJPROP_V141_EPHEMERAL_DB: test-container-only
+      MOJPROP_MARIADB_HOST: 127.0.0.1
+      MOJPROP_MARIADB_DATABASE: mojprop_v141_ci_only
+      MOJPROP_MARIADB_PASSWORD: ci-disposable-only
+      DJANGO_SETTINGS_MODULE: config.mojprop_v141_ci_mariadb_settings
+    steps:
+      - name: Checkout exact source SHA (no production deployment)
+        uses: actions/checkout@v4
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install open-source Django + MariaDB client for ephemeral CI
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq default-libmysqlclient-dev pkg-config
+          python -m pip install --disable-pip-version-check 'Django>=5.2,<6.0' 'mysqlclient>=2.2,<3.0'
+      - name: Assert disposable schema is absent before tests
+        run: |
+          python - <<'PY'
+          import MySQLdb
+          with MySQLdb.connect(host="127.0.0.1", port=3306, user="root",
+                               passwd="ci-disposable-only") as conn:
+              with conn.cursor() as c:
+                  c.execute("SHOW DATABASES LIKE 'test_mojprop_v141_ci_only'")
+                  if c.fetchone() is not None:
+                      raise SystemExit("Unsafe existing disposable test schema; refusing destructive test setup")
+          print("Verified fresh disposable test schema only; no external DB connection")
+          PY
+      - name: Migrate 0001-0010 into DISPOSABLE test database and execute real transactional tests
+        run: |
+          python -m django test tests.test_mojprop_v141_mariadb_integration \
+            --settings=config.mojprop_v141_ci_mariadb_settings \
+            --verbosity=2 --noinput
+      - name: Explicit release status
+        if: always()
+        run: |
+          echo "EPHEMERAL_MARIADB_TEST_ONLY_NOT_PRODUCTION"
+          echo "PRODUCTION_MIGRATION_AUTHORIZED=false"
+          echo "LIVE_BROKER_TRADES_AUTHORIZED=false"
+          echo "CHALLENGE_CHECKOUT_AUTHORIZED=false"
