@@ -5,6 +5,9 @@ on:
     paths:
       - 'prop_firm/xauusd_v13_preflight.py'
       - 'tests/test_xauusd_v13_preflight.py'
+      - 'prop_firm/xauusd_v13_broker_evidence.py'
+      - 'tests/test_xauusd_v13_broker_evidence.py'
+      - 'prop_firm/independent_attestation.py'
       - '.github/workflows/mojprop-xauusd-v13-offline-tests.yml'
   workflow_dispatch:
 
@@ -26,4 +29,4 @@ jobs:
         with:
           python-version: '3.11'
       - name: Exact new v1.3 math and legacy v1.2 policy unit tests
-        run: python -m unittest tests.test_xauusd_v13_preflight tests.test_prop_firm_policy -v
+        run: python -m unittest tests.test_xauusd_v13_preflight tests.test_xauusd_v13_broker_evidence tests.test_prop_firm_policy -v
