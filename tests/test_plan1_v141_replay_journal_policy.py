@@ -236,5 +236,30 @@ class SignedReplayJournalPolicyTests(unittest.TestCase):
         with self.assertRaises(JournalTransitionRejected):policy(state=s)
 
 
+    def test_36_genesis_cannot_claim_stage_one_already_passed(self):
+        x=good_previous(engine_state="SIMULATED_STAGE_ONE_MATH_PASSED_WAITING_TRANSITION")
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=x)
+
+    def test_37_persisted_unknown_engine_state_fails_closed(self):
+        x=good_previous(sequence=1,engine_state="UNVERIFIED_MAGIC_PASS",
+                        last_assessment_utc=at(1),previous_receipt_sha256=PREVIOUS)
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=x,sequence=2)
+
+    def test_38_stage_one_pass_state_requires_historical_acceptance(self):
+        s=replace(previous_phase_one_passed(),last_phase_one_accepted_utc=None)
+        x=replay_simulated_challenge(snapshot=good_snapshot())
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=s,calculated=x,sequence=2)
+
+    def test_39_stage_two_in_progress_requires_historical_start(self):
+        s=replace(previous_phase_one_passed(),engine_state="SIMULATED_STAGE_TWO_IN_REVIEW",
+                  last_phase_two_started_utc=None)
+        x=replay_simulated_challenge(snapshot=good_snapshot())
+        with self.assertRaises(JournalTransitionRejected):
+            policy(state=s,calculated=x,sequence=2)
+
+
 if __name__=="__main__":
     unittest.main()
