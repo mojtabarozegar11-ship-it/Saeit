@@ -62,7 +62,7 @@ class World20MojPropRealCRMTests(TestCase):
         self.assertEqual(form["horizon"], "review")
         self.assertTrue(form["notes"].startswith("Prelaunch interest only: MOJ-PROP-01"))
         result = self._post(form)
-        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.status_code, 201)
         self.assertIn(b"No payment", result.content)
         self.assertEqual(MojPropRequest.objects.count(), 1)
         lead = MojPropRequest.objects.get()
