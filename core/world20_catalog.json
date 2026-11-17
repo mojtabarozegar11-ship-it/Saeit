@@ -77,7 +77,8 @@
         "Learning",
         "AI tools",
         "Company"
-      ]
+      ],
+      "contact_label": "Ask about the challenge"
     },
     "zh": {
       "name": "简体中文",
@@ -98,7 +99,8 @@
         "学习",
         "人工智能工具",
         "公司"
-      ]
+      ],
+      "contact_label": "咨询挑战详情"
     },
     "hi": {
       "name": "हिन्दी",
@@ -119,7 +121,8 @@
         "शिक्षा",
         "एआई उपकरण",
         "कंपनी"
-      ]
+      ],
+      "contact_label": "चुनौती के बारे में पूछें"
     },
     "es": {
       "name": "Español",
@@ -140,7 +143,8 @@
         "Formación",
         "Herramientas de IA",
         "Empresa"
-      ]
+      ],
+      "contact_label": "Consultar sobre el desafío"
     },
     "ar": {
       "name": "العربية الفصحى",
@@ -161,7 +165,8 @@
         "التعلم",
         "أدوات الذكاء الاصطناعي",
         "الشركة"
-      ]
+      ],
+      "contact_label": "الاستفسار عن التحدي"
     },
     "fr": {
       "name": "Français",
@@ -182,7 +187,8 @@
         "Apprentissage",
         "Outils d'IA",
         "Entreprise"
-      ]
+      ],
+      "contact_label": "Poser une question sur le défi"
     },
     "bn": {
       "name": "বাংলা",
@@ -203,7 +209,8 @@
         "শিক্ষা",
         "এআই সরঞ্জাম",
         "প্রতিষ্ঠান"
-      ]
+      ],
+      "contact_label": "চ্যালেঞ্জ সম্পর্কে প্রশ্ন করুন"
     },
     "pt": {
       "name": "Português",
@@ -224,7 +231,8 @@
         "Aprendizagem",
         "Ferramentas de IA",
         "Empresa"
-      ]
+      ],
+      "contact_label": "Perguntar sobre o desafio"
     },
     "id": {
       "name": "Bahasa Indonesia",
@@ -245,7 +253,8 @@
         "Pembelajaran",
         "Alat AI",
         "Perusahaan"
-      ]
+      ],
+      "contact_label": "Tanyakan tentang tantangan"
     },
     "ur": {
       "name": "اردو",
@@ -266,7 +275,8 @@
         "تعلیم",
         "اے آئی ٹولز",
         "کمپنی"
-      ]
+      ],
+      "contact_label": "چیلنج کے بارے میں پوچھیں"
     },
     "ru": {
       "name": "Русский",
@@ -287,7 +297,8 @@
         "Обучение",
         "Инструменты ИИ",
         "Компания"
-      ]
+      ],
+      "contact_label": "Задать вопрос об испытании"
     },
     "de": {
       "name": "Deutsch",
@@ -308,7 +319,8 @@
         "Lernen",
         "KI-Werkzeuge",
         "Unternehmen"
-      ]
+      ],
+      "contact_label": "Frage zur Challenge stellen"
     },
     "ja": {
       "name": "日本語",
@@ -329,7 +341,8 @@
         "学習",
         "AIツール",
         "会社"
-      ]
+      ],
+      "contact_label": "チャレンジについて問い合わせる"
     },
     "pcm": {
       "name": "Naijá (Nigerian Pidgin)",
@@ -350,7 +363,8 @@
         "Learning",
         "AI tools",
         "Company"
-      ]
+      ],
+      "contact_label": "Ask question about di challenge"
     },
     "arz": {
       "name": "العامية المصرية",
@@ -371,7 +385,8 @@
         "التعلُّم",
         "أدوات الذكاء الاصطناعي",
         "الشركة"
-      ]
+      ],
+      "contact_label": "اسأل عن التحدي"
     },
     "mr": {
       "name": "मराठी",
@@ -392,7 +407,8 @@
         "शिक्षण",
         "एआय साधने",
         "कंपनी"
-      ]
+      ],
+      "contact_label": "आव्हानाबद्दल चौकशी करा"
     },
     "vi": {
       "name": "Tiếng Việt",
@@ -413,7 +429,8 @@
         "Học tập",
         "Công cụ AI",
         "Công ty"
-      ]
+      ],
+      "contact_label": "Hỏi về thử thách"
     },
     "te": {
       "name": "తెలుగు",
@@ -434,7 +451,8 @@
         "అభ్యాసం",
         "AI సాధనాలు",
         "సంస్థ"
-      ]
+      ],
+      "contact_label": "ఛాలెంజ్ గురించి అడగండి"
     },
     "sw": {
       "name": "Kiswahili",
@@ -455,7 +473,8 @@
         "Mafunzo",
         "Zana za AI",
         "Kampuni"
-      ]
+      ],
+      "contact_label": "Uliza kuhusu changamoto"
     },
     "ha": {
       "name": "Hausa",
@@ -476,7 +495,8 @@
         "Koyo",
         "Kayan AI",
         "Kamfani"
-      ]
+      ],
+      "contact_label": "Yi tambaya game da ƙalubale"
     },
     "fa": {
       "name": "فارسی",
@@ -497,7 +517,8 @@
         "آموزش",
         "ابزارهای هوش مصنوعی",
         "شرکت"
-      ]
+      ],
+      "contact_label": "پرسش درباره چالش"
     }
   }
 }
