@@ -51,7 +51,7 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
 
     def test_accessible_non_js_request_exists(self):
         self.assertGreaterEqual(self.page.count('/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01'), 3)
-        self.assertNotIn('/moj-prop-interest/form/', self.page)
+        self.assertIn('/moj-prop-interest/form/', self.page)
         self.assertNotIn('/moj-prop/?service=blueprint&amp;package=moj-prop-01#request', self.page)
         self.assertIn('MOJ-PROP-01 prefilled accessible request (manual review, not enrolment; deployment unverified)', self.page)
 
@@ -64,7 +64,7 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
 
     def test_nonpayable_root_endpoint_is_used_not_unmerged_feature_app(self):
         self.assertIn('path("moj-prop-intake/", mojprop_intake', self.urls)
-        self.assertNotIn('href="/moj-prop-interest/form/"', self.page)
+        self.assertIn('href="/moj-prop-interest/form/"', self.page)
         self.assertNotIn("action='/moj-prop/interest/'", self.page)
         self.assertIn('manual review, not enrolment', self.page)
 
