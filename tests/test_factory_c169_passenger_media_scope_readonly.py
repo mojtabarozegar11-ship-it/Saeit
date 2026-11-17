@@ -44,4 +44,11 @@ class C169Safety(unittest.TestCase):
         src=p.read_text();self.assertIn("'production_release_authorized':False",src)
     def test_27_no_synthetic_report_called_proof(self):self.assertFalse(m.storage_flags(None)['app_media_complete'])
 
+    def test_28_application_import_from_wsgi_detected(self):
+        self.assertTrue(m.wsgi_signals(b'from config.wsgi import application')['application_declared'])
+    def test_29_application_aliased_import_detected(self):
+        self.assertTrue(m.wsgi_signals(b'from wsgi import app as application')['application_declared'])
+    def test_30_unaliased_non_application_import_not_misclassified(self):
+        self.assertFalse(m.wsgi_signals(b'from wsgi import app')['application_declared'])
+
 if __name__=='__main__':unittest.main()
