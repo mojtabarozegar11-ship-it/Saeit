@@ -12,7 +12,7 @@
 - Every verified equity mark is checked against a daily breach floor of **day-opening equity − USD 4** and an overall floor of **USD 92**, inclusive of floating loss. Breach is sticky: even if equity subsequently recovers, math qualification is rejected.
 - The first stage requires an explicit acceptance timestamp before stage 2 may begin; both transitions and every fill/mark must fit the correct chronological interval. No phase or source can self-promote from a browser boolean.
 - Stage-opening equity must equal **USD 100**, stage-closing equity must reconcile to **USD 100 + aggregate verified realized net P&L**, the closing mark must follow the last position close, and position/equity source labels must agree.
-- Proposed XAUUSD risk **prior to an individual DEMO order**: at most **USD 3** single and **USD 8** aggregated nominal loss-at-stop (including spread, slippage and round-trip fees), with tighter prospective **USD 4 daily / USD 8 total drawdown headroom**. Lot step, stop distance, margin sufficiency, quote age and latest phase equity must pass; NO order is submitted by this module.
+- Proposed XAUUSD risk **prior to an individual DEMO order**: at most **USD 3** single and **USD 8** aggregated nominal loss-at-stop (including spread, slippage and round-trip fees), with tighter prospective **USD 4 daily / USD 8 total drawdown headroom**. Lot step, stop distance, margin sufficiency, quote age and latest phase equity must pass; additionally, unreconciled events, conflicting IDs, wrong source and opening/terminal equity mismatch block even a demo-order mathematical review. NO order is submitted by this module.
 - **Social condition is a separate 672-hour clock:** at least one original compliant post on EITHER Instagram OR Facebook, continuously public for at least 28 days. Even passing both demo stages may only produce `TRADING_MATH_COMPLETE_WAITING_SOCIAL_CLOCK` until a prospective mathematical social review is supplied. A self-reported post is NOT platform-verified, and legal review of mandatory financial endorsements is still required.
 
 ## Source modules (all pure, no network/filesystem/ORM side effects)
@@ -31,7 +31,7 @@ At repository root, with Python 3.11:
 PYTHONDONTWRITEBYTECODE=1 python3.11 -B scripts/mojprop_xauusd_v13_full_review_suite.py
 ```
 
-The test inventory is **194 v1.3 + 261 v1.4.1 + 39 historical = 494**. It includes **68 new engine replay cases, 24 new demo-order risk cases and 30 signed-simulator manifest cases**. The exact successful GitHub run is https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44112515329 on SHA `3bd15ae6e60c1d0c5f99e44b9e1580fdac216c5c`.
+The test inventory is **194 v1.3 + 265 v1.4.1 + 39 historical = 498**. It includes **68 new engine replay cases, 28 new demo-order risk cases and 30 signed-simulator manifest cases**. The 494-case CI execution before additional pretrade-integrity guards passed at https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44112515329 on SHA `3bd15ae6e60c1d0c5f99e44b9e1580fdac216c5c`. The **498-case current HEAD** must be independently checked against its own GitHub Actions run. Do not infer it from the previous passing SHA.
 
 **Do NOT run any test sample as a real brokerage order or payment request.** Success is reported as `UNIT_TESTS_PASS_NOT_RELEASE`. No browser-facing POST endpoint or payment button is created.
 
