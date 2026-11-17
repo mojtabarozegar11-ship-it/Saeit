@@ -1,4 +1,4 @@
-{% load static %}<!doctype html>
+{% load static tz %}<!doctype html>
 <html lang="{{ lang }}" dir="{{ direction }}">
 <head>
   <meta charset="utf-8">
@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="{% static 'core/mojprop-v141-statement.css' %}">
 </head>
 <body>
+{% timezone "UTC" %}
 <main class="sheet">
   <header class="masthead">
     <p class="brand">MOJ PROP · MOJPLAYWIN</p>
@@ -62,5 +63,6 @@
   </section>
   <footer>{{ labels.copyright }}</footer>
 </main>
+{% endtimezone %}
 </body>
 </html>
