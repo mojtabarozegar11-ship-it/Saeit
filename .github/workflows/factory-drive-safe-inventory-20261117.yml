@@ -1,0 +1,74 @@
+name: Factory VPS backup and disk inventory — owner-only read-only
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+concurrency:
+  group: factory-drive-inventory-20261117
+  cancel-in-progress: false
+jobs:
+  inventory:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.issue.number == 1600 &&
+      !github.event.issue.pull_request &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'MOJ-FACTORY-VPS-DISK-READONLY-20261117'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 12
+    steps:
+      - name: Read factory backup metadata without disclosure or mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -un)" = "githubops"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          import datetime, hashlib, json, os, pathlib, re, sqlite3, stat
+          root=pathlib.Path('/home/githubops/factory-runtime')
+          backup=root/'operations'/'backups'
+          def status(p):
+              try:
+                  st=p.lstat()
+                  return 'directory' if stat.S_ISDIR(st.st_mode) else 'symlink' if stat.S_ISLNK(st.st_mode) else 'file' if stat.S_ISREG(st.st_mode) else 'other'
+              except FileNotFoundError:
+                  return 'missing'
+          def disk(p):
+              try:
+                  v=os.statvfs(p)
+                  return {'free_bytes':v.f_frsize*v.f_bavail,'total_bytes':v.f_frsize*v.f_blocks}
+              except Exception as e:
+                  return {'error':type(e).__name__}
+          data={'schema':'moj.factory.backup-inventory.v1','read_only':True,'files_deleted':0,'factory_root':status(root),'vps_home_disk':disk('/home/githubops'),'factory_disk':disk(root) if status(root)=='directory' else None,'backup_root':status(backup),'files':[],'counts':{},'known_snapshot_bytes':0}
+          pattern=re.compile(r'^master-before-[0-9]{8}T[0-9]{6}Z[.]sqlite3$')
+          all_files=[]
+          if status(backup)=='directory':
+              for p in backup.iterdir():
+                  try:
+                      st=p.lstat()
+                      if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1: continue
+                      all_files.append((p,st))
+                  except OSError:
+                      continue
+          snapshots=[(p,st) for p,st in all_files if pattern.fullmatch(p.name)]
+          snapshots.sort(key=lambda t:(t[1].st_mtime_ns,t[0].name),reverse=True)
+          data['counts']={'regular_files':len(all_files),'master_snapshots':len(snapshots),'other_files':len(all_files)-len(snapshots)}
+          data['known_snapshot_bytes']=sum(st.st_size for p,st in snapshots)
+          for p,st in snapshots[:25]:
+              row={'name':p.name,'bytes':st.st_size,'mtime_utc':datetime.datetime.fromtimestamp(st.st_mtime,datetime.timezone.utc).isoformat(),'sqlite_quick_check':'not_run'}
+              if len(data['files']) < 2 and st.st_size < 3*1024**3 and not p.with_name(p.name+'-wal').exists():
+                  try:
+                      db=sqlite3.connect(p.as_uri()+'?mode=ro&immutable=1',uri=True,timeout=30)
+                      try: row['sqlite_quick_check']=db.execute('PRAGMA quick_check').fetchone()[0]
+                      finally: db.close()
+                  except Exception as e:
+                      row['sqlite_quick_check']='failed_'+type(e).__name__
+              data['files'].append(row)
+          data['other_bytes']=sum(st.st_size for p,st in all_files if not pattern.fullmatch(p.name))
+          data['backup_dir_disk']=disk(backup) if status(backup)=='directory' else None
+          print('MOJ_FACTORY_BACKUP_INVENTORY='+json.dumps(data,sort_keys=True))
+          PY
+          echo MOJ_FACTORY_READONLY_AUDIT_COMPLETE=true
