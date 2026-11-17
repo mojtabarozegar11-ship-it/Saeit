@@ -130,7 +130,7 @@ class V141DemoPretradeTests(unittest.TestCase):
         self.assertIn("open_positions_exceed_8pct",x.blockers)
 
     def test_14_stop_headroom_considers_4_percent_daily_floor(self):
-        status,order=candidate(existing_open_remaining_stop_risk="3")
+        status,order=candidate(existing_open_remaining_stop_risk="3.2")
         x=review(1,challenge=status,order=order)
         self.assertIn("projected_stops_breach_drawdown_limit",x.blockers)
 
@@ -174,7 +174,7 @@ class V141DemoPretradeTests(unittest.TestCase):
 
     def test_23_subminimum_lot_rejected(self):
         status,order=candidate(lot_quantity="0.005")
-        self.assertIn("broker_lot_step_rejected",review(1,challenge=status,order=order)
+        self.assertIn("broker_lot_step_rejected",review(1,challenge=status,order=order).blockers)
 
     def test_24_order_clock_must_match_replayed_snapshot(self):
         status,order=candidate(assessed_at=at(1,23)+timedelta(minutes=1),
