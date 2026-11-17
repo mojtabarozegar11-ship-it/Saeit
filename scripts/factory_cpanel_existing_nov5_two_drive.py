@@ -12,6 +12,7 @@ This script never declares a source safe to delete (independent restore gate).
 """
 from __future__ import annotations
 import argparse
+from contextlib import nullcontext
 import base64
 import hashlib
 import json
@@ -27,7 +28,8 @@ import sys
 from typing import BinaryIO
 
 from scripts.factory_dual_stream_v2 import encrypt_stream_to_dual_stores
-from scripts.factory_rclone_dual_parts import RcloneDualStore, TransferHold
+from scripts.factory_rclone_dual_parts import RcloneDualStore, TransferHold, _mode_secure_file
+from scripts.factory_rclone_ephemeral_binary import provision_verified_rclone
 
 OWNER_ROOT = "/home/zomorod2/restore-staging/factory"
 SOURCES = {
@@ -272,25 +274,38 @@ def run_export(args):
                 "source_contents_read":False,"safe_to_delete":False}
     # Gated provider OAuth/2-root proof/free quota BEFORE remote source opens.
     pub = _secure_file(Path(args.public_pem), 16384)
-    transport = RcloneDualStore(
-        Path(args.rclone_config), remote_a="factory_a", remote_b="factory_b",
-        expected_root_a=GOOGLE_A_ROOT, expected_root_b=GOOGLE_B_ROOT,
-        proof_path=PROOF_PATH, proof_sha256=PROOF_SHA256,
-        max_source_bytes=SOURCE_BYTES, chunk_bytes=CHUNK_BYTES,
-        free_reserve_bytes=MIN_FREE_RESERVE,rclone_exe=args.rclone_exe)
-    admission = transport.preflight()
-    namespace = "factory-historical-" + secrets.token_hex(16)
-    callbacks = transport.callbacks(namespace, destination_kind="historical-nov5")
-    with VerifiedCpanelStream(config, known, args.snapshot) as source:
-        receipt = encrypt_stream_to_dual_stores(
-            source, public_pem=pub,
-            trusted_public_spki_sha256=args.trusted_public_spki_sha256,
-            owner_a="owner-a",owner_b="owner-b",
-            upload_a=callbacks[0],upload_b=callbacks[1],
-            read_a=callbacks[2],read_b=callbacks[3],
-            chunk_bytes=CHUNK_BYTES,max_source_bytes=SOURCE_BYTES)
-        if not source.verified or source.n != SOURCE_BYTES:
-            raise TransferHold("SOURCE_NOT_AUTHENTICATED")
+    # The caller's existing owner-only OAuth file must exist before any binary
+    # download. Absence of local rclone executable does not justify production
+    # installation: obtain the pinned official binary only for this one run.
+    if args.rclone_exe is None:
+        if not _mode_secure_file(Path(args.rclone_config)):
+            raise TransferHold("OWNER_RCLONE_OAUTH_CONFIG_NOT_PRESENT")
+        owner_temp = Path(os.environ.get("RUNNER_TEMP", ""))
+        if not owner_temp.is_absolute() or owner_temp.is_symlink() or not owner_temp.is_dir():
+            raise TransferHold("OWNER_RUNNER_TEMP_UNAVAILABLE")
+        client = provision_verified_rclone(owner_temp)
+    else:
+        client = nullcontext(args.rclone_exe)
+    with client as rclone_binary:
+        transport = RcloneDualStore(
+            Path(args.rclone_config), remote_a="factory_a", remote_b="factory_b",
+            expected_root_a=GOOGLE_A_ROOT, expected_root_b=GOOGLE_B_ROOT,
+            proof_path=PROOF_PATH, proof_sha256=PROOF_SHA256,
+            max_source_bytes=SOURCE_BYTES, chunk_bytes=CHUNK_BYTES,
+            free_reserve_bytes=MIN_FREE_RESERVE,rclone_exe=args.rclone_exe)
+        admission = transport.preflight()
+        namespace = "factory-historical-" + secrets.token_hex(16)
+        callbacks = transport.callbacks(namespace, destination_kind="historical-nov5")
+        with VerifiedCpanelStream(config, known, args.snapshot) as source:
+            receipt = encrypt_stream_to_dual_stores(
+                source, public_pem=pub,
+                trusted_public_spki_sha256=args.trusted_public_spki_sha256,
+                owner_a="owner-a",owner_b="owner-b",
+                upload_a=callbacks[0],upload_b=callbacks[1],
+                read_a=callbacks[2],read_b=callbacks[3],
+                chunk_bytes=CHUNK_BYTES,max_source_bytes=SOURCE_BYTES)
+            if not source.verified or source.n != SOURCE_BYTES:
+                raise TransferHold("SOURCE_NOT_AUTHENTICATED")
     return {"schema":"factory.cpanel.nov5.off-only.v1","mode":"transfer",
             "snapshot_id":args.snapshot,"source_metadata_verified":True,
             "source_sha256_verified":True,"source_bytes":SOURCE_BYTES,
