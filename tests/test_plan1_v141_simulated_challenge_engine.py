@@ -428,5 +428,57 @@ class TwoStageEngineTests(unittest.TestCase):
         self.assertFalse(x.combined_math_complete)
 
 
+    def test_61_phase_one_initial_capital_must_be_100(self):
+        s=good_snapshot()
+        marks2=(replace(s.equity_marks[0],equity_usd="99"),)+s.equity_marks[1:]
+        x=replay(replace(s,equity_marks=marks2))
+        self.assertIn("phase_1_initial_equity_not_equal_to_plan_capital",x.phase_one.blockers)
+        self.assertFalse(x.phase_math_complete)
+
+    def test_62_phase_two_initial_capital_resets_to_100(self):
+        s=good_snapshot()
+        marks2=s.equity_marks[:14]+(replace(s.equity_marks[14],equity_usd="110"),)+s.equity_marks[15:]
+        x=replay(replace(s,equity_marks=marks2))
+        self.assertIn("phase_2_initial_equity_not_equal_to_plan_capital",x.phase_two.blockers)
+
+    def test_63_terminal_equity_must_equal_initial_plus_verified_net(self):
+        s=good_snapshot()
+        rows=s.equity_marks[:13]+(replace(s.equity_marks[13],equity_usd="115"),)+s.equity_marks[14:]
+        x=replay(replace(s,equity_marks=rows))
+        self.assertIn("phase_1_terminal_equity_pnl_mismatch",x.phase_one.blockers)
+
+    def test_64_terminal_mark_must_not_precede_final_close(self):
+        s=good_snapshot()
+        rows=s.equity_marks[:-1]+(replace(s.equity_marks[-1],observed_at=at(18,11)),)
+        x=replay(replace(s,equity_marks=rows))
+        self.assertIn("phase_2_terminal_equity_mark_predates_last_close",x.phase_two.blockers)
+
+    def test_65_equity_source_must_equal_execution_source(self):
+        s=good_snapshot()
+        rows=s.equity_marks[:14]+(replace(s.equity_marks[14],data_source="alt.demo.feed"),)+s.equity_marks[15:]
+        x=replay(replace(s,equity_marks=rows))
+        self.assertIn("phase_2_execution_equity_source_mismatch",x.phase_two.blockers)
+
+    def test_66_multiple_close_sources_in_same_phase_fail(self):
+        s=good_snapshot()
+        rows=(replace(s.closed_fills[0],data_source="second.demo.source"),)+s.closed_fills[1:]
+        x=replay(replace(s,closed_fills=rows))
+        self.assertIn("phase_1_execution_equity_source_mismatch",x.phase_one.blockers)
+
+    def test_67_fees_reduce_profit_and_require_equity_reconciliation(self):
+        s=good_snapshot()
+        rows=(replace(s.closed_fills[0],total_fees_usd="0.01"),)+s.closed_fills[1:]
+        x=replay(replace(s,closed_fills=rows))
+        self.assertEqual(x.phase_one.realized_net_usd,D("9.99"))
+        self.assertIn("phase_1_terminal_equity_pnl_mismatch",x.phase_one.blockers)
+
+    def test_68_even_complete_trades_cannot_pass_without_equity_marks(self):
+        s=good_snapshot()
+        x=replay(replace(s,equity_marks=()))
+        self.assertIn("phase_1_equity_history_missing",x.phase_one.blockers)
+        self.assertIn("phase_2_equity_history_missing",x.phase_two.blockers)
+        self.assertFalse(x.phase_math_complete)
+
+
 if __name__=="__main__":
     unittest.main()
