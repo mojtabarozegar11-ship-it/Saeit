@@ -10,7 +10,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inspect:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    # FAIL-CLOSED: this legacy workflow calls src.unlink() to remove originals
+    # from live cPanel after copying to VPS. An offsite independently restorable
+    # full backup is NOT yet proven, so no destructive backup relocation.
+    # Re-enable only in a separately reviewed recovery-gated PR.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
