@@ -55,7 +55,9 @@ jobs:
             tests/test_moj_prop_social_review.py \
             tests/test_mpw_cutover_current_catalog_guard_20261115.py \
             tests/test_mpw_guest_telemetry_isolation_20261108.py \
-            tests/test_mojprop_c142_public_form_get_readonly.py
+            tests/test_mojprop_c142_public_form_get_readonly.py \
+            core/test_mojprop_nojs_current_main_c100_20261116.py \
+            core/test_mojprop_starter30_native_access_c104_20261116.py
           echo 'C142_FOCUSED_REAL_CONTRACT_TESTS=PASS'
           echo 'C142_CUSTOMER_POST_PAYMENT_RELEASE=false'
 
