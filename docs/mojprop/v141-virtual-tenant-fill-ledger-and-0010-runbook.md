@@ -53,6 +53,33 @@ customer trade form, no broker execution or payments have been proven.
   hash mismatch after loading a Django DecimalField; quantities * price
   differences permit an 8-place exact USD P&L in proposed persistence.
 
+## 2026-11-17 stage-clock correctness fix (stacked draft)
+
+**Detected defect in #2684:** the virtual replay originally compared **both**
+stages against the initial stage-one `opened_at_utc + 28 days`. This rejects
+legitimate second-stage events after the original window despite the
+two-consecutive-stage contract.
+
+The isolated fix now reads the **persisted** stage-one acceptance timestamp
+and stage-two start timestamp from `PropV141SimState` through the internal
+writer. Stage-one fills must execute from the first start **up to but excluding**
+its acceptance/deadline. Stage-two fills must execute from the recorded second
+start **up to but excluding** that stage's own 28-day deadline. A second stage
+requires stage-one acceptance within the first deadline, followed by its own
+recorded start; future or reversed transitions fail closed. Any still-open
+stage-one inventory prevents second-stage review. No database schema change
+is needed for this correction, since both transition fields already exist
+in the independent `0009` state schema.
+
+Regression checks: 15 additional pure replay tests and 2 new Django source
+checks. These prove only the checked Python behavior and wiring; they do not
+prove that MariaDB transitions have been applied, that an upstream source is
+genuine, or that the broker and payment service may operate.
+
+**Deployment and commercial restrictions remain unchanged:** no merge to the
+production branch, no `0009`/`0010` migration, no public orders, no TRX
+settlement, and no automatic real-company broker execution.
+
 ## Deployment and security NO-GO
 
 **Do NOT enable `MOJ_PROP_V141_PORTFOLIO_ENABLED` or migrate 0010 on
