@@ -57,7 +57,7 @@ jobs:
           test ! -L scripts/mojprop_c148_owner_restore_storage_readonly.py
           test "$(git hash-object -- scripts/mojprop_c148_owner_restore_storage_readonly.py)" = "747a87f6e8c3e915e11f63931e078f97c2a83844"
           test ! -L tests/test_mojprop_c148_owner_restore_storage_readonly.py
-          test "$(git hash-object -- tests/test_mojprop_c148_owner_restore_storage_readonly.py)" = "f34f5e9ae256501951fbd5805c89c101dac21950"
+          test "$(git hash-object -- tests/test_mojprop_c148_owner_restore_storage_readonly.py)" = "f6163ed3cd077989272a73e8ab11978758794a9e"
           test ! -L scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
           test "$(git hash-object -- scripts/mojprop_c146_live_plan1_runtime_source_readonly.py)" = "198d3c2b4f8de90504002f95148c370604716cb9"
           test ! -L tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py
