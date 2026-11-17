@@ -1,0 +1,64 @@
+name: MOJ PROP — backup 10GiB admission and pinned mainline static release hash (NO DEPLOY)
+on:
+  push:
+    branches: [audit/mojprop-live-capacity-and-backup-admission-20261118]
+    paths:
+      - scripts/mojprop_backup_release_admission_readonly_20261118.py
+      - tests/test_mojprop_backup_release_admission_readonly_20261118.py
+      - .github/workflows/mojprop-backup-admission-and-static-hash-ci-20261118.yml
+  pull_request:
+    branches: [fix/mojprop-main-first-prospect-truthful-contact-20261118]
+permissions: {contents: read}
+jobs:
+  pure-fail-closed:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run independent fail-closed admission regressions
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
+            tests.test_mojprop_backup_release_admission_readonly_20261118
+      - name: Cross-check exact existing GPG storage invariant and harmless static release candidate SHA
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from scripts import mojplaywin_backup_encrypt_vps_gpg as producer
+          from scripts import mpw_vps_backup_runtime_gate_readonly_20261101 as runtime
+          from scripts import mojprop_backup_release_admission_readonly_20261118 as gate
+          assert producer.MIN_START_FREE==runtime.MIN_START_FREE==gate.MIN_START==10*1024**3
+          assert producer.MAX_ENCRYPTED_BYTES==12*1024**3
+          assert producer.MAX_MYSQL_SOURCE_BYTES==48*1024**3
+          assert not producer.MIN_START_FREE <= 4_543_619_072
+          page=Path('templates/moj-prop-v4/index.html')
+          raw=page.read_bytes()
+          assert b'MOJ-PROP-01' in raw and b'not payable today' in raw
+          print('MOJPROP_MAINLINE_STATIC_CANDIDATE_METADATA='+json.dumps({
+              'bytes':len(raw),
+              'sha256':hashlib.sha256(raw).hexdigest(),
+              'expected_previous_live_static_sha256':'76918c5129ff669ef02f82435a68f61a32d70141800712100d4a7fe9e8554895',
+              'page_is_live_from_this_job':False,
+              'static_file_release_authorized':False,
+              'production_sql_modified':False,
+              'existing_private_backups_modified':False,
+          },sort_keys=True))
+          print('MOJPROP_10GIB_BACKUP_ADMISSION_SOURCE_CONTRACT=PASS')
+          PY
+      - name: Declare no production mutations
+        if: always()
+        run: |
+          echo 'NEW_BACKUP_STARTED=false'
+          echo 'PRIVATE_BACKUP_DELETED=false'
+          echo 'ISOLATED_RESTORE_PERFORMED=false'
+          echo 'NEW_PROSPECT_OR_INVOICE_CREATED=false'
+          echo 'PAID_TRON_CHECKOUT_ENABLED=false'
+          echo 'STATIC_PAGE_DEPLOYED=false'
