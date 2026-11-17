@@ -10,11 +10,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-src = Path(__file__).parent / 'factory_owner_drive_setup.py'
-spec = importlib.util.spec_from_file_location('factory_owner_drive_setup', src)
-m = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = m
-spec.loader.exec_module(m)
+import factory_owner_drive_setup as m
+src = Path(m.__file__).resolve()
 
 class TestOwnerDriveSetup(unittest.TestCase):
     def test_01_two_private_roots_are_distinct(self):
