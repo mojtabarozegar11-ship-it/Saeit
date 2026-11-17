@@ -1,0 +1,61 @@
+name: MOJ PROP — exact Plan1 46455-byte atomic static + rollback source tests (NO DEPLOY)
+on:
+  push:
+    branches: [feature/mojprop-plan1-atomic-static-rollback-owner-gated-20261118]
+    paths:
+      - scripts/mojprop_plan1_static_atomic_release_20261118.py
+      - tests/test_mojprop_plan1_static_atomic_release_20261118.py
+      - .github/workflows/mojprop-static-plan1-atomic-rollback-offline-ci-20261118.yml
+  pull_request:
+    branches: [audit/mojprop-live-capacity-and-backup-admission-20261118]
+permissions: {contents: read}
+jobs:
+  isolated-no-live-systems:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Ensure exact live/app candidate source SHA and tested install CLI is closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B - <<'PY'
+          from scripts import mojprop_plan1_static_atomic_release_20261118 as release
+          from pathlib import Path
+          candidate=Path("templates/moj-prop-v4/index.html").read_bytes()
+          release.exact(candidate,release.CANDIDATE_SHA,release.CANDIDATE_SIZE,"GITHUB_REVIEWED_SOURCE")
+          assert release.OWNER_ACK=="AUTHORIZE-MOJPROP-01-STATIC-ONLY-20261118"
+          assert release.ReleaseReviews().approved() is False
+          print("REVIEWED_STATIC_PLAN1_PAGE_SHA256="+release.CANDIDATE_SHA)
+          print("REVIEWED_STATIC_PLAN1_PAGE_BYTES="+str(release.CANDIDATE_SIZE))
+          print("RELEASE_INSTALL_UNAVAILABLE_FROM_CLI=true")
+          PY
+      - name: Exercise full 42-part isolated synthetic static transaction matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
+            tests.test_mojprop_plan1_static_atomic_release_20261118
+      - name: Re-run existing main source, storage, and exact public source regression suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -q \
+            tests.test_mojprop_main_plan1_contact_source_20261118 \
+            tests.test_mojprop_backup_release_admission_readonly_20261118 \
+            tests.test_mojprop_public_live_static_exact_guard_20261118
+      - name: Hard fail closed for personal/customer/payment and deployments
+        if: always()
+        run: |
+          echo "LIVE_PRODUCTION_DEPLOY=false"
+          echo "PRIVATE_BACKUP_DELETE=false"
+          echo "NO_CUSTOMER_POST_OR_PURCHASE=true"
+          echo "OWNER_APPROVAL_NOT_REQUESTED_IN_CI=true"
+          echo "ISOLATED_TEST_FILES_ONLY=true"
+          echo "TRX_AMOUNT_TRANSFERRED=0"
