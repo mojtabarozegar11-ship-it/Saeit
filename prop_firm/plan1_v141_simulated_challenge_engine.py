@@ -199,6 +199,26 @@ def _phase_result(phase, fills, marks, *, opened, ended, as_of, required_net):
                 reasons.append(f"phase_{phase}_multiple_utc_day_open_marks")
             else:
                 day_open[day] = (when, equity)
+    phase_fill_sources = {key[1] for key in fills if key[0] == phase}
+    phase_mark_sources = {row[0].data_source for row in stage_marks}
+    if (len(phase_fill_sources) != 1
+            or phase_mark_sources != phase_fill_sources):
+        reasons.append(f"phase_{phase}_execution_equity_source_mismatch")
+    if stage_marks:
+        opening = stage_marks[0]
+        if opening[0].is_utc_day_open is not True or opening[2] != CAPITAL:
+            reasons.append(f"phase_{phase}_initial_equity_not_equal_to_plan_capital")
+        # The final mark must reflect all fully closed trade P&L with
+        # nothing silently added to or subtracted from the demo equity.
+        # This cannot independently prove that all positions are flat.
+        last_close = max((event[1] for key, entries in fills.items()
+                          if key[0] == phase and key in completed_positions
+                          for event in entries), default=None)
+        if last_close is not None:
+            if stage_marks[-1][1] < last_close:
+                reasons.append(f"phase_{phase}_terminal_equity_mark_predates_last_close")
+            if stage_marks[-1][2] != CAPITAL + net:
+                reasons.append(f"phase_{phase}_terminal_equity_pnl_mismatch")
     marks_by_day = {}
     for mark, when, equity in stage_marks:
         day = when.date().isoformat()
