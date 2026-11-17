@@ -48,6 +48,15 @@ def assess_plan_one(evidence: dict, *, sku: str = SKU, fee_trx: Decimal = FEE_TR
 
     Values must be trusted booleans from verified internal services. Unknown
     evidence, invalid SKU, price or contract revision always blocks.
+
+    The historical 20-gate 'buyer_kyc_verified' means lawful BUYER PURCHASE
+    screening for the simulated evaluation (as independently determined for
+    the relevant jurisdiction), NOT mandatory opening or KYC of a REAL broker
+    account before the two demo stages. Broker KYC has its own independent
+    proof gate only in the post-two-pass funded-account transition. This
+    function cannot decide whether a country's purchase laws require KYC;
+    no marketing form, email OTP, self-reported country or 'not applicable'
+    browser claim may flip this gate to True.
     """
     if type(evidence) is not dict:
         raise TypeError("Evidence must be a trusted named mapping")
