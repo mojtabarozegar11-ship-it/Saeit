@@ -25,6 +25,9 @@ class Migration(migrations.Migration):
                 ("last_manifest_sha256", models.CharField(max_length=64, blank=True)),
                 ("last_replay_sha256", models.CharField(max_length=64, blank=True)),
                 ("last_as_of", models.DateTimeField(null=True, blank=True)),
+                ("last_phase_one_accepted_at", models.DateTimeField(null=True, blank=True)),
+                ("last_phase_two_started_at", models.DateTimeField(null=True, blank=True)),
+                ("last_phase_two_completed_at", models.DateTimeField(null=True, blank=True)),
                 ("last_engine_state", models.CharField(
                     max_length=96, default="PENDING_SIGNED_SIMULATOR_FEED")),
                 ("last_receipt_sha256", models.CharField(max_length=64, blank=True)),
