@@ -230,7 +230,6 @@ def replay_provisioned_virtual_books(
             raise VirtualLedgerRejected("gap or out-of-order per-challenge event sequence")
         positions = {}
         finalized = set()
-        raw = []
         total_fee = D("0")
         gross = D("0")
         full_counts = {1: 0, 2: 0}
@@ -246,32 +245,40 @@ def replay_provisioned_virtual_books(
                 if key in finalized:
                     raise VirtualLedgerRejected("closed virtual position ID cannot be reopened")
                 if key in positions:
-                    p = positions[key]
-                    if p[0] != e.stage or p[1] != e.direction:
+                    stage, direction, lots = positions[key]
+                    if stage != e.stage or direction != e.direction:
                         raise VirtualLedgerRejected("virtual position changes stage or side")
-                    remaining, basis = p[2], p[3]
-                    combined = remaining + qty
-                    if combined > MAX_QTY:
+                    if sum((v for v, _ in lots), D("0")) + qty > MAX_QTY:
                         raise VirtualLedgerRejected("virtual position size limit exceeded")
-                    positions[key] = (e.stage, e.direction, combined,
-                                      (remaining * basis + qty * price) / combined)
+                    lots.append((qty, price))
                 else:
-                    positions[key] = (e.stage, e.direction, qty, price)
+                    positions[key] = (e.stage, e.direction, [(qty, price)])
             else:
                 if key not in positions:
                     raise VirtualLedgerRejected("virtual close without an existing open position")
-                stage, side, remaining, basis = positions[key]
+                stage, side, lots = positions[key]
+                remaining = sum((v for v, _ in lots), D("0"))
                 if stage != e.stage or side != e.direction or qty > remaining:
                     raise VirtualLedgerRejected("wrong stage/side or excessive partial virtual close")
-                pnl = (price - basis) * qty * (D("1") if side == "BUY" else D("-1"))
-                gross += pnl
-                residual = remaining - qty
-                if residual == 0:
+                # FIFO lots avoid repeating weighted-average decimals and
+                # preserve exact 8-place P&L from 4-place price and quantity.
+                amount_left = qty
+                next_lots = []
+                sign = D("1") if side == "BUY" else D("-1")
+                for lot_qty, lot_price in lots:
+                    consumed = min(amount_left, lot_qty)
+                    gross += (price - lot_price) * consumed * sign
+                    amount_left -= consumed
+                    if consumed < lot_qty:
+                        next_lots.append((lot_qty - consumed, lot_price))
+                if amount_left != 0:
+                    raise VirtualLedgerRejected("virtual FIFO position accounting mismatch")
+                if next_lots:
+                    positions[key] = (stage, side, next_lots)
+                else:
                     del positions[key]
                     finalized.add(key)
                     full_counts[stage] += 1
-                else:
-                    positions[key] = (stage, side, residual, basis)
             total_fee += fee
             row = dict(
                 contract=c.terms_sha256,
@@ -285,10 +292,15 @@ def replay_provisioned_virtual_books(
             history = sha256(json.dumps(row, sort_keys=True, separators=(",", ":"),
                                        ensure_ascii=True).encode("utf-8")).hexdigest()
         open_positions = tuple(
-            OpenVirtualPosition(position_ref=position, stage=stage,
-                direction=direction, remaining_ounces=qty,
-                weighted_open_price_usd=basis)
-            for position, (stage, direction, qty, basis) in sorted(positions.items())
+            OpenVirtualPosition(
+                position_ref=position, stage=stage, direction=direction,
+                remaining_ounces=sum((v for v, _ in lots), D("0")),
+                weighted_open_price_usd=(
+                    sum((v * px for v, px in lots), D("0"))
+                    / sum((v for v, _ in lots), D("0"))
+                ).quantize(D("0.00000001")),
+            )
+            for position, (stage, direction, lots) in sorted(positions.items())
         )
         books.append(VirtualChallengeBook(
             trader_ref=trader, challenge_ref=ref,
