@@ -42,6 +42,7 @@ class World20HTTPTests(SimpleTestCase):
                 self.assertIn(escape(metadata["intro"]), text)
                 self.assertIn(escape(metadata["payment_notice"]), text)
                 self.assertIn(escape(metadata["contact_label"]), text)
+                self.assertIn('href="/world/' + code + '/moj-prop-interest/"', text)
                 self.assertIn("mailto:mojplaywin@gmail.com?subject=MOJ-PROP-01%20information%20request", text)
                 self.assertIn(escape(metadata["fallback_notice"]), text)
                 self.assertIn('rel="canonical" href="https://mojplaywin.com/world/' + code + '/"', text)
@@ -150,3 +151,65 @@ class World20HTTPTests(SimpleTestCase):
         self.assertIn("return mojplaywin_world_sitemap(request)", source)
         self.assertIn("return mojplaywin_world_robots(request)", source)
         self.assertIn('https://zomorodmelal.ir', source)
+
+    def test_11_all_21_native_forms_have_same_backend_consent_contract(self):
+        for code in _RANKED + _SUPPLEMENT:
+            with self.subTest(code=code):
+                resp = self.get(f"/world/{code}/moj-prop-interest/")
+                self.assertEqual(resp.status_code, 200)
+                text = resp.content.decode("utf-8")
+                locale = world_catalog()["locales"][code]
+                self.assertIn("no-store", resp["Cache-Control"])
+                self.assertEqual(resp["X-Robots-Tag"], "noindex, nofollow, noarchive")
+                self.assertIn("frame-ancestors 'none'", resp["Content-Security-Policy"])
+                self.assertIn(f'lang="{code}" dir="{locale["direction"]}"', text)
+                self.assertIn(escape(locale["lead"]["name"]), text)
+                self.assertIn(escape(locale["lead"]["email"]), text)
+                self.assertIn(escape(locale["lead"]["consent"]), text)
+                self.assertIn(escape(locale["lead"]["submit"]), text)
+                self.assertIn('action="/moj-prop-intake/?format=html"', text)
+                for field in ("csrfmiddlewaretoken", "name", "email", "service",
+                              "horizon", "website", "idempotency_key",
+                              "notes", "consent"):
+                    self.assertIn('name="' + field + '"', text)
+                self.assertIn('name="service" value="blueprint"', text)
+                self.assertIn('name="horizon" value="review"', text)
+                self.assertIn("Prelaunch interest only: MOJ-PROP-01", text)
+                self.assertNotIn('name="wallet_address"', text)
+                self.assertNotIn('name="amount"', text)
+                self.assertNotIn('name="order_id"', text)
+
+    def test_12_native_form_rejects_unsafe_domains_methods_and_locale_query(self):
+        from django.test import Client
+        for path in ("/world/zz/moj-prop-interest/",
+                     "/world/fa/moj-prop-interest/?email=x",
+                     "/world/fa/moj-prop-interest/?lang=hi"):
+            self.assertEqual(self.get(path).status_code, 404)
+        for method in (self.client.post, self.client.patch, self.client.put):
+            response = method("/world/fa/moj-prop-interest/",
+                              secure=True, HTTP_HOST=self.HOST)
+            self.assertEqual(response.status_code, 405)
+        self.assertEqual(self.client.get(
+            "/world/fa/moj-prop-interest/",
+            secure=False, HTTP_HOST=self.HOST).status_code, 404)
+        self.assertEqual(self.client.get(
+            "/world/fa/moj-prop-interest/",
+            secure=True, HTTP_HOST="zomorodmelal.ir").status_code, 404)
+
+    def test_13_native_form_head_no_body_and_source_routes_preserved(self):
+        response = self.client.head(
+            "/world/fa/moj-prop-interest/",
+            secure=True, HTTP_HOST=self.HOST,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"")
+        urls = (Path(__file__).resolve().parents[1] /
+                "config/urls.py").read_text("utf-8")
+        self.assertIn('path("world/<str:lang>/moj-prop-interest/"', urls)
+        self.assertIn('path("moj-prop-intake/"', urls)
+        source = (Path(__file__).resolve().parents[1] /
+                  "core/mojprop_views.py").read_text("utf-8")
+        self.assertIn("with transaction.atomic():", source)
+        self.assertIn("MojPropRequest.objects.create(", source)
+        self.assertIn("def _keyed_request_id", source)
+        self.assertIn('modes == ["html"]', source)
