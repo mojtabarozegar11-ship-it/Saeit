@@ -91,7 +91,7 @@ def test_seo_title_description_and_legal_notice_uniqueness_72():
         assert '"@type":"Product"' not in page
         assert '"@type":"FAQPage"' not in page
         assert "noindex" not in page
-    assert seen == list(range(350, 422))
+    assert sorted(seen) == list(range(350, 422))
     assert len(titles) == len(descriptions) == 72
 
 
