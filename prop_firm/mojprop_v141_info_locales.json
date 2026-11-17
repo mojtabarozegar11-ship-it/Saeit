@@ -1,0 +1,187 @@
+{
+  "schema": "mojprop.v141.public-info.locale.v1",
+  "codes": [
+    "en",
+    "fa",
+    "ar",
+    "de",
+    "fr",
+    "es",
+    "pt",
+    "it",
+    "tr",
+    "ru",
+    "zh",
+    "ja",
+    "ko",
+    "hi",
+    "id",
+    "vi",
+    "th",
+    "nl",
+    "pl",
+    "ur"
+  ],
+  "locales": {
+    "en": {
+      "heading": "MOJ PROP Plan 1 — proposed challenge conditions",
+      "overview": "Proposed fee: 30 native TRX, not currently collected. Two sequential DEMO phases share ONE 28-day evaluation deadline; net-profit targets are 9.6% and 6%. At least 50 independently verified, fully CLOSED distinct positions in total and six verified trading days in each phase are required.",
+      "risk": "Best profitable day must be no more than 32% of verified phase net profit. Proposed XAUUSD risk: no more than 3% nominal risk per order and 8% total open nominal risk, subject to tighter 4% daily and 8% total drawdown limits including costs.",
+      "social": "A draft asks for ONE original post on Instagram OR Facebook, publicly visible for 672 hours, independently of the 28-day demo deadline. The post must disclose any promotional relationship; the condition is not active without legal review and differs from other unsigned draft terms.",
+      "funding": "Company-funded USD 100 brokerage access is conditional on separate capital verification, legal eligibility, KYC, written broker permission and a later signed agreement. Proposed net realized profit sharing: 70% trader / 30% company, not guaranteed.",
+      "legal": "NOT AN ACTIVE OFFER. No payment, checkout, invoice, funded account, purchase, enrollment or live broker order. Refund and jurisdiction rules are not finalized. Do not send funds or identity documents. An information request does not accept these proposed terms."
+    },
+    "fa": {
+      "heading": "مج پراپ — شرایط پیشنهادی چالش پلن ۱",
+      "overview": "هزینه پیشنهادی ۳۰ ترون بومی شبکه است و فعلاً دریافت نمی‌شود. دو مرحله پی‌درپی دمو فقط یک مهلت مشترک ۲۸روزه دارند؛ هدف سود خالص مراحل ۹٫۶٪ و ۶٪ است. در مجموع دو مرحله دست‌کم ۵۰ موقعیت یکتای کاملاً بسته‌شده و مستقلاً تأییدشده و در هر مرحله حداقل ۶ روز معاملاتی معتبر لازم است.",
+      "risk": "سهم سود بهترین روز نباید بیش از ۳۲٪ سود خالص تأییدشده همان مرحله باشد. در مدل پیشنهادی XAUUSD، ریسک اسمی هر سفارش حداکثر ۳٪ و مجموع ریسک باز حداکثر ۸٪ است، با رعایت سقف سخت‌گیرانه‌تر افت روزانه ۴٪ و کل ۸٪ شامل هزینه‌ها.",
+      "social": "یک پیش‌نویس شرط یک پست اصلی در اینستاگرام یا فیس‌بوک را با نمایش عمومی ۶۷۲ساعته مستقل از مهلت معاملات ۲۸روزه مطرح می‌کند. رابطه تبلیغاتی باید آشکار شود. این شرط تا بررسی قانونی فعال نیست و با پیش‌نویس‌های امضانشده دیگر اختلاف دارد.",
+      "funding": "دسترسی احتمالی به حساب ۱۰۰دلاری تأمین‌شده توسط شرکت منوط به اثبات مستقل سرمایه، صلاحیت قانونی، احراز هویت، مجوز کتبی کارگزار و قرارداد جداگانه است. تقسیم پیشنهادی سود خالص تحقق‌یافته ۷۰٪ معامله‌گر و ۳۰٪ شرکت است و تضمین نمی‌شود.",
+      "legal": "این پیشنهاد فروش فعال نیست؛ پرداخت، درگاه، فاکتور، حساب دارای سرمایه، ثبت‌نام یا معامله واقعی وجود ندارد. مقررات استرداد و کشورهای مجاز نهایی نشده‌اند. پول یا مدارک هویتی ارسال نکنید؛ درخواست اطلاعات به معنای پذیرش قرارداد نیست."
+    },
+    "ar": {
+      "heading": "MOJ PROP — الشروط المقترحة لتحدي الخطة الأولى",
+      "overview": "الرسوم المقترحة 30 TRX أصلي، ولا تُحصّل حاليًا. مرحلتان متتاليتان تجريبيتان ضمن مهلة إجمالية واحدة مدتها 28 يومًا، بهدفَي ربح صافٍ 9.6% و6%. يلزم إغلاق 50 مركزًا فريدًا ومتحققًا منه إجمالًا، وستة أيام تداول موثقة في كل مرحلة.",
+      "risk": "يجب ألا يتجاوز ربح أفضل يوم 32% من صافي ربح المرحلة المتحقق منه. حدود مخاطر XAUUSD المقترحة: 3% لكل أمر و8% لإجمالي المخاطر المفتوحة، مع حدود أشد للسحب اليومي 4% والإجمالي 8% بما يشمل التكاليف.",
+      "social": "تقترح مسودة نشر منشور أصلي واحد على إنستغرام أو فيسبوك ظاهرًا للجمهور 672 ساعة مستقلة عن مهلة التقييم. يجب الإفصاح عن العلاقة الترويجية. الشرط غير نافذ قبل المراجعة القانونية ويختلف عن مسودات أخرى غير موقعة.",
+      "funding": "الحصول المحتمل على حساب بقيمة 100 دولار ممول من الشركة مشروط بإثبات رأس المال، والأهلية القانونية، والتحقق من الهوية، وموافقة الوسيط الخطية، وعقد مستقل. تقسيم الربح الصافي المحقق المقترح 70% للمتداول و30% للشركة دون ضمان.",
+      "legal": "ليس عرضًا نشطًا. لا دفع أو فاتورة أو تسجيل أو حساب ممول أو تداول حقيقي. سياسة الاسترداد والمناطق المسموحة غير نهائيتين. لا ترسل مالًا أو مستندات هوية؛ طلب المعلومات ليس قبولًا للعقد."
+    },
+    "de": {
+      "heading": "MOJ PROP Plan 1 — vorgeschlagene Challenge-Bedingungen",
+      "overview": "Vorgeschlagene Gebühr: 30 native TRX, derzeit ohne Zahlung. Zwei aufeinanderfolgende DEMO-Phasen teilen sich eine einzige Frist von 28 Tagen; Nettogewinnziele 9,6 % und 6 %. Insgesamt mindestens 50 unabhängig bestätigte, vollständig geschlossene Positionen und sechs Handelstage je Phase.",
+      "risk": "Der beste Gewinntag darf höchstens 32 % des verifizierten Nettogewinns der Phase ausmachen. Vorgeschlagene XAUUSD-Risikolimits: maximal 3 % je Order und 8 % offene Gesamtrisiken; strengere Verlustgrenzen von 4 % täglich und 8 % insgesamt einschließlich Kosten.",
+      "social": "Ein Entwurf sieht einen Originalbeitrag auf Instagram ODER Facebook vor, der 672 Stunden öffentlich sichtbar bleibt, unabhängig von der 28-Tage-DEMO-Frist. Werbliche Beziehungen sind offenzulegen. Ohne rechtliche Prüfung gilt diese Pflicht nicht; andere ununterzeichnete Entwürfe weichen ab.",
+      "funding": "Ein mögliches firmeneigenes Brokerkonto mit 100 USD setzt unabhängig bestätigtes Kapital, Zulässigkeit, Identitätsprüfung, schriftliche Brokererlaubnis und einen gesonderten Vertrag voraus. Vorgeschlagene Teilung des realisierten Nettogewinns: 70 % Trader, 30 % Unternehmen, ohne Garantie.",
+      "legal": "KEIN AKTIVES ANGEBOT. Keine Zahlung, Rechnung, Anmeldung, finanzierte Konten oder realen Brokeraufträge. Erstattung und zulässige Länder sind nicht abschließend geklärt. Senden Sie kein Geld und keine Ausweise. Eine Anfrage ist keine Vertragsannahme."
+    },
+    "fr": {
+      "heading": "MOJ PROP Plan 1 — conditions proposées du défi",
+      "overview": "Frais proposés : 30 TRX natifs, actuellement non encaissés. Deux phases DÉMO successives partagent une seule période de 28 jours ; objectifs de profit net : 9,6 % et 6 %. Au moins 50 positions distinctes entièrement clôturées et vérifiées au total, et six jours de négociation vérifiés par phase.",
+      "risk": "Le meilleur jour ne doit pas dépasser 32 % du bénéfice net vérifié de sa phase. Risque XAUUSD proposé : 3 % maximum par ordre et 8 % de risque ouvert total, sous réserve de limites plus strictes de perte quotidienne de 4 % et globale de 8 %, frais inclus.",
+      "social": "Un projet prévoit une publication originale sur Instagram OU Facebook, visible publiquement pendant 672 heures indépendamment du délai DÉMO. Toute relation promotionnelle doit être déclarée. Cette condition n'est pas active sans examen juridique et diffère d'autres projets non signés.",
+      "funding": "Un éventuel compte de courtage de 100 USD financé par la société nécessite des capitaux vérifiés séparément, une admissibilité légale, des contrôles d'identité, l'accord écrit du courtier et un contrat distinct. Partage proposé du profit net réalisé : 70 % trader / 30 % société, sans garantie.",
+      "legal": "AUCUNE OFFRE ACTIVE. Aucun paiement, facture, inscription, compte financé ni ordre réel. Les remboursements et les pays éligibles ne sont pas finalisés. N'envoyez ni argent ni pièce d'identité. Une demande d'informations n'accepte aucun contrat."
+    },
+    "es": {
+      "heading": "MOJ PROP Plan 1 — condiciones propuestas del desafío",
+      "overview": "Tarifa propuesta: 30 TRX nativos, todavía sin cobro. Dos fases DEMO consecutivas comparten un único plazo de 28 días, con metas de beneficio neto del 9,6 % y el 6 %. Se requieren al menos 50 posiciones únicas completamente cerradas y verificadas en total, y seis días de negociación por fase.",
+      "risk": "El día más rentable no puede superar el 32 % del beneficio neto verificado de cada fase. Riesgo XAUUSD propuesto: máximo 3 % por orden y 8 % de riesgo abierto conjunto, sujeto a límites de pérdida diaria del 4 % y total del 8 % incluidos los costes.",
+      "social": "Un borrador propone una publicación original en Instagram O Facebook visible durante 672 horas, independientemente del plazo DEMO. Debe revelarse la relación promocional. La condición no está vigente sin revisión legal y difiere de otros borradores no firmados.",
+      "funding": "Una posible cuenta de 100 USD financiada por la empresa exige capital verificado, elegibilidad legal, identificación, permiso escrito del bróker y contrato aparte. Reparto propuesto de beneficio neto realizado: 70 % operador / 30 % empresa, sin garantía.",
+      "legal": "NO ES UNA OFERTA ACTIVA. No hay pagos, facturas, inscripciones, cuentas financiadas ni operaciones reales. Reembolsos y países admitidos aún no están definidos. No envíe dinero ni documentos. Solicitar información no acepta el contrato."
+    },
+    "pt": {
+      "heading": "MOJ PROP Plano 1 — condições propostas do desafio",
+      "overview": "Taxa proposta: 30 TRX nativos, ainda não cobrada. Duas fases DEMO sequenciais compartilham um único prazo de 28 dias, com metas de lucro líquido de 9,6% e 6%. São necessárias pelo menos 50 posições distintas totalmente encerradas e verificadas no total e seis dias de negociação em cada fase.",
+      "risk": "O dia mais lucrativo não pode superar 32% do lucro líquido verificado da fase. Limites propostos para XAUUSD: risco nominal de até 3% por ordem e 8% no total aberto, sujeitos a perdas máximas de 4% ao dia e 8% no total, incluindo custos.",
+      "social": "Uma minuta propõe uma publicação original no Instagram OU Facebook visível por 672 horas, independentemente do prazo DEMO. A relação promocional deve ser divulgada. A exigência não vigora sem revisão legal e diverge de outras minutas não assinadas.",
+      "funding": "Possível conta de corretora com US$ 100 financiados pela empresa depende de capital comprovado, elegibilidade legal, verificação de identidade, autorização escrita da corretora e contrato separado. Divisão proposta do lucro líquido realizado: 70% trader / 30% empresa, sem garantia.",
+      "legal": "NÃO É OFERTA ATIVA. Sem pagamento, fatura, inscrição, conta financiada ou ordens reais. Reembolso e países permitidos ainda não foram definidos. Não envie dinheiro ou documentos. Solicitar informações não implica aceitar contrato."
+    },
+    "it": {
+      "heading": "MOJ PROP Piano 1 — condizioni proposte della sfida",
+      "overview": "Costo proposto: 30 TRX nativi, non attualmente riscosso. Due fasi DEMO consecutive condividono un unico termine di 28 giorni, con obiettivi di utile netto del 9,6% e 6%. Servono almeno 50 posizioni distinte completamente chiuse e verificate in totale e sei giorni di trading per fase.",
+      "risk": "Il giorno più redditizio non deve superare il 32% dell'utile netto verificato della fase. Rischio XAUUSD proposto: massimo 3% per ordine e 8% di rischio aperto complessivo, con limiti più severi di perdita del 4% giornaliero e 8% totale, costi inclusi.",
+      "social": "Una bozza propone un post originale su Instagram O Facebook visibile pubblicamente per 672 ore, indipendentemente dalla scadenza DEMO. Il rapporto promozionale va dichiarato. L'obbligo non è attivo senza verifica legale e differisce da altre bozze non firmate.",
+      "funding": "Un eventuale conto di intermediazione da 100 USD finanziato dall'azienda richiede prova separata del capitale, idoneità legale, verifica d'identità, autorizzazione scritta del broker e contratto separato. Ripartizione proposta dell'utile netto realizzato: 70% trader / 30% società, senza garanzie.",
+      "legal": "NON È UN'OFFERTA ATTIVA. Nessun pagamento, fattura, iscrizione, conto finanziato o ordine reale. Rimborsi e Paesi ammessi non sono definitivi. Non inviare denaro o documenti. Una richiesta informazioni non accetta alcun contratto."
+    },
+    "tr": {
+      "heading": "MOJ PROP Plan 1 — önerilen değerlendirme koşulları",
+      "overview": "Önerilen ücret 30 yerel TRX'tir ve şu anda tahsil edilmez. Ardışık iki DEMO aşaması tek bir 28 günlük süreyi paylaşır; net kâr hedefleri %9,6 ve %6'dır. Toplamda bağımsız doğrulanmış en az 50 tamamen kapatılmış farklı pozisyon ve her aşamada altı işlem günü gerekir.",
+      "risk": "En kârlı gün, ilgili aşamanın doğrulanmış net kârının %32'sini aşamaz. Önerilen XAUUSD risk sınırları: emir başına %3 ve toplam açık riskte %8; maliyetler dâhil günlük %4 ve toplam %8 daha sıkı kayıp sınırları uygulanır.",
+      "social": "Bir taslak, Instagram VEYA Facebook'ta 672 saat herkese açık kalan bir özgün gönderi öngörür; bu süre DEMO'nun 28 gününden bağımsızdır. Tanıtım ilişkisi açıklanmalıdır. Yasal inceleme tamamlanmadan şart etkin değildir ve diğer imzasız taslaklarla farklıdır.",
+      "funding": "Şirket tarafından finanse edilebilecek 100 USD'lik aracı kurum hesabı, bağımsız sermaye kanıtına, yasal uygunluğa, kimlik kontrolüne, brokerin yazılı iznine ve ayrı sözleşmeye bağlıdır. Gerçekleşen net kârın önerilen paylaşımı: %70 trader / %30 şirket; garanti yoktur.",
+      "legal": "AKTİF BİR TEKLİF DEĞİLDİR. Ödeme, fatura, kayıt, fonlanmış hesap veya gerçek emir yoktur. İade ve uygun ülkeler kesinleşmemiştir. Para ya da kimlik belgesi göndermeyin. Bilgi talebi sözleşmeyi kabul etmez."
+    },
+    "ru": {
+      "heading": "MOJ PROP План 1 — предлагаемые условия испытания",
+      "overview": "Предлагаемая плата — 30 нативных TRX, сейчас не взимается. Два последовательных ДЕМО-этапа имеют один общий срок 28 дней; цели чистой прибыли — 9,6% и 6%. Нужно не менее 50 уникальных полностью закрытых и независимо проверенных позиций суммарно и шесть торговых дней на каждом этапе.",
+      "risk": "Прибыль лучшего дня — не более 32% проверенной чистой прибыли этапа. Предлагаемый риск XAUUSD: максимум 3% на ордер и 8% совокупного открытого риска; более строгие ограничения просадки — 4% в день и 8% всего, включая расходы.",
+      "social": "Один проект условий предусматривает оригинальную публикацию в Instagram ИЛИ Facebook, видимую 672 часа отдельно от 28-дневного ДЕМО. Рекламная связь должна раскрываться. До юридической проверки условие не действует и отличается от других неподписанных проектов.",
+      "funding": "Возможный брокерский счёт на 100 USD за счёт компании требует независимого подтверждения капитала, законной допустимости, идентификации, письменного разрешения брокера и отдельного договора. Предлагаемое распределение реализованной чистой прибыли: 70% трейдеру / 30% компании, без гарантий.",
+      "legal": "ЭТО НЕ ДЕЙСТВУЮЩЕЕ ПРЕДЛОЖЕНИЕ. Нет оплаты, счетов, регистрации, финансирования или реальных сделок. Возвраты и разрешённые страны не утверждены. Не отправляйте деньги и документы. Запрос информации не означает согласия с договором."
+    },
+    "zh": {
+      "heading": "MOJ PROP 计划一 — 拟议挑战条件",
+      "overview": "拟议费用为 30 枚 TRON 原生 TRX，目前不收取。两个连续的模拟阶段共用一个 28 天期限；净利润目标分别为 9.6% 和 6%。两个阶段合计须至少有 50 个经独立核实、完全平仓且互不重复的头寸，每阶段至少有 6 个经核实的交易日。",
+      "risk": "每阶段最佳盈利日不得超过该阶段经核实净利润的 32%。拟议 XAUUSD 风险上限：单笔订单不超过 3%，全部未平仓订单合计不超过 8%；同时适用更严格的每日 4%、总计 8% 回撤上限（含费用）。",
+      "social": "一份草案要求在 Instagram 或 Facebook 发布一条原创帖文，并保持公开可见 672 小时；该期限与模拟交易的 28 天期限分开计算。必须披露推广关系。未经法律审查，此条款不生效，且与其他未签署草案存在差异。",
+      "funding": "未来可能提供由公司出资的 100 美元经纪账户，但须独立核验资金、合法资格、身份、经纪商书面许可及另行签署协议。拟议已实现净利润分成：交易者 70%，公司 30%，不作保证。",
+      "legal": "目前并非正式销售。没有付款、订单发票、注册、资金账户或真实经纪交易。退款与适用国家规则尚未确定。请勿发送资金或身份证件；咨询不等于接受合同。"
+    },
+    "ja": {
+      "heading": "MOJ PROP プラン1 — 提案中のチャレンジ条件",
+      "overview": "提案料金はTRONのネイティブTRXで30 TRX、現在は徴収しません。連続する2段階のデモ評価は共通の28日間で実施し、純利益目標は9.6%と6%です。両段階合計で、独立検証済みの完全決済された異なるポジション50件以上と、各段階6取引日以上が必要です。",
+      "risk": "各段階の最高利益日が検証済み純利益に占める割合は32%以下です。提案中のXAUUSDリスク上限は1注文3%、全未決済リスク8%。費用込みで1日4%、全期間8%のより厳しいドローダウン制限も適用されます。",
+      "social": "草案の一つではInstagramまたはFacebookにオリジナル投稿を1件行い、デモ28日間とは独立して672時間公開する条件があります。広告関係の開示が必要です。法的審査前には有効ではなく、他の未署名草案とも相違します。",
+      "funding": "会社資金による100米ドルの取引口座は、資本の独立確認、法的適格性、本人確認、ブローカーの書面承認および別契約が前提です。実現純利益の提案分配率はトレーダー70%、会社30%で、保証はありません。",
+      "legal": "現在販売中ではありません。支払い、請求書、登録、資金提供口座、実取引はありません。返金条件と対象国は未確定です。送金や身分証提出をしないでください。問い合わせは契約への同意ではありません。"
+    },
+    "ko": {
+      "heading": "MOJ PROP 플랜 1 — 제안된 챌린지 조건",
+      "overview": "제안 수수료는 TRON 네이티브 30 TRX이며 현재 수금하지 않습니다. 연속된 2개의 데모 단계는 하나의 28일 기한을 공유하고 순이익 목표는 9.6%와 6%입니다. 두 단계 합계로 독립적으로 검증된 완전 청산 고유 포지션 50건 이상 및 각 단계 거래일 6일 이상이 필요합니다.",
+      "risk": "각 단계 최고 수익일의 수익은 검증된 단계 순이익의 32%를 넘지 않아야 합니다. 제안된 XAUUSD 위험 한도는 주문당 3%, 총 미청산 위험 8%이며 비용을 포함한 일일 4%, 전체 8% 손실 한도를 지켜야 합니다.",
+      "social": "한 초안은 Instagram 또는 Facebook에 원본 게시물 1개를 올리고 데모 평가 28일과 별도로 672시간 공개하도록 제안합니다. 광고 관계를 표시해야 합니다. 법적 검토 전에는 효력이 없으며 다른 미서명 초안과 차이가 있습니다.",
+      "funding": "회사 자금으로 제공될 수 있는 100달러 중개계좌는 자본 증빙, 법적 자격, 신원 확인, 브로커 서면 허가 및 별도 계약이 필요합니다. 실현 순이익 배분 제안은 트레이더 70%, 회사 30%이며 보장은 없습니다.",
+      "legal": "현재 유효한 판매 제안이 아닙니다. 결제, 청구서, 가입, 자금 제공 계좌 또는 실거래는 없습니다. 환불과 허용 국가 기준도 미확정입니다. 돈이나 신분증을 보내지 마세요. 문의는 계약 동의가 아닙니다."
+    },
+    "hi": {
+      "heading": "MOJ PROP प्लान 1 — प्रस्तावित चुनौती की शर्तें",
+      "overview": "प्रस्तावित शुल्क 30 मूल TRX है और अभी लिया नहीं जा रहा। दो क्रमिक डेमो चरणों के लिए कुल एक ही 28-दिन की अवधि है; शुद्ध लाभ लक्ष्य 9.6% और 6% हैं। दोनों चरणों में कुल कम से कम 50 स्वतंत्र रूप से सत्यापित, पूरी तरह बंद अलग-अलग पोज़िशन और प्रत्येक चरण में छह सत्यापित ट्रेडिंग दिन आवश्यक हैं।",
+      "risk": "हर चरण में सबसे लाभदायक दिन का हिस्सा सत्यापित शुद्ध लाभ के 32% से अधिक नहीं होना चाहिए। प्रस्तावित XAUUSD जोखिम सीमा प्रति ऑर्डर 3% और कुल खुला जोखिम 8% है; खर्च सहित दैनिक 4% और कुल 8% ड्रॉडाउन सीमा भी लागू होगी।",
+      "social": "एक मसौदे में Instagram या Facebook पर एक मौलिक पोस्ट 672 घंटे सार्वजनिक रखने की शर्त प्रस्तावित है, जो 28-दिन के डेमो से अलग है। प्रचार संबंध स्पष्ट बताना होगा। कानूनी समीक्षा तक यह शर्त लागू नहीं है और अन्य अहस्ताक्षरित मसौदों से भिन्न है।",
+      "funding": "कंपनी की ओर से संभावित 100 USD ब्रोकरेज खाते के लिए स्वतंत्र पूंजी प्रमाण, कानूनी पात्रता, पहचान सत्यापन, ब्रोकर की लिखित अनुमति और अलग अनुबंध जरूरी होंगे। प्रस्तावित वास्तविक शुद्ध लाभ बंटवारा: ट्रेडर 70%, कंपनी 30%; कोई गारंटी नहीं।",
+      "legal": "यह सक्रिय बिक्री प्रस्ताव नहीं है। कोई भुगतान, चालान, नामांकन, फंडेड खाता या वास्तविक ट्रेड नहीं। रिफंड और पात्र देशों के नियम अंतिम नहीं हैं। धन या पहचान दस्तावेज़ न भेजें। जानकारी मांगना अनुबंध स्वीकार करना नहीं है।"
+    },
+    "id": {
+      "heading": "MOJ PROP Paket 1 — ketentuan tantangan yang diusulkan",
+      "overview": "Biaya yang diusulkan adalah 30 TRX asli, belum dipungut. Dua fase DEMO berurutan memiliki satu tenggat bersama 28 hari; target laba bersih 9,6% dan 6%. Diperlukan setidaknya 50 posisi berbeda yang ditutup sepenuhnya dan diverifikasi secara independen secara total, serta enam hari perdagangan pada tiap fase.",
+      "risk": "Hari paling menguntungkan tidak boleh melebihi 32% laba bersih terverifikasi setiap fase. Batas risiko XAUUSD yang diusulkan: 3% per order dan 8% total risiko terbuka, tunduk pada batas penurunan yang lebih ketat, 4% harian dan 8% total termasuk biaya.",
+      "social": "Satu draf mengusulkan satu unggahan asli di Instagram ATAU Facebook yang terlihat publik selama 672 jam, terpisah dari 28 hari DEMO. Hubungan promosi wajib diungkapkan. Syarat ini belum berlaku tanpa tinjauan hukum dan berbeda dari draf lain yang belum ditandatangani.",
+      "funding": "Kemungkinan akun broker bernilai USD 100 yang dibiayai perusahaan bergantung pada bukti modal independen, kelayakan hukum, verifikasi identitas, izin tertulis broker, dan kontrak terpisah. Pembagian laba bersih terealisasi yang diusulkan: 70% trader / 30% perusahaan, tanpa jaminan.",
+      "legal": "BUKAN PENAWARAN AKTIF. Tidak ada pembayaran, faktur, pendaftaran, akun didanai, atau transaksi broker nyata. Pengembalian dana dan negara yang memenuhi syarat belum final. Jangan kirim uang atau dokumen identitas. Permintaan informasi bukan persetujuan kontrak."
+    },
+    "vi": {
+      "heading": "MOJ PROP Gói 1 — điều kiện thử thách dự kiến",
+      "overview": "Phí dự kiến là 30 TRX gốc, hiện chưa thu. Hai giai đoạn DEMO liên tiếp có chung một thời hạn 28 ngày; mục tiêu lợi nhuận ròng lần lượt 9,6% và 6%. Cần ít nhất 50 vị thế riêng biệt đã đóng hoàn toàn và được xác minh độc lập trong cả hai giai đoạn, cùng sáu ngày giao dịch được xác minh cho mỗi giai đoạn.",
+      "risk": "Ngày có lãi cao nhất không được vượt quá 32% lợi nhuận ròng được xác minh của giai đoạn. Giới hạn rủi ro XAUUSD dự kiến: 3% mỗi lệnh và 8% tổng rủi ro đang mở, đồng thời áp dụng giới hạn sụt giảm nghiêm ngặt hơn 4% mỗi ngày và 8% tổng cộng, gồm cả chi phí.",
+      "social": "Một dự thảo yêu cầu một bài đăng gốc trên Instagram HOẶC Facebook hiển thị công khai 672 giờ, độc lập với thời hạn DEMO 28 ngày. Phải công khai mối quan hệ quảng bá. Điều kiện chưa có hiệu lực khi chưa thẩm định pháp lý và khác các dự thảo chưa ký khác.",
+      "funding": "Tài khoản môi giới 100 USD có thể do công ty cấp vốn chỉ sau khi xác minh nguồn vốn riêng, tư cách pháp lý, danh tính, giấy phép bằng văn bản của môi giới và hợp đồng riêng. Tỷ lệ chia lợi nhuận ròng đã thực hiện dự kiến: 70% nhà giao dịch / 30% công ty, không bảo đảm.",
+      "legal": "CHƯA PHẢI ĐỀ NGHỊ BÁN. Không có thanh toán, hóa đơn, đăng ký, tài khoản cấp vốn hoặc giao dịch thực. Điều kiện hoàn tiền và quốc gia phù hợp chưa hoàn tất. Không gửi tiền hay giấy tờ; hỏi thông tin không phải chấp thuận hợp đồng."
+    },
+    "th": {
+      "heading": "MOJ PROP แผน 1 — เงื่อนไขการทดสอบที่เสนอ",
+      "overview": "ค่าธรรมเนียมที่เสนอคือ 30 TRX เหรียญหลักของเครือข่าย โดยยังไม่เก็บเงิน การประเมิน DEMO สองขั้นตอนต่อเนื่องใช้กรอบเวลารวมเพียง 28 วัน เป้าหมายกำไรสุทธิ 9.6% และ 6% ต้องมีสถานะที่ปิดครบและตรวจสอบอิสระอย่างน้อย 50 รายการรวมสองขั้นตอน และซื้อขายอย่างน้อย 6 วันต่อขั้นตอน",
+      "risk": "วันทำกำไรสูงสุดต้องไม่เกิน 32% ของกำไรสุทธิที่ยืนยันในขั้นตอนนั้น ขีดจำกัดความเสี่ยง XAUUSD ที่เสนอคือไม่เกิน 3% ต่อคำสั่งและ 8% ของความเสี่ยงเปิดรวม ภายใต้ขีดจำกัดการขาดทุน 4% ต่อวันและ 8% รวม โดยคิดต้นทุนด้วย",
+      "social": "ร่างหนึ่งเสนอให้โพสต์ต้นฉบับบน Instagram หรือ Facebook หนึ่งโพสต์และเปิดสาธารณะ 672 ชั่วโมง แยกจากช่วง DEMO 28 วัน ต้องเปิดเผยความสัมพันธ์ด้านการส่งเสริมการขาย เงื่อนไขนี้ยังไม่ใช้ก่อนผ่านการทบทวนกฎหมายและแตกต่างจากร่างที่ยังไม่ลงนามอื่น ๆ",
+      "funding": "บัญชีซื้อขายที่อาจได้รับทุนจากบริษัท 100 USD ต้องตรวจสอบเงินทุนแยกต่างหาก ความเหมาะสมตามกฎหมาย ตัวตน การอนุญาตเป็นลายลักษณ์อักษรจากโบรกเกอร์ และสัญญาแยกต่างหาก การแบ่งกำไรสุทธิที่เกิดขึ้นจริงเสนอ 70% ผู้เทรด / 30% บริษัท ไม่รับประกัน",
+      "legal": "ยังไม่ใช่ข้อเสนอขาย ไม่มีการชำระเงิน ใบแจ้งหนี้ สมัคร บัญชีทุน หรือคำสั่งซื้อขายจริง กฎคืนเงินและประเทศที่อนุญาตยังไม่สรุป อย่าส่งเงินหรือเอกสารประจำตัว การสอบถามไม่ใช่การยอมรับสัญญา"
+    },
+    "nl": {
+      "heading": "MOJ PROP Plan 1 — voorgestelde challengevoorwaarden",
+      "overview": "Voorgestelde vergoeding: 30 native TRX, momenteel niet geïnd. Twee opeenvolgende DEMO-fasen delen één termijn van 28 dagen; nettowinstdoelen zijn 9,6% en 6%. In totaal minstens 50 unieke volledig gesloten, onafhankelijk geverifieerde posities en zes geverifieerde handelsdagen per fase.",
+      "risk": "De beste winstdag mag maximaal 32% van de geverifieerde nettowinst per fase uitmaken. Voorgestelde XAUUSD-risico's: maximaal 3% per order en 8% totaal open risico, naast strengere verliesgrenzen van 4% per dag en 8% in totaal inclusief kosten.",
+      "social": "Een concept vraagt één origineel bericht op Instagram OF Facebook dat 672 uur publiek zichtbaar blijft, los van de DEMO-termijn van 28 dagen. Een promotionele relatie moet worden vermeld. Deze eis geldt niet zonder juridische toetsing en wijkt af van andere niet-ondertekende concepten.",
+      "funding": "Mogelijke toegang tot een door het bedrijf gefinancierde brokerrekening van 100 USD vereist onafhankelijk kapitaalbewijs, wettelijke toelating, identificatie, schriftelijke toestemming van de broker en een aparte overeenkomst. Voorgestelde verdeling van gerealiseerde nettowinst: 70% handelaar / 30% bedrijf, zonder garantie.",
+      "legal": "GEEN ACTIEF AANBOD. Geen betaling, factuur, inschrijving, gefinancierde rekening of echte order. Terugbetalingen en toegestane landen zijn niet definitief. Stuur geen geld of identiteitsdocumenten. Een informatievraag accepteert geen contract."
+    },
+    "pl": {
+      "heading": "MOJ PROP Plan 1 — proponowane warunki wyzwania",
+      "overview": "Proponowana opłata wynosi 30 natywnych TRX i obecnie nie jest pobierana. Dwa kolejne etapy DEMO mają jeden wspólny termin 28 dni; cele zysku netto wynoszą 9,6% i 6%. Wymagane jest łącznie co najmniej 50 różnych, w pełni zamkniętych i niezależnie zweryfikowanych pozycji oraz sześć dni handlowych w każdym etapie.",
+      "risk": "Najlepszy dzień nie może przynieść ponad 32% zweryfikowanego zysku netto etapu. Proponowane limity ryzyka XAUUSD: maksymalnie 3% na zlecenie i 8% łącznego otwartego ryzyka, z surowszym limitem obsunięcia 4% dziennie i 8% łącznie wraz z kosztami.",
+      "social": "Jeden projekt przewiduje jeden oryginalny post na Instagramie LUB Facebooku widoczny publicznie przez 672 godziny, niezależnie od 28 dni DEMO. Relację promocyjną należy ujawnić. Warunek nie obowiązuje bez oceny prawnej i różni się od innych niepodpisanych projektów.",
+      "funding": "Ewentualny rachunek maklerski z kapitałem firmy 100 USD wymaga niezależnego potwierdzenia środków, uprawnienia prawnego, weryfikacji tożsamości, pisemnej zgody brokera i osobnej umowy. Proponowany podział zrealizowanego zysku netto: 70% trader / 30% firma, bez gwarancji.",
+      "legal": "TO NIE JEST AKTYWNA OFERTA. Nie ma płatności, faktur, zapisów, finansowanych rachunków ani prawdziwych zleceń. Zwroty i dozwolone kraje nie zostały ustalone. Nie wysyłaj pieniędzy ani dokumentów. Zapytanie nie oznacza akceptacji umowy."
+    },
+    "ur": {
+      "heading": "MOJ PROP پلان 1 — چیلنج کی مجوزہ شرائط",
+      "overview": "مجوزہ فیس 30 اصل TRX ہے اور فی الحال وصول نہیں کی جا رہی۔ ڈیمو کے دو مسلسل مراحل کے لیے مجموعی طور پر ایک ہی 28 دن کی مدت ہے؛ خالص منافع کے اہداف 9.6% اور 6% ہیں۔ دونوں مراحل میں کل کم از کم 50 منفرد مکمل بند اور آزادانہ تصدیق شدہ پوزیشنز اور ہر مرحلے میں چھ تصدیق شدہ تجارتی دن درکار ہیں۔",
+      "risk": "بہترین منافع والے دن کا حصہ متعلقہ مرحلے کے تصدیق شدہ خالص منافع کے 32% سے زیادہ نہیں ہو سکتا۔ XAUUSD کے مجوزہ خطرے کی حد ہر آرڈر کے لیے 3% اور کل کھلے خطرے کے لیے 8% ہے؛ اخراجات سمیت روزانہ 4% اور مجموعی 8% ڈراڈاؤن کی سخت حد بھی لاگو ہے۔",
+      "social": "ایک مسودہ انسٹاگرام یا فیس بک پر ایک اصل پوسٹ کو 672 گھنٹے عوامی رکھنے کی شرط پیش کرتا ہے، جو ڈیمو کے 28 دن سے الگ ہے۔ تشہیری تعلق ظاہر کرنا لازم ہوگا۔ قانونی جائزے سے پہلے یہ شرط فعال نہیں اور دوسرے غیر دستخط شدہ مسودوں سے مختلف ہے۔",
+      "funding": "کمپنی کی طرف سے ممکنہ 100 امریکی ڈالر کے بروکر اکاؤنٹ کے لیے آزاد سرمایہ ثبوت، قانونی اہلیت، شناخت کی تصدیق، بروکر کی تحریری اجازت اور علیحدہ معاہدہ ضروری ہیں۔ حاصل شدہ خالص منافع کی مجوزہ تقسیم 70% ٹریڈر اور 30% کمپنی ہے، کوئی ضمانت نہیں۔",
+      "legal": "یہ فعال فروخت کی پیشکش نہیں۔ کوئی ادائیگی، رسید، رجسٹریشن، فنڈڈ اکاؤنٹ یا حقیقی بروکر تجارت نہیں۔ رقم واپسی اور مجاز ممالک کے اصول طے نہیں ہوئے۔ پیسے یا شناختی دستاویزات نہ بھیجیں۔ معلومات مانگنا معاہدہ قبول کرنا نہیں۔"
+    }
+  }
+}
