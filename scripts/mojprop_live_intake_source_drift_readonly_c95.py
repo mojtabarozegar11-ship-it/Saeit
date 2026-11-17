@@ -29,7 +29,7 @@ EXPECTED = {
     "core/mojprop_accessible_intake.py": "505a1d237e3deb156e7e394e94b1c34ddf1e0071",
     "config/urls.py": "b924051fc75df43a8dfc7822fede041495230491",
     "core/management/commands/mojprop_sales_action_queue.py":
-        "095dcf51e005694f4cb24df1e39ce8a4f6a0cf08",
+        "39594fd4fdb6e80803232fe5f642f0ad3948c57c",
 }
 MAX_SOURCE = 128 * 1024
 
