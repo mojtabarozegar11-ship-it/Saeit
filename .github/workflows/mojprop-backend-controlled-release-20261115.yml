@@ -27,6 +27,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Block release if dedicated Plan1 opt-in route is absent or miswired
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This source gate does not authorize any deploy. It prevents the
+          # manual job reaching SSH until canonical Plan1 GET+POST integration.
+          python3 -B scripts/mojprop_plan1_form_source_gate_c130.py --require-source-ready
       - name: Validate Moj Prop catalog update payload and installer
         run: |
           python3 -m py_compile scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py scripts/mojprop_schema_preflight_c83.py scripts/fixtures/mojprop_legacy_request_source_c84.py scripts/fixtures/mojprop_legacy_admin_source_c84.py scripts/mojprop_db_release_evidence.py scripts/mojprop_restore_capacity_admission.py scripts/mojprop_live_database_identity_c85.py core/signal_free_views.py core/signal_free_models.py core/guest_recovery_models.py core/migrations/0047_mpw_guest_email_recovery.py
