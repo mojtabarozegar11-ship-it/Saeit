@@ -457,6 +457,19 @@ class Plan1VerifiedOrmHandoffTests(SimpleTestCase):
             self.run_review(data)
 
 
+
+    def test_private_buyer_reference_preserved_for_later_waiver_acceptance(self):
+        result=self.run_review()
+        self.assertEqual(result.buyer_ref,"BUYER-ABCDEFGHIJKLMNOP")
+
+    def test_private_seller_reference_preserved_for_later_waiver_acceptance(self):
+        result=self.run_review()
+        self.assertEqual(result.seller_ref,"SELLER-ABCDEFGHIJKLMNOP")
+
+    def test_opaque_parties_have_no_email_in_handoff(self):
+        result=self.run_review()
+        self.assertNotIn("@",result.buyer_ref+result.seller_ref)
+
 from django.test import TestCase
 from prop_firm.lead_models import PropInterest
 from test_prop_plan1_canonical_interest_bridge import sign as consent_sign
