@@ -24,6 +24,7 @@ import secrets
 from typing import BinaryIO, Callable
 
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -63,7 +64,8 @@ def _sha(x: bytes) -> str:
 
 def _manifest_key(key: bytes, run_id: bytes) -> bytes:
     return HKDF(algorithm=hashes.SHA256(), length=32,
-                salt=run_id, info=b'MOJ-F01V2-PRIVATE-MANIFEST').derive(key)
+                salt=run_id, info=b'MOJ-F01V2-PRIVATE-MANIFEST',
+                backend=default_backend()).derive(key)
 
 
 def _read_chunk(source: BinaryIO, limit: int) -> bytes:
@@ -89,7 +91,7 @@ def _b64decode(s: str) -> bytes:
 def _public_fingerprint(pem: bytes) -> tuple[object, str]:
     if type(pem) is not bytes or len(pem) > 16384:
         raise ValueError('INVALID_PUBLIC_PEM')
-    pub = serialization.load_pem_public_key(pem)
+    pub = serialization.load_pem_public_key(pem, backend=default_backend())
     if not isinstance(pub, rsa.RSAPublicKey) or pub.key_size < 3072:
         raise ValueError('PUBLIC_RSA_TOO_WEAK_OR_WRONG_TYPE')
     der = pub.public_bytes(serialization.Encoding.DER,
@@ -238,7 +240,8 @@ def decrypt_to_isolated_file(
     if (type(expected_public_spki_sha256) is not str or
             manifest['public_key_spki_sha256'] != expected_public_spki_sha256):
         raise ValueError('WRONG_BACKUP_RECIPIENT')
-    key = serialization.load_pem_private_key(private_pem,password=private_password)
+    key = serialization.load_pem_private_key(private_pem,password=private_password,
+                                                 backend=default_backend())
     if key.key_size < 3072:
         raise ValueError('PRIVATE_RSA_TOO_WEAK')
     public_der = key.public_key().public_bytes(
