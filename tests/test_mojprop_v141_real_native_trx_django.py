@@ -55,7 +55,7 @@ class RealNativePaymentStorageTests(TestCase):
             merchant_owner_verified=True, merchant_residence_country="IR",
             buyer_residence_verified=True, buyer_residence_country="AE",
             customer_country_permitted=True,
-            seller_cross_border_permission_verified=True,
+            seller_cross_border_lawful_basis_reviewed=True,
             fee_based_independent_evaluation_approved=True,
             full_terms_accepted_and_verified=True,
             refunds_and_consumer_rights_cleared=True,
@@ -64,7 +64,7 @@ class RealNativePaymentStorageTests(TestCase):
             compliance_reference="EXTERNAL-REGULATOR-REFERENCE-001",
             seller_role="natural_person_independent_service",
             seller_role_verified=True,
-            iran_foreign_trx_receipt_rights_verified=True,
+            iran_foreign_trx_settlement_lawfulness_reviewed=True,
             us_person_and_us_nexus_excluded=True,
             relevant_sanctions_screen_verified=True,
         )
@@ -164,7 +164,7 @@ class RealNativePaymentStorageTests(TestCase):
 
     def test_no_unpublished_terms_or_foreign_permission(self):
         for bad in (
-            dict(legal_evidence=self.legal_evidence(iran_foreign_trx_receipt_rights_verified=False)),
+            dict(legal_evidence=self.legal_evidence(iran_foreign_trx_settlement_lawfulness_reviewed=False)),
             dict(legal_evidence=self.legal_evidence(seller_role="licensed_crypto_broker")),
             dict(legal_evidence=self.legal_evidence(relevant_sanctions_screen_verified=False)),
             dict(terms_version=VERSION + "-DRAFT"),
