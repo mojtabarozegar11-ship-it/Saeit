@@ -1,4 +1,6 @@
 """No external HTTP: adversarial checks of C142 live GET-only classifier."""
+import socket
+import ssl
 import unittest
 from urllib.error import HTTPError, URLError
 
@@ -101,6 +103,19 @@ class Plan1GetOnlyProbeContract(unittest.TestCase):
         result=probe_one(FakeOpener(err),"en",ENDPOINTS[0][1])
         self.assertFalse(result["get_form_verified"])
         self.assertEqual(result["state"],"http_404")
+
+    def test_dns_tls_and_timeout_cannot_be_misclassified_as_http_404(self):
+        cases = (
+            (URLError(socket.gaierror(socket.EAI_NONAME, "synthetic DNS")), "dns_unavailable"),
+            (URLError(ssl.SSLError("synthetic TLS error")), "tls_failed"),
+            (URLError(TimeoutError("synthetic timeout")), "network_timeout"),
+        )
+        for error, state in cases:
+            with self.subTest(state=state):
+                result = probe_one(FakeOpener(error), "en", ENDPOINTS[0][1])
+                self.assertEqual(result["state"], state)
+                self.assertIsNone(result["http_status"])
+                self.assertFalse(result["get_form_verified"])
 
     def test_bounded_network_error_preserved_as_unknown(self):
         result=probe_one(FakeOpener(URLError("test connection unavailable")),
