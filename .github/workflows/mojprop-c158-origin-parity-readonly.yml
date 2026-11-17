@@ -29,7 +29,7 @@ jobs:
           set -euo pipefail
           test ! -L scripts/mojprop_c158_owner_origin_parity_readonly.py
           test "$(git hash-object -- scripts/mojprop_c158_owner_origin_parity_readonly.py)" = "fc53c294fcd21de282009aa6a466c43701ce6521"
-          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_c156_cpanel_static_source_bytes_readonly
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_c158_owner_origin_parity_readonly
       - name: Install existing pinned cPanel SSH identity (never log key)
         shell: bash
         env:
