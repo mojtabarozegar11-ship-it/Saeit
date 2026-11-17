@@ -19,7 +19,7 @@ TABLE = "core_mojproprequest"
 REQUIRED = frozenset((
     "request_id", "name", "email", "route", "horizon", "notes",
     "product_id", "consent", "status", "source", "ip_hash",
-    "user_agent", "created_at",
+    "user_agent", "created_at", "updated_at", "reviewed_at", "internal_note",
 ))
 
 
