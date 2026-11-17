@@ -1,0 +1,71 @@
+name: MOJ PROP Plan1 main-vs-legacy suite reconciliation (source only)
+on:
+  push:
+    branches: [fix/mojprop-historical-ci-contracts-vs-funded-plan1-20261117]
+    paths:
+      - 'core/test_mojprop_nojs_current_main_c100_20261116.py'
+      - 'core/test_mojprop_starter30_native_access_c104_20261116.py'
+      - 'tests/test_mojprop_contact_fallback_c110_20261116.py'
+      - 'tests/test_mojprop_nojs_signed_db_reconciliation_c102.py'
+      - 'tests/test_mojprop_signal_plan_inquiry_20261115.py'
+      - 'tests/test_mojprop_starter30_single_sku_contract_20261115.py'
+      - 'tests/test_mojprop_v4_buyer_funnel_20261115.py'
+      - '.github/workflows/mojprop-plan1-historic-suite-reconciliation-20261117.yml'
+  pull_request:
+    branches: [fix/mojprop-main-prelaunch-real-plan1-20261116]
+    paths:
+      - 'core/test_mojprop_nojs_current_main_c100_20261116.py'
+      - 'core/test_mojprop_starter30_native_access_c104_20261116.py'
+      - 'tests/test_mojprop_contact_fallback_c110_20261116.py'
+      - 'tests/test_mojprop_nojs_signed_db_reconciliation_c102.py'
+      - 'tests/test_mojprop_signal_plan_inquiry_20261115.py'
+      - 'tests/test_mojprop_starter30_single_sku_contract_20261115.py'
+      - 'tests/test_mojprop_v4_buyer_funnel_20261115.py'
+      - '.github/workflows/mojprop-plan1-historic-suite-reconciliation-20261117.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  seven-suite-real-vs-historic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      SECRET_KEY: ci-only-secret-key
+      DEBUG: 'true'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install existing project dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Assert separate genuine historical and live prelaunch source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          old=Path('tests/fixtures/mojprop-starter30-home-before-plan1-20261117.html').read_text('utf-8')
+          active=Path('templates/moj-prop-v4/index.html').read_text('utf-8')
+          assert 'MOJPROP-STARTER30' in old and 'MOJ-PROP-01' not in old
+          assert 'MOJ-PROP-01' in active and 'MOJPROP-STARTER30' not in active
+          assert 'No wallet or payment collection now.' in active
+          assert '/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01' in active
+          print('PLAN1_DISTINCT_FROM_EDUCATION_SOURCE=PASS')
+          PY
+      - name: Focused historical and current tests (no site write)
+        run: |
+          pytest -q \
+            core/test_mojprop_nojs_current_main_c100_20261116.py \
+            core/test_mojprop_starter30_native_access_c104_20261116.py \
+            tests/test_mojprop_contact_fallback_c110_20261116.py \
+            tests/test_mojprop_nojs_signed_db_reconciliation_c102.py \
+            tests/test_mojprop_signal_plan_inquiry_20261115.py \
+            tests/test_mojprop_starter30_single_sku_contract_20261115.py \
+            tests/test_mojprop_v4_buyer_funnel_20261115.py \
+            tests/test_mojprop_plan1_static_prelaunch.py \
+            tests/test_mojprop_commercial_samples_release.py

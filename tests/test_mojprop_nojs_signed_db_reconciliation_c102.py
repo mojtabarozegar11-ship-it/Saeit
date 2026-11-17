@@ -55,7 +55,11 @@ class MojPropNoJsDbProofClosureTests(unittest.TestCase):
 
     def test_07_html_fallback_still_visible_on_main_commercial_landing(self):
         source = (ROOT / "templates/moj-prop-v4/index.html").read_text()
-        self.assertIn('href="/moj-prop-intake/?format=html"', source)
+        self.assertIn(
+            'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01"',
+            source,
+        )
+        self.assertNotIn("MOJPROP-STARTER30", source)
         self.assertIn("<noscript>", source)
 
     def test_08_no_js_view_uses_real_existing_idempotent_crm_path(self):
