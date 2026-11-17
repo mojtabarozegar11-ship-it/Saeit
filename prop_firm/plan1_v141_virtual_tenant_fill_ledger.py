@@ -187,7 +187,8 @@ def replay_provisioned_virtual_books(
                     _utc(c.stage_one_accepted_at_utc, "stage_one_accepted_at_utc"))
         second = (None if c.phase_two_started_at_utc is None else
                   _utc(c.phase_two_started_at_utc, "phase_two_started_at_utc"))
-        if accepted is not None and not start <= accepted < start + WINDOW:
+        if accepted is not None and (
+                accepted < start or accepted > now or accepted >= start + WINDOW):
             raise VirtualLedgerRejected("stage-one acceptance outside its own 28-day window")
         if c.max_unlocked_stage == 1 and second is not None:
             raise VirtualLedgerRejected("stage two has not been unlocked")
@@ -312,6 +313,11 @@ def replay_provisioned_virtual_books(
             )
             history = sha256(json.dumps(row, sort_keys=True, separators=(",", ":"),
                                        ensure_ascii=True).encode("utf-8")).hexdigest()
+        # A finalized first stage must not carry open inventory into stage two.
+        if c.max_unlocked_stage == 2 and any(
+                position_stage == 1
+                for position_stage, _side, _lots in positions.values()):
+            raise VirtualLedgerRejected("open first-stage inventory cannot migrate to stage two")
         open_positions = tuple(
             OpenVirtualPosition(
                 position_ref=position, stage=stage, direction=direction,
