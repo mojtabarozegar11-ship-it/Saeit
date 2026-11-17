@@ -1,0 +1,145 @@
+name: MOJPROP Plan1 isolated non-payable sidecar — reviewed source and owner-only release
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'templates/moj-prop-plan1-sidecar/**'
+      - 'scripts/mojprop_plan1_sidecar_release.py'
+      - 'tests/test_mojprop_plan1_sidecar_release.py'
+      - '.github/workflows/mojprop-plan1-sidecar-release.yml'
+  workflow_dispatch:
+    inputs:
+      owner_approved_sidecar_release:
+        description: 'Explicit owner approval: new Plan1 informational URL only; existing root/contact untouched'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-plan1-sidecar-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable reviewed commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Pin HTML and guarded installer to reviewed exact Git blobs
+        run: |
+          set -euo pipefail
+          test ! -L templates/moj-prop-plan1-sidecar/index.html
+          test ! -L scripts/mojprop_plan1_sidecar_release.py
+          test "$(git hash-object -- templates/moj-prop-plan1-sidecar/index.html)" = "66f3126d22d41c3395e7c09982120989e9eb5f0f"
+          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_release.py)" = "6719b6d550b91d7783b32461d35975a157cffa16"
+      - name: Run owner-preservation, exact staged source and security regressions
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_plan1_sidecar_release
+      - name: Validate public-static-only scope
+        run: |
+          echo 'SIDECAR_SOURCE_AND_SECURITY_TESTED=true'
+          echo 'SIDECAR_CHECKOUT_CONSENT_BROKER_PAYMENT_DEPLOYMENT=false'
+
+  owner_only_install:
+    needs: [validate]
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.owner_approved_sidecar_release == true &&
+      vars.MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED == 'true' &&
+      vars.MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED == 'true' &&
+      vars.MOJPROP_STATIC_ROLLBACK_VERIFIED == 'true' &&
+      vars.MOJPROP_SIDECAR_SOURCE_REVIEWED == 'true' &&
+      vars.MOJPROP_SIDECAR_APPROVED_MAIN_SHA == github.sha
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify unchanged reviewed source, source-only and owner-manual scope
+        run: |
+          set -euo pipefail
+          test "$(git hash-object -- templates/moj-prop-plan1-sidecar/index.html)" = "66f3126d22d41c3395e7c09982120989e9eb5f0f"
+          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_release.py)" = "6719b6d550b91d7783b32461d35975a157cffa16"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_mojprop_plan1_sidecar_release
+      - name: Prepare pinned cPanel connection through authorized factory runner
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/mojprop-plan1-sidecar-ssh"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/id"
+          chmod 600 "$work/id"
+          ssh-keygen -y -P '' -f "$work/id" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host owner-cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/id\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 40s ssh -T -F "$work/config" owner-cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/mojplaywin.com/moj-prop'
+      - name: Stage only exact informational page and installer in private owner workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-plan1-sidecar-ssh"
+          tar -cf "$work/sidecar.tar" scripts/mojprop_plan1_sidecar_release.py templates/moj-prop-plan1-sidecar/index.html
+          stage="/home/zomorod2/.mojprop-plan1-sidecar-stage-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$work/config" owner-cpanel "umask 077; test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 50s ssh -T -F "$work/config" owner-cpanel "tar -xf - -C '$stage' --no-same-owner" < "$work/sidecar.tar"
+      - name: Fail closed on unknown Plan1 target before any public write
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-plan1-sidecar-ssh"
+          stage="/home/zomorod2/.mojprop-plan1-sidecar-stage-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$work/config" owner-cpanel \
+            "PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mojprop_plan1_sidecar_release.py' preflight '$GITHUB_RUN_ID'" \
+            | python3 -c 'import json,sys; prefix="MOJPROP_PLAN1_SIDECAR="; lines=[l for l in sys.stdin.read(4000).splitlines() if l.startswith(prefix)]; assert len(lines)==1; x=json.loads(lines[0][len(prefix):]); assert x["schema"]=="mojprop.plan1.additive.sidecar.v1" and x["source_exact_git_blob_verified"] is True and x["read_only"] is True and x["can_add_without_overwriting"] is True and x["payment_or_customer_data_enabled"] is False and x["full_restore_independently_observed_by_this_code"] is False; print("ADD_ONLY_PREFLIGHT_OK",x["destination_status"])'
+      - name: Owner-approved addition of ONLY new /moj-prop/plan1/index.html
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-plan1-sidecar-ssh"
+          stage="/home/zomorod2/.mojprop-plan1-sidecar-stage-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$work/config" owner-cpanel \
+            "MOJPROP_SIDECAR_RELEASE_APPROVED=true MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED=true MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED=true MOJPROP_SIDECAR_SOURCE_REVIEWED=true PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mojprop_plan1_sidecar_release.py' install '$GITHUB_RUN_ID'" \
+            | python3 -c 'import json,sys; prefix="MOJPROP_PLAN1_SIDECAR="; rows=[l for l in sys.stdin.read(4000).splitlines() if l.startswith(prefix)]; assert len(rows)==1; d=json.loads(rows[0][len(prefix):]); assert d["schema"]=="mojprop.plan1.additive.sidecar.v1" and d["status"] in ("created_new_path_only","already_identical") and d["existing_owner_home_contact_preserved"] is True and d["customer_post_or_trx_payment"] is False; print("SIDECAR_ADD_ONLY_INSTALL="+d["status"])'
+      - name: Check public GET exact bytes against the review-pinned page
+        shell: bash
+        run: |
+          set -euo pipefail
+          file="$RUNNER_TEMP/mojprop-sidecar-get.html"
+          code="$(curl --silent --show-error --max-redirs 0 --max-time 30 -H 'Accept-Encoding: identity' -o "$file" -w '%{http_code}' 'https://mojplaywin.com/moj-prop/plan1/')"
+          test "$code" = "200"
+          cmp -s "$file" templates/moj-prop-plan1-sidecar/index.html
+          echo 'SIDECAR_EXACT_PUBLIC_SOURCE_DELIVERY=true'
+          echo 'SIDECAR_PAYMENT_AND_PAID_ENROLLMENT_STILL_DISABLED=true'
+      - name: Remove ephemeral factory runner SSH material only
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/mojprop-plan1-sidecar-ssh"
+          if test -d "$work"; then rm -f "$work/id" "$work/known" "$work/config" "$work/sidecar.tar"; rmdir "$work" || true; fi
