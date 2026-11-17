@@ -74,9 +74,24 @@ PREPURCHASE_DISCLOSURES = (
     "Both evaluation phases use DEMO/simulated accounts, not real brokerage "
     "accounts; a live LiteFinance or other broker account is NOT required to "
     "enter or complete either evaluation stage.",
-    "Only AFTER passing BOTH independently verified demo stages may a buyer "
-    "begin separately reviewed real broker KYC, real-account agreement and "
-    "genuinely evidenced USD 100 capital-allocation procedures.",
+    "Only AFTER passing BOTH independently verified DEMO stages may a trader "
+    "be considered for broker-authorized order execution on the EXISTING "
+    "LiteFinance real account under its lawful holder's control. NO buyer-owned "
+    "real brokerage account is promised or needed.",
+    "The nominal initial USD 100 is an independently funded, auditable "
+    "trading/risk allocation in that owner-controlled real account, NOT "
+    "money deposited to the buyer's own account or wallet.",
+    "Access requires explicit broker approval for individual order authority "
+    "and attribution; the buyer receives NO account passwords, 2FA, "
+    "broker withdrawal rights or trading principal.",
+    "After the contractually defined period, only independently reconciled "
+    "attributable REALIZED net profit after valid prior losses is split "
+    "70% trader and 30% organizer. Actual disclosed cryptocurrency transfer "
+    "fees are deducted once from the trader share.",
+    "Broker withdrawal must go through the broker-authorized holder's "
+    "original funding/withdrawal channel. A possible customer crypto profit "
+    "payment is a SEPARATE lawful business-treasury transfer to the verified "
+    "beneficiary wallet, subject to KYC, sanctions, local rules and actual funds.",
     "Email verification, age declaration and country selection are simple "
     "interest onboarding, NOT complete legal buyer screening; any legally "
     "required pre-purchase checks still apply.",
@@ -84,7 +99,8 @@ PREPURCHASE_DISCLOSURES = (
     "The evaluation runs for 28 days from independently confirmed settlement.",
     "At least 50 verified closed positions are required across the challenge.",
     "Each phase requires at least six verified trading days.",
-    "A real USD 100 account is conditional on passing and independently proven funding.",
+    "No new REAL account is opened for the buyer; funding and risk limits "
+    "for the existing broker account must be independently verified.",
     "The funded profit split is 70% trader and 30% company; 14 levels are conditional.",
     "No Instagram or Facebook post, upload, link, publication or promotional "
     "submission is required from a buyer, regardless of phase or outcome. "
