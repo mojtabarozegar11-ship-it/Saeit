@@ -124,6 +124,19 @@ class ContactDriftC128Tests(unittest.TestCase):
         self.assertFalse(_safe_contact_href("https://somewhere.example"))
         self.assertFalse(_safe_contact_href("mailto:unverified@example.com"))
 
+    def test_active_markup_is_reported_as_fixed_boolean_not_leaked(self):
+        bad=self.original.replace(
+            b"</body>",b'<iframe src="https://attacker.invalid/x"></iframe></body>'
+        )
+        report=checks(bad,self.original)
+        self.assertFalse(report["passive_markup_only"])
+        self.assertFalse(report["complete_contact_contract"])
+        self.assertTrue(report["script_free"])
+        self.assertTrue(report["form_free"])
+        self.assertFalse(report["exact_reviewed_template_bytes"])
+        self.assertEqual(tuple(report),_CHECKS)
+        self.assertTrue(all(type(value) is bool for value in report.values()))
+
     def test_oversize_and_non_utf8_fail_closed(self):
         self.assertTrue(not any(checks(b"x"*(256*1024+1),self.original).values()))
         self.assertTrue(not any(checks(b"\xff",self.original).values()))

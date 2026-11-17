@@ -90,6 +90,42 @@ class ContactFallbackProof(unittest.TestCase):
         )
         self.assertFalse(classify_contact(bad.encode()))
 
+    def test_scriptless_active_markup_bypasses_are_all_rejected(self):
+        # 25 distinct adversarial HTML/CSS constructs: none may be called a
+        # safe first-party support fallback just because script/form=0.
+        attacks = (
+            '<iframe src="https://attacker.invalid/x"></iframe>',
+            '<img src="https://attacker.invalid/pixel">',
+            '<svg onload="alert(1)"></svg>',
+            '<meta http-equiv="refresh" content="0;url=https://attacker.invalid">',
+            '<a href="/moj-prop/" onclick="steal()">click</a>',
+            '<link rel="stylesheet" href="https://attacker.invalid/x.css">',
+            '<base href="https://attacker.invalid/">',
+            '<video src="/x.mp4"></video>',
+            '<audio src="/x.mp3"></audio>',
+            '<object data="https://attacker.invalid/x"></object>',
+            '<embed src="/x">',
+            '<input name="private">',
+            '<button formaction="/buyer-post">send</button>',
+            '<canvas></canvas>',
+            '<template><span>deceptive</span></template>',
+            '<picture><source srcset="https://attacker.invalid/img"></picture>',
+            '<a href="/moj-prop/" ping="https://attacker.invalid">home</a>',
+            '<a href="/moj-prop/" style="display:none">home</a>',
+            '<div onmouseover="fetch(1)">hover</div>',
+            '<div onfocus="fetch(1)">focus</div>',
+            '<style>@import "https://attacker.invalid/style.css";</style>',
+            '<style>p{background:url(https://attacker.invalid/t)}</style>',
+            '<style>p{width:expression(alert(1))}</style>',
+            '<style>p{behavior:url(steal.htc)}</style>',
+            '<style>p{background:u\\72l(https://attacker.invalid)}</style>',
+        )
+        for payload in attacks:
+            with self.subTest(payload=payload[:54]):
+                changed = self.html.replace("</body>", payload + "</body>")
+                self.assertNotEqual(changed, self.html)
+                self.assertFalse(classify_contact(changed.encode("utf-8")))
+
     def test_public_transport_direct_200_and_no_redirect_only(self):
         good = parse_transport(transport())
         self.assertTrue(classify_transport(good))

@@ -17,13 +17,14 @@ if __package__ in ("", None):
 
 from scripts.mojprop_public_official_contact_contract_c127 import (
     _ContactDocument, _GENERAL_MAILTO, _PLAN1_MAILTO, _SUPPORT,
-    _MAX_HTML_BYTES, classify_contact, _safe_contact_href,
+    _MAX_HTML_BYTES, classify_contact, _safe_contact_href, _passive_markup_only,
 )
 
 _CHECKS = (
     "html_document",
     "script_free",
     "form_free",
+    "passive_markup_only",
     "plan1_title",
     "official_support_visible",
     "plan1_subject_mailto",
@@ -55,6 +56,7 @@ def checks(raw: bytes | None, reviewed: bytes | None) -> dict[str, bool]:
         "html_document": bool(page.has_html),
         "script_free": page.scripts == 0,
         "form_free": page.forms == 0,
+        "passive_markup_only": _passive_markup_only(page),
         "plan1_title": "moj prop plan 1" in page.title.lower(),
         "official_support_visible": _SUPPORT in words,
         "plan1_subject_mailto": _PLAN1_MAILTO in page.links,
