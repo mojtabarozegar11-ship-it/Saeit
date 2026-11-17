@@ -29,7 +29,8 @@ def auctions_home(request):
     ready = len(serials) == len(all_notices) and len(set(serials.values())) == len(all_notices)
     if ready:
         numbers = [serials[item["id"]] for item in all_notices]
-        ready = numbers == list(range(numbers[0], numbers[0] + len(numbers)))
+        proposed = [item["proposed_public_number"] for item in all_notices]
+        ready = numbers == proposed == list(range(350, 422))
     if ready:
         supply = [dict(item, public_number=serials[item["id"]]) for item in grouped["supply"]]
         equipment = [dict(item, public_number=serials[item["id"]]) for item in grouped["equipment"]]
