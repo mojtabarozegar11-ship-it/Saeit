@@ -31,6 +31,8 @@ on:
       - "tests/test_mojprop_c155_cpanel_statsbar_quota_readonly.py"
       - "scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py"
       - "tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py"
+      - "scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py"
+      - "tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py"
       - "scripts/mojprop_c157_offhost_stream_preflight_readonly.py"
       - "tests/test_mojprop_c157_offhost_stream_preflight_readonly.py"
 
@@ -116,6 +118,12 @@ jobs:
           test "$(git hash-object -- scripts/mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py)" = "41e9dc8523da3536460a2b3b6ff94fb049d2e03c"
           test ! -L tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py
           test "$(git hash-object -- tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py)" = "fdd68d71da6d0cbe2a1a91153758e87bb4c3d3f7"
+          python3 -B -m py_compile scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c157_cpanel_statsbar_shape_readonly -q
+          test ! -L scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py)" = "c950f3f95d6a6e0d1b1eeb97089cdabe80a3a01a"
+          test ! -L tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py)" = "57f074159ef00c44cdf83be92e7acb194e9bf5a2"
           python3 -B -m py_compile scripts/mojprop_c157_offhost_stream_preflight_readonly.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c157_offhost_stream_preflight_readonly -q
           test ! -L scripts/mojprop_c157_offhost_stream_preflight_readonly.py
@@ -305,6 +313,16 @@ jobs:
             < scripts/mojprop_c157_offhost_stream_preflight_readonly.py \
             | python3 -c 'import json,sys; raw=sys.stdin.read(9500); p="MOJPROP_C157_OFFHOST_STREAM_PREFLIGHT_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C157_SANITIZED_PREFLIGHT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.offhost_stream_tools.readonly.c157.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert set(d["installed_tool_capabilities"])=={"mariadb_dump","mysqldump","age","gpg","openssl","gzip"}; assert all(type(v) is bool for v in d["installed_tool_capabilities"].values()); assert set(d["fixed_media_candidates"])=={"staging_media","staging_uploads","webroot_media","webroot_uploads","public_html_media"}; assert all(v["recursive_media_scope_proven"] is False and v["media_content_read"] is False and type(v["direct_regular_files"]) is int and 0<=v["direct_regular_files"]<=64 and type(v["direct_subdirectories"]) is int and 0<=v["direct_subdirectories"]<=64 for v in d["fixed_media_candidates"].values()); assert all(d[k] is False for k in ("offhost_source_artifact_revalidated_in_this_probe","recipient_public_key_verified","database_connection_and_consistent_snapshot_verified","actual_live_media_root_verified","account_quota_verified","offhost_db_media_restore_proven","db_dump_executed","encryption_executed","database_or_media_contents_read","production_deployment_authorized","cost_incurred")); assert not set(d).intersection({"password","secret","token","email","customer","filename","path","api_key","wallet","domain"}); print(a[0])'
           echo 'C157_METADATA_ONLY_STREAMING_TOOL_PREFLIGHT_NOT_DB_BACKUP_OR_RESTORE=COMPLETE' >> "$GITHUB_STEP_SUMMARY"
+      - name: C157 exact sanitized UAPI StatsBar structural fingerprint (no values)
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 55s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(9500); p="MOJPROP_C157_UAPI_SHAPE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C157_SANITIZED_UAPI_SHAPE"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.statsbar_uapi_shape.c157.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; q=d["payload_shape"]; ids={"diskusage","mysqldiskusage","fileusage"}; assert set(q["known_id_matches"])==ids and set(q["known_name_matches"])==ids; assert all(type(v) is int and 0<=v<=128 for v in q["known_id_matches"].values()) and all(type(v) is int and 0<=v<=128 for v in q["known_name_matches"].values()); assert type(q["row_count"]) is int and 0<=q["row_count"]<=128; assert q["actual_account_quota_proven"] is False; assert all(d[k] is False for k in ("db_or_customer_content_accessed","provider_payload_logged","backup_created","offhost_backup_verified","independent_restore_verified","production_deploy_authorized","cost_incurred")); assert not set(d).intersection({"password","secret","token","email","customer","filename","path","api_key","wallet","domain","name","value","count","reason","errors"}); print(a[0])'
+          echo 'C157_UAPI_STATS_STRUCTURE_ONLY_NO_VALUES_OR_QUOTA_CLAIM' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
