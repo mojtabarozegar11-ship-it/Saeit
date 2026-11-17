@@ -1,0 +1,224 @@
+{
+  "schema_version": 1,
+  "source": "content/auctions-72/procurement-notices.json",
+  "purpose": "accurate plain-English topic names visible to international suppliers and AI-powered search",
+  "notes": "English group descriptors are informational translations, not evidence of export authorization, availability or commercial acceptance",
+  "pairs": [
+    {
+      "product_serial": 350,
+      "equipment_serial": 386,
+      "persian_group": "میوه تازه",
+      "english_group": "fresh fruit"
+    },
+    {
+      "product_serial": 351,
+      "equipment_serial": 387,
+      "persian_group": "سبزیجات و صیفی‌جات",
+      "english_group": "vegetables and fresh produce"
+    },
+    {
+      "product_serial": 352,
+      "equipment_serial": 388,
+      "persian_group": "غلات و برنج",
+      "english_group": "grains and rice"
+    },
+    {
+      "product_serial": 353,
+      "equipment_serial": 389,
+      "persian_group": "حبوبات",
+      "english_group": "pulses and legumes"
+    },
+    {
+      "product_serial": 354,
+      "equipment_serial": 390,
+      "persian_group": "خشکبار و مغزها",
+      "english_group": "dried fruits and nuts"
+    },
+    {
+      "product_serial": 355,
+      "equipment_serial": 391,
+      "persian_group": "خرما و فرآورده‌های آن",
+      "english_group": "dates and date products"
+    },
+    {
+      "product_serial": 356,
+      "equipment_serial": 392,
+      "persian_group": "زعفران و ادویه",
+      "english_group": "saffron and spices"
+    },
+    {
+      "product_serial": 357,
+      "equipment_serial": 393,
+      "persian_group": "گیاهان دارویی و عطاری",
+      "english_group": "herbs and herbal products"
+    },
+    {
+      "product_serial": 358,
+      "equipment_serial": 394,
+      "persian_group": "روغن‌ها و چربی‌های خوراکی",
+      "english_group": "edible oils and fats"
+    },
+    {
+      "product_serial": 359,
+      "equipment_serial": 395,
+      "persian_group": "عسل و فرآورده‌های زنبور",
+      "english_group": "honey and bee products"
+    },
+    {
+      "product_serial": 360,
+      "equipment_serial": 396,
+      "persian_group": "قارچ خوراکی",
+      "english_group": "cultivated edible mushrooms"
+    },
+    {
+      "product_serial": 361,
+      "equipment_serial": 397,
+      "persian_group": "محصولات ارگانیک و گواهی‌شده",
+      "english_group": "certified organic agricultural products"
+    },
+    {
+      "product_serial": 362,
+      "equipment_serial": 398,
+      "persian_group": "لبنیات",
+      "english_group": "dairy products"
+    },
+    {
+      "product_serial": 363,
+      "equipment_serial": 399,
+      "persian_group": "گوشت قرمز",
+      "english_group": "legally sourced red meat"
+    },
+    {
+      "product_serial": 364,
+      "equipment_serial": 400,
+      "persian_group": "مرغ و سایر طیور",
+      "english_group": "poultry products"
+    },
+    {
+      "product_serial": 365,
+      "equipment_serial": 401,
+      "persian_group": "تخم‌مرغ و فرآورده‌ها",
+      "english_group": "eggs and egg products"
+    },
+    {
+      "product_serial": 366,
+      "equipment_serial": 402,
+      "persian_group": "ماهی و آبزیان",
+      "english_group": "fish and seafood"
+    },
+    {
+      "product_serial": 367,
+      "equipment_serial": 403,
+      "persian_group": "مواد غذایی فرآوری‌شده",
+      "english_group": "processed food products"
+    },
+    {
+      "product_serial": 368,
+      "equipment_serial": 404,
+      "persian_group": "شیرینی، شکلات و تنقلات",
+      "english_group": "confectionery, chocolate and snacks"
+    },
+    {
+      "product_serial": 369,
+      "equipment_serial": 405,
+      "persian_group": "نوشیدنی‌ها و قهوه",
+      "english_group": "beverages, tea and coffee"
+    },
+    {
+      "product_serial": 370,
+      "equipment_serial": 406,
+      "persian_group": "بذر، نهال و نشا",
+      "english_group": "seeds, nursery trees and seedlings"
+    },
+    {
+      "product_serial": 371,
+      "equipment_serial": 407,
+      "persian_group": "کود، خاک و بستر کشت",
+      "english_group": "fertilizers, soil and growing media"
+    },
+    {
+      "product_serial": 372,
+      "equipment_serial": 408,
+      "persian_group": "حفاظت و سلامت گیاه",
+      "english_group": "plant protection and crop health products"
+    },
+    {
+      "product_serial": 373,
+      "equipment_serial": 409,
+      "persian_group": "تجهیزات کشاورزی و گلخانه",
+      "english_group": "agricultural and greenhouse equipment"
+    },
+    {
+      "product_serial": 374,
+      "equipment_serial": 410,
+      "persian_group": "گل و گیاه زینتی",
+      "english_group": "ornamental flowers and plants"
+    },
+    {
+      "product_serial": 375,
+      "equipment_serial": 411,
+      "persian_group": "دامپروری و پرورش طیور",
+      "english_group": "livestock and poultry farming supplies"
+    },
+    {
+      "product_serial": 376,
+      "equipment_serial": 412,
+      "persian_group": "پوشاک و منسوجات",
+      "english_group": "clothing and textiles"
+    },
+    {
+      "product_serial": 377,
+      "equipment_serial": 413,
+      "persian_group": "کیف، کفش و چرم",
+      "english_group": "bags, shoes and leather products"
+    },
+    {
+      "product_serial": 378,
+      "equipment_serial": 414,
+      "persian_group": "خانه و آشپزخانه",
+      "english_group": "household and kitchen products"
+    },
+    {
+      "product_serial": 379,
+      "equipment_serial": 415,
+      "persian_group": "لوازم برقی و دیجیتال",
+      "english_group": "electrical and digital appliances"
+    },
+    {
+      "product_serial": 380,
+      "equipment_serial": 416,
+      "persian_group": "آرایشی، بهداشتی و شوینده",
+      "english_group": "cosmetics, hygiene and cleaning products"
+    },
+    {
+      "product_serial": 381,
+      "equipment_serial": 417,
+      "persian_group": "کودک، بازی و سرگرمی",
+      "english_group": "toys, children's products and games"
+    },
+    {
+      "product_serial": 382,
+      "equipment_serial": 418,
+      "persian_group": "فرش، صنایع دستی و هنر",
+      "english_group": "carpets, handicrafts and artworks"
+    },
+    {
+      "product_serial": 383,
+      "equipment_serial": 419,
+      "persian_group": "طلا، نقره و گوهرسنگ",
+      "english_group": "gold, silver and gemstones"
+    },
+    {
+      "product_serial": 384,
+      "equipment_serial": 420,
+      "persian_group": "ساختمان، ابزار و تأسیسات",
+      "english_group": "building supplies, tools and installations"
+    },
+    {
+      "product_serial": 385,
+      "equipment_serial": 421,
+      "persian_group": "مواد اولیه و بسته‌بندی تولیدی",
+      "english_group": "industrial raw materials and packaging"
+    }
+  ]
+}
