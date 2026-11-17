@@ -1,0 +1,286 @@
+name: MOJ PROP — live prospect CRM totals and Django runtime via pinned selfhosted relay (READ ONLY)
+on:
+  push:
+    branches: [audit/mojprop-v141-live-crm-readonly-business-gates-20261118]
+    paths: [.github/workflows/mojprop-v141-live-crm-aggregate-readonly-20261118.yml]
+permissions:
+  contents: read
+jobs:
+  only-aggregates-no-pii:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - name: Verify factory restricted runner and pinned cPanel identity; inspect live Django CRM read-only
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ "$(id -un)" != "githubrunner" || -z "${HOST_KEY:-}" ]]; then
+            echo "LIVE_CRM_READONLY=BLOCKED_RUNNER_OR_KEY"
+            exit 1
+          fi
+          d="$RUNNER_TEMP/mojprop-live-crm-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/key" "$d/known"; rmdir "$d" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          if ! ssh-keygen -y -P '' -f "$d/key" >/dev/null 2>&1; then
+            echo "LIVE_CRM_READONLY=BLOCKED_INVALID_CLIENT_KEY"
+            exit 1
+          fi
+          timeout 15s ssh-keyscan -T 9 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null || true
+          fp="$(ssh-keygen -lf "$d/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+          if [[ "$fp" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]]; then
+            echo "LIVE_CRM_READONLY=BLOCKED_HOST_KEY_UNREACHABLE_OR_MISMATCH"
+            exit 1
+          fi
+          echo "LIVE_CRM_READONLY_PINNED_HOST_KEY=verified"
+          sshcmd=(ssh -T -i "$d/key" -p 1396 -o UserKnownHostsFile="$d/known" -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ForwardAgent=no -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 zomorod2@zohal.pws-dns.net)
+          if ! timeout 22s "${sshcmd[@]}" 'test "$(id -un)" = zomorod2' >/dev/null 2>&1; then
+            echo "LIVE_CRM_READONLY=BLOCKED_CPANEL_AUTH"
+            exit 1
+          fi
+          echo "LIVE_CRM_READONLY_CPANEL_AUTH=verified"
+          timeout 65s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'PY'
+          import ast,json,os,stat,subprocess,sys
+          from pathlib import Path
+          root=Path('/home/zomorod2/Saeit-staging')
+          entry=Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
+          result={'classification':'MOJPROP_LIVE_DJANGO_CRM_ONLY_AGGREGATES',
+                  'candidate_code_present':False,'passenger_source_refs_candidate':False,
+                  'candidate_python_runtimes_tested':0,'python_with_django_found':False,
+                  'crm_count_performed':False,'crm_source_confirmed_effective_wsgi':False,
+                  'buyer_pii_read':False,'any_database_writes':False,
+                  'emails_sent':False,'live_trades':False,'paid_release_authorized':False}
+          def safe_source(path,cap):
+              try:
+                  s=path.lstat()
+                  if not stat.S_ISREG(s.st_mode) or s.st_size>cap or s.st_size<1:return None
+                  return path.read_text(encoding='utf-8',errors='replace')
+              except OSError:return None
+          entry_text=safe_source(entry,20000)
+          root_text=safe_source(root/'config'/'urls.py',35000)
+          result['candidate_code_present']=root_text is not None
+          result['passenger_source_refs_candidate']=bool(entry_text and 'Saeit-staging' in entry_text)
+          if entry_text:
+              try:
+                  tree=ast.parse(entry_text)
+                  result['passenger_wsgi_parse_ok']=True
+                  result['passenger_application_symbol_present']='application' in entry_text
+              except SyntaxError:
+                  result['passenger_wsgi_parse_ok']=False
+          pycandidates=[
+             '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python',
+             '/home/zomorod2/virtualenv/Saeit-staging/3.10/bin/python',
+             '/home/zomorod2/virtualenv/Saeit-staging/3.12/bin/python',
+             '/home/zomorod2/virtualenv/Saeit-staging/3.9/bin/python',
+             '/home/zomorod2/Saeit-staging/.venv/bin/python',
+             '/home/zomorod2/Saeit-staging/venv/bin/python',
+             sys.executable
+          ]
+          selected=None
+          for name in pycandidates:
+              try:
+                  p=Path(name)
+                  if not p.exists() or not p.is_file():continue
+                  result['candidate_python_runtimes_tested']+=1
+                  run=subprocess.run([name,'-B','-c','import django;print("DJANGO_RUNTIME_AVAILABLE")'],
+                      stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=6,check=False)
+                  if run.returncode==0 and run.stdout.strip()==b'DJANGO_RUNTIME_AVAILABLE':
+                      selected=name
+                      break
+              except (OSError,subprocess.TimeoutExpired):
+                  pass
+          result['python_with_django_found']=selected is not None
+          if selected and result['passenger_source_refs_candidate'] and result['candidate_code_present']:
+              script=r'''
+          import json,os,sys
+          from datetime import timedelta
+          sys.path.insert(0,"/home/zomorod2/Saeit-staging")
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          os.environ.setdefault("SAEIT_ENV","production")
+          response={"crm_import_ok":False,"query_status":"not_started","count":None,
+             "last_7d":None,"last_30d":None,"source_counts":{},"status_counts":{},
+             "database_backend_mysql":False,"sql_select_only":True,
+             "pii_or_row_values_printed":False}
+          try:
+              import django
+              django.setup()
+              from django.db import connections
+              from django.db.models import Count
+              from django.utils import timezone
+              from core.models import MojPropRequest
+              alias=MojPropRequest.objects.db
+              conn=connections[alias]
+              response["database_backend_mysql"]="mysql" in conn.settings_dict.get("ENGINE","").lower()
+              response["crm_import_ok"]=True
+              # These are SELECT/COUNT queries ONLY. Never read individual identities.
+              import concurrent.futures
+              def collect():
+                  q=MojPropRequest.objects
+                  n=q.count()
+                  seven=q.filter(created_at__gte=timezone.now()-timedelta(days=7)).count()
+                  thirty=q.filter(created_at__gte=timezone.now()-timedelta(days=30)).count()
+                  known_source=("moj-prop-public",)
+                  sources={s:q.filter(source=s).count() for s in known_source}
+                  choices=set(str(c[0]) for c in getattr(MojPropRequest,"STATUS_CHOICES",()))
+                  statuses={s:q.filter(status=s).count() for s in choices if len(s)<50}
+                  return n,seven,thirty,sources,statuses
+              # No mass row iteration, no raw SQL dumps, no details returned.
+              n,seven,thirty,sources,statuses=collect()
+              response.update(query_status="ok",count=n,last_7d=seven,
+                              last_30d=thirty,source_counts=sources,status_counts=statuses)
+          except Exception as exc:
+              response["query_status"]="error_"+type(exc).__name__[:32]
+          print("LIVE_MOJPROP_CRM_READONLY_TOTALS="+json.dumps(response,sort_keys=True))
+          '''
+              try:
+                  p=subprocess.run([selected,'-B','-c',script],stdout=subprocess.PIPE,
+                      stderr=subprocess.DEVNULL,cwd=str(root),
+                      timeout=35,check=False,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
+                  raw=p.stdout.decode('utf-8',errors='ignore').strip().splitlines()
+                  records=[line for line in raw if line.startswith('LIVE_MOJPROP_CRM_READONLY_TOTALS=')]
+                  if records:
+                      record=json.loads(records[-1].split('=',1)[1])
+                      allowed={"crm_import_ok","query_status","count","last_7d","last_30d",
+                                "source_counts","status_counts","database_backend_mysql",
+                                "sql_select_only","pii_or_row_values_printed"}
+                      result['crm_count_performed']=record.get('query_status')=='ok'
+                      result['aggregates']={k:record.get(k) for k in allowed}
+                  else:
+                      result['crm_probe_error_class']='no_structured_result'
+              except (OSError,ValueError,subprocess.TimeoutExpired):
+                  result['crm_probe_error_class']='runtime_error_or_timeout'
+          print("LIVE_MOJPROP_WSGI_CRM_AGGREGATE_PROBE="+json.dumps(result,sort_keys=True))
+          PY
+          echo "LIVE_CRM_READONLY_COMPLETE=true"
+      - name: Public HTTPS GET only — verify real Moj Prop direct customer contact fallback
+        shell: bash
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          from html.parser import HTMLParser
+          from urllib.request import Request, build_opener, HTTPRedirectHandler
+          from urllib.error import HTTPError, URLError
+          import json
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          class Contact(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.forms=0;self.mailto=0;self.form_external=0
+                  self.email_fields=0;self.tel_links=0;self.links=0
+              def handle_starttag(self,tag,attrs):
+                  x=dict(attrs)
+                  if tag=='form':
+                      self.forms+=1
+                      a=x.get('action','')
+                      self.form_external+=int(
+                          a.startswith(('http:','https:')) or a.startswith('//'))
+                  elif tag=='a':
+                      self.links+=1
+                      href=x.get('href','')
+                      if href.startswith('mailto:'):self.mailto+=1
+                      if href.startswith('tel:'):self.tel_links+=1
+                  elif tag=='input' and x.get('type')=='email':
+                      self.email_fields+=1
+          names={
+              'real_prop_contact_fallback':'/moj-prop/contact/',
+              'generic_support_contact':'/contact/',
+              'prop_home':'/moj-prop/',
+              'original_intake_api':'/moj-prop-intake/',
+              'new_prop_optin':'/moj-prop-interest/form/',
+              'real_prop_detail_candidate':'/moj-prop/plan1/',
+          }
+          opener=build_opener(NoRedirect)
+          out={}
+          for name,path in names.items():
+              status=0;data=b'';ctype='';location=False
+              req=Request('https://mojplaywin.com'+path,method='GET',
+                          headers={'Accept':'text/html,application/json',
+                                   'Cache-Control':'no-cache','User-Agent':'MOJPROP-owner-public-contact-get-only/1.0'})
+              try:
+                  with opener.open(req,timeout=10) as resp:
+                      status=resp.status
+                      data=resp.read(65001)
+                      ctype=resp.headers.get('Content-Type','').split(';',1)[0].lower()
+              except HTTPError as ex:
+                  status=ex.code
+                  location=bool(ex.headers.get('Location'))
+                  ex.close()
+              except (OSError,URLError,TimeoutError):pass
+              result={'status':status,'http_redirect_has_location':location,
+                      'content_type':ctype,'bounded':len(data)<=65000}
+              if status==200 and ctype=='text/html' and len(data)<=65000:
+                  text=data.decode('utf-8',errors='replace')
+                  parser=Contact()
+                  parser.feed(text)
+                  low=text.lower()
+                  result.update({
+                      'form_count':parser.forms,'email_fields':parser.email_fields,
+                      'mailto_links':parser.mailto,'tel_links':parser.tel_links,
+                      'forms_external_action':parser.form_external,
+                      'mentions_real_moj_prop_01':'moj-prop-01' in low,
+                      'mentions_educational_starter30':'starter30' in low or 'starter-30' in low,
+                      'mentions_nonpayable':'no payment' in low or 'not payable' in low,
+                  })
+              out[name]=result
+          print('MOJPROP_LIVE_PUBLIC_CONTACT_GET_ONLY='+json.dumps({
+              'routes':out,'post_submitted':False,'personal_data_sent':False,
+              'email_sent':False,'payment_enabled':False
+          },sort_keys=True))
+          PY
+      - name: Verify official public contact mailto destination matches connected sales mailbox
+        shell: bash
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          import json
+          from html.parser import HTMLParser
+          from urllib.parse import unquote
+          from urllib.request import Request,build_opener,HTTPRedirectHandler
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          class Extract(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.contacts=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag!='a':return
+                  href=dict(attrs).get('href','')
+                  if href.lower().startswith('mailto:'):
+                      address=unquote(href.split(':',1)[-1].split('?',1)[0]).strip().lower()
+                      if address and len(address)<255:self.contacts.append(address)
+          host='https://mojplaywin.com/moj-prop/contact/'
+          with build_opener(NoRedirect).open(
+              Request(host,method='GET',headers={'Accept':'text/html',
+                  'User-Agent':'MOJPROP-owner-contact-mailto-verification/1.0'}),timeout=15) as resp:
+              content=resp.read(65001);code=resp.status
+          parser=Extract()
+          if len(content)<=65000 and code==200:
+              parser.feed(content.decode('utf-8'))
+          connected={'mojplaywin@gmail.com'}
+          result={
+              'public_contact_http_status':code,
+              'public_mailto_link_count':len(parser.contacts),
+              'unique_mailto_destinations':len(set(parser.contacts)),
+              'directly_matches_connected_mojplaywin_gmail':bool(set(parser.contacts)&connected),
+              'published_public_contact_recipient':parser.contacts[0] if len(parser.contacts)==1 else None,
+              'all_mailtos_directly_match_connected_mojplaywin_gmail':bool(parser.contacts and set(parser.contacts)<=connected),
+              'destination_is_already_public_on_website':True,'messages_sent':False,
+              'mailbox_forwarding_verified':False,
+              'production_site_modified':False,
+          }
+          print('MOJPROP_VERIFIED_PUBLIC_MAILTO_ROUTE='+json.dumps(result,sort_keys=True))
+          PY
+      - name: Declare no release or buyer simulation
+        if: always()
+        run: |
+          echo "CUSTOMER_POST_SENT=false"
+          echo "CUSTOMER_EMAIL_OR_ID_PRINTED=false"
+          echo "BACKUP_READ_OR_DECRYPTED=false"
+          echo "PRODUCTION_SCHEMA_MODIFIED=false"
+          echo "PUBLIC_SITE_FILES_MODIFIED=false"
+          echo "PAID_CHALLENGE_SOLD=false"
+          echo "LIVE_TRADING_ORDER_SENT=false"
