@@ -1,10 +1,5 @@
 name: Zomorod bounded disposable package cache cleanup
 on:
-  push:
-    branches: [main]
-    paths: [".github/workflows/zomorod-safe-package-cache-cleanup-20261018.yml"]
-  pull_request:
-    paths: [".github/workflows/zomorod-safe-package-cache-cleanup-20261018.yml"]
   workflow_dispatch:
     inputs:
       cleanup_action:
@@ -26,7 +21,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inspect:
-    runs-on: ubuntu-latest
+    # Manual owner command only. Never run server operations on a push or PR.
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it' && github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 25
     steps:
       - name: Prepare pinned cPanel relay
@@ -45,11 +42,11 @@ jobs:
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          ssh-keyscan -T 10 -p 22 -t rsa 127.0.0.1 > "$d/vps.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           cat > "$d/config" <<EOF
           Host saeit-vps
-            HostName 178.239.147.150
+            HostName 127.0.0.1
             User githubops
             Port 22
             IdentityFile $d/vps.key
