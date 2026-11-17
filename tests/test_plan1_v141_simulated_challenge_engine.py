@@ -503,5 +503,21 @@ class TwoStageEngineTests(unittest.TestCase):
         self.assertIsNone(replay(early).phase_one_frozen_evidence_sha256)
 
 
+    def test_72_final_stage_digest_stable_when_assessment_advances(self):
+        snap=good_snapshot()
+        a=replay(snap)
+        b=replay(replace(snap,as_of=NOW+timedelta(days=1)))
+        self.assertEqual(a.phase_two_frozen_evidence_sha256,
+                         b.phase_two_frozen_evidence_sha256)
+
+    def test_73_final_stage_digest_changes_with_equity_history(self):
+        snap=good_snapshot()
+        marks=list(snap.equity_marks)
+        marks[15]=replace(marks[15],equity_usd="100.99")
+        b=replay(replace(snap,equity_marks=tuple(marks)))
+        self.assertNotEqual(replay(snap).phase_two_frozen_evidence_sha256,
+                            b.phase_two_frozen_evidence_sha256)
+
+
 if __name__=="__main__":
     unittest.main()
