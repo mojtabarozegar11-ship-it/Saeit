@@ -118,7 +118,7 @@ class MojPropCatalogSamplesContractTests(unittest.TestCase):
         self.assertNotIn("scripts/deploy_mojplaywin_moj_prop_backend.py templates/moj-prop-v4", workflow)
 
     def test_source_control_keeps_both_old_baselines_immutable(self):
-        for name in ("index-v4.html", "catalog-index-v4.html"):
+        for name in ("index-v4.html", "catalog-index-v4.html", "contact-index-pre-plan1.html"):
             self.assertTrue((SITE_SOURCE / "baselines" / name).is_file())
         self.assertNotEqual(
             (SITE_SOURCE / "baselines/catalog-index-v4.html").read_bytes(),
@@ -139,13 +139,14 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         self.route = self.docroot / "moj-prop"
         self.route.mkdir(parents=True)
         stage = self.home / ".mojplaywin-moj-prop-catalog-123" / "templates/moj-prop-v4"
-        for path in release.FILES + release.PRESERVED_LIVE_FILES + (release.BASELINE_CATALOG, release.BASELINE_HOME, release.BASELINE_SIGNAL, release.BASELINE_SIGNAL_FREE_PREVIEW):
+        for path in release.FILES + release.PRESERVED_LIVE_FILES + (release.BASELINE_CATALOG, release.BASELINE_HOME, release.BASELINE_CONTACT, release.BASELINE_SIGNAL, release.BASELINE_SIGNAL_FREE_PREVIEW):
             source = SITE_SOURCE / path
             target = stage / path
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
         for before, current in (("baselines/index-v4.html", "index.html"),
-                                ("baselines/catalog-index-v4.html", "catalog/index.html")):
+                                ("baselines/catalog-index-v4.html", "catalog/index.html"),
+                                ("baselines/contact-index-pre-plan1.html", "contact/index.html")):
             source = SITE_SOURCE / before
             target = self.route / current
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -162,6 +163,46 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         self.stage = stage
+
+    def test_plan1_contact_is_an_atomic_member_and_legacy_manifest_is_rejected(self):
+        self.assertIn(Path("contact/index.html"), release.FILES)
+        self.assertIn("v4-contact-rollback", release.MANIFEST_SCHEMA)
+        self.assertNotIn(Path("signals/index.html"), release.FILES)
+        old = (self.route / "contact/index.html").read_bytes()
+        release.deploy("123", "a" * 40)
+        self.assertEqual(
+            (self.route / "contact/index.html").read_bytes(),
+            (self.stage / "contact/index.html").read_bytes(),
+        )
+        backup = self.backups / "moj-prop-catalog-123"
+        manifest = json.loads((backup / "manifest.json").read_text("utf-8"))
+        self.assertEqual(manifest["schema"], release.MANIFEST_SCHEMA)
+        self.assertIn("contact/index.html", [item["path"] for item in manifest["files"]])
+        release.restore(backup)
+        self.assertEqual((self.route / "contact/index.html").read_bytes(), old)
+
+    def test_owner_modified_live_contact_is_never_overwritten(self):
+        contact = self.route / "contact/index.html"
+        contact.write_text("Owner-managed contact page", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "Live Plan1 contact differs"):
+            release.deploy("123", "a" * 40)
+        self.assertEqual(contact.read_text("utf-8"), "Owner-managed contact page")
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+
+    def test_unreviewed_staged_contact_or_direct_404_link_denies_release(self):
+        staged = self.stage / "contact/index.html"
+        original = staged.read_bytes()
+        for altered in (
+            b"<html><body>Unreviewed inquiry</body></html>",
+            original.replace(b"Dedicated Plan 1 form not live",
+                             b'<a href="/moj-prop-interest/form/">Submit private data</a>'),
+        ):
+            with self.subTest(bad_size=len(altered)):
+                staged.write_bytes(altered)
+                with self.assertRaisesRegex(RuntimeError, "Prelaunch contact is not"):
+                    release.deploy("123", "a" * 40)
+                self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+        staged.write_bytes(original)
 
     def test_updater_delivers_both_samples_and_retains_reversible_catalog(self):
         old_index = (self.route / "index.html").read_bytes()

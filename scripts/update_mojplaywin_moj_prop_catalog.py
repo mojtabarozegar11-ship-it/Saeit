@@ -32,6 +32,7 @@ HTML_FILES = (
     Path("catalog/index.html"),
     Path("signals/index.html"),
     Path("starter-30-trx/index.html"),
+    Path("contact/index.html"),
 )
 # These two FREE educational files are part of the same reversible static
 # release. A sales link must never be published without its actual content.
@@ -43,9 +44,10 @@ STARTER30_FILES = (
 # Starter30 release is strictly *not* authorized to rewrite that separate page.
 PRESERVED_LIVE_FILES = (Path("signals/index.html"),)
 FILES = tuple(x for x in HTML_FILES if x not in PRESERVED_LIVE_FILES) + STARTER30_FILES
-MANIFEST_SCHEMA = "mojprop.static.starter30.v3-preserve-signals"
+MANIFEST_SCHEMA = "mojprop.static.plan1-c153.v4-contact-rollback"
 BASELINE_CATALOG = Path("baselines/catalog-index-v4.html")
 BASELINE_HOME = Path("baselines/index-v4.html")
+BASELINE_CONTACT = Path("baselines/contact-index-pre-plan1.html")
 BASELINE_SIGNAL = Path("baselines/signals-index-before-free.html")
 # Exact #2407 one-off public research preview (before double opt-in #2428).
 BASELINE_SIGNAL_FREE_PREVIEW = Path("baselines/signals-index-after-free-preview.html")
@@ -100,7 +102,7 @@ def source_root(run_id: str) -> Path:
     path = HOME / (".mojplaywin-moj-prop-catalog-" + safe_id(run_id)) / "templates/moj-prop-v4"
     if path.is_symlink() or not path.is_dir():
         raise RuntimeError("Invalid staged Moj Prop source")
-    for relative in FILES + PRESERVED_LIVE_FILES + (BASELINE_CATALOG, BASELINE_HOME, BASELINE_SIGNAL, BASELINE_SIGNAL_FREE_PREVIEW):
+    for relative in FILES + PRESERVED_LIVE_FILES + (BASELINE_CATALOG, BASELINE_HOME, BASELINE_CONTACT, BASELINE_SIGNAL, BASELINE_SIGNAL_FREE_PREVIEW):
         assert_file(path / relative)
     html = {str(relative): (path / relative).read_text("utf-8") for relative in HTML_FILES}
     if ("const endpoint='/moj-prop-intake/';" not in html["index.html"]
@@ -167,6 +169,15 @@ def source_root(run_id: str) -> Path:
     if ('href="/moj-prop-interest/form/' in home
             or "/moj-prop/starter-30-trx/" in home):
         raise RuntimeError("Plan1 home links to an unavailable form or old educational SKU")
+    contact = html["contact/index.html"]
+    # This is a prelaunch support route, never a CRM form or a payment route.
+    if (not all(mark in contact for mark in (
+            "MOJ-PROP-01", "prelaunch",
+            "mailto:support@mojplaywin.com?subject=MOJ-PROP-01",
+            "Dedicated Plan 1 form not live"))
+            or 'href="/moj-prop-interest/form/' in contact
+            or "<form" in contact.lower()):
+        raise RuntimeError("Prelaunch contact is not the approved voluntary support page")
     return path
 
 
@@ -211,6 +222,7 @@ def verify_private_backup_root(*, create: bool) -> None:
 def plan(root: Path) -> list[dict]:
     old_catalog = (root / BASELINE_CATALOG).read_bytes()
     old_home = (root / BASELINE_HOME).read_bytes()
+    old_contact = (root / BASELINE_CONTACT).read_bytes()
     old_signal = (root / BASELINE_SIGNAL).read_bytes()
     free_preview_signal = (root / BASELINE_SIGNAL_FREE_PREVIEW).read_bytes()
     marker = b"<!-- MOJ_PROP_CATALOG_RELEASE_V4 -->\n"
@@ -234,6 +246,9 @@ def plan(root: Path) -> list[dict]:
         if relative == Path("index.html"):
             if not exists or before not in (after, old_home, old_home_without_marker):
                 raise RuntimeError("Live home differs from approved baseline; refusing replacement")
+        elif relative == Path("contact/index.html") and exists:
+            if before not in (after, old_contact):
+                raise RuntimeError("Live Plan1 contact differs from approved baseline; refusing replacement")
         elif relative == Path("catalog/index.html") and exists:
             if before != after and before != old_catalog:
                 raise RuntimeError("Live catalog differs from both approved baseline and release; refusing replacement")

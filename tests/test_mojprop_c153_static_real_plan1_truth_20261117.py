@@ -86,6 +86,18 @@ class Plan1StaticTruth(unittest.TestCase):
                                  "/moj-prop/pay/" in link for link in p.hrefs))
         self.assertNotIn("walletconnect", self.home.lower())
 
+    def test_11_contact_source_is_in_install_and_rollback_inventory(self):
+        script = (ROOT / "scripts/update_mojplaywin_moj_prop_catalog.py").read_text("utf-8")
+        self.assertIn('Path("contact/index.html")', script)
+        self.assertIn('BASELINE_CONTACT', script)
+        self.assertIn("Live Plan1 contact differs from approved baseline", script)
+        self.assertIn("v4-contact-rollback", script)
+        stage = ROOT / "templates/moj-prop-v4/contact/index.html"
+        baseline = ROOT / "templates/moj-prop-v4/baselines/contact-index-pre-plan1.html"
+        self.assertEqual(stage.read_text("utf-8"), self.contact)
+        self.assertTrue(baseline.is_file())
+        self.assertNotEqual(baseline.read_bytes(), stage.read_bytes())
+
     def test_10_farsi_prelaunch_caveat_and_first_party_contact(self):
         self.assertIn("فرم اختصاصی رضایت فعلاً فعال نیست", self.home)
         self.assertIn("فرم اختصاصی رضایت فعلاً فعال نیست", self.contact)
