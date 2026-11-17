@@ -89,6 +89,9 @@ class SimulatedPhaseDecision:
     best_realized_day_usd: Decimal
     target_net_usd: Decimal
     lowest_verified_equity_usd: Decimal | None
+    latest_verified_equity_usd: Decimal | None
+    latest_verified_day_open_usd: Decimal | None
+    latest_equity_observed_at_utc: str | None
     mathematical_pass: bool
     risk_breached: bool
     blockers: tuple[str, ...]
@@ -258,6 +261,12 @@ def _phase_result(phase, fills, marks, *, opened, ended, as_of, required_net):
         verified_utc_trading_days=len(trade_days), realized_net_usd=net,
         best_realized_day_usd=best_day, target_net_usd=required_net,
         lowest_verified_equity_usd=lowest,
+        latest_verified_equity_usd=(stage_marks[-1][2] if stage_marks else None),
+        latest_verified_day_open_usd=(
+            day_open.get(stage_marks[-1][1].date().isoformat(), (None, None))[1]
+            if stage_marks else None),
+        latest_equity_observed_at_utc=(
+            stage_marks[-1][1].isoformat() if stage_marks else None),
         mathematical_pass=not reasons, risk_breached=breach, blockers=reasons,
     )
 
