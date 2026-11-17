@@ -34,13 +34,13 @@ REQUIRED_TEST_MODULES = (
     ("tests.test_mojprop_v141_prelaunch_copy", 25),
     ("tests.test_plan1_v141_simulated_challenge_engine", 68),
     ("tests.test_plan1_v141_demo_order_risk_review", 28),
-    ("tests.test_plan1_v141_signed_simulator_manifest", 30),
+    ("tests.test_plan1_v141_signed_simulator_manifest", 33),
     ("tests.test_plan1_v141_replay_journal_policy", 35),
     ("tests.test_plan1_v141_django_journal_source", 20),
 )
 LEGACY_TEST_MODULE = "tests.test_prop_firm_policy"
 EXPECTED_V13_TESTS = 194
-EXPECTED_V14_TESTS = 320
+EXPECTED_V14_TESTS = 323
 EXPECTED_ALL_TESTS = EXPECTED_V13_TESTS + EXPECTED_V14_TESTS
 
 
