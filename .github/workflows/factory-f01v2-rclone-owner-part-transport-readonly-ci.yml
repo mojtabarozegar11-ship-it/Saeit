@@ -30,7 +30,7 @@ jobs:
           test ! -L scripts/factory_rclone_dual_parts.py
           test ! -L tests/test_factory_rclone_dual_parts.py
           test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = '0545bdf88852565b2aede6814de48431249e3895'
-          test "$(git hash-object tests/test_factory_rclone_dual_parts.py)" = 'dda94008c6d20e0e8ea01f11d47b1e7b037cea52'
+          test "$(git hash-object tests/test_factory_rclone_dual_parts.py)" = 'b103672bfeaef18d42d78c8ed0534a8cd7147ed9'
       - name: Run 40 offline fail-closed multipart transport cases
         shell: bash
         env:
