@@ -28,6 +28,21 @@ _RECORDED_STATES = frozenset((
     "TRADING_MATH_COMPLETE_WAITING_SOCIAL_CLOCK",
 )) | _TERMINAL
 
+_CRITICAL_INPUT_BLOCKERS = frozenset((
+    "unsupported_non_xauusd_close",
+    "close_outside_evaluation_or_future",
+    "close_outside_sequential_phase_window",
+    "equity_outside_evaluation_or_future",
+    "equity_outside_sequential_phase_window",
+    "unreconciled_close_event",
+    "unreconciled_equity_observation",
+    "conflicting_duplicate_event_id",
+    "conflicting_duplicate_equity_id",
+    "cross_source_position_id_conflict",
+    "position_reused_between_simulated_phases",
+    "phase_two_started_without_phase_one_mathematical_pass",
+))
+
 _STAGE_TWO_PARENTS = frozenset((
     "SIMULATED_STAGE_ONE_MATH_PASSED_WAITING_TRANSITION",
     "SIMULATED_STAGE_TWO_IN_REVIEW",
@@ -162,6 +177,8 @@ def decide_next_signed_replay_receipt(*, previous: PreviousReplayState,
     done = _from_decision(calculated.phase_two_completed_at_utc, "phase_two_completed")
     frozen = calculated.phase_one_frozen_evidence_sha256
     if stage_one is not None:
+        if any(code in _CRITICAL_INPUT_BLOCKERS for code in calculated.blockers):
+            raise JournalTransitionRejected("stage-one acceptance has unreconciled or conflicting event evidence")
         if (calculated.phase_one.mathematical_pass is not True
                 or type(frozen) is not str or _SHA.fullmatch(frozen) is None):
             raise JournalTransitionRejected("stage-one acceptance lacks valid closed-stage evidence")
