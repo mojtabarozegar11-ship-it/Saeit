@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import hmac
 import json
 import re
 
@@ -26,6 +27,7 @@ from .plan1_v14_social_or_50_terms import review_prospective_terms
 from .plan1_v141_replay_journal_policy import (
     JournalTransitionRejected, PreviousReplayState,
     decide_next_signed_replay_receipt,
+    calculate_v141_receipt_sha256,
 )
 
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
@@ -55,6 +57,33 @@ class StoredSimReplayResult:
     enrollment_authorized: bool = False
     real_trading_authorized: bool = False
     payout_authorized: bool = False
+
+
+def _assert_saved_receipt_integrity(*, state, receipt):
+    """Reject damaged receipt metadata before replay or new chain append.
+
+    Does NOT authenticate external simulator history or independently anchor
+    database hashes outside this database.
+    """
+    if (receipt.state_id != state.pk
+            or type(receipt.sequence) is not int
+            or type(receipt.receipt_sha256) is not str
+            or _SHA.fullmatch(receipt.receipt_sha256) is None):
+        raise DurableSimReplayRejected("stored receipt identity or digest malformed")
+    try:
+        computed = calculate_v141_receipt_sha256(
+            challenge_ref=state.challenge_ref,
+            sequence=receipt.sequence,
+            manifest_sha256=receipt.raw_manifest_sha256,
+            replay_sha256=receipt.replay_sha256,
+            previous_receipt_sha256=receipt.previous_receipt_sha256,
+            reported_engine_state=receipt.reported_engine_state,
+            as_of_utc=receipt.as_of,
+        )
+    except (JournalTransitionRejected, TypeError, ValueError) as exc:
+        raise DurableSimReplayRejected("stored receipt canonical reconstruction failed") from exc
+    if not hmac.compare_digest(computed, receipt.receipt_sha256):
+        raise DurableSimReplayRejected("stored receipt hash does not match record metadata")
 
 
 def _manifest_claims(raw):
@@ -108,6 +137,32 @@ def store_signed_v141_demo_manifest(*, state_pk: int, raw_manifest: bytes,
     if (state.last_sequence > 0 and
             (state.last_as_of is None or _SHA.fullmatch(state.last_receipt_sha256 or "") is None)):
         raise DurableSimReplayRejected("stored journal sequence lacks last durable receipt")
+    if state.last_sequence > 0:
+        # A state row alone is insufficient: verify the referenced durable
+        # receipt and the immediately preceding chain link under the row lock.
+        try:
+            head = PropV141SimReceipt.objects.get(
+                state=state, sequence=state.last_sequence)
+        except PropV141SimReceipt.DoesNotExist as exc:
+            raise DurableSimReplayRejected("state points to missing latest receipt") from exc
+        _assert_saved_receipt_integrity(state=state, receipt=head)
+        if (head.receipt_sha256 != state.last_receipt_sha256
+                or head.raw_manifest_sha256 != state.last_manifest_sha256
+                or head.replay_sha256 != state.last_replay_sha256
+                or head.reported_engine_state != state.last_engine_state
+                or head.as_of != state.last_as_of):
+            raise DurableSimReplayRejected("state does not match stored latest receipt")
+        if state.last_sequence > 1:
+            try:
+                previous_head = PropV141SimReceipt.objects.get(
+                    state=state, sequence=state.last_sequence - 1)
+            except PropV141SimReceipt.DoesNotExist as exc:
+                raise DurableSimReplayRejected("latest receipt predecessor is missing") from exc
+            _assert_saved_receipt_integrity(state=state, receipt=previous_head)
+            if head.previous_receipt_sha256 != previous_head.receipt_sha256:
+                raise DurableSimReplayRejected("latest receipt predecessor digest mismatch")
+        elif head.previous_receipt_sha256 != "0" * 64:
+            raise DurableSimReplayRejected("genesis receipt previous hash is invalid")
     claimed_sequence, claimed_id = _manifest_claims(raw_manifest)
     if not 1 <= claimed_sequence <= 1_000_000_000:
         raise DurableSimReplayRejected("unsigned sequence out of bounds")
@@ -136,6 +191,7 @@ def store_signed_v141_demo_manifest(*, state_pk: int, raw_manifest: bytes,
             old = PropV141SimReceipt.objects.get(state=state, sequence=claimed_sequence)
         except PropV141SimReceipt.DoesNotExist as exc:
             raise DurableSimReplayRejected("replay sequence has no durable receipt") from exc
+        _assert_saved_receipt_integrity(state=state, receipt=old)
         if (old.manifest_id != claimed_id or old.raw_manifest_sha256 != digest
                 or old.replay_sha256 != calc.snapshot_sha256):
             raise DurableSimReplayRejected("historical replay does not match stored immutable receipt")
