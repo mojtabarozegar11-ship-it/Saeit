@@ -62,7 +62,15 @@ def assess_plan_one(evidence: dict, *, sku: str = SKU, fee_trx: Decimal = FEE_TR
                           datetime.now(timezone.utc))
 
 PREPURCHASE_DISCLOSURES = (
-    "Both evaluation phases use simulated accounts; no real capital is traded.",
+    "Both evaluation phases use DEMO/simulated accounts, not real brokerage "
+    "accounts; a live LiteFinance or other broker account is NOT required to "
+    "enter or complete either evaluation stage.",
+    "Only AFTER passing BOTH independently verified demo stages may a buyer "
+    "begin separately reviewed real broker KYC, real-account agreement and "
+    "genuinely evidenced USD 100 capital-allocation procedures.",
+    "Email verification, age declaration and country selection are simple "
+    "interest onboarding, NOT complete legal buyer screening; any legally "
+    "required pre-purchase checks still apply.",
     "The fee is 30 native TRX, not USD, IRR or a training-report purchase.",
     "The evaluation runs for 28 days from independently confirmed settlement.",
     "At least 50 verified closed positions are required across the challenge.",
