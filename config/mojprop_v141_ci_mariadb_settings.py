@@ -26,6 +26,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
+    "django.contrib.sessions",
     "prop_firm.apps.MojPropConfig",
 ]
 DATABASES = {
@@ -53,5 +54,12 @@ TEMPLATES = [{
 }]
 LOGIN_URL = "/admin/login/"
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
-MIDDLEWARE = []
-ROOT_URLCONF = None
+# Real Django Client sessions + middleware, but no live website or broker.
+MIDDLEWARE = [
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+]
+ROOT_URLCONF = "config.mojprop_v141_ci_urls"
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
