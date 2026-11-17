@@ -148,6 +148,12 @@ def decide_next_signed_replay_receipt(*, previous: PreviousReplayState,
     else:
         if previous.engine_state not in _RECORDED_STATES:
             raise JournalTransitionRejected("unrecognized persisted challenge state")
+        if (previous.last_phase_one_accepted_utc is None
+                and previous.last_phase_one_evidence_sha256):
+            raise JournalTransitionRejected("unaccepted stage one has unexpected frozen evidence")
+        if (previous.engine_state == "SIMULATED_STAGE_ONE_IN_REVIEW"
+                and previous.last_phase_one_accepted_utc is not None):
+            raise JournalTransitionRejected("in-review stage one cannot have an acceptance checkpoint")
         if previous.last_phase_one_accepted_utc is not None and (
                 type(previous.last_phase_one_evidence_sha256) is not str
                 or _SHA.fullmatch(previous.last_phase_one_evidence_sha256) is None):
