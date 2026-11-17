@@ -123,3 +123,81 @@ class VerifiedFiftyTradesTests(SimpleTestCase):
 
     def test_zero_unreconciled_sales_do_not_unlock_phase(self):
         self.assertFalse(self.inspect([]).sufficient)
+
+    def test_c156_conflicting_origin_excludes_position(self):
+        rows=[e(i) for i in range(49)]+[
+            e(49, position="disputed", origin="manual"),
+            e(50, position="disputed", origin="bot"),
+        ]
+        result=self.inspect(rows)
+        self.assertEqual(result.valid_closed_positions,49)
+        self.assertEqual(result.uncountable_events,1)
+        self.assertFalse(result.sufficient)
+
+    def test_c156_conflict_exclusion_independent_of_fill_order(self):
+        rows=[e(i) for i in range(49)]+[
+            e(49, position="disputed", origin="manual"),
+            e(50, position="disputed", origin="bot"),
+        ]
+        first=self.inspect(rows)
+        reverse=self.inspect(list(reversed(rows)))
+        self.assertEqual(first,reverse)
+        self.assertFalse(reverse.sufficient)
+
+    def test_c156_conflicting_unknown_and_manual_excluded(self):
+        rows=[e(i) for i in range(49)]+[
+            e(49, position="disputed", origin="unknown"),
+            e(50, position="disputed", origin="manual"),
+        ]
+        result=self.inspect(rows)
+        self.assertFalse(result.sufficient)
+        self.assertEqual(result.unknown_origin_positions,0)
+
+    def test_c156_identical_origin_partial_fills_remain_countable_once(self):
+        rows=[e(i) for i in range(49)]+[
+            e(49, position="one", origin="bot"),
+            e(50, position="one", origin="bot"),
+        ]
+        result=self.inspect(rows)
+        self.assertTrue(result.sufficient)
+        self.assertEqual(result.bot_positions,1)
+
+    def test_c156_conflict_does_not_poison_other_broker_same_position(self):
+        rows=[e(i) for i in range(48)]+[
+            e(48, source="broker-a", position="same", origin="manual"),
+            e(49, source="broker-a", position="same", origin="bot"),
+            e(50, source="broker-b", position="same", origin="manual"),
+        ]
+        result=self.inspect(rows)
+        self.assertEqual(result.valid_closed_positions,49)
+        self.assertEqual(result.uncountable_events,1)
+        self.assertFalse(result.sufficient)
+
+    def test_c156_conflict_not_restored_by_third_matching_fill(self):
+        rows=[e(i) for i in range(49)]+[
+            e(49, position="disputed", origin="manual"),
+            e(50, position="disputed", origin="bot"),
+            e(51, position="disputed", origin="manual"),
+        ]
+        result=self.inspect(rows)
+        self.assertEqual(result.valid_closed_positions,49)
+        self.assertFalse(result.sufficient)
+
+    def test_c156_unverified_conflicting_fill_does_not_override_verified(self):
+        rows=[e(i) for i in range(49)]+[
+            e(49, position="one", origin="manual"),
+            e(50, position="one", origin="bot", status="pending"),
+        ]
+        result=self.inspect(rows)
+        self.assertTrue(result.sufficient)
+        self.assertEqual(result.uncountable_events,1)
+
+    def test_c156_conflicting_origin_not_replaced_by_unknown(self):
+        rows=[e(i) for i in range(49)]+[
+            e(49, position="one", origin="manual"),
+            e(50, position="one", origin="bot"),
+            e(51, position="one", origin="unknown"),
+        ]
+        result=self.inspect(rows)
+        self.assertFalse(result.sufficient)
+        self.assertEqual(result.valid_closed_positions,49)
