@@ -97,7 +97,7 @@ PREPURCHASE_DISCLOSURES = (
     "required pre-purchase checks still apply.",
     "The fee is 30 native TRX, not USD, IRR or a training-report purchase.",
     "The evaluation runs for 28 days from independently confirmed settlement.",
-    "At least 50 verified closed positions are required across the challenge.",
+    "At least 50 independently verified closed positions are required in EACH of the two simulated evaluation phases (not 50 combined).",
     "Each phase requires at least six verified trading days.",
     "No new REAL account is opened for the buyer; funding and risk limits "
     "for the existing broker account must be independently verified.",
