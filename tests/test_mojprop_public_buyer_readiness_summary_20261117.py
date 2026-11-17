@@ -185,14 +185,14 @@ class BuyerReadinessEvidenceTests(unittest.TestCase):
         self.assertEqual(state, "BLOCKED")
 
     def test_transport_duplicate_or_missing_keys_fails_closed(self):
-        self.assertIsNone(parse_transport_evidence(transport() + TRANSPORT_KEYS[0]+"=200\\n"))
+        self.assertIsNone(parse_transport_evidence(transport() + TRANSPORT_KEYS[0]+"=200\n"))
         self.assertIsNone(parse_transport_evidence(transport().replace(
-            TRANSPORT_KEYS[5]+"=0\\n", "")))
+            TRANSPORT_KEYS[5]+"=0\n", "")))
         self.assertEqual(summary(parse_contract_evidence(specimen()),None)[0],"BLOCKED")
 
     def test_transport_injected_privacy_data_denied(self):
-        for injected in ("receipt_token=SECRET\\n", "csrf_token=SECRET\\n",
-                         "customer_email=buyer@example.com\\n", "# html \\n"):
+        for injected in ("receipt_token=SECRET\n", "csrf_token=SECRET\n",
+                         "customer_email=buyer@example.com\n", "# html \n"):
             with self.subTest(injected=injected[:8]):
                 self.assertIsNone(parse_transport_evidence(transport()+injected))
 
