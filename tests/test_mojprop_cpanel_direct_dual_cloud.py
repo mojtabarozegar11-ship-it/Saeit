@@ -271,5 +271,67 @@ class DirectCPanelDualDriveTests(unittest.TestCase):
         with self.assertRaisesRegex(bridge.BackupHold, "MISSING_SSH_IDENTITY_FILE"):
             bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
 
+
+    def _approved_params(self):
+        return dict(
+            owner_approval=bridge.OWNER_ARM,
+            mode="mysql",
+            source_path=SOURCE,
+            ssh_config=self.config,
+            verified_ssh_identity=True,
+            verified_passenger_database=True,
+            verified_complete_scope=True,
+            independently_recoverable_private_key=True,
+            store=SimpleNamespace(max_source_bytes=128 * 1024 * 1024),
+            gzip_executable="/usr/bin/gzip",
+            approved_public_pem=b"dummy-owner-public-pem",
+            approved_public_spki_sha256="a" * 64,
+            pseudonymous_owner_a="a" * 32,
+            pseudonymous_owner_b="b" * 32,
+            run_subdirectory="factory-current-" + "f" * 32,
+        )
+
+    def test_24_approved_transfer_delegates_once_to_existing_dual_encryption_core(self):
+        from unittest.mock import sentinel
+        params = self._approved_params()
+        with patch("factory_dual_stream_v2._public_fingerprint",
+                   return_value=(object(), "a" * 64)), \
+             patch.object(bridge, "build_producer_argv",
+                          return_value=["/usr/bin/ssh", "pinned-source"]), \\
+             patch("factory_rclone_dual_parts.encrypt_verified_pipe_to_two_owner_drives",
+                   return_value=sentinel.encrypted_dual_store_receipt) as encrypt:
+            value = bridge.transfer_approved_scope(**params)
+            self.assertIs(value, sentinel.encrypted_dual_store_receipt)
+            encrypt.assert_called_once()
+            args = encrypt.call_args
+            self.assertIs(args.args[0], params["store"])
+            self.assertEqual(args.kwargs["vetted_producer_argv"],
+                             ["/usr/bin/ssh", "pinned-source"])
+            self.assertEqual(args.kwargs["run_subdirectory"],
+                             params["run_subdirectory"])
+
+    def test_25_mismatched_owner_public_key_denies_transfer(self):
+        params = self._approved_params()
+        with patch("factory_dual_stream_v2._public_fingerprint",
+                   return_value=(object(), "f" * 64)), \
+             patch.object(bridge, "build_producer_argv",
+                          side_effect=AssertionError("must never start source")):
+            with self.assertRaisesRegex(bridge.BackupHold,
+                                        "WRONG_PUBLIC_RECOVERY_KEY"):
+                bridge.transfer_approved_scope(**params)
+
+    def test_26_above_original_source_stream_bound_fails_before_cloud(self):
+        params = self._approved_params()
+        params["store"] = SimpleNamespace(max_source_bytes=49 * 1024**3)
+        with patch("factory_dual_stream_v2._public_fingerprint",
+                   return_value=(object(), "a" * 64)), \
+             patch.object(bridge, "build_producer_argv",
+                          return_value=["ssh", "source"]), \\
+             patch("factory_rclone_dual_parts.encrypt_verified_pipe_to_two_owner_drives",
+                   side_effect=AssertionError("must not upload")):
+            with self.assertRaisesRegex(bridge.BackupHold,
+                                        "SOURCE_STREAM_EXCEEDS_CPANEL_SAFETY_CAP"):
+                bridge.transfer_approved_scope(**params)
+
 if __name__ == "__main__":
     unittest.main()
