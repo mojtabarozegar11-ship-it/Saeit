@@ -58,7 +58,9 @@ def _safe_owner_dir(path: Path, expected_uid: int) -> bool:
 def inspect_disk(root: Path = ROOT, *, expected_uid: int | None = None) -> dict:
     uid = os.geteuid() if expected_uid is None else expected_uid
     pages = {}
-    # Never access a path outside this exact owner document tree.
+    read_status = {}
+    # Diagnostic classifications are from a closed list and disclose no
+    # filenames, hashes, bytes or identifiers. Failure is never readiness.
     safe_root = (root.is_absolute()
                  and _safe_owner_dir(root, uid)
                  and not root.parent.is_symlink())
@@ -66,8 +68,12 @@ def inspect_disk(root: Path = ROOT, *, expected_uid: int | None = None) -> dict:
         state = "unreviewed_or_unavailable"
         file = root / relative
         parent = file.parent
-        safe_parent = _safe_owner_dir(parent, uid)
-        if safe_root and safe_parent:
+        if not safe_root:
+            reason = "blocked_unsafe_root"
+        elif not _safe_owner_dir(parent, uid):
+            reason = "blocked_unsafe_parent"
+        else:
+            reason = "blocked_unreadable_or_race"
             try:
                 before = file.lstat()
                 if (stat.S_ISREG(before.st_mode)
@@ -89,14 +95,23 @@ def inspect_disk(root: Path = ROOT, *, expected_uid: int | None = None) -> dict:
                                 != (before.st_size, before.st_mtime_ns, before.st_ino)):
                             raise OSError("source mutated during read")
                         state = classify(raw, kind)
+                        reason = ("read_known_source" if
+                                  state != "unreviewed_or_unavailable"
+                                  else "read_unreviewed_source")
                     finally:
                         os.close(fd)
+                else:
+                    reason = "blocked_unsafe_file_metadata"
+            except FileNotFoundError:
+                reason = "missing_file"
             except (OSError, PermissionError, ValueError):
-                state = "unreviewed_or_unavailable"
+                reason = "blocked_unreadable_or_race"
         pages[kind] = state
+        read_status[kind] = reason
     return {
-        "schema": "mojprop.cpanel.static.exact_source.readonly.c156.v1",
+        "schema": "mojprop.cpanel.static.exact_source.readonly.c156.v2",
         "pages": pages,
+        "read_status": read_status,
         "both_disk_files_reviewed_exact": all(
             state != "unreviewed_or_unavailable"
             for state in pages.values()),

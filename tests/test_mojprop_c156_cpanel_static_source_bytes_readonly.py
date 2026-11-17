@@ -100,6 +100,30 @@ class ReadOnlyDiskClassifier(unittest.TestCase):
         r = c156.inspect_disk(self.root, expected_uid=os.geteuid() + 234)
         self.assertFalse(r["both_disk_files_reviewed_exact"])
 
+    def test_v2_status_distinguishes_missing_vs_owner_edit_vs_unsafe(self):
+        report = c156.inspect_disk(self.root)
+        self.assertEqual(report["read_status"]["home"], "missing_file")
+        self.assertEqual(report["read_status"]["contact"], "missing_file")
+        self.put("home", b"<html>unreviewed page</html>")
+        self.put("contact", b"<html>another owner edit</html>")
+        report = c156.inspect_disk(self.root)
+        self.assertEqual(report["read_status"]["home"], "read_unreviewed_source")
+        self.assertEqual(report["read_status"]["contact"], "read_unreviewed_source")
+        (self.root / "index.html").chmod(0o666)
+        report = c156.inspect_disk(self.root)
+        self.assertEqual(report["read_status"]["home"], "blocked_unsafe_file_metadata")
+
+    def test_v2_can_identify_reviewed_exact_source_without_exposing_digest(self):
+        actual = (
+            Path(__file__).resolve().parents[1]
+            / "templates/moj-prop-v4/baselines/index-main-before-plan1-c153.html"
+        ).read_bytes()
+        self.put("home", actual)
+        report = c156.inspect_disk(self.root)
+        self.assertEqual(report["pages"]["home"], "known_current_main")
+        self.assertEqual(report["read_status"]["home"], "read_known_source")
+        self.assertNotIn("30b7fe4400f88252f3b71a581f96a796ca853b6c", str(report))
+
     def test_report_excludes_file_contents_sha_values_and_release(self):
         r = c156.inspect_disk(self.root)
         self.assertTrue(r["read_only"])
@@ -108,6 +132,7 @@ class ReadOnlyDiskClassifier(unittest.TestCase):
         self.assertFalse(r["customer_records_accessed"])
         self.assertTrue(r["no_file_content_hash_or_path_logged"])
         self.assertEqual(set(r["pages"]), {"home", "contact"})
+        self.assertEqual(set(r["read_status"]), {"home", "contact"})
 
 
 if __name__ == "__main__":

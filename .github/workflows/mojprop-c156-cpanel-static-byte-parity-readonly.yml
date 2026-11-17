@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           test ! -L scripts/mojprop_c156_cpanel_static_source_bytes_readonly.py
-          test "$(git hash-object -- scripts/mojprop_c156_cpanel_static_source_bytes_readonly.py)" = "7aa29642f2e519ff664cf722f4367267a43dacd1"
+          test "$(git hash-object -- scripts/mojprop_c156_cpanel_static_source_bytes_readonly.py)" = "ecffdad46ef794c4df96f5d8154e2477404345c6"
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_c156_cpanel_static_source_bytes_readonly
       - name: Install existing pinned cPanel SSH identity (never log key)
         shell: bash
@@ -54,7 +54,7 @@ jobs:
           work="$RUNNER_TEMP/mojprop-c156-cpanel"
           timeout 60s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
             < scripts/mojprop_c156_cpanel_static_source_bytes_readonly.py \
-            | python3 -c 'import sys,json; raw=sys.stdin.read(4000); prefix="MOJPROP_C156_CPANEL_STATIC_SOURCE_READONLY="; lines=[l for l in raw.splitlines() if l.startswith(prefix)]; assert len(lines)==1,"MISSING_AGGREGATE"; r=json.loads(lines[0][len(prefix):]); assert r["schema"]=="mojprop.cpanel.static.exact_source.readonly.c156.v1" and r["read_only"] is True and r["release_authorized"] is False and r["database_or_media_read"] is False and r["customer_records_accessed"] is False; assert set(r["pages"])=={"home","contact"}; permitted={"known_current_main","known_legacy_v4","approved_plan1_source","unreviewed_or_unavailable"}; assert all(z in permitted for z in r["pages"].values()); assert not set(r).intersection({"path","filename","sha","digest","source","customer","password"}); print(lines[0])'
+            | python3 -c 'import sys,json; raw=sys.stdin.read(4000); prefix="MOJPROP_C156_CPANEL_STATIC_SOURCE_READONLY="; lines=[l for l in raw.splitlines() if l.startswith(prefix)]; assert len(lines)==1,"MISSING_AGGREGATE"; r=json.loads(lines[0][len(prefix):]); assert r["schema"]=="mojprop.cpanel.static.exact_source.readonly.c156.v2" and r["read_only"] is True and r["release_authorized"] is False and r["database_or_media_read"] is False and r["customer_records_accessed"] is False; assert set(r["pages"])=={"home","contact"}; permitted={"known_current_main","known_legacy_v4","approved_plan1_source","unreviewed_or_unavailable"}; assert all(z in permitted for z in r["pages"].values()); assert set(r["read_status"])=={"home","contact"}; allowed_reasons={"blocked_unsafe_root","blocked_unsafe_parent","blocked_unreadable_or_race","blocked_unsafe_file_metadata","missing_file","read_known_source","read_unreviewed_source"}; assert all(v in allowed_reasons for v in r["read_status"].values()); assert not set(r).intersection({"path","filename","sha","digest","source","customer","password"}); print(lines[0])'
           echo 'C156_REAL_CPANEL_STATIC_BYTES_READ_ONLY=true'
           echo 'C156_NO_DB_MEDIA_BUYER_POST_RELEASE_OR_PAYMENT=true'
       - name: Wipe ephemeral SSH authentication material
