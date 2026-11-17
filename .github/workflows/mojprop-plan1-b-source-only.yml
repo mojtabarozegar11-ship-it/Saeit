@@ -16,6 +16,8 @@ on:
       - 'prop_firm/plan1_intake_provenance.py'
       - 'prop_firm/plan1_canonical_interest_bridge.py'
       - 'prop_firm/plan1_buyer_no_social_amendment.py'
+      - 'prop_firm/plan1_phase_account_boundary.py'
+      - 'tests/test_prop_plan1_demo_to_real_boundary.py'
       - 'tests/test_prop_plan1_no_buyer_social.py'
       - 'prop_firm/plan1_orm_consent_review.py'
       - 'tests/test_prop_plan1_orm_consent_review.py'
@@ -83,6 +85,10 @@ jobs:
             tests/test_prop_plan1_private_order_draft.py \
             tests/test_prop_plan1_intake_provenance.py \
             tests/test_prop_plan1_canonical_interest_bridge.py
+
+      - name: Verify demo-only challenges and separate real-broker transition
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_demo_to_real_boundary.py' -v
 
       - name: Verify new owner no-social buyer clause is source-only
         run: |
