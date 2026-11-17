@@ -28,13 +28,12 @@ jobs:
       DEBUG: 'true'
       SECRET_KEY: 'c137-synthetic-full-ci-only'
       ALLOWED_HOSTS: 'localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com'
-      DATABASE_URL: 'sqlite:///./c137-synthetic-ci.sqlite3'
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
