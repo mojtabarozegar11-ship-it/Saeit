@@ -24,13 +24,15 @@ TOTAL_CLOSED_TRADES = 50
 DAYS_PER_PHASE = 6
 RISK_PER_ORDER_PCT = Decimal("3")
 OPEN_RISK_PCT = Decimal("8")
+MAX_BEST_DAY_SHARE_PCT = Decimal("32")
 CANDIDATE_SCHEMA = "mojprop.plan1.xauusd.v13.review-only.fa-en.1"
 
 FA = (
     "پیش‌نویس غیرقابل پرداخت MOJ-PROP-01؛ بهای پیشنهادی ۳۰ TRX بومی شبکه ترون. "
     "دو مرحله ارزیابی کاملاً شبیه‌سازی‌شده است. هدف مرحله اول ۹٫۶٪ و مرحله دوم ۶٪؛ "
     "حداقل ۵۰ معامله بسته‌شده و مستقل تأییدشده در مجموع دو مرحله و حداقل ۶ روز "
-    "معاملاتی در هر مرحله، در بازه ۲۸ روزه. فقط XAUUSD. ریسک هر معامله حداکثر "
+    "معاملاتی در هر مرحله، در بازه ۲۸ روزه؛ سود بهترین روز نباید بیش از "
+    "۳۲٪ سود خالص تأییدشده هر مرحله باشد. فقط XAUUSD. ریسک هر معامله حداکثر "
     "۳٪ و مجموع ریسک باز حداکثر ۸٪ سرمایه مبناست؛ سقف افت روزانه ۴٪ و کل ۸٪ "
     "همواره مقدم است. کارمزد، اسپرد، لغزش و خطر شکاف قیمت نیز لحاظ می‌شود. "
     "الزام به انتشار پست در اینستاگرام یا فیس‌بوک وجود ندارد. تخصیص ریسک اولیه "
@@ -45,7 +47,9 @@ EN = (
     "Both evaluation phases are DEMO/simulated. The first-phase net profit "
     "target is 9.6% and the second-phase target is 6%; at least 50 independently "
     "verified CLOSED positions TOTAL across both phases and at least six verified "
-    "trading days in EACH phase within a 28-day evaluation window. XAUUSD only. "
+    "trading days in EACH phase within a 28-day evaluation window. The best "
+    "profitable day must not exceed 32% of independently verified net profit "
+    "of the relevant phase. XAUUSD only. "
     "Nominal single-order stop risk is at most 3% and total open stop risk is at most "
     "8% of starting tier capital; binding 4% daily and 8% total drawdown floors "
     "take priority. Fees, full spread and slippage reserve are included, with "
@@ -77,6 +81,8 @@ class DraftV13GoldTerms:
     instrument: str
     risk_per_order_pct: Decimal
     open_risk_pct: Decimal
+    max_profitable_day_share_pct: Decimal
+    social_waiver_digest_sha256: str
     daily_drawdown_pct: Decimal
     total_drawdown_pct: Decimal
     trader_share_pct: Decimal
@@ -110,6 +116,8 @@ def draft_gold_terms_v13() -> DraftV13GoldTerms:
             POLICY.min_challenge_days != DAYS_PER_PHASE or
             POLICY.completion_deadline_days != 28 or
             POLICY.max_daily_loss_pct != Decimal("4") or
+            POLICY.best_day_share_pct != MAX_BEST_DAY_SHARE_PCT or
+            p.max_consistency_pct != MAX_BEST_DAY_SHARE_PCT or
             POLICY.max_total_loss_pct != Decimal("8") or
             POLICY.trader_profit_share_pct != Decimal("70") or
             POLICY.company_profit_share_pct != Decimal("30") or
@@ -148,6 +156,8 @@ def draft_gold_terms_v13() -> DraftV13GoldTerms:
         instrument="XAUUSD",
         risk_per_order_pct=RISK_PER_ORDER_PCT,
         open_risk_pct=OPEN_RISK_PCT,
+        max_profitable_day_share_pct=MAX_BEST_DAY_SHARE_PCT,
+        social_waiver_digest_sha256=waiver.digest_sha256,
         daily_drawdown_pct=POLICY.max_daily_loss_pct,
         total_drawdown_pct=POLICY.max_total_loss_pct,
         trader_share_pct=POLICY.trader_profit_share_pct,
