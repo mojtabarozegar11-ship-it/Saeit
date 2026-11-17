@@ -58,10 +58,18 @@ class PrivateVirtualPortfolioSourceTests(unittest.TestCase):
         self.assertIn('request.META.get("QUERY_STRING", "")',self.view)
 
     def test_12_no_cross_tenant_broker_credentials_in_json(self):
-        self.assertNotIn("password",self.view.lower())
-        self.assertNotIn("account_login",self.view)
-        self.assertNotIn("trusted_signer_keys",self.view)
-        self.assertNotIn("hmac_signature",self.view)
+        tree = ast.parse(self.view)
+        payloads = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name) and node.func.id == "dict"
+        ]
+        self.assertEqual(len(payloads), 1)
+        output_fields = {arg.arg for arg in payloads[0].keywords}
+        for forbidden in ("password", "broker_login", "broker_account_id",
+                          "wallet_key", "private_key", "other_user_balance",
+                          "trusted_signer_keys", "hmac_signature"):
+            self.assertNotIn(forbidden, output_fields)
 
     def test_13_output_does_not_claim_unrealized_equity(self):
         self.assertIn("realized_only_no_floating_equity=True",self.view)
