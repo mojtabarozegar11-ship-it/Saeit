@@ -26,17 +26,20 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Verify immutable exact source SHA pins and 121 offline checks
+      - name: Verify immutable exact source SHA pins and 146 offline checks
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git hash-object scripts/factory_cpanel_existing_nov5_two_drive.py)" = '89e94c184a1babfb02b52dc7dfa26cf6f72f50c1'
-          test "$(git hash-object tests/test_factory_cpanel_existing_nov5_two_drive.py)" = 'd16ba5adcd0c7b95d602a007ec44e38df532fadc'
+          test "$(git hash-object scripts/factory_cpanel_existing_nov5_two_drive.py)" = '3fd53fa116e72b8d9019720a9f604d1393c95e1a'
+          test "$(git hash-object tests/test_factory_cpanel_existing_nov5_two_drive.py)" = 'c04a53f8ef1a89ef57a3cc523eee08c7cb1d2efb'
           test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'f9c6d8445144744920246a128c977bdc850eb80f'
           test "$(git hash-object scripts/factory_dual_stream_v2.py)" = '7a1d0ac87d97c30134f4d6955359379b0c88a255'
           test "$(git hash-object tests/test_factory_rclone_dual_parts.py)" = '4194efaaab093dd9e152ffaf2a558da80185b9ce'
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_cpanel_existing_nov5_two_drive.py' -q
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_rclone_dual_parts.py' -q
+          test "$(git hash-object scripts/factory_rclone_ephemeral_binary.py)" = 'fa088e6531c302b95044d014ac8e8c568fb9ca7a'
+          test "$(git hash-object tests/test_factory_rclone_ephemeral_binary.py)" = 'df5924adf2a39dece73e31371795fa7d18dcdf42'
+          PYTHONPATH=scripts PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_factory_rclone_ephemeral_binary
           echo FACTORY_CPanel_HISTORICAL_SOURCE_ONLY_OFFLINE_PASS=true
   cpanel-source-metadata:
     needs: offline
