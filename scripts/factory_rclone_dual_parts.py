@@ -25,6 +25,7 @@ MAX_CONFIG_BYTES = 131072
 MAX_CIPHER_PART_BYTES = 8 * 1024 * 1024 + 80
 MAX_PROOF_BYTES = 8192
 MAX_ABOUT_BYTES = 16384
+MAX_DIR_LIST_BYTES = 262144
 MAX_OBJECTS = 131072
 MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_USER_SOURCE_BYTES = 1 << 40
@@ -151,6 +152,7 @@ class RcloneDualStore:
             raise TransferHold('RCLONE_NOT_INSTALLED')
         self._admission = None
         self._objects_written = set()
+        self._callbacks_claimed = False
 
     def _run(self, *argv: str, max_output: int = 0, input_bytes: bytes | None = None) -> bytes:
         return _rclone_call([self.executable, '--config', str(self.config_path), '--quiet', *argv],
@@ -206,6 +208,26 @@ class RcloneDualStore:
         self._admission = RcloneAdmission(self.remote_a, self.remote_b, required, a, b)
         return self._admission
 
+    def _direct_child_names(self, remote: str, directory: str) -> set[str]:
+        """Bounded provider-authoritative listing; never log names from Drive.
+
+        A failure to read the current-backups folder is NOT evidence of an
+        empty folder.  The caller must already have provisioned this private
+        parent in the correct, owner-controlled Google Drive root.
+        """
+        if not _relative_path(directory):
+            raise TransferHold('INVALID_REMOTE_DIRECTORY')
+        output = self._run('lsf', remote + ':' + directory + '/',
+                           '--format', 'p', max_output=MAX_DIR_LIST_BYTES)
+        try:
+            children = output.decode('utf-8').splitlines()
+        except UnicodeError:
+            raise TransferHold('REMOTE_NAMESPACE_LIST_UNREADABLE') from None
+        if any(not x.rstrip('/') or '\x00' in x or '\r' in x or '/' in x.rstrip('/')
+               for x in children):
+            raise TransferHold('REMOTE_NAMESPACE_LIST_AMBIGUOUS')
+        return {x.rstrip('/').casefold() for x in children}
+
     def callbacks(self, run_subdirectory: str):
         """Return four independent core callbacks (A upload/read, B upload/read).
 
@@ -216,10 +238,23 @@ class RcloneDualStore:
             raise TransferHold('MISSING_PROVIDER_PREFLIGHT')
         if not re.fullmatch(r'factory-current-[0-9a-f]{32}', run_subdirectory):
             raise TransferHold('UNSAFE_RUN_PREFIX')
+        if self._callbacks_claimed:
+            raise TransferHold('MULTIPLE_RUNS_ON_SAME_TRANSPORT_DENIED')
+        # A failed, partially created namespace must never be silently reused.
+        self._callbacks_claimed = True
         prefix = 'current-backups/' + run_subdirectory
-        # mkdir is additive, unlike sync/delete. Caller generated random name.
+        # Fail closed if either private Drive already has this run (even with
+        # differently cased names). Listing failures are not 'empty' proofs.
+        for remote in (self.remote_a, self.remote_b):
+            if run_subdirectory.casefold() in self._direct_child_names(remote, 'current-backups'):
+                raise TransferHold('BACKUP_RUN_NAMESPACE_ALREADY_EXISTS')
+        # mkdir is additive, but NOT a Google-Drive-atomic create-if-absent.
+        # A 128-bit owner-generated run ID plus list/check mitigates collisions.
         for remote in (self.remote_a, self.remote_b):
             self._run('mkdir', remote + ':' + prefix)
+        for remote in (self.remote_a, self.remote_b):
+            if self._direct_child_names(remote, prefix):
+                raise TransferHold('NEW_BACKUP_RUN_NAMESPACE_NOT_EMPTY')
 
         def upload(remote: str, name: str, payload: bytes):
             if not OBJECT.fullmatch(name) or type(payload) is not bytes:
