@@ -6,6 +6,9 @@ on:
       - fix/mojprop-v141-stage-specific-28d-windows-20261117
       - feature/mojprop-v141-secure-customer-statement-20261117
       - feature/mojprop-v141-prelaunch-lead-intake-20261117
+  pull_request:
+    branches:
+      - audit/mojprop-v141-readonly-production-restore-gates-20261117
   workflow_dispatch:
 
 permissions:
