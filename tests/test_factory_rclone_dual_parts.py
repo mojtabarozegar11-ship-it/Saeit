@@ -154,8 +154,15 @@ class TestRcloneDualDrive(unittest.TestCase):
         with self.assertRaisesRegex(m.TransferHold,'UNUPLOADED_PART_READBACK_DENIED'):ra('notuploaded.enc')
     def test_27_valid_manifest_uploads_last_like_payload(self):
         self.fake.preflight();a,b,ra,rb=self.fake.callbacks('factory-current-'+'1'*32)
-        a('f01v2-abc-manifest.json',b'{"schema":"something"}')
-        self.assertEqual(ra('f01v2-abc-manifest.json'),b'{"schema":"something"}')
+        part='f01v2-abc-000001.enc'
+        payload=m.F01_MAGIC+b'X'*100
+        a(part,payload);self.assertEqual(ra(part),payload)
+        b(part,payload);self.assertEqual(rb(part),payload)
+        manifest=b'{"schema":"something"}'
+        a('f01v2-abc-manifest.json',manifest)
+        b('f01v2-abc-manifest.json',manifest)
+        self.assertEqual(ra('f01v2-abc-manifest.json'),manifest)
+        self.assertEqual(rb('f01v2-abc-manifest.json'),manifest)
     def test_28_object_name_traversal_denied(self):
         self.fake.preflight();a,b,_,_=self.fake.callbacks('factory-current-'+'2'*32)
         with self.assertRaisesRegex(m.TransferHold,'INVALID_ENCRYPTED_PART'):a('../folder.enc',m.F01_MAGIC+b'X'*100)
@@ -262,5 +269,80 @@ class TestRcloneDualDrive(unittest.TestCase):
             with self.assertRaisesRegex(m.TransferHold,'RCLONE_PROVIDER_OPERATION_FAILED'):
                 self.fake.callbacks(run_id)
         self.assertFalse(self.fake.dirs)
+
+
+    def _new_cipher_callbacks(self, letter):
+        self.fake.preflight()
+        return self.fake.callbacks('factory-current-'+letter*32)
+
+    def test_47_manifest_first_is_denied(self):
+        a,b,ra,rb=self._new_cipher_callbacks('b')
+        with self.assertRaisesRegex(m.TransferHold,'MANIFEST_BEFORE_DUAL_PART_READBACK_DENIED'):
+            a('done-manifest.json',b'{}')
+        self.assertFalse(any(':done-manifest.json' in x for x in self.fake.objects))
+
+    def test_48_one_provider_cipher_only_denies_manifest(self):
+        a,b,ra,rb=self._new_cipher_callbacks('c')
+        a('one.enc',m.F01_MAGIC+b'0'*100)
+        with self.assertRaisesRegex(m.TransferHold,'MANIFEST_BEFORE_DUAL_PART_READBACK_DENIED'):
+            a('done-manifest.json',b'{}')
+
+    def test_49_dual_upload_without_readback_denies_manifest(self):
+        a,b,ra,rb=self._new_cipher_callbacks('d')
+        part=m.F01_MAGIC+b'1'*100
+        a('one.enc',part);b('one.enc',part)
+        with self.assertRaisesRegex(m.TransferHold,'MANIFEST_BEFORE_DUAL_PART_READBACK_DENIED'):
+            a('done-manifest.json',b'{}')
+
+    def test_50_partial_readback_denies_manifest(self):
+        a,b,ra,rb=self._new_cipher_callbacks('e')
+        part=m.F01_MAGIC+b'2'*100
+        a('one.enc',part);b('one.enc',part);ra('one.enc')
+        with self.assertRaisesRegex(m.TransferHold,'MANIFEST_BEFORE_DUAL_PART_READBACK_DENIED'):
+            b('done-manifest.json',b'{}')
+
+    def test_51_different_cipher_across_destinations_denies_manifest(self):
+        a,b,ra,rb=self._new_cipher_callbacks('f')
+        a('one.enc',m.F01_MAGIC+b'3'*100)
+        b('one.enc',m.F01_MAGIC+b'4'*100)
+        ra('one.enc');rb('one.enc')
+        with self.assertRaisesRegex(m.TransferHold,'MANIFEST_BEFORE_DUAL_PART_READBACK_DENIED'):
+            a('done-manifest.json',b'{}')
+
+    def test_52_corrupted_remote_readback_does_not_count(self):
+        a,b,ra,rb=self._new_cipher_callbacks('0')
+        part=m.F01_MAGIC+b'5'*100
+        a('one.enc',part);b('one.enc',part)
+        self.fake.objects['factory_a:current-backups/factory-current-'+'0'*32+'/one.enc']=m.F01_MAGIC+b'6'*100
+        with self.assertRaisesRegex(m.TransferHold,'REMOTE_CIPHERTEXT_READBACK_MISMATCH'):
+            ra('one.enc')
+        rb('one.enc')
+        with self.assertRaisesRegex(m.TransferHold,'MANIFEST_BEFORE_DUAL_PART_READBACK_DENIED'):
+            b('done-manifest.json',b'{}')
+
+    def test_53_no_ciphertext_after_first_manifest(self):
+        a,b,ra,rb=self._new_cipher_callbacks('1')
+        part=m.F01_MAGIC+b'7'*100
+        a('one.enc',part);b('one.enc',part);ra('one.enc');rb('one.enc')
+        a('done-manifest.json',b'{}')
+        with self.assertRaisesRegex(m.TransferHold,'CIPHERTEXT_AFTER_MANIFEST_DENIED'):
+            b('two.enc',part)
+
+    def test_54_two_manifest_names_conflict_denied(self):
+        a,b,ra,rb=self._new_cipher_callbacks('2')
+        part=m.F01_MAGIC+b'8'*100
+        a('one.enc',part);b('one.enc',part);ra('one.enc');rb('one.enc')
+        a('first-manifest.json',b'{}')
+        with self.assertRaisesRegex(m.TransferHold,'CONFLICTING_COMPLETION_MANIFEST_DENIED'):
+            b('second-manifest.json',b'{}')
+
+    def test_55_multi_part_partial_readback_denies_manifest(self):
+        a,b,ra,rb=self._new_cipher_callbacks('3')
+        for name,number in (('one.enc',b'9'),('two.enc',b'A')):
+            part=m.F01_MAGIC+number*100
+            a(name,part);b(name,part)
+        ra('one.enc');rb('one.enc');ra('two.enc')
+        with self.assertRaisesRegex(m.TransferHold,'MANIFEST_BEFORE_DUAL_PART_READBACK_DENIED'):
+            a('done-manifest.json',b'{}')
 
 if __name__=='__main__':unittest.main()
