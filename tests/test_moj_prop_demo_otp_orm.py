@@ -114,10 +114,10 @@ class RealDatabaseDemoEmailConsentTests(TestCase):
         with self.assertRaises(Plan1OrderGateClosed):
             self.review()
 
-    def test_educational_sku_cannot_use_existing_optin(self):
+    def test_other_plan_sku_cannot_use_existing_plan1_optin(self):
         self.interest=PropInterest.objects.create(
-            email="synthetic-other-starter@example.invalid",
-            plan_code="MOJPROP-STARTER30",
+            email="synthetic-other-plan@example.invalid",
+            plan_code="MOJ-PROP-02",
             consent_version="moj-prop-interest-v1",
             source_language="en",
         )
