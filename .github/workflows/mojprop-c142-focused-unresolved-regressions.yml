@@ -1,0 +1,129 @@
+name: MOJ PROP C142 focused outstanding global regressions - NO RELEASE
+on:
+  push:
+    branches: [fix/mojprop-c142-consolidated-legacy-route-consent-20261117]
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-c142-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  remaining-contracts:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    env:
+      DEBUG: 'true'
+      SECRET_KEY: 'mojprop-c142-ephemeral-ci-only'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install project dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Verify Django code and migration closure
+        run: |
+          set -euo pipefail
+          python3 manage.py check
+          python3 manage.py makemigrations --check --dry-run
+          python3 manage.py collectstatic --noinput
+      - name: Execute remaining 12 previously failing real modules
+        run: |
+          set -euo pipefail
+          python3 -m pytest -q --tb=short --disable-warnings \
+            tests/test_mojprop_signal_plan_inquiry_20261115.py \
+            tests/test_mojprop_contact_fallback_c110_20261116.py \
+            tests/test_mojprop_direct_support_fallback_c134_20261116.py \
+            tests/test_mojprop_nojs_signed_db_reconciliation_c102.py \
+            tests/test_mojprop_v4_buyer_funnel_20261115.py \
+            tests/test_moj_prop_site.py \
+            tests/test_mpw_contact_business_php_20261019.py \
+            tests/test_mojprop_commercial_samples_release.py \
+            tests/test_mojprop_starter30_single_sku_contract_20261115.py \
+            tests/test_moj_prop_social_review.py \
+            tests/test_mpw_cutover_current_catalog_guard_20261115.py \
+            tests/test_mpw_guest_telemetry_isolation_20261108.py \
+            tests/test_mojprop_c142_public_form_get_readonly.py
+          echo 'C142_FOCUSED_REAL_CONTRACT_TESTS=PASS'
+          echo 'C142_CUSTOMER_POST_PAYMENT_RELEASE=false'
+
+  live-plan1-consent-form-get-only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Observe real public EN/FA consent GET without buyer POST or email
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_c142_public_form_get_readonly.py
+
+  full-repository-regression-after-focused-green:
+    needs: remaining-contracts
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      DEBUG: 'true'
+      SECRET_KEY: 'c142-full-repository-ci-ephemeral'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install actual project dependencies and approved PDF parser hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install -r requirements.txt
+          parser="$RUNNER_TEMP/mpw-pdf-parser"
+          install -d -m 700 "$parser"
+          python3 -m pip install --no-deps --require-hashes --target "$parser" -r .github/requirements/mpw-pdf-parser-ci.txt
+          echo "PYTHONPATH=$parser" >> "$GITHUB_ENV"
+      - name: Verify Django schema then build static manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 manage.py check
+          python3 manage.py makemigrations --check --dry-run
+          python3 manage.py collectstatic --noinput
+      - name: Run unfiltered ALL pytest modules for true global gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pytest -q --tb=short --disable-warnings
+      - name: Verify full migration chain on isolated local SQLite only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 manage.py migrate --noinput
+          echo 'C142_FULL_REPO_TESTS_AND_EPHEMERAL_MIGRATIONS_PASS=true'
+          echo 'C142_MAIN_MERGE_AND_PRODUCTION_DEPLOY=false'
