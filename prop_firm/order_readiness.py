@@ -69,9 +69,11 @@ PREPURCHASE_DISCLOSURES = (
     "Each phase requires at least six verified trading days.",
     "A real USD 100 account is conditional on passing and independently proven funding.",
     "The funded profit split is 70% trader and 30% company; 14 levels are conditional.",
-    "One original Instagram and one original Facebook post apply per challenge only "
-    "where legally permissible, with clear advertising disclosure and no personal "
-    "account scraping or forced access.",
+    "No Instagram or Facebook post, upload, link, publication or promotional "
+    "submission is required from a buyer, regardless of phase or outcome. "
+    "The 2026-11-17 no-social-post waiver supersedes the buyer-post clause of "
+    "the historical 2026-11-15/v1.2 information packet. Optional promotions "
+    "need separately obtained advertising consent; owner accounts are excluded.",
     "Eligibility, KYC, geographic restrictions and fair refund terms apply.",
     "No payable invoice or challenge activation is offered until all gates pass.",
 )
