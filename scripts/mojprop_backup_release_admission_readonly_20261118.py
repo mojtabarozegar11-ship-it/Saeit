@@ -58,7 +58,7 @@ def inspect(snapshot: dict) -> dict:
         raise AdmissionEvidenceRejected("expected audited backup capacity snapshot")
     if any(key not in snapshot for key in REQUIRED):
         raise AdmissionEvidenceRejected("incomplete authenticated report")
-    if _boolean(snapshot, "files_deleted") or _boolean(snapshot, "database_bytes_read"):
+    if _integer(snapshot, "files_deleted", 1000) != 0 or _boolean(snapshot, "database_bytes_read"):
         raise AdmissionEvidenceRejected("not a metadata-only operation")
     if _boolean(snapshot, "secret_key_bytes_read") or _boolean(snapshot, "backup_written"):
         raise AdmissionEvidenceRejected("unexpected privileged write/read")
@@ -78,7 +78,7 @@ def inspect(snapshot: dict) -> dict:
     if claimed_capacity != (free >= MIN_START):
         raise AdmissionEvidenceRejected("self-inconsistent free-capacity report")
     locations = snapshot["candidate_locations"]
-    if type(locations) is not dict or len(locations) > 25:
+    if type(locations) is not dict or "home" not in locations or len(locations) > 25:
         raise AdmissionEvidenceRejected("unsafe alternate-disk inventory")
     alternative = []
     for label, item in locations.items():
@@ -89,6 +89,8 @@ def inspect(snapshot: dict) -> dict:
         actual_free = _integer(item, "free_bytes")
         same_fs = _boolean(item, "distinct_from_home_device")
         owner_private = _boolean(item, "private_existing_target")
+        if label == "home" and (actual_free != free or same_fs):
+            raise AdmissionEvidenceRejected("home filesystem capacity or device identity disagrees")
         if _boolean(item, "has_10gib_free") != (actual_free >= MIN_START):
             raise AdmissionEvidenceRejected("mount's free disk claim inconsistent")
         if label != "home" and same_fs and owner_private and actual_free >= MIN_START:
