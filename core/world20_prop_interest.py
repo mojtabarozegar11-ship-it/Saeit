@@ -15,11 +15,11 @@ from django.views.decorators.csrf import csrf_protect
 from .world20_views import _HOSTS, world_catalog
 
 
-def _secure(response, language):
+def _secure(response, language, *, private_receipt=False):
     response["Cache-Control"] = "private, no-store, max-age=0"
     response["Pragma"] = "no-cache"
     response["Content-Language"] = language
-    response["Referrer-Policy"] = "no-referrer"
+    response["Referrer-Policy"] = ("no-referrer" if private_receipt else "same-origin")
     response["X-Robots-Tag"] = "noindex, nofollow, noarchive"
     response["X-Frame-Options"] = "DENY"
     response["X-Content-Type-Options"] = "nosniff"
@@ -95,7 +95,7 @@ def localized_prop_interest(request, lang):
             "reference": data["request_id"],
             "private_receipt": data["receipt_token"],
         }, status=api_response.status_code, content_type="text/html; charset=utf-8")
-        return _secure(response, lang)
+        return _secure(response, lang, private_receipt=True)
 
     status = api_response.status_code
     # Fail closed on malformed or unexpected downstream success responses.
