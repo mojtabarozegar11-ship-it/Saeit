@@ -28,6 +28,7 @@ SETTINGS = dict(
     MOJPROP_V141_NATIVE_TERMS_VERSION=VERSION,
     MOJPROP_V141_NATIVE_TERMS_SHA256=D,
     MOJPROP_V141_TRON_RECEIVER=RECEIVER,
+    MOJPROP_V141_ORDER_SIGNING_KEY="CI-only-local-test-key-" + "7" * 48,
     MOJPROP_V141_TRON_SOLIDITY_PROVIDERS=(
         "https://api.trongrid.io", "https://tron-node.example.org"
     ),
@@ -126,6 +127,22 @@ class RealNativePaymentStorageTests(TestCase):
                 self.invoice()
         self.assertEqual(PropV141NativeOrder.objects.count(), 0)
 
+    def test_missing_secret_disallows_invoice(self):
+        with override_settings(MOJPROP_V141_ORDER_SIGNING_KEY="weak"):
+            with self.assertRaises(CheckoutRejected):
+                self.invoice()
+        self.assertEqual(PropV141NativeOrder.objects.count(), 0)
+
+    def test_modified_signed_invoice_rejected_before_receipt(self):
+        i = self.invoice()
+        # Simulates illegal direct ORM mutation rather than service issuance.
+        PropV141NativeOrder.objects.filter(pk=i.pk).update(
+            payer_hex41="41" + "b1" * 20)
+        with self.assertRaises(CheckoutRejected):
+            confirm_native_trx_and_deliver(reference=i.reference, txid=TX_A)
+        self.assertEqual(PropGlobalTRXSettlement.objects.count(), 0)
+        self.assertEqual(PropV141VirtualBook.objects.count(), 0)
+
     def test_no_iranian_or_us_buyer(self):
         for country in ("IR", "US", "ir", "USA", "", "1R"):
             with self.assertRaises(CheckoutRejected, msg=country):
@@ -172,6 +189,7 @@ class RealNativePaymentStorageTests(TestCase):
         self.assertEqual(i.recipient, RECEIVER)
         self.assertEqual(i.terms_sha256, D)
         self.assertEqual(i.payer_wallet_attestation_sha256, D)
+        self.assertEqual(len(i.order_hmac_sha256), 64)
         self.assertEqual(i.status, "issued")
         self.assertFalse(hasattr(i, "native_receipt"))
 
