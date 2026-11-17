@@ -22,9 +22,9 @@
   <header class="zm-proc-hero">
     <span>شرکت کشت و صنعت زمرد ملل · فراخوان دریافت پیشنهاد</span>
     <h1>۷۲ فراخوان تأمین کالا و خرید تجهیزات تولیدی</h1>
-    <p>۳۶ فراخوان برای شناسایی تأمین‌کنندگان محصولات و ۳۶ فراخوان برای دریافت پیشنهاد خرید ماشین‌آلات صنعتی مرتبط با همان گروه‌ها.</p>
+    <p>۳۶ فراخوان برای شناسایی تأمین‌کنندگان محصولات و ۳۶ فراخوان برای دریافت پیشنهاد خرید ماشین‌آلات صنعتی آماده شده‌اند؛ انتشار عمومی پس از نهایی‌شدن شماره یکتا انجام می‌شود.</p>
     <p><strong>توضیح حقوقی:</strong> این آگهی‌ها مزایده فروش نیستند؛ فراخوان تأمین، استعلام بها و درخواست پیشنهاد فنی و مالی خرید هستند. هیچ تاریخ یا مهلت ثابت برای ارائه پیشنهاد تعیین نشده است.</p>
-    <nav class="zm-proc-nav" aria-label="دسترسی سریع"><a href="#proc-supply">۳۶ آگهی تأمین کالا</a><a href="#proc-equipment">۳۶ آگهی خرید تجهیزات صنعتی</a><a href="#proc-terms">شرایط شرکت</a></nav>
+    {% if numbering_ready %}<nav class="zm-proc-nav" aria-label="دسترسی سریع"><a href="#proc-supply">۳۶ آگهی تأمین کالا</a><a href="#proc-equipment">۳۶ آگهی خرید تجهیزات صنعتی</a><a href="#proc-terms">شرایط شرکت</a></nav>{% endif %}
   </header>
   <section class="zm-proc-terms" id="proc-terms" aria-labelledby="proc-terms-heading">
     <h2 id="proc-terms-heading">شرایط عمومی فراخوان‌ها</h2>
@@ -33,6 +33,7 @@
     <details><summary>مدارک پیشنهادی تأمین کالا</summary><ul>{% for requirement in procurement_policy.common_supply_documents %}<li>{{ requirement }}</li>{% endfor %}</ul><p>معیارهای ارزیابی: {% for item in procurement_policy.evaluation_supply %}{{ item }}{% if not forloop.last %}؛ {% endif %}{% endfor %}</p></details>
     <details><summary>مدارک پیشنهادی تجهیزات صنعتی</summary><ul>{% for requirement in procurement_policy.common_equipment_documents %}<li>{{ requirement }}</li>{% endfor %}</ul><p>معیارهای ارزیابی: {% for item in procurement_policy.evaluation_equipment %}{{ item }}{% if not forloop.last %}؛ {% endif %}{% endfor %}</p></details>
   </section>
+  {% if numbering_ready %}
   <section class="zm-proc-section" id="proc-supply" aria-labelledby="proc-supply-heading">
     <h2 id="proc-supply-heading">۳۶ فراخوان تأمین مستقیم کالا و محصولات</h2>
     <p>تولیدکنندگان، کشاورزان، کارخانه‌ها و تأمین‌کنندگان واجد شرایط می‌توانند ظرفیت تأمین و پیشنهاد فنی و مالی خود را معرفی کنند.</p>
@@ -43,6 +44,13 @@
     <p>تولیدکنندگان و نمایندگان معتبر ماشین‌آلات می‌توانند پیشنهاد فنی و مالی ارائه دهند. ظرفیت، مقدار خرید، جانمایی و محل نصب پس از ارزیابی و صرفاً در قرارداد مشخص می‌شود.</p>
     <div class="zm-proc-grid">{% for notice in equipment_notices %}{% include "core/includes/procurement_notice_card.html" %}{% empty %}<p>فراخوانی برای این بخش ثبت نشده است.</p>{% endfor %}</div>
   </section>
+  {% else %}
+  <section class="zm-proc-terms" role="status" aria-labelledby="numbering-pending">
+    <h2 id="numbering-pending">شماره‌گذاری نهایی آگهی‌ها در انتظار تطبیق با دفتر ثبت قبلی</h2>
+    <p>شرح ۳۶ فراخوان کالا و ۳۶ فراخوان خرید ماشین‌آلات آماده است؛ برای جلوگیری از تداخل شماره با آگهی‌های قبلی، تا تأیید آخرین شماره ثبت‌شده و تخصیص یکتای شماره‌ها، هیچ‌یک در این ویترین به‌عنوان آگهی شماره‌دار منتشر نمی‌شود.</p>
+    <p>پس از بررسی دفتر آگهی‌های قبلی، شماره‌ها از نخستین شماره آزاد بعدی، ابتدا برای ۳۶ آگهی کالا و سپس برای ۳۶ آگهی تجهیزات، تخصیص داده می‌شوند.</p>
+  </section>
+  {% endif %}
   <footer class="zm-proc-terms">
     <p><strong>بدون تعهد مالی:</strong> انتشار فراخوان به معنای ثبت سفارش یا پرداخت نیست؛ تصمیم نهایی مستلزم ارزیابی، مجوزهای لازم و قرارداد مکتوب است. پرونده‌های خصوصی مزایده به این صفحه منتقل نشده‌اند.</p>
     <a class="auction-inquiry" href="{{ procurement_policy.channel }}">ارتباط رسمی با شرکت برای ارسال پیشنهاد</a>
