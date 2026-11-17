@@ -18,6 +18,8 @@ on:
       - 'prop_firm/plan1_buyer_no_social_amendment.py'
       - 'prop_firm/plan1_phase_account_boundary.py'
       - 'prop_firm/plan1_demo_email_interest.py'
+      - 'prop_firm/plan1_revised_buyer_terms_link.py'
+      - 'tests/test_prop_plan1_revised_buyer_terms_link.py'
       - 'tests/test_prop_plan1_demo_to_real_boundary.py'
       - 'tests/test_moj_prop_demo_to_real_db.py'
       - 'tests/test_prop_plan1_demo_email_interest.py'
@@ -46,6 +48,8 @@ on:
       - 'prop_firm/plan1_private_order_draft.py'
       - 'prop_firm/plan1_intake_provenance.py'
       - 'prop_firm/plan1_demo_email_interest.py'
+      - 'prop_firm/plan1_revised_buyer_terms_link.py'
+      - 'tests/test_prop_plan1_revised_buyer_terms_link.py'
       - 'prop_firm/plan1_orm_consent_review.py'
       - 'tests/test_moj_prop_demo_otp_orm.py'
       - 'tests/test_prop_plan1_demo_email_interest.py'
@@ -139,10 +143,10 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Compile B-only bridge and regression files
         run: |
-          python -m py_compile prop_firm/plan1_orm_consent_review.py prop_firm/plan1_demo_email_interest.py tests/test_prop_plan1_orm_consent_review.py tests/test_prop_plan1_orm_verified_handoff.py tests/test_moj_prop_demo_otp_orm.py tests/test_prop_plan1_demo_email_interest.py
+          python -m py_compile prop_firm/plan1_orm_consent_review.py prop_firm/plan1_demo_email_interest.py tests/test_prop_plan1_orm_consent_review.py tests/test_prop_plan1_orm_verified_handoff.py tests/test_moj_prop_demo_otp_orm.py tests/test_prop_plan1_demo_email_interest.py prop_firm/plan1_revised_buyer_terms_link.py tests/test_prop_plan1_revised_buyer_terms_link.py
       - name: Source-only CRM/signed-review integration regression
         run: |
-          python manage.py test tests.test_prop_plan1_orm_consent_review tests.test_prop_plan1_orm_verified_handoff tests.test_moj_prop_demo_to_real_db tests.test_moj_prop_demo_otp_orm --verbosity 2
+          python manage.py test tests.test_prop_plan1_orm_consent_review tests.test_prop_plan1_orm_verified_handoff tests.test_moj_prop_demo_to_real_db tests.test_moj_prop_demo_otp_orm tests.test_prop_plan1_revised_buyer_terms_link --verbosity 2
       - name: Assert no Plan1 payment or funding activation
         run: |
           python - <<'PY'
