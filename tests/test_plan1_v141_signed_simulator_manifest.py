@@ -14,6 +14,7 @@ from tests.test_plan1_v141_simulated_challenge_engine import good_snapshot, NOW
 
 KEY=b"K"*32
 SOURCE="allowlisted.simulator.adapter"
+FEED="verified.demo.source"
 KEY_ID="review.adapter.v1"
 MANIFEST_ID="LEDGER-ABCDEFGHIJKLMNOP"
 
@@ -51,6 +52,7 @@ def ingest(raw=None,signature=None,**kwargs):
         hmac_signature=original_sign if signature is None else signature,
         trusted_signer_keys=kwargs.pop("trusted_signer_keys",{KEY_ID:KEY}),
         expected_source=kwargs.pop("expected_source",SOURCE),
+        expected_feed_source=kwargs.pop("expected_feed_source",FEED),
         expected_key_id=kwargs.pop("expected_key_id",KEY_ID),
         expected_manifest_id=kwargs.pop("expected_manifest_id",MANIFEST_ID),
         expected_challenge_ref=kwargs.pop(
@@ -248,6 +250,52 @@ class SignedManifestTests(unittest.TestCase):
         raw,sig=build(doc)
         with self.assertRaises(LedgerManifestRejected):
             ingest(raw=raw,signature=sig)
+
+
+    def test_34_publisher_id_distinct_from_allowlisted_trade_feed(self):
+        x=ingest()
+        self.assertNotEqual(x.source,FEED)
+        self.assertEqual(x.source,SOURCE)
+
+    def test_35_expected_feed_mismatch_blocks_even_valid_hmac(self):
+        with self.assertRaises(LedgerManifestRejected):
+            ingest(expected_feed_source="not.the.authorized.feed")
+
+    def test_36_tampered_fill_source_rejected_with_legitimate_hmac_key(self):
+        doc=payload()
+        doc["snapshot"]["closed_fills"][0]["data_source"]="rogue.broker.feed"
+        raw,sig=build(doc)
+        with self.assertRaises(LedgerManifestRejected):
+            ingest(raw=raw,signature=sig)
+
+    def test_37_tampered_equity_source_rejected_with_legitimate_hmac_key(self):
+        doc=payload()
+        doc["snapshot"]["equity_marks"][0]["data_source"]="rogue.broker.feed"
+        raw,sig=build(doc)
+        with self.assertRaises(LedgerManifestRejected):
+            ingest(raw=raw,signature=sig)
+
+    def test_38_inner_source_equal_to_outer_adapter_is_not_implicitly_trusted(self):
+        doc=payload()
+        doc["snapshot"]["closed_fills"][0]["data_source"]=SOURCE
+        raw,sig=build(doc)
+        with self.assertRaises(LedgerManifestRejected):
+            ingest(raw=raw,signature=sig)
+
+    def test_39_empty_expected_feed_source_is_not_a_valid_allowlist(self):
+        with self.assertRaises(LedgerManifestRejected):
+            ingest(expected_feed_source="")
+
+    def test_40_wrong_feed_rejected_when_positions_and_equity_both_claim_it(self):
+        doc=payload()
+        for row in doc["snapshot"]["closed_fills"]:
+            row["data_source"]="second.demo.source"
+        for row in doc["snapshot"]["equity_marks"]:
+            row["data_source"]="second.demo.source"
+        raw,sig=build(doc)
+        with self.assertRaises(LedgerManifestRejected):
+            ingest(raw=raw,signature=sig)
+
 
 
 if __name__=="__main__":
