@@ -153,16 +153,11 @@ class TestRcloneDualDrive(unittest.TestCase):
         self.fake.preflight();a,b,ra,rb=self.fake.callbacks('factory-current-'+'f'*32)
         with self.assertRaisesRegex(m.TransferHold,'UNUPLOADED_PART_READBACK_DENIED'):ra('notuploaded.enc')
     def test_27_valid_manifest_uploads_last_like_payload(self):
-        self.fake.preflight();a,b,ra,rb=self.fake.callbacks('factory-current-'+'1'*32)
-        part='f01v2-abc-000001.enc'
-        payload=m.F01_MAGIC+b'X'*100
-        a(part,payload);self.assertEqual(ra(part),payload)
-        b(part,payload);self.assertEqual(rb(part),payload)
-        manifest=b'{"schema":"something"}'
-        a('f01v2-abc-manifest.json',manifest)
-        b('f01v2-abc-manifest.json',manifest)
-        self.assertEqual(ra('f01v2-abc-manifest.json'),manifest)
-        self.assertEqual(rb('f01v2-abc-manifest.json'),manifest)
+        a,b,ra,rb,part,payload,manifest_name,manifest=self._ready_one_cipher('1')
+        a(manifest_name,manifest)
+        b(manifest_name,manifest)
+        self.assertEqual(ra(manifest_name),manifest)
+        self.assertEqual(rb(manifest_name),manifest)
     def test_28_object_name_traversal_denied(self):
         self.fake.preflight();a,b,_,_=self.fake.callbacks('factory-current-'+'2'*32)
         with self.assertRaisesRegex(m.TransferHold,'INVALID_ENCRYPTED_PART'):a('../folder.enc',m.F01_MAGIC+b'X'*100)
@@ -275,6 +270,35 @@ class TestRcloneDualDrive(unittest.TestCase):
         self.fake.preflight()
         return self.fake.callbacks('factory-current-'+letter*32)
 
+    def _manifest_fixture(self, part_name, payload, **updates):
+        run=part_name.split('-')[1]
+        name='f01v2-'+run+'-manifest.json'
+        plain_len=len(payload)-len(m.F01_MAGIC)-41
+        data={
+            'schema':'factory.dual-encrypted-stream.f01v2',
+            'run_id':run,'public_key_spki_sha256':'e'*64,
+            'wrapped_key':'A'*128,'nonce_prefix':'QUFBQUFBQUE=',
+            'chunk_limit':4096,'plain_total':plain_len,
+            'cipher_total':len(payload),
+            'parts':[{'name':part_name,'index':1,'cipher_bytes':len(payload),
+                      'cipher_sha256':m._sha(payload),'plain_bytes':plain_len}],
+            'owner_refs':['a'*32,'b'*32],
+            'source_consistency_external':False,'restore_verified':False,
+            'manifest_mac_sha256':'c'*64,
+        }
+        data.update(updates)
+        return name,json.dumps(data,sort_keys=True,ensure_ascii=True,separators=(',',':')).encode('ascii')
+
+    def _ready_one_cipher(self, letter):
+        a,b,ra,rb=self._new_cipher_callbacks(letter)
+        part_name='f01v2-'+'a'*32+'-000001.enc'
+        payload=m.F01_MAGIC+b'X'*100
+        a(part_name,payload);b(part_name,payload)
+        self.assertEqual(ra(part_name),payload)
+        self.assertEqual(rb(part_name),payload)
+        manifest_name,manifest=self._manifest_fixture(part_name,payload)
+        return a,b,ra,rb,part_name,payload,manifest_name,manifest
+
     def test_47_manifest_first_is_denied(self):
         a,b,ra,rb=self._new_cipher_callbacks('b')
         with self.assertRaisesRegex(m.TransferHold,'MANIFEST_BEFORE_DUAL_PART_READBACK_DENIED'):
@@ -321,20 +345,16 @@ class TestRcloneDualDrive(unittest.TestCase):
             b('done-manifest.json',b'{}')
 
     def test_53_no_ciphertext_after_first_manifest(self):
-        a,b,ra,rb=self._new_cipher_callbacks('1')
-        part=m.F01_MAGIC+b'7'*100
-        a('one.enc',part);b('one.enc',part);ra('one.enc');rb('one.enc')
-        a('done-manifest.json',b'{}')
+        a,b,ra,rb,part,payload,name,manifest=self._ready_one_cipher('1')
+        a(name,manifest)
         with self.assertRaisesRegex(m.TransferHold,'CIPHERTEXT_AFTER_MANIFEST_DENIED'):
-            b('two.enc',part)
+            b('two.enc',payload)
 
     def test_54_two_manifest_names_conflict_denied(self):
-        a,b,ra,rb=self._new_cipher_callbacks('2')
-        part=m.F01_MAGIC+b'8'*100
-        a('one.enc',part);b('one.enc',part);ra('one.enc');rb('one.enc')
-        a('first-manifest.json',b'{}')
+        a,b,ra,rb,part,payload,name,manifest=self._ready_one_cipher('2')
+        a(name,manifest)
         with self.assertRaisesRegex(m.TransferHold,'CONFLICTING_COMPLETION_MANIFEST_DENIED'):
-            b('second-manifest.json',b'{}')
+            b('second-manifest.json',manifest)
 
     def test_55_multi_part_partial_readback_denies_manifest(self):
         a,b,ra,rb=self._new_cipher_callbacks('3')
@@ -344,5 +364,76 @@ class TestRcloneDualDrive(unittest.TestCase):
         ra('one.enc');rb('one.enc');ra('two.enc')
         with self.assertRaisesRegex(m.TransferHold,'MANIFEST_BEFORE_DUAL_PART_READBACK_DENIED'):
             a('done-manifest.json',b'{}')
+
+
+    def test_56_provider_a_b_manifest_content_difference_denied(self):
+        a,b,ra,rb,part,payload,name,manifest=self._ready_one_cipher('4')
+        a(name,manifest)
+        alt=json.loads(manifest)
+        alt['wrapped_key']='B'*128
+        divergent=json.dumps(alt,sort_keys=True,separators=(',',':')).encode()
+        with self.assertRaisesRegex(m.TransferHold,'TWO_DRIVES_MANIFEST_CONTENT_MISMATCH'):
+            b(name,divergent)
+
+    def test_57_corrupt_manifest_provider_readback_denied(self):
+        a,b,ra,rb,part,payload,name,manifest=self._ready_one_cipher('5')
+        a(name,manifest)
+        key='factory_a:current-backups/factory-current-'+'5'*32+'/'+name
+        self.fake.objects[key]=manifest[:-1]+b'0'
+        with self.assertRaisesRegex(m.TransferHold,'REMOTE_MANIFEST_READBACK_MISMATCH'):
+            ra(name)
+
+    def test_58_manifest_wrong_part_name_denied(self):
+        a,b,ra,rb,part,payload,name,manifest=self._ready_one_cipher('6')
+        entries=json.loads(manifest)['parts']
+        entries[0]['name']='wrong-000001.enc'
+        bad_name,bad=self._manifest_fixture(part,payload,parts=entries)
+        with self.assertRaisesRegex(m.TransferHold,'INVALID_OR_UNBOUND_COMPLETION_MANIFEST'):
+            a(bad_name,bad)
+
+    def test_59_manifest_wrong_sha_denied(self):
+        a,b,ra,rb,part,payload,name,manifest=self._ready_one_cipher('7')
+        entries=json.loads(manifest)['parts']
+        entries[0]['cipher_sha256']='1'*64
+        _,bad=self._manifest_fixture(part,payload,parts=entries)
+        with self.assertRaisesRegex(m.TransferHold,'INVALID_OR_UNBOUND_COMPLETION_MANIFEST'):
+            a(name,bad)
+
+    def test_60_manifest_false_restore_claim_enforced(self):
+        a,b,ra,rb,part,payload,name,manifest=self._ready_one_cipher('8')
+        _,bad=self._manifest_fixture(part,payload,restore_verified=True)
+        with self.assertRaisesRegex(m.TransferHold,'INVALID_OR_UNBOUND_COMPLETION_MANIFEST'):
+            a(name,bad)
+
+    def test_61_manifest_unknown_field_denied(self):
+        a,b,ra,rb,part,payload,name,manifest=self._ready_one_cipher('9')
+        _,bad=self._manifest_fixture(part,payload,untrusted_extra='x')
+        with self.assertRaisesRegex(m.TransferHold,'INVALID_OR_UNBOUND_COMPLETION_MANIFEST'):
+            a(name,bad)
+
+    def test_62_manifest_duplicate_json_keys_denied(self):
+        a,b,ra,rb,part,payload,name,manifest=self._ready_one_cipher('a')
+        dup=manifest.replace(b'"schema":',b'"schema":"wrong","schema":',1)
+        with self.assertRaisesRegex(m.TransferHold,'INVALID_OR_UNBOUND_COMPLETION_MANIFEST'):
+            a(name,dup)
+
+    def test_63_manifest_noncanonical_json_denied(self):
+        a,b,ra,rb,part,payload,name,manifest=self._ready_one_cipher('b')
+        noncanonical=json.dumps(json.loads(manifest),indent=2).encode()
+        with self.assertRaisesRegex(m.TransferHold,'INVALID_OR_UNBOUND_COMPLETION_MANIFEST'):
+            a(name,noncanonical)
+
+    def test_64_manifest_wrong_plain_total_denied(self):
+        a,b,ra,rb,part,payload,name,manifest=self._ready_one_cipher('c')
+        _,bad=self._manifest_fixture(part,payload,plain_total=123456)
+        with self.assertRaisesRegex(m.TransferHold,'INVALID_OR_UNBOUND_COMPLETION_MANIFEST'):
+            a(name,bad)
+
+    def test_65_manifest_missing_extra_part_denied(self):
+        a,b,ra,rb,part,payload,name,manifest=self._ready_one_cipher('d')
+        second='f01v2-'+'a'*32+'-000002.enc'
+        a(second,payload);b(second,payload);ra(second);rb(second)
+        with self.assertRaisesRegex(m.TransferHold,'INVALID_OR_UNBOUND_COMPLETION_MANIFEST'):
+            a(name,manifest)
 
 if __name__=='__main__':unittest.main()
