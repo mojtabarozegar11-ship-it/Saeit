@@ -1,0 +1,46 @@
+name: MOJ PROP XAUUSD 3-8 owner review-only policy checks
+
+on:
+  pull_request:
+    branches:
+      - feature/prop-firm-policy-v11-20261114
+    paths:
+      - prop_firm/xauusd_owner_risk_review.py
+      - tests/test_prop_firm_xauusd_owner_risk_review.py
+      - .github/workflows/mojprop-xauusd-owner-risk-review.yml
+
+permissions:
+  contents: read
+
+jobs:
+  offline-xauusd-policy:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact reviewed PR code without persisted token
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate source scope (no live execution)
+        run: |
+          set -euo pipefail
+          test -f prop_firm/xauusd_owner_risk_review.py
+          test -f tests/test_prop_firm_xauusd_owner_risk_review.py
+          grep -q 'real_execution_authorized: bool = False' prop_firm/xauusd_owner_risk_review.py
+          grep -q 'payment_or_funding_authorized: bool = False' prop_firm/xauusd_owner_risk_review.py
+      - name: Run all 38 owner XAUUSD risk and safety tests
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_prop_firm_xauusd_owner_risk_review
+      - name: Report no live side effects
+        run: |
+          echo 'MOJPROP_XAUUSD_MATH_GUARD_TESTED=true'
+          echo 'MOJPROP_LIVE_EXECUTION=false'
+          echo 'MOJPROP_PAYMENT_OR_SITE_DEPLOYMENT=false'
