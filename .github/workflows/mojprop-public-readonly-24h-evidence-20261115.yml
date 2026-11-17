@@ -51,6 +51,11 @@ jobs:
             "saman_ar_signals|https://mojplaywin.com/ar/saman/market-signals/"
             "single_bot_root|https://mojtaba.bot.ai/"
           )
+          # Transport facts are non-secret fixed-key fields, never response
+          # bodies. Even valid-looking HTML does not prove HTTP 200/no redirect.
+          transport_proof="$RUNNER_TEMP/mojprop-nojs-transport-decisions.txt"
+          : > "$transport_proof"
+          chmod 600 "$transport_proof"
           unhealthy=0
           mojplaywin_unhealthy=0
           for item in "${targets[@]}"; do
@@ -63,11 +68,12 @@ jobs:
               --connect-timeout 6 --max-time 15 --silent --show-error \
               -H 'Cache-Control: no-cache' \
               -o "$check_dir/$name.body" \
-              -w '%{http_code}|%{exitcode}|%{time_namelookup}|%{time_connect}|%{time_appconnect}|%{time_starttransfer}' \
+              -w '%{http_code}|%{exitcode}|%{time_namelookup}|%{time_connect}|%{time_appconnect}|%{time_starttransfer}|%{num_redirects}' \
               "$url" 2>/dev/null || true)"
-            IFS='|' read -r code curl_exit dns_time connect_time tls_time ttfb <<< "$metrics"
+            IFS='|' read -r code curl_exit dns_time connect_time tls_time ttfb redirects <<< "$metrics"
             [[ "$code" =~ ^[0-9]{3}$ ]] || code="000"
             [[ "$curl_exit" =~ ^[0-9]+$ ]] || curl_exit="unknown"
+            [[ "$redirects" =~ ^[0-9]+$ ]] || redirects="unknown"
             case "$curl_exit" in
               0) class="http_response" ;;
               6) class="dns_resolution_failed" ;;
@@ -89,6 +95,13 @@ jobs:
             echo "GET_ONLY_${name}_TCP_SECONDS=${connect_time:-unknown}"
             echo "GET_ONLY_${name}_TLS_SECONDS=${tls_time:-unknown}"
             echo "GET_ONLY_${name}_TTFB_SECONDS=${ttfb:-unknown}"
+            echo "GET_ONLY_${name}_REDIRECTS=$redirects"
+            if [[ "$name" == "mojprop_intake_html" || "$name" == "mojprop_status_html" ]]; then
+              # Only fixed-key numeric outcomes. No URLs, headers, tokens or HTML.
+              printf 'GET_ONLY_%s_HTTP=%s\n' "$name" "$code" >> "$transport_proof"
+              printf 'GET_ONLY_%s_CURL_EXIT=%s\n' "$name" "$curl_exit" >> "$transport_proof"
+              printf 'GET_ONLY_%s_REDIRECTS=%s\n' "$name" "$redirects" >> "$transport_proof"
+            fi
             printf '%s\n' "- $name : HTTP $code; curl exit $curl_exit ($class); DNS ${dns_time:-?}s; TCP ${connect_time:-?}s; TLS ${tls_time:-?}s; TTFB ${ttfb:-?}s — GET only" >> "$GITHUB_STEP_SUMMARY"
             if [[ "$code" == "200" && "$name" == "mojprop_root" ]]; then
               if grep -Fq 'starter-30-trx' "$check_dir/$name.body"; then
@@ -128,6 +141,7 @@ jobs:
             "$check_dir/mojprop_status_html.body" | tee "$RUNNER_TEMP/mojprop-nojs-sanitized-decisions.txt"
           python3 -B scripts/mojprop_public_buyer_readiness_summary_20261117.py \
             "$RUNNER_TEMP/mojprop-nojs-sanitized-decisions.txt" \
+            "$transport_proof" \
             "$GITHUB_STEP_SUMMARY"
           # Compare ONLY existing downloaded PUBLIC GET response; never submit
           # buyer details or echo HTML/CSRF. Current main may have fixed the
