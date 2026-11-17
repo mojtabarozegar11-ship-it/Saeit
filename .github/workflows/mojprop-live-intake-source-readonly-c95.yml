@@ -15,6 +15,8 @@ on:
       - "tests/test_mojprop_starter30_public_presence_readonly_c122.py"
       - "scripts/mojprop_c146_live_plan1_runtime_source_readonly.py"
       - "tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py"
+      - "scripts/mojprop_c148_owner_restore_storage_readonly.py"
+      - "tests/test_mojprop_c148_owner_restore_storage_readonly.py"
 
 permissions:
   contents: read
@@ -50,6 +52,12 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_starter30_public_presence_readonly_c122 -q
           python3 -B -m py_compile scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c146_live_plan1_runtime_source_readonly -q
+          python3 -B -m py_compile scripts/mojprop_c148_owner_restore_storage_readonly.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c148_owner_restore_storage_readonly -q
+          test ! -L scripts/mojprop_c148_owner_restore_storage_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c148_owner_restore_storage_readonly.py)" = "747a87f6e8c3e915e11f63931e078f97c2a83844"
+          test ! -L tests/test_mojprop_c148_owner_restore_storage_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c148_owner_restore_storage_readonly.py)" = "f6163ed3cd077989272a73e8ab11978758794a9e"
           test ! -L scripts/mojprop_c146_live_plan1_runtime_source_readonly.py
           test "$(git hash-object -- scripts/mojprop_c146_live_plan1_runtime_source_readonly.py)" = "198d3c2b4f8de90504002f95148c370604716cb9"
           test ! -L tests/test_mojprop_c146_live_plan1_runtime_source_readonly.py
@@ -143,6 +151,16 @@ jobs:
             < scripts/mojprop_c146_live_plan1_runtime_source_readonly.py \
             | python3 -c 'import json,sys; raw=sys.stdin.read(9000); prefix="MOJPROP_C146_PLAN1_LIVE_SOURCE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(a)==1,"MISSING_SANITIZED_PLAN1_PROBE"; d=json.loads(a[0][len(prefix):]); assert d["schema"]=="mojprop.plan1.live_source.readonly.c146.v1" and d["read_only"] is True and d["production_change_or_cost_authorized"] is False; assert set(d["source_identity"])=={"config/urls.py","core/moj_prop_views.py","core/templates/mojplaywin/moj_prop_interest_form_d.html","prop_firm/lead_models.py"}; assert all(v in ("matches","drifted","missing","unsafe","unavailable") for v in d["source_identity"].values()); assert set(d["static_urlconf_declares"])=={"browser_get","consent_post"} and all(type(x) is bool for x in d["static_urlconf_declares"].values()); assert all(d[k] is False for k in ("actual_passenger_worker_source_proven","public_plan1_get_verified","full_app_db_media_restore_proven","payment_or_enrollment_proven","customer_data_accessed","database_accessed","external_network_called","production_change_or_cost_authorized")); assert not set(d).intersection({"email","customer_id","db_password","api_key","wallet","customer_name","token"}); print(a[0])'
           echo 'C146_SOURCE_ONLY_PASSED_NO_DEPLOY_OR_BACKUP_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: C148 owner-only fixed path permission, disk and restore-case metadata (no writes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 45s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c148_owner_restore_storage_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8500); p="MOJPROP_C148_OWNER_DISK_RESTORE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C148_SANITIZED_REPORT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.owner.cpanel.disk_restore_metadata.readonly.c148.v1" and d["read_only"] is True; assert d["owner_identity_verified"] is True; assert set(d["fixed_path_states"])=={"home","staging","webroot","prop_firm_dir","prop_interest_model_file","local_plan1_backup_dir","independent_restore_evidence_dir"}; assert all(v in ("safe","missing","symlink","wrong_owner","world_writable","group_writable","not_regular_file","not_directory","hardlinked","unavailable") for v in d["fixed_path_states"].values()); assert all(d[k] is False for k in ("account_quota_verified","offhost_backup_verified","full_app_db_media_restore_verified","customer_data_accessed","backup_content_read","database_accessed","external_network_called","payment_created","production_deployment_authorized","cost_incurred")); assert type(d["case_metadata"]["matching_owner_private_case_dirs"]) is int and 0<=d["case_metadata"]["matching_owner_private_case_dirs"]<=128; assert d["case_metadata"]["read_any_receipt_or_backup"] is False and d["case_metadata"]["independent_restore_proven"] is False; assert not set(d).intersection({"email","database_name","filename","path","secret","password","token","buyer","wallet","private_key"}); print(a[0])'
+          echo 'C148_OWNER_STORAGE_PERMISSIONS_AND_RESTORE_METADATA_READONLY=COMPLETE_NOT_RESTORE_PROOF' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
