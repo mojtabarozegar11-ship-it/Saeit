@@ -13,7 +13,10 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-HOME = ROOT / "templates" / "moj-prop-v4" / "index.html"
+# Keep the full historical JS/opt-in contract tested without rewriting
+# the only current public funded Plan1 prelaunch homepage.
+HOME = ROOT / "tests/fixtures/mojprop-starter30-home-before-plan1-20261117.html"
+CURRENT_HOME = ROOT / "templates" / "moj-prop-v4" / "index.html"
 SIGNALS = ROOT / "templates" / "moj-prop" / "signals" / "index.html"
 
 NODE_BROWSER = r"""
@@ -109,6 +112,14 @@ if (process.argv[3]) {
 
 
 class SignalPlanInquiryTests(unittest.TestCase):
+    def test_legacy_signal_simulator_cannot_be_mistaken_for_live_funded_home(self):
+        historic = HOME.read_text("utf-8")
+        current = CURRENT_HOME.read_text("utf-8")
+        self.assertIn("MOJPROP-STARTER30", historic)
+        self.assertNotIn("MOJ-PROP-01", historic)
+        self.assertIn("MOJ-PROP-01", current)
+        self.assertNotIn("MOJPROP-STARTER30", current)
+
     def test_three_price_card_links_target_the_real_intake_page(self):
         html = SIGNALS.read_text(encoding="utf-8")
         for plan in ("education-weekly", "education-monthly", "education-quarterly"):
