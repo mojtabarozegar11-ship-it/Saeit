@@ -1,0 +1,37 @@
+name: D MOJ PROP LiteFinance XAUUSD 0.80-dollar risk math (offline)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/mojprop_litefinance_gold_risk_envelope_d.py'
+      - 'tests/test_mojprop_litefinance_gold_risk_envelope_d.py'
+      - '.github/workflows/d-mojprop-xauusd-risk-feasibility-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  read_only_risk_contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: No-order XAUUSD cost feasibility regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_litefinance_gold_risk_envelope_d -v
+          python3 -B - <<'PY'
+          from pathlib import Path
+          p=Path("scripts/mojprop_litefinance_gold_risk_envelope_d.py").read_text()
+          assert '"order_execution_authorized": False' in p
+          assert '"payment_authorized": False' in p
+          assert '"actual_funded_account_ready": False' in p
+          assert 'D("0.80")' in p
+          assert 'LiteFinance' in p
+          for banned in ("import requests","import socket","import subprocess","import ccxt","MetaTrader5"):
+              assert banned not in p
+          print("Strict source-only cost math, no client/broker order or payment")
+          PY
