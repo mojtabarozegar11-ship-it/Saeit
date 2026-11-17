@@ -94,14 +94,14 @@ class ActualCpanelQuotaFallbackTests(unittest.TestCase):
         self.assertNotIn("/home/private",output)
 
     def test_12_missing_binary_does_not_execute_anything(self):
-        with patch.object(q.os,"stat",side_effect=FileNotFoundError), \
+        with patch.object(q.os,"lstat",side_effect=FileNotFoundError), \
              patch.object(q.subprocess,"run") as run:
             data=q._one("cpapi2_statsbar")
         run.assert_not_called()
         self.assertEqual(data["diagnostic"],"binary_missing")
 
     def test_13_non_executable_binary_disallowed(self):
-        with patch.object(q.os,"stat",return_value=SimpleNamespace(
+        with patch.object(q.os,"lstat",return_value=SimpleNamespace(
                           st_mode=stat.S_IFREG | 0o600)), \
              patch.object(q.os,"access",return_value=False), \
              patch.object(q.subprocess,"run") as run:
@@ -111,7 +111,7 @@ class ActualCpanelQuotaFallbackTests(unittest.TestCase):
 
     def test_14_nonzero_exit_classified_without_stderr_leak(self):
         msg=b"password=very-secret-host-error"
-        with patch.object(q.os,"stat",return_value=SimpleNamespace(
+        with patch.object(q.os,"lstat",return_value=SimpleNamespace(
                           st_mode=stat.S_IFREG | 0o755)), \
              patch.object(q.os,"access",return_value=True), \
              patch.object(q.subprocess,"run",
@@ -125,7 +125,7 @@ class ActualCpanelQuotaFallbackTests(unittest.TestCase):
 
     def test_15_provider_sanitized_happy_path(self):
         payload=json.dumps(good_cpapi2()).encode()
-        with patch.object(q.os,"stat",return_value=SimpleNamespace(
+        with patch.object(q.os,"lstat",return_value=SimpleNamespace(
                           st_mode=stat.S_IFREG | 0o755)), \
              patch.object(q.os,"access",return_value=True), \
              patch.object(q.subprocess,"run",
@@ -135,6 +135,44 @@ class ActualCpanelQuotaFallbackTests(unittest.TestCase):
         self.assertEqual(out["diagnostic"],"success_numeric_quota")
         self.assertEqual(out["account_disk"]["percent_used"],125.0)
         self.assertEqual(out["mysql_disk"]["used"],455.0)
+
+    def test_16_root_owned_cpanel_symlink_target_can_be_checked_readonly(self):
+        api=b'{"result":{"status":1,"data":[{"id":"diskusage","count":"125","max":"100","units":"MB"}]}}'
+        with patch.object(q.os,"lstat",return_value=SimpleNamespace(
+                          st_mode=stat.S_IFLNK | 0o777,st_uid=0)), \
+             patch.object(q.os.path,"realpath",
+                          return_value="/usr/local/cpanel/3rdparty/bin/uapi"), \
+             patch.object(q.os,"stat",return_value=SimpleNamespace(
+                          st_mode=stat.S_IFREG | 0o755,st_uid=0)), \
+             patch.object(q.os,"access",return_value=True), \
+             patch.object(q.subprocess,"run",
+                          return_value=SimpleNamespace(returncode=0,
+                                stdout=api,stderr=b"")) as runner:
+            result=q._one("uapi_statsbar")
+        self.assertEqual(result["diagnostic"],"success_numeric_quota")
+        self.assertEqual(result["account_disk"]["percent_used"],125.0)
+        self.assertEqual(runner.call_args.args[0],q.CALLS["uapi_statsbar"])
+
+    def test_17_symlink_outside_root_trusted_prefix_denied(self):
+        with patch.object(q.os,"lstat",return_value=SimpleNamespace(
+                          st_mode=stat.S_IFLNK | 0o777,st_uid=0)), \
+             patch.object(q.os.path,"realpath",return_value="/tmp/evil"), \
+             patch.object(q.subprocess,"run") as runner:
+            result=q._one("uapi_statsbar")
+        runner.assert_not_called()
+        self.assertEqual(result["diagnostic"],"binary_not_regular_or_executable")
+
+    def test_18_symlink_to_group_writable_cpanel_executable_denied(self):
+        with patch.object(q.os,"lstat",return_value=SimpleNamespace(
+                          st_mode=stat.S_IFLNK | 0o777,st_uid=0)), \
+             patch.object(q.os.path,"realpath",
+                          return_value="/usr/local/cpanel/3rdparty/bin/uapi"), \
+             patch.object(q.os,"stat",return_value=SimpleNamespace(
+                          st_mode=stat.S_IFREG | 0o775,st_uid=0)), \
+             patch.object(q.subprocess,"run") as runner:
+            result=q._one("uapi_statsbar")
+        runner.assert_not_called()
+        self.assertEqual(result["diagnostic"],"binary_not_regular_or_executable")
 
     def test_16_no_valid_quota_does_not_authorize_backups(self):
         with patch.object(q.pwd,"getpwuid",
