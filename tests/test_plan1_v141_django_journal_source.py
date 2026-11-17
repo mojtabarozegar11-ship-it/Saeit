@@ -130,6 +130,18 @@ class DjangoReplayJournalSourceChecks(unittest.TestCase):
         self.assertIn("state.last_phase_two_evidence_sha256 = next_receipt.phase_two_evidence_sha256",x)
         self.assertIn('"last_phase_two_evidence_sha256"',x)
 
+    def test_25_authorized_feed_id_is_separate_persisted_field(self):
+        self.assertIn("trusted_feed_source = models.CharField(max_length=160)",source("models"))
+        self.assertIn('("trusted_feed_source", models.CharField(max_length=160))',source("migration"))
+
+    def test_26_server_read_only_authorized_feed_is_used_in_manifest_check(self):
+        self.assertIn("expected_feed_source=state.trusted_feed_source",source("service"))
+
+    def test_27_no_default_trusted_feed_or_legacy_buyer_mutation(self):
+        self.assertNotIn('trusted_feed_source = models.CharField(max_length=160, default=',source("models"))
+        self.assertNotIn("migrations.AlterField",source("migration"))
+
+
 
 if __name__=="__main__":
     unittest.main()
