@@ -509,3 +509,7 @@ from .lead_models import PropInterest
 # Isolated prospective v1.4.1 SIMULATED replay receipt tables; never
 # changes historical v1.2 buyer enrollments or authorizes payments.
 from .plan1_v141_persistence_models import PropV141SimState, PropV141SimReceipt  # noqa: E402,F401
+
+# Prospective separately versioned per-trader VIRTUAL fill books (migration 0010).
+# Deliberately no public HTTP write path or real broker execution.
+from .plan1_v141_virtual_tenant_models import PropV141VirtualBook, PropV141VirtualFill  # noqa: E402,F401
