@@ -96,6 +96,31 @@ class DraftV13BuyerTermsTests(unittest.TestCase):
         self.assertEqual(a.digest_sha256,b.digest_sha256)
         self.assertRegex(a.digest_sha256,r"^[0-9a-f]{64}$")
 
+    def test_best_day_cap_is_disclosed_fa_en(self):
+        x = draft_gold_terms_v13()
+        self.assertEqual(x.max_profitable_day_share_pct, Decimal("32"))
+        self.assertIn("32% of independently verified net profit", x.en)
+        self.assertIn("۳۲٪", x.fa)
+
+    def test_waiver_digest_is_bound_in_customer_draft(self):
+        waiver = buyer_no_social_post_amendment()
+        x = draft_gold_terms_v13()
+        self.assertEqual(x.social_waiver_digest_sha256, waiver.digest_sha256)
+        self.assertRegex(x.social_waiver_digest_sha256, r"^[0-9a-f]{64}$")
+
+    def test_best_day_rule_drift_blocks_new_buyer_terms(self):
+        with patch("prop_firm.xauusd_v13_draft_terms.POLICY",
+                   replace(POLICY,best_day_share_pct=Decimal("40"))):
+            with self.assertRaises(ValueError):
+                draft_gold_terms_v13()
+
+    def test_plan_best_day_cap_drift_blocks_new_terms(self):
+        p = plan_for_code(SKU)
+        with patch("prop_firm.xauusd_v13_draft_terms.plan_for_code",
+                   return_value=replace(p,max_consistency_pct=Decimal("50"))):
+            with self.assertRaises(ValueError):
+                draft_gold_terms_v13()
+
     def test_legacy_rule_drift_blocks_draft(self):
         with patch("prop_firm.xauusd_v13_draft_terms.POLICY",
                    replace(POLICY,min_closed_trades_per_challenge=100)):
