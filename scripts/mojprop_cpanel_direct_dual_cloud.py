@@ -24,6 +24,7 @@ from pathlib import Path
 import re
 import shutil
 import stat
+import subprocess
 
 # This hash is the immutable Git SHA-1 blob of the existing, reviewed 2026-11
 # cPanel source program (not a hash of user data or of a DB password).
@@ -112,6 +113,37 @@ def _source_bytes(path: Path) -> bytes:
     return raw
 
 
+def _verify_pinned_host_key(path: Path, host_entry: str, fingerprint: str) -> None:
+    """Validate the fixed owner-reviewed public key, not a fresh SSH keyscan.
+
+    Missing, additional, or altered host keys hold before any source byte.
+    """
+    if not path.is_absolute() or path.is_symlink():
+        raise BackupHold("UNSAFE_KNOWN_HOSTS_PATH")
+    try:
+        st = path.stat()
+        if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid()
+                or not 0 < st.st_size <= 8192):
+            raise BackupHold("UNSAFE_PINNED_HOST_FILE")
+        text = path.read_text("ascii").strip()
+        lines = [x.strip() for x in text.splitlines() if x.strip()]
+        if (len(lines) != 1 or len(lines[0].split()) != 3
+                or lines[0].split()[0] != host_entry
+                or lines[0].split()[1] not in ("ssh-rsa", "ssh-ed25519")):
+            raise BackupHold("UNEXPECTED_PINNED_SSH_PUBLIC_KEY")
+        response = subprocess.run(
+            ["ssh-keygen", "-lf", str(path), "-E", "sha256"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=5, check=False,
+        )
+        if (response.returncode != 0 or
+                len(response.stdout) > 512 or
+                fingerprint not in response.stdout.decode("ascii").split()):
+            raise BackupHold("PINNED_SSH_FINGERPRINT_MISMATCH")
+    except (OSError, UnicodeError, subprocess.TimeoutExpired):
+        raise BackupHold("PINNED_SSH_FINGERPRINT_UNAVAILABLE") from None
+
+
 def _ssh_guard(config_path: Path) -> None:
     """Reject unsafe configuration constructs *without invoking ssh -G*.
 
@@ -180,10 +212,16 @@ def _ssh_guard(config_path: Path) -> None:
     for key in ("identityfile", "userknownhostsfile"):
         if not relay.get(key, "").startswith("/"):
             raise BackupHold("SSH_RELAY_PINNED_KEY_MISSING")
-    if not Path(effective["userknownhostsfile"]).is_file():
-        raise BackupHold("CPANEL_HOST_KEYS_NOT_PRESENT")
-    if not Path(relay["userknownhostsfile"]).is_file():
-        raise BackupHold("VPS_HOST_KEYS_NOT_PRESENT")
+    _verify_pinned_host_key(
+        Path(effective["userknownhostsfile"]),
+        "[178.239.147.125]:1396",
+        "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04",
+    )
+    _verify_pinned_host_key(
+        Path(relay["userknownhostsfile"]),
+        "178.239.147.150",
+        "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs",
+    )
 
 
 def admission(mode: str, *, source_path: Path, ssh_config: Path) -> SourceAdmission:
