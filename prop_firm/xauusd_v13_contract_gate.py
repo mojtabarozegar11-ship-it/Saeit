@@ -9,7 +9,9 @@ from dataclasses import dataclass
 
 from .order_readiness import PREPURCHASE_DISCLOSURES, TERMS_VERSION
 from .plan1_buyer_disclosure_v12 import buyer_disclosure
-from .plan1_buyer_no_social_amendment import current_plan1_buyer_copy
+from .plan1_buyer_no_social_amendment import (
+    buyer_no_social_post_amendment, current_plan1_buyer_copy,
+)
 from .rules import POLICY
 from .xauusd_v13_preflight import DRAFT_CONTRACT_VERSION
 
@@ -38,6 +40,7 @@ def audit_v13_gold_terms() -> GoldTermsGate:
     try:
         historical = buyer_disclosure()
         current = current_plan1_buyer_copy()
+        waiver = buyer_no_social_post_amendment()
         if (historical.contract_version != TERMS_VERSION
                 or TERMS_VERSION != "2026-11-15/v1.2"
                 or POLICY.version != TERMS_VERSION):
@@ -60,8 +63,12 @@ def audit_v13_gold_terms() -> GoldTermsGate:
                 or current.payment_enabled is not False
                 or current.enrollment_enabled is not False):
             blockers.append("no_social_post_waiver_or_no_payment_drift")
-        if "No mandatory Instagram" not in current.en:
-            # Avoid quietly reintroducing mandatory endorsements via copy edits.
+        if (waiver.en not in current.en
+                or waiver.fa not in current.fa
+                or waiver.instagram_posts_required != 0
+                or waiver.facebook_posts_required != 0
+                or waiver.posting_a_condition_of_challenge_pass is not False
+                or waiver.posting_a_condition_of_funded_profit is not False):
             blockers.append("no_social_waiver_language_unreviewed")
     except (ValueError, RuntimeError, AttributeError) as exc:
         blockers.append("buyer_disclosure_source_failed_closed")
