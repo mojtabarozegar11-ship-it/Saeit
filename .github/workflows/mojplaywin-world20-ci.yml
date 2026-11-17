@@ -1,0 +1,60 @@
+name: MojPlayWin world top20 plus Persian — isolated Django HTTP and SEO
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'core/world20_catalog.json'
+      - 'core/world20_views.py'
+      - 'core/world20_prop_interest.py'
+      - 'core/templates/mojplaywin/world20_prop_interest.html'
+      - 'core/world20_sitemap.py'
+      - 'core/seo_views.py'
+      - 'core/templates/mojplaywin/world20.html'
+      - 'core/templates/mojplaywin/footer.html'
+      - 'core/templates/mojplaywin/theme.html'
+      - 'core/templates/mojplaywin/home.html'
+      - 'config/urls.py'
+      - 'config/world20_ci_settings.py'
+      - 'config/world20_ci_urls.py'
+      - 'tests/test_world20_http.py'
+      - 'tests/test_world20_mojprop_crm.py'
+      - 'scripts/mojprop_world20_public_readonly_probe.py'
+      - 'tests/test_mojprop_world20_public_readonly_probe.py'
+      - '.github/workflows/mojplaywin-world20-ci.yml'
+  push:
+    branches:
+      - feature/mojplaywin-world20-plus-fa-20261118
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-world-locales:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install minimal open-source isolated Django only
+        run: python -m pip install --disable-pip-version-check 'Django>=5.2,<5.3'
+      - name: Compile and assert minimal Django configuration
+        run: |
+          python -m compileall -q core/world20_views.py core/world20_prop_interest.py config/world20_ci_settings.py config/world20_ci_urls.py core/world20_sitemap.py tests/test_world20_http.py tests/test_world20_mojprop_crm.py scripts/mojprop_world20_public_readonly_probe.py tests/test_mojprop_world20_public_readonly_probe.py scripts/mojprop_live_intake_source_drift_readonly_c95.py tests/test_mojprop_live_intake_source_drift_readonly_c95.py
+          python -m django check --settings=config.world20_ci_settings
+      - name: Execute 21 locale real Django HTTP, canonical, hreflang and safety cases
+        run: python -m django test tests.test_world20_http --settings=config.world20_ci_settings --verbosity 2 --noinput
+      - name: Verify public HTTPS probe cannot mutate or follow offsite redirects
+        run: python -m unittest tests.test_mojprop_world20_public_readonly_probe -q
+      - name: Observe actual live public URLs on MojPlayWin from neutral GitHub runner
+        run: python scripts/mojprop_world20_public_readonly_probe.py
+        # Observation only: 404 is expected before release. Never auto-deploy.
+      - name: Document deployment and payment boundary
+        if: always()
+        run: |
+          echo "WORLD20_DEVELOPMENT_SOURCE_ONLY"
+          echo "PUBLIC_SITE_RELEASE_AUTHORIZED=false"
+          echo "MOJ_PROP_CHECKOUT_AUTHORIZED=false"
+          echo "PRODUCTION_DATABASE_TOUCHED=false"

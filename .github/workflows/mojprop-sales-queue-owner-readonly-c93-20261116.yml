@@ -5,6 +5,8 @@ on:
       - ".github/workflows/mojprop-sales-queue-owner-readonly-c93-20261116.yml"
       - "scripts/mojprop_live_sales_queue_boolean_readonly_20261116.py"
       - "tests/test_mojprop_live_sales_queue_boolean_readonly_20261116.py"
+      - "scripts/mojprop_live_crm_schema_readonly_20261118.py"
+      - "tests/test_mojprop_live_crm_schema_readonly_20261118.py"
 
 permissions:
   contents: read
@@ -31,7 +33,7 @@ jobs:
           python3 -B -m py_compile scripts/mojprop_live_sales_queue_boolean_readonly_20261116.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_live_sales_queue_boolean_readonly_20261116 -q
           test ! -L scripts/mojprop_live_sales_queue_boolean_readonly_20261116.py
-          test "$(git hash-object -- scripts/mojprop_live_sales_queue_boolean_readonly_20261116.py)" = "9fe572372f81de5f76eca89900cf6bb0ec22fb30"
+          test "$(git hash-object -- scripts/mojprop_live_sales_queue_boolean_readonly_20261116.py)" = "db0886d1dbc7ed2a285b31d3807cb704bd2d0bbe"
       - name: Connect only through pinned factory runner to the existing cPanel
         shell: bash
         env:
@@ -61,6 +63,20 @@ jobs:
             | python3 -c 'import json,sys; data=sys.stdin.read(6000); prefix="MOJPROP_PRIVATE_SALES_QUEUE_GATE="; lines=[x for x in data.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_QUEUE"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.sales_queue.boolean_public_diagnostic.v1" and d["read_only"] is True and d["offer_or_payment_created"] is False and d["customer_contact_sent"] is False and d["exact_lead_counts_or_personal_data_emitted"] is False; assert isinstance(d["categories_with_work_pending"],list) and all(isinstance(x,str) for x in d["categories_with_work_pending"]); print(lines[0])'
           echo 'LIVE_MOJPROP_PRIVATE_SALES_QUEUE_READONLY=PASS'
           echo 'No customer contact, lead ID, payment or count exposed or modified.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify cPanel CRM table identity and unique request index without reading buyer rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mojprop_live_crm_schema_readonly_20261118.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_live_crm_schema_readonly_20261118 -q
+          test ! -L scripts/mojprop_live_crm_schema_readonly_20261118.py
+          test "$(git hash-object -- scripts/mojprop_live_crm_schema_readonly_20261118.py)" = "ebf3c0027fbff8b3ff72fc7fed5f58c85c200d19"
+          work="$RUNNER_TEMP/mojprop-queue-c93"
+          timeout 65s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_live_crm_schema_readonly_20261118.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(5000); p="MOJPROP_LIVE_CRM_SCHEMA_READONLY="; rows=[x for x in raw.splitlines() if x.startswith(p)]; assert len(rows)==1,"MISSING_SCHEMA_EVIDENCE"; d=json.loads(rows[0][len(p):]); assert d["schema"]=="mojprop.crm.live_schema.readonly.v1" and d["read_only"] is True and d["customer_rows_queried"] is False and d["data_written"] is False and d["production_deploy_authorized"] is False and d["payment_or_enrollment_created"] is False; assert set(d).isdisjoint({"name","email","phone","customer_id","customer_data","sql","secret","token","connection_string"}); print(rows[0])'
+          echo 'LIVE_MOJPROP_CRM_SCHEMA_METADATA_ONLY=OBSERVED_NO_DB_WRITE' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash

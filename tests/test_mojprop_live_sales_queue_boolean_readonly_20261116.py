@@ -37,6 +37,23 @@ class LiveMojPropQueuePrivacyTests(unittest.TestCase):
         self.assertIs(result["offer_or_payment_created"], False)
         self.assertIs(result["customer_contact_sent"], False)
 
+    def test_real_plan1_priority_is_boolean_only_and_not_an_educational_payment(self):
+        self.assertIn("prop01_challenge_interest_review", CATEGORIES)
+        data = fixture()
+        for entry in data["categories"]:
+            entry["count"] = int(entry["category"] == "prop01_challenge_interest_review")
+        sanitized = sanitize_action_queue(data)
+        self.assertEqual(
+            sanitized["categories_with_work_pending"],
+            ["prop01_challenge_interest_review"],
+        )
+        self.assertTrue(sanitized["any_actionable_consent_scoped_lead"])
+        self.assertFalse(sanitized["offer_or_payment_created"])
+        self.assertFalse(sanitized["revenue_recognized"])
+        raw = json.dumps(sanitized)
+        self.assertNotIn("private@example", raw)
+        self.assertNotIn("PRIVATE-IDENTIFIER", raw)
+
     def test_all_categories_empty_is_not_a_fabricated_sale(self):
         data = fixture()
         for item in data["categories"]:

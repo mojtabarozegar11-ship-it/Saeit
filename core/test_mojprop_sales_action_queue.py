@@ -158,7 +158,7 @@ class MojPropSalesQueueTests(TestCase):
 
     def test_empty_production_snapshot_never_claims_sales(self):
         data = action_queue_snapshot()
-        self.assertEqual(data["category_count"], 15)
+        self.assertEqual(data["category_count"], 16)
         self.assertEqual(data["total_queue_entries"], 0)
         self.assertIsNone(data["independent_customer_count"])
         self.assertIsNone(data["collected_revenue"])
@@ -383,3 +383,69 @@ class MojPropSalesQueueTests(TestCase):
                          "sent_unacknowledged"):
             with self.subTest(category=category):
                 self.assertEqual(report[category]["count"], 0)
+
+    def _prop01(self, ref, *, status="new", consent=True,
+                route="blueprint", notes=None):
+        lead = self._lead(ref, status=status, route=route)
+        source = notes if notes is not None else (
+            "Prelaunch interest only: MOJ-PROP-01 (proposed real "
+            "proprietary trading CHALLENGE). No 30 TRX payment. "
+            "Preferred language: fa."
+        )
+        MojPropRequest.objects.filter(pk=lead.pk).update(
+            notes=source, consent=consent,
+        )
+        return lead
+
+    def test_prop01_first_priority_is_actual_challenge_not_starter30(self):
+        lead = self._prop01("PROP-NEW")
+        categories = action_queue_snapshot()["categories"]
+        first = categories[0]
+        self.assertEqual(first["category"], "prop01_challenge_interest_review")
+        self.assertEqual(first["count"], 1)
+        self.assertEqual(first["plan_code_claim"], "MOJ-PROP-01")
+        self.assertTrue(first["operator_only"])
+        self.assertTrue(first["buyer_scope_unverified"])
+        self.assertFalse(first["customer_outreach_authorized"])
+        self.assertFalse(first["price_or_payment_authorized"])
+        self.assertFalse(first["is_paid_enrollment"])
+        self.assertFalse(first["is_educational_starter30"])
+        self.assertEqual(self.categories()["starter30_unquoted_manual_review"]["count"], 0)
+        self.assertNotIn(lead.email, str(action_queue_snapshot()))
+
+    def test_prop01_isolates_without_optin_after_closed_or_wrong_route(self):
+        self._prop01("PROP-WITHDRAWN", consent=False)
+        self._prop01("PROP-CLOSED", status="closed")
+        self._prop01("PROP-DELIVERED", status="delivered")
+        self._prop01("PROP-SIGNAL", route="signals")
+        self._prop01("PROP-SPOOFED", notes="MOJ-PROP-01 paid guaranteed profit")
+        self.assertEqual(self.categories()["prop01_challenge_interest_review"]["count"], 0)
+
+    def test_prop01_no_duplicate_qualification_when_existing_offer(self):
+        for state in ("draft", "approved", "issued"):
+            lead = self._prop01("PROP-HAS-" + state, status="reviewing")
+            self._offer(lead, status=state)
+        self.assertEqual(self.categories()["prop01_challenge_interest_review"]["count"], 0)
+
+    def test_prop01_operator_details_are_private_and_bounded(self):
+        one = self._prop01("PROP-ALPHA")
+        two = self._prop01("PROP-BETA")
+        self._starter("EDUCATIONAL-SEPARATE")
+        report = action_queue_snapshot(detail_limit=1)
+        first = report["categories"][0]
+        self.assertEqual(first["count"], 2)
+        self.assertEqual(first["request_refs"], ["PROP-ALPHA"])
+        self.assertNotIn(one.email, str(report))
+        self.assertNotIn(two.email, str(report))
+        self.assertEqual(
+            self.categories()["starter30_unquoted_manual_review"]["count"], 1
+        )
+
+    def test_prop01_pending_review_not_misreported_as_revenue(self):
+        self._prop01("PROP-NOPAID")
+        data = action_queue_snapshot()
+        self.assertEqual(data["categories"][0]["count"], 1)
+        self.assertIsNone(data["collected_revenue"])
+        self.assertIsNone(data["independent_customer_count"])
+        self.assertFalse(data["payment_or_delivery_automatically_approved"])
+        self.assertEqual(MojPropOffer.objects.count(), 0)
