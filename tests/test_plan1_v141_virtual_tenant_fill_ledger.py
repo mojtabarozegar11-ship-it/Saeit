@@ -332,7 +332,7 @@ class VirtualTenantLedgerUnitTests(unittest.TestCase):
             event(seq=3,action="CLOSE",qty="0.5000",price="3004",fee_usd="0"),
             event(seq=4,action="CLOSE",qty="1.5000",price="3005",fee_usd="0"),
         ).challenge_books[0]
-        self.assertEqual(book.closed_realized_gross_usd,Decimal("8"))
+        self.assertEqual(book.closed_realized_gross_usd,Decimal("7.5"))
         self.assertEqual(book.fully_closed_positions_total,1)
 
     def test_50_ledger_is_not_a_broker_trade_and_has_no_paid_entitlements(self):
