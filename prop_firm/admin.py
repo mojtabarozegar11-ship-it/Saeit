@@ -3,7 +3,7 @@ from django.contrib import admin
 from .models import (
     PropTrader, PropAccount, PropExecution, PropEquityObservation, PropDecisionLog,
     PropProfitAllocation, PropProfitJournalLine, PropSocialEvidence, PropChallengeEnrollment,
-    PropInterest,
+    PropInterest, PropV141Interest,
 )
 
 
@@ -124,3 +124,14 @@ class PropInterestAdmin(admin.ModelAdmin):
             and getattr(user, "is_superuser", False)
             and super().has_change_permission(request, obj)
         )
+
+
+@admin.register(PropV141Interest)
+class PropV141InterestAdmin(PropInterestAdmin):
+    """Superuser-only, consent-scoped v1.4.1 prelaunch lead inbox.
+
+    Reuses no-add/no-delete and immutable identity policy. Status changes to
+    'contacted' are allowed only by authorized superuser; withdrawals are final.
+    This does not create purchases, broker accounts or marketing permissions.
+    """
+    pass
