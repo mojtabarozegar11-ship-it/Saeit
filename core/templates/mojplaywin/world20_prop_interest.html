@@ -26,7 +26,8 @@ small{display:block;color:#cdd5e1}
 <h1>{{ copy.prop_title }}</h1>
 <p>{{ copy.prop_body }}</p>
 <p class="alert">{{ copy.payment_notice }}</p>
-<form action="/moj-prop-intake/?format=html" method="post" enctype="application/x-www-form-urlencoded">
+{% if failed %}<p class="alert" role="alert">{{ copy.lead.failed }}</p>{% endif %}
+<form action="/world/{{ locale }}/moj-prop-interest/" method="post" enctype="application/x-www-form-urlencoded">
 <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_value }}">
 <input type="hidden" name="service" value="blueprint">
 <input type="hidden" name="horizon" value="review">
