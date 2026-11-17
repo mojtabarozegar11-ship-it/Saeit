@@ -1,0 +1,37 @@
+name: D MOJPROP offsite Drive quota admission — no-deploy offline CI
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/mojprop_google_drive_offsite_capacity_d.py'
+      - 'tests/test_mojprop_google_drive_offsite_capacity_d.py'
+      - '.github/workflows/d-mojprop-offsite-drive-admission-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source_only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify no-network capacity decision and regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_google_drive_offsite_capacity_d -v
+          python3 -B - <<'PY'
+          from pathlib import Path
+          s=Path('scripts/mojprop_google_drive_offsite_capacity_d.py').read_text()
+          assert '"payment_authorized": False' in s
+          assert '"deployment_authorized": False' in s
+          assert '"quota_authenticated_by_this_process": False' in s
+          assert '"backup_uploaded_verified": False' in s
+          assert 'google_drive_quota_free_bytes' in s
+          forbidden=('import requests','import urllib.request','import subprocess','socket.create_connection')
+          assert not any(x in s for x in forbidden)
+          print("D offsite screening cannot enable live backup, deployment or payment")
+          PY
