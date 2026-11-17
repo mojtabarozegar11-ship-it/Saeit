@@ -63,7 +63,7 @@ def audit_v13_gold_terms() -> GoldTermsGate:
             in historical.en
         )
         current_each = any(
-            "50 independently verified closed positions in EACH" in statement
+            "50 independently verified closed positions are required in EACH" in statement
             for statement in PREPURCHASE_DISCLOSURES
         )
         if old_combined and current_each:
