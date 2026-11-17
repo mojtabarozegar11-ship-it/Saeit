@@ -58,6 +58,15 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
             tests.test_mojprop_c142_public_form_get_readonly
           PYTHONDONTWRITEBYTECODE=1 python3.11 -B scripts/mojprop_c142_public_form_get_readonly.py
+      - name: Inspect deployed mainline unpaid Moj Prop prospect/receipt GET forms
+        id: mainline_unpaid
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
+            tests.test_mojprop_v141_live_unpaid_prospect_readonly
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B \
+            scripts/mojprop_v141_live_unpaid_prospect_readonly.py
       - name: Inspect candidate cPanel runtime, quota and DB connection through pinned SSH
         id: cpanel
         continue-on-error: true
@@ -180,6 +189,7 @@ jobs:
           echo "PUBLIC_DEPLOYMENT_PERFORMED=false"
           echo "RELEASE_AUTHORIZED=false"
           echo "PUBLIC_GET_FORM_STEP_OUTCOME=${{ steps.lead_form.outcome }}"
+          echo "MAINLINE_UNPAID_GET_OUTCOME=${{ steps.mainline_unpaid.outcome }}"
           echo "CPANEL_AUDIT_STEP_OUTCOME=${{ steps.cpanel.outcome }}"
           echo "VPS_AUDIT_STEP_OUTCOME=${{ steps.vps.outcome }}"
           if [[ "${{ steps.cpanel.outcome }}" != "success" || "${{ steps.vps.outcome }}" != "success" ]]; then
