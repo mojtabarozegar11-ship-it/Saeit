@@ -58,7 +58,11 @@ class MojPropCatalogSamplesContractTests(unittest.TestCase):
         self.assertEqual(len(release.FILES), len(set(release.FILES)))
         home = (SITE_SOURCE / "index.html").read_text("utf-8")
         catalog = (SITE_SOURCE / "catalog/index.html").read_text("utf-8")
-        self.assertIn('href="/moj-prop/starter-30-trx/"', home)
+        # Current genuine Plan1 home must NOT market the old educational SKU.
+        # The legacy educational assets and catalog card stay independently
+        # guarded, but they cannot be mistaken for a funded Plan1 challenge.
+        self.assertNotIn('href="/moj-prop/starter-30-trx/"', home)
+        self.assertIn('href="/moj-prop-interest/form/"', home)
         self.assertIn('href="/moj-prop/starter-30-trx/"', catalog)
         starter = (SITE_SOURCE / expected[0]).read_text("utf-8")
         self.assertIn("./journal-template.csv", starter)
@@ -142,6 +146,28 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
             target = stage / path
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
+        # Archived Starter30 publisher tests need a *separate, synthetic* home
+        # with the historical catalog link. Only the temporary staging path is
+        # amended; the actual MOJ-PROP-01 home and its Plan1 CTAs are untouched.
+        # A second negative regression below proves publishing the genuine
+        # Plan1 source as Starter30 is explicitly refused.
+        staged_home = stage / "index.html"
+        original_home = staged_home.read_text("utf-8")
+        if ('href="/moj-prop/starter-30-trx/"' in original_home
+                or original_home.count("</body>") != 1
+                or 'href="/moj-prop-interest/form/"' not in original_home):
+            raise AssertionError("C139 Plan1 source layout drift")
+        historical_only_link = (
+            '<!-- C139 test-only archived education, not a public offer -->'
+            '<aside data-legacy-publisher-fixture="nonpayable">'
+            '<a href="/moj-prop/starter-30-trx/">'
+            'Synthetic archived Starter30 publisher test; no payment'
+            '</a></aside>'
+        )
+        staged_home.write_text(
+            original_home.replace("</body>", historical_only_link + "</body>", 1),
+            encoding="utf-8",
+        )
         for before, current in (("baselines/index-v4.html", "index.html"),
                                 ("baselines/catalog-index-v4.html", "catalog/index.html")):
             source = SITE_SOURCE / before
@@ -160,6 +186,36 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         self.stage = stage
+
+    def test_actual_plan1_home_is_rejected_by_old_starter30_publisher(self):
+        """Production Plan1 never becomes sellable through the legacy script."""
+        actual = (SITE_SOURCE / "index.html").read_text("utf-8")
+        self.assertIn('href="/moj-prop-interest/form/"', actual)
+        self.assertNotIn('href="/moj-prop/starter-30-trx/"', actual)
+        (self.stage / "index.html").write_text(actual, encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError,
+                                    "Starter30 package is not discoverable"):
+            release.deploy("123", "a" * 40)
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
+
+    def test_legacy_fixture_is_ephemeral_and_nonpayable(self):
+        source = (SITE_SOURCE / "index.html").read_text("utf-8")
+        stage = (self.stage / "index.html").read_text("utf-8")
+        self.assertNotIn("data-legacy-publisher-fixture", source)
+        self.assertIn('data-legacy-publisher-fixture="nonpayable"', stage)
+        self.assertEqual(stage.count('href="/moj-prop/starter-30-trx/"'), 1)
+        # The Plan1 page correctly warns visitors not to send TRX; rejecting
+        # that protective warning would be a false positive. Instead assert
+        # the ONLY alteration is our nonpayable historical test-only fixture.
+        marker = (
+            '<!-- C139 test-only archived education, not a public offer -->'
+            '<aside data-legacy-publisher-fixture="nonpayable">'
+            '<a href="/moj-prop/starter-30-trx/">'
+            'Synthetic archived Starter30 publisher test; no payment'
+            '</a></aside>'
+        )
+        self.assertEqual(stage.replace(marker, "", 1), source)
 
     def test_updater_delivers_both_samples_and_retains_reversible_catalog(self):
         old_index = (self.route / "index.html").read_bytes()
