@@ -1,0 +1,66 @@
+{% load static %}<!doctype html>
+<html lang="{{ lang }}" dir="{{ direction }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>{{ labels.title }}</title>
+  <link rel="stylesheet" href="{% static 'core/mojprop-v141-statement.css' %}">
+</head>
+<body>
+<main class="sheet">
+  <header class="masthead">
+    <p class="brand">MOJ PROP · MOJPLAYWIN</p>
+    <h1>{{ labels.title }}</h1>
+    <p class="flag">{{ labels.demo }}</p>
+    <p class="lead">{{ labels.intro }}</p>
+  </header>
+  <section class="summary" aria-label="{{ labels.challenge }}">
+    <dl class="metrics">
+      <div><dt>{{ labels.challenge }}</dt><dd class="ref">{{ challenge_ref }}</dd></div>
+      <div><dt>{{ labels.stage }}</dt><dd>{{ stage }}</dd></div>
+      <div><dt>{{ labels.events }}</dt><dd>{{ event_count }}</dd></div>
+      <div><dt>{{ labels.closed }}</dt><dd>{{ closed_count }}</dd></div>
+      <div><dt>{{ labels.realized }}</dt><dd>{{ realized_usd }}</dd></div>
+      <div><dt>{{ labels.deadline }}</dt>
+        <dd><time datetime="{{ deadline|date:'c' }}">{{ deadline|date:'Y-m-d H:i:s' }}</time></dd>
+      </div>
+    </dl>
+  </section>
+  <aside class="warning" role="note">{{ labels.warning }}</aside>
+  <section class="history" aria-label="{{ labels.activity }}">
+    <h2>{{ labels.activity }}</h2>
+    {% if recent %}
+    <div class="table-wrap">
+      <table>
+        <caption>{{ labels.activity }}</caption>
+        <thead><tr>
+          <th scope="col">{{ labels.number }}</th>
+          <th scope="col">{{ labels.action }}</th>
+          <th scope="col">{{ labels.side }}</th>
+          <th scope="col">{{ labels.quantity }}</th>
+          <th scope="col">{{ labels.price }}</th>
+          <th scope="col">{{ labels.timestamp }}</th>
+        </tr></thead>
+        <tbody>
+          {% for fill in recent %}
+          <tr>
+            <td>{{ fill.sequence }}</td>
+            <td>{{ fill.action }}</td>
+            <td>{{ fill.direction }}</td>
+            <td>{{ fill.quantity_ounces }}</td>
+            <td>{{ fill.price_usd_per_ounce }}</td>
+            <td><time datetime="{{ fill.executed_at_utc|date:'c' }}">{{ fill.executed_at_utc|date:'Y-m-d H:i:s' }}</time></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty">{{ labels.empty }}</p>
+    {% endif %}
+  </section>
+  <footer>{{ labels.copyright }}</footer>
+</main>
+</body>
+</html>
