@@ -148,9 +148,25 @@ def source_root(run_id: str) -> Path:
                            "risk_plan_recorded", "reflection_recorded"]
             or any(row != [str(i), "", "", ""] for i, row in enumerate(rows[1:], 1))):
         raise RuntimeError("Starter30 CSV must contain exactly 10 EMPTY simulated sessions")
-    if ("/moj-prop/starter-30-trx/" not in html["index.html"]
-            or "/moj-prop/starter-30-trx/" not in catalog):
-        raise RuntimeError("Starter30 package is not discoverable from the live catalog and home")
+    # Starter30 educational files remain individually inspectable in their
+    # catalog and atomically backed up, but they are NOT the funded Plan1 hero.
+    # This split must never weaken the prior byte-exact rollback protections.
+    if "/moj-prop/starter-30-trx/" not in catalog:
+        raise RuntimeError("Starter30 educational package missing from catalog")
+    home = html["index.html"]
+    required_plan1 = (
+        "SOLE CURRENT PRODUCT", "MOJ-PROP-01",
+        "Prelaunch only:", "30,000,000 SUN",
+        'href="/moj-prop/contact/"',
+        "Support contact is NOT an accepted Plan 1 CRM lead",
+    )
+    if not all(mark in home for mark in required_plan1):
+        raise RuntimeError("Plan1 prelaunch homepage source is not approved")
+    # The dedicated consent-only Django form is NOT on main/production today.
+    # Do not publish a clickable 404 and imply that a lead was recorded.
+    if ('href="/moj-prop-interest/form/' in home
+            or "/moj-prop/starter-30-trx/" in home):
+        raise RuntimeError("Plan1 home links to an unavailable form or old educational SKU")
     return path
 
 
