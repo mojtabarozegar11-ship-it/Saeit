@@ -267,7 +267,11 @@ class SidecarTests(unittest.TestCase):
 
     def test_33_no_false_xauusd_three_percent_launch(self):
         s = REVIEWED.read_text("utf-8")
-        self.assertIn("XAUUSD-only 3% per-order / 8% open-risk policy is NOT implemented", s)
+        self.assertIn("prospective v1.3 source-only order preflight now enforces", s)
+        self.assertIn("broker-verified exact XAUUSD symbol", s)
+        self.assertIn("up to 3% per-order / 8% aggregate open stop-risk", s)
+        self.assertIn("NOT live, customer-authorized or enabled for real orders", s)
+        self.assertNotIn("policy is NOT implemented", s)
 
     def test_34_existing_engine_limits_are_stated(self):
         s = REVIEWED.read_text("utf-8")
@@ -285,7 +289,9 @@ class SidecarTests(unittest.TestCase):
 
     def test_37_persian_risk_status_does_not_claim_deployment(self):
         s = REVIEWED.read_text("utf-8")
-        self.assertIn("هنوز در موتور اجرا پیاده‌سازی یا تأیید نشده", s)
+        self.assertIn("در کد توسعه پیاده‌سازی و آزمون شده", s)
+        self.assertIn("هنوز روی سایت زنده منتشر نشده", s)
+        self.assertIn("معاملات واقعی فعال نیست", s)
 
     def test_38_public_page_still_has_no_registration_or_payment_form(self):
         parsed = HTMLSafety()
@@ -293,6 +299,20 @@ class SidecarTests(unittest.TestCase):
         self.assertEqual(parsed.forms, 0)
         self.assertEqual(parsed.scripts, ["application/ld+json"])
         self.assertIn("payment disabled", REVIEWED.read_text("utf-8"))
+
+    def test_39_new_gold_contract_is_distinct_and_not_publicly_active(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("2026-11-17/v1.3", s)
+        self.assertIn("Historical v1.2", s)
+        self.assertIn("0.8% order risk / 1.6% aggregate open risk", s)
+        self.assertIn("it is NOT installed on the public site", s)
+
+    def test_40_customer_pays_nothing_until_real_separate_approval(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("Not open for paid enrollment", s)
+        self.assertIn("No wallet address, payment instruction", s)
+        self.assertIn("No payment, challenge application or consent form is active", s)
+        self.assertIn("سقف سخت‌گیرانه افت روزانه ۴٪ و کل ۸٪", s)
 
 
 if __name__ == "__main__":
