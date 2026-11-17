@@ -21,7 +21,7 @@ _SUPPLEMENT = ("fa",)
 _RTL = frozenset(("ar", "arz", "ur", "fa"))
 _FIELDS = frozenset((
     "name", "direction", "headline", "intro", "prop_title", "prop_body",
-    "payment_notice", "prop_link", "fallback_notice", "language_label", "contact_label", "sections",
+    "payment_notice", "prop_link", "fallback_notice", "language_label", "contact_label", "sections", "lead",
 ))
 _SECTION_KEYS = ("prop", "store", "games", "research", "learning", "ai", "company")
 _SECTION_PATHS = (
@@ -54,11 +54,17 @@ def world_catalog():
         value = locales[code]
         if type(value) is not dict or set(value) != _FIELDS:
             raise ValueError(f"Incomplete translated fields for {code}")
-        for field in _FIELDS - {"sections"}:
+        for field in _FIELDS - {"sections", "lead"}:
             if type(value[field]) is not str or not value[field].strip():
                 raise ValueError(f"Untranslated {field} in {code}")
         if value["direction"] != ("rtl" if code in _RTL else "ltr"):
             raise ValueError(f"Wrong writing direction for {code}")
+        if (type(value["lead"]) is not dict or
+                set(value["lead"]) != {
+                    "name", "email", "reason", "consent", "submit", "receipt",
+                } or any(type(v) is not str or not v.strip()
+                         for v in value["lead"].values())):
+            raise ValueError(f"Incomplete buyer form copy in {code}")
         if (type(value["sections"]) is not list or
                 len(value["sections"]) != len(_SECTION_KEYS) or
                 any(type(label) is not str or not label.strip()
