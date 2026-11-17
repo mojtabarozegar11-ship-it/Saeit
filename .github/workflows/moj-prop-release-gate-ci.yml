@@ -5,6 +5,7 @@ on:
     branches:
       - "feature/prop-firm-policy-v11-20261114"
       - "a/mojprop-evidence-*"
+      - "a/mojprop-risk-*"
   pull_request:
     branches:
       - "main"
@@ -65,5 +66,7 @@ jobs:
           tests.test_moj_prop_plan_qualification
           tests.test_moj_prop_cohort_buyer_binding_a148
           tests.test_moj_prop_fifty_trades
+          tests.test_moj_prop_order_headroom_a153
+          tests.test_prop_firm_policy
           tests.test_tron_manual_reconciliation
           --verbosity 2
