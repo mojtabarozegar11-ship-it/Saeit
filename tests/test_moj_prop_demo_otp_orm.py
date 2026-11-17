@@ -12,10 +12,10 @@ from prop_firm.lead_models import PropInterest
 from prop_firm.models import PropChallengeEnrollment, PropAccount
 from prop_firm.buyer_order_review import Plan1OrderGateClosed
 from prop_firm.plan1_orm_consent_review import review_email_verified_existing_interest
-from test_prop_plan1_canonical_interest_bridge import (
+from tests.test_prop_plan1_canonical_interest_bridge import (
     args as consent_args, sign as consent_sign,
 )
-from test_prop_plan1_demo_email_interest import (
+from tests.test_prop_plan1_demo_email_interest import (
     OTP_KEY, NOW, receipt as otp_receipt, sign as otp_sign,
 )
 
