@@ -19,16 +19,6 @@ ENDPOINTS = (
     ("fa", "https://mojplaywin.com/moj-prop-interest/form/?lang=fa"),
 )
 MAX_BYTES = 65000
-REQUIRED = (
-    'action="/moj-prop-interest/"',
-    'method="post"',
-    'name="contact_consent"',
-    'name="email"',
-    'name="plan_code" value="MOJ-PROP-01"',
-    'name="csrfmiddlewaretoken"',
-    'noindex,nofollow',
-)
-
 
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, request, fp, code, msg, headers, newurl):
