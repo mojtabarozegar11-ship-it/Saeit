@@ -18,9 +18,11 @@ from django.views.decorators.csrf import csrf_protect
 
 from core.contact_intake import canonical_contact_email
 from prop_firm.plan1_v141_lead_models import CONSENT_VERSION, PropV141Interest
+from prop_firm.mojprop_v141_interest_i18n import interest_context, interest_catalog
+from prop_firm.moj_prop_page import SUPPORTED_CODES
 
 _HOSTS = frozenset(("mojplaywin.com", "www.mojplaywin.com"))
-_LANGUAGE = frozenset(("en", "fa"))
+_LANGUAGE = frozenset(SUPPORTED_CODES)
 _REQUIRED = frozenset((
     "email", "plan_code", "consent_version",
     "contact_consent", "language",
@@ -80,8 +82,7 @@ def moj_prop_v141_interest(request):
             return _response_headers(HttpResponse("Unsupported language", status=400))
         response = render(
             request, "moj-prop-plan1-v141-prelaunch/interest.html",
-            {"language": lang, "direction": "rtl" if lang == "fa" else "ltr",
-             "consent_version": CONSENT_VERSION},
+            {**interest_context(lang), "consent_version": CONSENT_VERSION},
         )
         patch_vary_headers(response, ("Cookie",))
         if request.method == "HEAD":
@@ -125,11 +126,7 @@ def moj_prop_v141_interest(request):
             },
         )
     lang = request.POST["language"]
-    message = (
-        "درخواست اطلاعات شما دریافت شد. این ثبت، خرید یا پذیرش چالش نیست."
-        if lang == "fa" else
-        "Information request recorded. No purchase or enrollment occurred."
-    )
+    message = interest_catalog()[lang]["received"]
     response = HttpResponse(message, status=202,
                             content_type="text/plain; charset=utf-8")
     return _response_headers(response)
