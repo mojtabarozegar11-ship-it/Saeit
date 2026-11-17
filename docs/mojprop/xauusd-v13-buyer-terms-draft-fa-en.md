@@ -14,7 +14,7 @@
 
 تقسیم سود تحقق‌یافته و تطبیق‌شده در مرحله واقعی: ۷۰٪ معامله‌گر و ۳۰٪ برگزارکننده، طبق قرارداد و پس از کسر زیان‌های قبلی و هزینه‌های اعلام‌شده.
 
-**الزام به انتشار پست یا لینک در اینستاگرام/فیس‌بوک وجود ندارد.** استفاده از حساب شخصی مالک نیز ممنوع است. رضایت تبلیغاتی اختیاری و مستقل است.
+**شرط پیشنهادی v1.3 (فقط پس از تأیید حقوقی):** انتشار **یک پست اصیل در اینستاگرام یا فیسبوک، یکی از دو شبکه کافی است**، با افشای روشن رابطه تجاری و حفظ دسترسی عمومی به پست به‌مدت **۲۸ روز متوالی**. نباید حمایت مثبت یا وعده سود اجباری باشد و استفاده از حساب شخصی مالک ممنوع است. این شرط تا زمانی که رضایت مستقل خریدار، سازگاری با قوانین و مقررات پلتفرم‌ها، و بررسی حقوقی اثبات نشده، قابل اعمال یا فروش نیست. اصلاحیه قبلی عدم الزام انتشار پست برای شرایط تاریخی محفوظ است؛ تغییر عطف‌به‌ماسبق ممنوع است.
 
 **تصمیم پیشنهادی نسخه v1.3 (صرفاً داخلی):** حداقل **۵۰ معامله بسته‌شده و مستقل تأییدشده در مجموع دو مرحله**، با حداقل **۶ روز معاملاتی در هر مرحله**. این تفسیر با `rules.py` و افشای تاریخی هماهنگ است. بااین‌حال، متن پیش‌خرید v1.2 هنوز عبارت متعارض «۵۰ معامله در هر مرحله» دارد؛ تا اصلاح و بازبینی حقوقی و امضای شرایط جدید، هیچ‌کدام به‌عنوان شرط قابل‌فروش به مشتری عرضه نمی‌شود.
 
@@ -30,7 +30,7 @@ Both evaluation phases are simulated/demo. A real trading allocation is **not** 
 
 After successful transition and independent reconciliation of actual realized net profits, the proposed distribution is 70% trader / 30% organizer, subject to the signed contract and valid loss recovery.
 
-**No mandatory Instagram or Facebook post or link.** Optional promotion requires separate consent; personal owner accounts are excluded.
+**Proposed v1.3 social condition (not yet lawful or binding):** ONE original post on EITHER Instagram OR Facebook, not both, clearly disclosing challenge participation and remaining publicly accessible for **28 consecutive days**. No coerced positive endorsement, profit claim, owner personal-account use or broker credential disclosure. This condition may ONLY be included after independent jurisdiction/platform advertising review and buyer-specific contract consent; otherwise NO SALE. The earlier no-social-post waiver remains a historical amendment, never silently revoked for existing buyers.
 
 **Proposed v1.3 drafting decision (internal only):** at least **50 independently reconciled CLOSED positions TOTAL across both phases**, with at least **six verified trading days in EACH phase**. This follows the canonical evaluation engine and historical disclosure. The v1.2 pre-purchase text still contradicts it by requiring 50 in each phase; no buyer-facing, payable representation is approved until all versions are legally reconciled, contract-versioned, and signed.
 
@@ -39,8 +39,9 @@ After successful transition and independent reconciliation of actual realized ne
 1. New signed FA/EN contract with unique `v1.3` fingerprint and a resolved, unequivocal 50-trade criterion; no silent changes to historic `v1.2` agreements.
 2. Legal jurisdiction, refunds, country/age eligibility, AML/sanctions, and privacy cleared for the actual market.
 3. Broker authorization and capital evidence verified beyond an HMAC signer; no demonstration of this exists in this draft.
-4. Buyer acceptance provenance cryptographically bound to exact contract, not just a webpage click; old `order_readiness.TERMS_VERSION` must never silently become v1.3.
-5. Independent native TRX settlement, recovery-ready backup, monitoring and rollback with explicit deployment approval.
-6. No public purchase, live order, broker connection, profit transfer, or customer enrollment is approved by this document.
+4. Buyer acceptance provenance cryptographically bound to exact contract, not just a webpage click; old `order_readiness.TERMS_VERSION` must never silently become v1.3. Resolve the conflicting historical 50-per-phase text without changing signed v1.2 terms.
+5. Independently verify that a 28-day Instagram OR Facebook participation-post condition is lawful, platform-compatible, proportionate, voluntarily accepted in a signed v1.3 agreement, and reviewable without collecting account credentials or private social data.
+6. Independent native TRX settlement, recovery-ready backup, monitoring and rollback with explicit deployment approval.
+7. No public purchase, live order, broker connection, profit transfer, or customer enrollment is approved by this document.
 
 Sources: `prop_firm/rules.py`, `prop_firm/order_readiness.py`, `prop_firm/plan1_buyer_disclosure_v12.py`, `prop_firm/plan1_buyer_no_social_amendment.py`, `prop_firm/xauusd_v13_preflight.py`, `prop_firm/xauusd_v13_broker_evidence.py`.
