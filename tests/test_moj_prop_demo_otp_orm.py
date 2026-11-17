@@ -13,7 +13,7 @@ from prop_firm.models import PropChallengeEnrollment, PropAccount
 from prop_firm.buyer_order_review import Plan1OrderGateClosed
 from prop_firm.plan1_orm_consent_review import review_email_verified_existing_interest
 from test_prop_plan1_canonical_interest_bridge import (
-    args as consent_args, sign as consent_sign, synthetic_draft,
+    args as consent_args, sign as consent_sign,
 )
 from test_prop_plan1_demo_email_interest import (
     OTP_KEY, NOW, receipt as otp_receipt, sign as otp_sign,
@@ -51,7 +51,6 @@ class RealDatabaseDemoEmailConsentTests(TestCase):
             request_ref=c["expected_request_ref"],
             inquiry_sha256=c["expected_inquiry_sha256"],
             consent_evidence_sha256=c["expected_consent_evidence_sha256"],
-            private_order_draft=synthetic_draft(),
             signed_otp_receipt=otp,
             signed_otp_tag_hex=otp_sign(otp),
             trusted_otp_service_key=OTP_KEY,
@@ -186,3 +185,13 @@ class RealDatabaseDemoEmailConsentTests(TestCase):
         self.assertFalse(result.payable_invoice)
         self.assertFalse(result.demo_account_activated)
         self.assertFalse(result.real_account_activated)
+
+    def test_otp_interest_does_not_require_paid_purchase_contract(self):
+        result=self.review()
+        self.assertFalse(result.buyer_signed_contract_verified)
+        self.assertFalse(result.purchase_legality_verified)
+
+    def test_no_private_contract_draft_expected_in_otp_path(self):
+        data=self.data()
+        self.assertNotIn("private_order_draft", data)
+        self.assertFalse(self.review(data).payable_invoice)
