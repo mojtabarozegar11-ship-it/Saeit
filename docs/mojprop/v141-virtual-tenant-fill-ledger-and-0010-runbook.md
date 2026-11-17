@@ -2,7 +2,7 @@
 
 **Status:** Source-built, nonproduction, on Draft PR #2684. No customer order
 matching service, no verified market quote/simulator publisher, no actual
-customer enrollment, no applied MariaDB 0009/0010 migration, no public
+customer enrollment, no applied *production* MariaDB 0009/0010 migration, no public
 customer trade form, no broker execution or payments have been proven.
 
 ## Confirmed target design
@@ -29,7 +29,7 @@ customer trade form, no broker execution or payments have been proven.
 |---|---|---|
 | `prop_firm/plan1_v141_virtual_tenant_fill_ledger.py` | Pure per-trader, per-challenge XAUUSD open/close/partial-close replay, FIFO inventory cost, long/short P&L, exact 8-decimal money, 4-decimal source quote/quantity/fees, unique global source event IDs, contiguous challenge sequences, duplicate idempotence, temporal 28-day check, separate stage closed-position tallies and deterministic SHA256 per challenge | No market data authenticity, floating equity, stage pass, real orders or client authentication |
 | `prop_firm/plan1_v141_virtual_tenant_models.py` | NEW isolated version-specific Django `PropV141VirtualBook` one-to-one to `PropV141SimState`, owner FK to actual site user; `PropV141VirtualFill` append-only intended rows with unique event ID globally, unique per-book sequence, quantity/price/fee check constraints | Existing v1.2 funded-account table unchanged |
-| `prop_firm/migrations/0010_v141_virtual_tenant_books.py` | Creation-only migration dependent on `0009_v141_sim_replay_journal` and AUTH_USER_MODEL; defines book and fill schema and constraints | NOT APPLIED; Django and MariaDB runtime/concurrency/rollback still untested |
+| `prop_firm/migrations/0010_v141_virtual_tenant_books.py` | Creation-only migration dependent on `0009_v141_sim_replay_journal` and AUTH_USER_MODEL; defines book and fill schema and constraints | NOT applied to production; disposable MariaDB Django migrations, rollback and concurrency tested (13/13 PASS) |
 | `prop_firm/plan1_v141_atomic_virtual_fill_service.py` | Server-internal signed event HMAC scoped to book, site owner and exact contract; `transaction.atomic` + row locks, full stored sequence reconstruction, hash and realized-P&L comparison, historical idempotence, globally exclusive event IDs, immutability after phase acceptance, fail-closed phase-two timing and terminal states | Not an HTTP endpoint; requires separately authorized upstream DEMO feed, protected signer keys and independently provisioned customer account |
 | `core/mojprop_v141_private_portfolio_view.py` + `config/urls.py` | Tenant-scoped `GET /moj-prop-v141/portfolio/<slug:challenge_ref>/`, HTTPS + mojplaywin.com allowlist, logged-in owner only, no-store/noindex headers; shows purely realized virtual P&L and closed-position count with explicit non-funded / nonverified caveats | `MOJ_PROP_V141_PORTFOLIO_ENABLED` defaults FALSE (no setting set); NOT deployed, no trading POST, no real equity valuation |
 | `prop_firm/plan1_v141_shared_company_master_review.py` | Separate mathematical single-company-account risk-capacity review for many website customers | All real order authority remains FALSE, no real MT5 adapter |
@@ -52,6 +52,45 @@ customer trade form, no broker execution or payments have been proven.
 - Canonical 4-place source decimals avoid a `1` versus `1.0000`
   hash mismatch after loading a Django DecimalField; quantities * price
   differences permit an 8-place exact USD P&L in proposed persistence.
+
+## 2026-11-17 shared evaluation deadline and stage-transition hardening (stacked draft)
+
+**Contract reconciliation — important correction:** the *authoritative unsigned
+FA/EN buyer terms* in `plan1_v14_social_or_50_terms.py` and the base
+`xauusd_v13_draft_terms.py` specify **ONE 28-day evaluation window for BOTH
+sequential demo phases**, not 28 days *per phase*. The independently separate
+28-day social-post hold is a different clock. A previous implementation in
+this same draft briefly treated stage two as gaining an extra 28 days;
+**that interpretation was invalid and is now rejected**.
+
+The final code reuses the **single deadline**
+`evaluation_started_at + timedelta(days=28)` for all phase-one and
+phase-two fills. It also validates independently persisted stage-one
+acceptance and stage-two start from `PropV141SimState`: no phase-two event
+may precede its actual start, no start at or after the overall 28-day
+deadline may unlock stage two, phase one freezes after acceptance, no
+reversed/future transitions, and no carried-open stage-one position
+inventory. A historical final fill exactly at first-stage acceptance is
+valid (the internal writer still blocks new post-acceptance appends).
+No additional database schema change was needed.
+
+**Regression target:** 18 additional pure replay checks and 2 Django
+source checks compared with PR #2684's 817-case baseline. Exact combined
+Python test inventory = **837**. Previously reported 835-case CI
+demonstrated the *intermediate* clock interpretation; only a new CI success
+on the revised final SHA proves this corrected policy.
+
+No production migration, deployment, broker order, enrollment, payment,
+legal approval or external market-feed authenticity is implied by these tests.
+
+## 2026-11-17 ephemeral MariaDB integration evidence
+
+**EXACT SOURCE HEAD at verification:** `647e90cb77953065fe65180ce5eddd31ab0cfb47`.
+
+- [Python source-unit CI #44155142665](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44155142665): completed **success** (835 source-unit cases).
+- [Real Django/MariaDB CI #44155132828](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44155132828): **13/13 executed test cases passed**, 0 failures/errors, on a disposable MariaDB 11.8 Docker service. Actual Django migration `0001` through `0010` was applied to `test_mojprop_v141_ci_only` and the test DB was destroyed afterwards. Proved InnoDB/strict SQL, ownership isolation, HMAC rejection, a globally unique fill ID, one-to-one book state, positive-quantity DB check, atomic rollback, freeze after stage acceptance, and **two concurrent identical writes under row lock**.
+- Isolated credentials were CI dummy-only; settings refuse non-GitHub operation, non-loopback host, unexpected schema and absent explicit ephemeral flags.
+- **Not proven:** production/staging host disk capacity, existing old MariaDB schema collisions, off-host full backup and recovery, real market data provider, authenticated site HTTPS order form, legal enrollment, LiteFinance permissions, TRX settlement or any real trading. Disposable CI is a valuable runtime gate but **does not authorize a production migration**.
 
 ## Deployment and security NO-GO
 
@@ -87,4 +126,4 @@ enrollment, DB migration, production deployment or payout is performed.**
 Exact passing CI runs must be tied to their source commit SHA:
 - [754 verified Python source unit tests](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44148489647)
 - [797 verified after isolated Django model/migration/internal service changes](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44149821309)
-- Current 817-case build must pass exact SHA before being reported as green.
+- Current [835/835 source-unit CI](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44155142665) plus [13/13 ephemeral MariaDB integration CI](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44155132828) passed at exact SHA `647e90cb77953065fe65180ce5eddd31ab0cfb47`; neither validates production readiness.

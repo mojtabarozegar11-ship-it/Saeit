@@ -82,6 +82,10 @@ class ProvisionedVirtualChallenge:
     # This is a server-sourced review input, NOT an authenticated approval.
     max_unlocked_stage: int
     trusted_feed_source: str
+    # Stage transitions originate in PropV141SimState. The contractual
+    # 28-day evaluation window covers BOTH sequential phases, not each phase.
+    stage_one_accepted_at_utc: datetime | None = None
+    phase_two_started_at_utc: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -179,7 +183,21 @@ def replay_provisioned_virtual_books(
                 or start > now or type(c.max_unlocked_stage) is not int
                 or c.max_unlocked_stage not in (1, 2)):
             raise VirtualLedgerRejected("duplicate, premature, wrong-version or invalid provisioned challenge")
-        registry[ref] = (c, trader, start)
+        accepted = (None if c.stage_one_accepted_at_utc is None else
+                    _utc(c.stage_one_accepted_at_utc, "stage_one_accepted_at_utc"))
+        second = (None if c.phase_two_started_at_utc is None else
+                  _utc(c.phase_two_started_at_utc, "phase_two_started_at_utc"))
+        if accepted is not None and (
+                accepted < start or accepted > now or accepted >= start + WINDOW):
+            raise VirtualLedgerRejected("stage-one acceptance outside its own 28-day window")
+        if c.max_unlocked_stage == 1 and second is not None:
+            raise VirtualLedgerRejected("stage two has not been unlocked")
+        if c.max_unlocked_stage == 2 and (
+                accepted is None or second is None
+                or not accepted <= second <= now
+                or second >= start + WINDOW):
+            raise VirtualLedgerRejected("stage two requires an accepted first stage and trusted start")
+        registry[ref] = (c, trader, start, accepted, second)
 
     # Event IDs are globally scoped by the server's feed across all tenants,
     # preventing one upstream fill from being credited to two challenge books.
@@ -197,7 +215,7 @@ def replay_provisioned_virtual_books(
         _sha(e.raw_event_sha256, "raw_event_sha256")
         if ref not in registry:
             raise VirtualLedgerRejected("event challenge not privately provisioned")
-        c, expected_trader, start = registry[ref]
+        c, expected_trader, start, accepted, second = registry[ref]
         if trader != expected_trader or source != c.trusted_feed_source:
             raise VirtualLedgerRejected("cross-tenant or foreign-source virtual fill")
         if (type(e.sequence) is not int or not 1 <= e.sequence <= MAX_EVENTS
@@ -207,8 +225,16 @@ def replay_provisioned_virtual_books(
         if e.action not in ("OPEN", "CLOSE") or e.direction not in ("BUY", "SELL") or e.symbol != "XAUUSD":
             raise VirtualLedgerRejected("only XAUUSD OPEN/CLOSE BUY/SELL virtual fills allowed")
         when = _utc(e.executed_at_utc, "executed_at_utc")
-        if not start <= when <= now or when >= start + WINDOW:
-            raise VirtualLedgerRejected("virtual fill outside challenge 28-day window")
+        phase_start = start if e.stage == 1 else second
+        # One legal 28-day evaluation clock for both phases. The second-phase
+        # transition cannot restart, extend or bypass the original deadline.
+        if (phase_start is None or not phase_start <= when <= now
+                or when >= start + WINDOW):
+            raise VirtualLedgerRejected("virtual fill outside shared 28-day evaluation window")
+        # An already-recorded final fill may share the acceptance timestamp.
+        # Writer still forbids appending ANY new stage-one event after acceptance.
+        if e.stage == 1 and accepted is not None and when > accepted:
+            raise VirtualLedgerRejected("stage-one fill after authoritative stage acceptance")
         qty = _dec(e.quantity_ounces, "quantity_ounces", ceiling=MAX_QTY, strictly_positive=True)
         price = _dec(e.price_usd_per_ounce, "price_usd_per_ounce", ceiling=MAX_PRICE, strictly_positive=True)
         fee = _dec(e.fee_usd, "fee_usd", ceiling=MAX_FEES)
@@ -225,7 +251,7 @@ def replay_provisioned_virtual_books(
 
     books = []
     total = 0
-    for ref, (c, trader, _start) in sorted(registry.items()):
+    for ref, (c, trader, _start, _accepted, _second) in sorted(registry.items()):
         candidates = by_challenge[ref]
         numbers = sorted(candidates)
         if numbers != list(range(1, len(numbers) + 1)):
@@ -293,6 +319,11 @@ def replay_provisioned_virtual_books(
             )
             history = sha256(json.dumps(row, sort_keys=True, separators=(",", ":"),
                                        ensure_ascii=True).encode("utf-8")).hexdigest()
+        # A finalized first stage must not carry open inventory into stage two.
+        if c.max_unlocked_stage == 2 and any(
+                position_stage == 1
+                for position_stage, _side, _lots in positions.values()):
+            raise VirtualLedgerRejected("open first-stage inventory cannot migrate to stage two")
         open_positions = tuple(
             OpenVirtualPosition(
                 position_ref=position, stage=stage, direction=direction,

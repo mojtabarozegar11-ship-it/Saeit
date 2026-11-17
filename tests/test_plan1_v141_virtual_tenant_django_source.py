@@ -183,6 +183,16 @@ class VirtualTenantDjangoSourceTests(unittest.TestCase):
         self.assertIn("book.state.last_phase_two_completed_at is not None",self.writer)
         self.assertIn("stage-two event outside independently recorded active stage",self.writer)
 
+    def test_38_replay_reads_real_phase_transition_from_persisted_state(self):
+        self.assertIn("stage_one_accepted_at_utc=book.state.last_phase_one_accepted_at",self.writer)
+        self.assertIn("phase_two_started_at_utc=book.state.last_phase_two_started_at",self.writer)
+
+    def test_39_virtual_ledger_checks_independent_stage_windows(self):
+        for needle in ("phase_start = start if e.stage == 1 else second",
+                       "when >= start + WINDOW",
+                       "open first-stage inventory cannot migrate to stage two"):
+            self.assertIn(needle,self.pure)
+
 
 if __name__=="__main__":
     unittest.main()

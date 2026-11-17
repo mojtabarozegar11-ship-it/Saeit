@@ -150,7 +150,11 @@ class VirtualTenantLedgerUnitTests(unittest.TestCase):
         e=(event(),event(seq=2,action="CLOSE",price="3002"),
            event(seq=3,action="OPEN",stage=2,position="P-2"),
            event(seq=4,action="CLOSE",stage=2,position="P-2",price="3004"))
-        b=run(*e,provisioned=(provision(max_unlocked_stage=2),)).challenge_books[0]
+        b=run(*e,provisioned=(provision(
+            max_unlocked_stage=2,
+            stage_one_accepted_at_utc=START+timedelta(minutes=2,seconds=30),
+            phase_two_started_at_utc=START+timedelta(minutes=3),
+        ),)).challenge_books[0]
         self.assertEqual(b.fully_closed_positions_total,2)
         self.assertEqual(b.fully_closed_positions_stage_one,1)
         self.assertEqual(b.fully_closed_positions_stage_two,1)
@@ -348,6 +352,142 @@ class VirtualTenantLedgerUnitTests(unittest.TestCase):
                  event(seq=4,action="CLOSE",qty="1",price="3003")).challenge_books[0]
         self.assertEqual(book.unique_event_count,4)
         self.assertEqual(book.fully_closed_positions_total,1)
+
+
+    def test_52_second_stage_cannot_extend_shared_28_day_contract_window(self):
+        later=START+timedelta(days=29)
+        p=provision(max_unlocked_stage=2,
+                    stage_one_accepted_at_utc=START+timedelta(hours=1),
+                    phase_two_started_at_utc=later)
+        with self.assertRaises(VirtualLedgerRejected):
+            run(event(stage=2, executed_at_utc=later+timedelta(minutes=1)),
+                provisioned=(p,),server_now=later+timedelta(days=1))
+
+    def test_53_second_stage_at_shared_day_28_deadline_is_rejected(self):
+        second=START+timedelta(days=1)
+        p=provision(max_unlocked_stage=2,
+                    stage_one_accepted_at_utc=START+timedelta(hours=1),
+                    phase_two_started_at_utc=second)
+        with self.assertRaises(VirtualLedgerRejected):
+            run(event(stage=2,executed_at_utc=START+timedelta(days=28)),
+                provisioned=(p,),server_now=START+timedelta(days=28,minutes=1))
+
+    def test_54_phase_two_event_cannot_precede_its_signed_start(self):
+        later=START+timedelta(days=1)
+        p=provision(max_unlocked_stage=2,
+                    stage_one_accepted_at_utc=START+timedelta(hours=1),
+                    phase_two_started_at_utc=later)
+        with self.assertRaises(VirtualLedgerRejected):
+            run(event(stage=2,executed_at_utc=later-timedelta(seconds=1)),
+                provisioned=(p,),server_now=later+timedelta(minutes=1))
+
+    def test_55_phase_one_cannot_accept_fills_after_acceptance(self):
+        p=provision(stage_one_accepted_at_utc=START+timedelta(hours=1))
+        with self.assertRaises(VirtualLedgerRejected):
+            run(event(executed_at_utc=START+timedelta(hours=2)),provisioned=(p,))
+
+    def test_56_stage_one_acceptance_at_deadline_is_rejected(self):
+        p=provision(stage_one_accepted_at_utc=START+timedelta(days=28))
+        with self.assertRaises(VirtualLedgerRejected):
+            run(provisioned=(p,),server_now=START+timedelta(days=30))
+
+    def test_57_unlocked_second_stage_requires_previous_acceptance(self):
+        p=provision(max_unlocked_stage=2,
+                    phase_two_started_at_utc=START+timedelta(days=29))
+        with self.assertRaises(VirtualLedgerRejected):
+            run(provisioned=(p,),server_now=START+timedelta(days=30))
+
+    def test_58_second_stage_start_cannot_precede_first_acceptance(self):
+        p=provision(max_unlocked_stage=2,
+                    stage_one_accepted_at_utc=START+timedelta(days=1),
+                    phase_two_started_at_utc=START+timedelta(hours=1))
+        with self.assertRaises(VirtualLedgerRejected):
+            run(provisioned=(p,),server_now=START+timedelta(days=30))
+
+    def test_59_future_second_stage_transition_is_not_trusted(self):
+        p=provision(max_unlocked_stage=2,
+                    stage_one_accepted_at_utc=START+timedelta(hours=1),
+                    phase_two_started_at_utc=START+timedelta(days=29))
+        with self.assertRaises(VirtualLedgerRejected):
+            run(provisioned=(p,),server_now=NOW)
+
+    def test_60_locked_stage_rejects_second_stage_timestamp(self):
+        p=provision(phase_two_started_at_utc=START+timedelta(days=1))
+        with self.assertRaises(VirtualLedgerRejected):
+            run(provisioned=(p,),server_now=START+timedelta(days=2))
+
+    def test_61_first_stage_cannot_borrow_second_stage_window(self):
+        later=START+timedelta(days=1)
+        p=provision(max_unlocked_stage=2,
+                    stage_one_accepted_at_utc=START+timedelta(hours=1),
+                    phase_two_started_at_utc=later)
+        with self.assertRaises(VirtualLedgerRejected):
+            run(event(executed_at_utc=later+timedelta(minutes=1)),
+                provisioned=(p,),server_now=later+timedelta(days=1))
+
+    def test_62_second_stage_window_start_is_inclusive(self):
+        later=START+timedelta(days=1)
+        p=provision(max_unlocked_stage=2,
+                    stage_one_accepted_at_utc=START+timedelta(hours=1),
+                    phase_two_started_at_utc=later)
+        b=run(event(stage=2,executed_at_utc=later),
+              provisioned=(p,),server_now=later).challenge_books[0]
+        self.assertEqual(len(b.open_positions),1)
+
+    def test_63_second_stage_cannot_be_unlocked_without_start_timestamp(self):
+        p=provision(max_unlocked_stage=2,
+                    stage_one_accepted_at_utc=START+timedelta(hours=1))
+        with self.assertRaises(VirtualLedgerRejected):
+            run(provisioned=(p,))
+
+    def test_64_first_stage_acceptance_before_enrollment_start_rejected(self):
+        p=provision(stage_one_accepted_at_utc=START-timedelta(seconds=1))
+        with self.assertRaises(VirtualLedgerRejected):
+            run(provisioned=(p,))
+
+    def test_65_future_first_stage_acceptance_rejected_even_if_locked(self):
+        p=provision(stage_one_accepted_at_utc=START+timedelta(days=3))
+        with self.assertRaises(VirtualLedgerRejected):
+            run(provisioned=(p,),server_now=NOW)
+
+    def test_66_first_stage_open_inventory_cannot_carry_into_stage_two(self):
+        later=START+timedelta(days=1)
+        p=provision(max_unlocked_stage=2,
+                    stage_one_accepted_at_utc=START+timedelta(hours=1),
+                    phase_two_started_at_utc=later)
+        with self.assertRaisesRegex(VirtualLedgerRejected,"open first-stage inventory"):
+            run(event(),event(seq=2,stage=2,position="POSITION-SECOND",
+                              executed_at_utc=later+timedelta(minutes=1)),
+                provisioned=(p,),server_now=later+timedelta(minutes=5))
+
+    def test_67_final_historical_fill_equal_to_acceptance_instant_allowed(self):
+        accepted=START+timedelta(minutes=2)
+        p=provision(stage_one_accepted_at_utc=accepted)
+        b=run(event(),event(seq=2,action="CLOSE",price="3002",
+                           executed_at_utc=accepted),
+              provisioned=(p,)).challenge_books[0]
+        self.assertEqual(b.fully_closed_positions_stage_one,1)
+
+    def test_68_second_stage_valid_inside_global_window(self):
+        second=START+timedelta(days=1)
+        p=provision(max_unlocked_stage=2,
+                    stage_one_accepted_at_utc=START+timedelta(hours=1),
+                    phase_two_started_at_utc=second)
+        b=run(
+            event(stage=2,executed_at_utc=second+timedelta(minutes=1)),
+            event(seq=2,stage=2,action="CLOSE",price="3002",
+                  executed_at_utc=second+timedelta(minutes=2)),
+            provisioned=(p,),server_now=second+timedelta(days=1)
+        ).challenge_books[0]
+        self.assertEqual(b.fully_closed_positions_stage_two,1)
+        self.assertEqual(b.realized_net_after_all_fees_usd,Decimal("1.80"))
+
+    def test_69_stage_two_transition_at_global_deadline_cannot_unlock(self):
+        p=provision(max_unlocked_stage=2,
+                    stage_one_accepted_at_utc=START+timedelta(hours=1),
+                    phase_two_started_at_utc=START+timedelta(days=28))
+        with self.assertRaises(VirtualLedgerRejected):
+            run(provisioned=(p,),server_now=START+timedelta(days=28))
 
 
 if __name__=="__main__":
