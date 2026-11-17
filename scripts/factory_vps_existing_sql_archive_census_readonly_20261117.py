@@ -58,7 +58,7 @@ def expected_digest(path,st,expected):
             if not b:break
             n+=len(b)
             sha.update(b)
-    after=path.stat(follow_symlinks=False)
+    after=os.stat(path, follow_symlinks=False)
     unchanged=before==(after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns)
     return {
       "status":"MATCH" if n==st.st_size and unchanged and sha.hexdigest()==expected else "MISMATCH",
