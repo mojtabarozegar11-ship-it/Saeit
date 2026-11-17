@@ -63,3 +63,40 @@ def test_no_fake_dates_or_commitment_metadata():
         html = (PUBLIC / str(n) / "index.html").read_text(encoding="utf-8")
         assert 'datePublished' not in html and 'dateModified' not in html
         assert 'پرداخت' in html and 'قرارداد' in html
+
+
+def test_release_rewrite_targets_only_official_serials_350_through_421():
+    from scripts.zomorod_auctions_72_deploy import (
+        NEW_MARKER, NEW_RULE, ANCHOR, INDEX_RULE, MAP_RULE,
+        assert_exact_rewrite_range, new_rewrite,
+    )
+    assert_exact_rewrite_range()
+    baseline = b"\n".join([INDEX_RULE, MAP_RULE, ANCHOR]) + b"\n"
+    result = new_rewrite(baseline)
+    assert result.count(NEW_MARKER) == 1
+    assert result.count(ANCHOR) == 1
+    assert result.index(NEW_MARKER) < result.index(ANCHOR)
+    assert b"/zm-auction$1/index.html [END,NC]" in NEW_RULE
+    assert INDEX_RULE in result and MAP_RULE in result
+    assert not b"RewriteRule ^auctions/422/" in result
+
+
+def test_release_refuses_duplicate_new_auction_rules():
+    import pytest
+    from scripts.zomorod_auctions_72_deploy import NEW_RULE, ANCHOR, new_rewrite
+    existing = NEW_RULE + ANCHOR
+    with pytest.raises(RuntimeError):
+        new_rewrite(existing)
+    with pytest.raises(RuntimeError):
+        new_rewrite(ANCHOR + b"\nRewriteRule ^auctions/350/?$ /other [END]\n")
+
+
+def test_static_publisher_never_publishes_direct_auctions_directory():
+    from pathlib import Path
+    source = (Path(__file__).resolve().parents[1]
+              / "scripts/zomorod_auctions_72_deploy.py").read_text(encoding="utf-8")
+    assert 'ROOT / ("zm-auction" + str(n))' in source
+    assert 'ROOT / "zm-auctions-index/index.html"' in source
+    assert 'ROOT / "zm-auctions-index/sitemap.xml"' in source
+    assert 'b\'PassengerAppRoot "/home/zomorod2/Saeit"\'' in source
+    assert 'ROOT / "auctions").exists()' in source
