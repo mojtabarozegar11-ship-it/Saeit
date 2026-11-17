@@ -28,7 +28,7 @@ class FakeDriveAdapter(m.RcloneDualStore):
             if path==PROOF_PATH: return self.proofs.get(remote,b'')
             return self.objects.get(argv[1],b'')
         if cmd=='about':
-            remote=argv[2].removesuffix(':')
+            remote=argv[2][:-1] if argv[2].endswith(':') else argv[2]
             return json.dumps({'free':self.free.get(remote)}).encode()
         if cmd=='mkdir':
             self.dirs.add(argv[1]);return b''
