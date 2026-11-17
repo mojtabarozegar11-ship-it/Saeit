@@ -25,7 +25,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(id -un)" = "githubops"
+          test "$(hostname -s)" = "factory" || { echo "FACTORY_RUNNER_HOSTNAME_MISMATCH"; exit 78; }
           PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
           import datetime, hashlib, json, os, pathlib, re, sqlite3, stat
           root=pathlib.Path('/home/githubops/factory-runtime')
