@@ -40,6 +40,13 @@ class LegalEvidence:
     authorized_receiving_account_verified: bool
     payment_method_legally_cleared: bool
     compliance_reference: str
+    # Independently sourced, immutable back-office legal/identity decisions.
+    # These flags cannot be attested by a visitor/browser, IP or wallet alone.
+    seller_role: str = "unknown"  # natural_person_independent_service, licensed_crypto_broker, other
+    seller_role_verified: bool = False
+    iran_foreign_trx_receipt_rights_verified: bool = False
+    us_person_and_us_nexus_excluded: bool = False
+    relevant_sanctions_screen_verified: bool = False
 
 
 @dataclass(frozen=True)
@@ -103,5 +110,22 @@ def decide_preinvoice(lane: Lane, method: PaymentMethod,
     if method is not PaymentMethod.NATIVE_TRX:
         return PreinvoiceDecision(lane, False, PaymentMethod.NONE, None,
                                   "Payment method not cleared by this foreign-buyer route")
+    # Art. 38 of Iran's crypto-broker regulation prohibits licensees using
+    # crypto assets as payment. Type-2 does not by itself authorize this sale.
+    if (evidence.seller_role == "licensed_crypto_broker"):
+        return PreinvoiceDecision(lane, False, PaymentMethod.NONE, None,
+                                  "Iran-licensed crypto broker cannot use crypto as merchant payment (art.38)")
+    if (evidence.seller_role_verified is not True or
+            evidence.seller_role != "natural_person_independent_service"):
+        return PreinvoiceDecision(lane, False, PaymentMethod.NONE, None,
+                                  "Independent seller's actual contracting capacity not verified")
+    if evidence.merchant_residence_country == "IR" and (
+            evidence.iran_foreign_trx_receipt_rights_verified is not True):
+        return PreinvoiceDecision(lane, False, PaymentMethod.NONE, None,
+                                  "Foreign TRX service export/receipt authority not verified for Iran resident")
+    if (evidence.us_person_and_us_nexus_excluded is not True or
+            evidence.relevant_sanctions_screen_verified is not True):
+        return PreinvoiceDecision(lane, False, PaymentMethod.NONE, None,
+                                  "US-origin service import/nexus or counterparty sanctions screening incomplete")
     return PreinvoiceDecision(lane, True, PaymentMethod.NATIVE_TRX, NATIVE_TRX_SUN,
                               "Provisional quote only: server invoice, TRON solidified settlement and atomic ledger are separate")
