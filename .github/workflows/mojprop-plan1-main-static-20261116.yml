@@ -6,6 +6,8 @@ on:
     paths:
       - templates/moj-prop-v4/index.html
       - tests/test_mojprop_plan1_static_prelaunch.py
+      - templates/moj-prop/contact/index.html
+      - tests/test_mojprop_plan1_prelaunch_contact_20261117.py
       - .github/workflows/mojprop-plan1-main-static-20261116.yml
   pull_request:
     branches:
@@ -13,6 +15,8 @@ on:
     paths:
       - templates/moj-prop-v4/index.html
       - tests/test_mojprop_plan1_static_prelaunch.py
+      - templates/moj-prop/contact/index.html
+      - tests/test_mojprop_plan1_prelaunch_contact_20261117.py
       - .github/workflows/mojprop-plan1-main-static-20261116.yml
 permissions:
   contents: read
@@ -26,6 +30,8 @@ jobs:
           persist-credentials: false
       - name: Assert nonpayable correct canonical Plan 1 content
         run: python3 -m unittest -v tests.test_mojprop_plan1_static_prelaunch
+      - name: Verify real Plan1 EN/FA first-party support contact and privacy
+        run: python3 -m unittest -v tests.test_mojprop_plan1_prelaunch_contact_20261117
       - name: Parse inline customer form script and syntax check with Node
         run: |
           python3 - <<'PY'
