@@ -47,3 +47,11 @@ The new `scripts/mojprop_cpanel_direct_dual_cloud.py` connects them without stor
 6. Only mark `RESTORABLE=TRUE` once complete restore and function checks actually succeed; then reconsider release gates for MojProp.
 
 **All source-only unit tests and workflow on this PR are non-network/non-production.**
+
+## Real read-only result and exact-head CI — 18 November 2026
+- [GitHub Actions #44189240265](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44189240265): **93/93 tests green** (26 source/SSH/admission/dispatch cases + 67 existing real-core/mock-Drive encryption/readback cases), exact source head `b692d2c23a0cd074252de03b4466a73e79a03081` at the recorded run.
+- **Actual self-hosted runner** metadata in the same run: `OWNER_RUNNER_OFFLINE_RCLONE_PRESENT=false` and `OWNER_RUNNER_PRIVATE_RCLONE_CONFIG_PRESENT=false`. No OAuth was read, no Drive quota queried, no current DB/media data streamed.
+- Additional hardening on source head: both cPanel and relay SSH private-key files must exist, be regular, same-owner, link-count 1, mode 0600. Four adversarial tests confirm missing, world-readable, symlinked or unknown identity files deny startup.
+- **Preflight decision right now: NO-GO to transfer.** Do not bypass owner authentication or Drive quota by lowering safety thresholds. The connector OAuth inside ChatGPT is separate from an owner-owned server-side rclone config.
+- Manual authorization phrase by itself is not a cryptographically signed or single-use approval token; human operator must independently verify per-case authorization and distinct 128-bit run IDs. No unattended production execution workflow is wired here.
+- References: [MariaDB consistent snapshot and DDL limitations](https://mariadb.com/docs/server/clients-and-utilities/backup-restore-and-import-clients/mariadb-dump), [rclone stdin streaming](https://rclone.org/commands/rclone_rcat/), [Google Drive quota via rclone](https://rclone.org/drive/).
