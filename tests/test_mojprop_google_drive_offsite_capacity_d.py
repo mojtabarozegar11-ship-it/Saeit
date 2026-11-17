@@ -125,7 +125,7 @@ class TestOwnerDriveOffsiteGate(unittest.TestCase):
         self.denied(quota_checked_at=(NOW-timedelta(minutes=16)).isoformat())
 
     def test_timezone_aware_equivalent(self):
-        iso=(NOW+timedelta(hours=3)).astimezone(timezone(timedelta(hours=3))).isoformat()
+        iso=NOW.astimezone(timezone(timedelta(hours=3))).isoformat()
         record=replace(self.record, quota_checked_at=iso)
         self.assertTrue(self.check(record)["capacity_math_screen_passed"])
 
