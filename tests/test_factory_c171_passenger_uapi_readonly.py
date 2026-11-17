@@ -1,5 +1,8 @@
 """No-network C171 parser and owner-only UAPI admission regressions."""
 import json
+import os
+from pathlib import Path, PurePosixPath
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -188,6 +191,99 @@ class C171PrivateRegistryTests(unittest.TestCase):
         self.assertEqual(o['enabled_apps'],2)
         self.assertTrue(o['registered_metadata_not_runtime_attestation'])
         self.assertFalse(o['current_backup_created'])
+
+
+    def _private_root_fixture(self):
+        td=tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        home=Path(td.name)/'owner'
+        home.mkdir(mode=0o700)
+        new=home/'site-production'
+        new.mkdir(mode=0o700)
+        return home,new
+
+    def test_33_registry_root_metadata_confirmed(self):
+        home,root=self._private_root_fixture()
+        (root/'passenger_wsgi.py').write_text('application=None')
+        (root/'manage.py').write_text('print(1)')
+        (root/'media').mkdir(mode=0o700)
+        (root/'uploads').mkdir(mode=0o700)
+        with patch.object(m,'HOME',PurePosixPath(home)):
+            r=m._registered_root_metadata_census(reply([{'path':'site-production'}]),os.geteuid())
+        self.assertTrue(r['registered_root_census_attempted'])
+        self.assertEqual(r['registered_root_secure_dirs'],1)
+        self.assertEqual(r['registered_root_wsgi_metadata'],1)
+        self.assertEqual(r['registered_root_manage_metadata'],1)
+        self.assertEqual(r['registered_root_media_metadata'],1)
+        self.assertEqual(r['registered_root_uploads_metadata'],1)
+
+    def test_34_missing_registered_root_not_proven(self):
+        home,root=self._private_root_fixture()
+        with patch.object(m,'HOME',PurePosixPath(home)):
+            r=m._registered_root_metadata_census(reply([{'path':'not_created'}]),os.geteuid())
+        self.assertEqual(r['registered_root_unverified_dirs'],1)
+        self.assertEqual(r['registered_root_secure_dirs'],0)
+
+    def test_35_registered_root_symlink_denied(self):
+        home,root=self._private_root_fixture()
+        (home/'link').symlink_to(root)
+        with patch.object(m,'HOME',PurePosixPath(home)):
+            r=m._registered_root_metadata_census(reply([{'path':'link'}]),os.geteuid())
+        self.assertEqual(r['registered_root_unverified_dirs'],1)
+
+    def test_36_group_writable_registered_root_denied(self):
+        home,root=self._private_root_fixture()
+        root.chmod(0o770)
+        with patch.object(m,'HOME',PurePosixPath(home)):
+            r=m._registered_root_metadata_census(reply([{'path':'site-production'}]),os.geteuid())
+        self.assertEqual(r['registered_root_unverified_dirs'],1)
+
+    def test_37_symlinked_media_never_counted(self):
+        home,root=self._private_root_fixture()
+        (root/'media').symlink_to(home)
+        with patch.object(m,'HOME',PurePosixPath(home)):
+            r=m._registered_root_metadata_census(reply([{'path':'site-production'}]),os.geteuid())
+        self.assertEqual(r['registered_root_secure_dirs'],1)
+        self.assertEqual(r['registered_root_media_metadata'],0)
+
+    def test_38_non_owner_registered_root_denied(self):
+        home,root=self._private_root_fixture()
+        with patch.object(m,'HOME',PurePosixPath(home)):
+            r=m._registered_root_metadata_census(reply([{'path':'site-production'}]),os.geteuid()+10000)
+        self.assertEqual(r['registered_root_unverified_dirs'],1)
+
+    def test_39_outside_home_registered_root_denied(self):
+        home,root=self._private_root_fixture()
+        with patch.object(m,'HOME',PurePosixPath(home)):
+            r=m._registered_root_metadata_census(reply([{'path':'/etc'}]),os.geteuid())
+        self.assertEqual(r['registered_root_unverified_dirs'],1)
+
+    def test_40_provider_api_failure_no_metadata_census(self):
+        home,root=self._private_root_fixture()
+        with patch.object(m,'HOME',PurePosixPath(home)):
+            r=m._registered_root_metadata_census(reply([],status=0),os.geteuid())
+        self.assertFalse(r['registered_root_census_attempted'])
+
+    def test_41_no_file_contents_read_during_root_census(self):
+        home,root=self._private_root_fixture()
+        (root/'passenger_wsgi.py').write_text('do_not_open')
+        with patch.object(m,'HOME',PurePosixPath(home)):
+            with patch('builtins.open',side_effect=AssertionError('CONTENTS_MUST_NOT_BE_READ')):
+                r=m._registered_root_metadata_census(reply([{'path':'site-production'}]),os.geteuid())
+        self.assertEqual(r['registered_root_wsgi_metadata'],1)
+
+    def test_42_report_with_owner_root_metadata_no_path_leak(self):
+        home,root=self._private_root_fixture()
+        with patch.object(m,'HOME',PurePosixPath(home)):
+            with patch.object(m.pwd,'getpwuid',return_value=SimpleNamespace(pw_name=m.OWNER)):
+                with patch.object(m,'_bounded_run',return_value=reply([{
+                    'domain':'mojplaywin.com','path':'site-production',
+                    'envvars':{'SECRET':'VERY_PRIVATE_VALUE'}}])):
+                    o=m.report()
+        self.assertEqual(o['registered_root_secure_dirs'],1)
+        self.assertNotIn(str(home),str(o))
+        self.assertNotIn('VERY_PRIVATE_VALUE',str(o))
+        self.assertFalse(o['live_database_identity_proven'])
 
 
 if __name__ == '__main__':
