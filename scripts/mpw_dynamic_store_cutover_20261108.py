@@ -55,7 +55,7 @@ REVIEWED_STAGING_BLOBS = {
     "core/templates/mojplaywin/store.html": "0a41d31299da2b0884412d2adc1700d57c588341",
     "core/mojplaywin_product_detail.py": "9350c172591fbe9d49ee1c08b24beeb1bdd70cb2",
     "core/templates/mojplaywin/product_detail.html": "21678160b12bb2f73727c624ab5237e6b0272fd9",
-    "core/commerce_funnel.py": "b2b0b0ccfc632652e32ce40cc4bd879b2cd4b9b9",
+    "core/commerce_funnel.py": "5e1892427b243a8c1c3dc50312499c0deec60317",
 }
 
 
