@@ -10,7 +10,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   cleanup:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    # DISABLED: source-of-truth now preserves four SQLite backups including a zero-prefix sidecar-bearing candidate.
+    # No cleanup until immutable offsite copies and explicit deletion authorization exist.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
