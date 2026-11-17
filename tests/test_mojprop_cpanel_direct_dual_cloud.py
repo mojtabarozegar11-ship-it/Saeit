@@ -35,6 +35,11 @@ class DirectCPanelDualDriveTests(unittest.TestCase):
         self.vps_known = p / "vps.known"
         self.cpanel_known.write_text(KNOWN["host"] + "\n")
         self.vps_known.write_text(KNOWN["vps"] + "\n")
+        self.cpanel_private = p / "cpanel.key"
+        self.vps_private = p / "vps.key"
+        for key in (self.cpanel_private, self.vps_private):
+            key.write_bytes(b"owner-secret-key-shape-only-" + b"x" * 128)
+            key.chmod(0o600)
         self.conf = (
             "Host saeit-vps\n"
             "  HostName 178.239.147.150\n"
@@ -240,6 +245,31 @@ class DirectCPanelDualDriveTests(unittest.TestCase):
         self.assertEqual(bridge.OWNER_ARM,
                          "OWNER_APPROVES_ONE_OFFSITE_BACKUP_SET_WITHOUT_DEPLOY")
 
+
+
+    def test_20_missing_cpanel_private_key_denied(self):
+        self.cpanel_private.unlink()
+        with self.assertRaisesRegex(bridge.BackupHold, "MISSING_SSH_IDENTITY_FILE"):
+            bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
+
+    def test_21_world_readable_vps_private_key_denied(self):
+        self.vps_private.chmod(0o644)
+        with self.assertRaisesRegex(bridge.BackupHold, "UNSAFE_SSH_PRIVATE_KEY_PERMISSIONS"):
+            bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
+
+    def test_22_symlinked_ssh_identity_denied(self):
+        target = self.cpanel_private.with_suffix(".real")
+        self.cpanel_private.rename(target)
+        self.cpanel_private.symlink_to(target)
+        with self.assertRaisesRegex(bridge.BackupHold, "UNSAFE_SSH_IDENTITY_PATH"):
+            bridge.admission("files", source_path=SOURCE, ssh_config=self.config)
+
+    def test_23_unknown_key_filename_in_config_denied(self):
+        self._modify(self.conf.replace(
+            "IdentityFile " + str(self.cpanel_private),
+            "IdentityFile /tmp/unapproved-key-that-does-not-exist"))
+        with self.assertRaisesRegex(bridge.BackupHold, "MISSING_SSH_IDENTITY_FILE"):
+            bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
 
 if __name__ == "__main__":
     unittest.main()
