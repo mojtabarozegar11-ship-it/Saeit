@@ -79,6 +79,15 @@ genuine, or that the broker and payment service may operate.
 production branch, no `0009`/`0010` migration, no public orders, no TRX
 settlement, and no automatic real-company broker execution.
 
+## 2026-11-17 ephemeral MariaDB integration evidence
+
+**EXACT SOURCE HEAD at verification:** `647e90cb77953065fe65180ce5eddd31ab0cfb47`.
+
+- [Python source-unit CI #44155142665](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44155142665): completed **success** (835 source-unit cases).
+- [Real Django/MariaDB CI #44155132828](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44155132828): **13/13 executed test cases passed**, 0 failures/errors, on a disposable MariaDB 11.8 Docker service. Actual Django migration `0001` through `0010` was applied to `test_mojprop_v141_ci_only` and the test DB was destroyed afterwards. Proved InnoDB/strict SQL, ownership isolation, HMAC rejection, a globally unique fill ID, one-to-one book state, positive-quantity DB check, atomic rollback, freeze after stage acceptance, and **two concurrent identical writes under row lock**.
+- Isolated credentials were CI dummy-only; settings refuse non-GitHub operation, non-loopback host, unexpected schema and absent explicit ephemeral flags.
+- **Not proven:** production/staging host disk capacity, existing old MariaDB schema collisions, off-host full backup and recovery, real market data provider, authenticated site HTTPS order form, legal enrollment, LiteFinance permissions, TRX settlement or any real trading. Disposable CI is a valuable runtime gate but **does not authorize a production migration**.
+
 ## Deployment and security NO-GO
 
 **Do NOT enable `MOJ_PROP_V141_PORTFOLIO_ENABLED` or migrate 0010 on
