@@ -132,6 +132,26 @@ jobs:
                   "disk_free_is_not_account_quota":True},sort_keys=True),flush=True)
           except Exception as exc:
               print("MOJ_CPANEL_ACCOUNT_QUOTA="+json.dumps({"available":False,"error":type(exc).__name__,"disk_free_is_not_account_quota":True}),flush=True)
+          # Fixed-root read-only cPanel account usage map; no email/account details.
+          classifications={}
+          known=("restore-staging","public_html","mail",".backups",".trash","tmp","logs","Saeit","backup","public_ftp")
+          for name in known:
+              p=pathlib.Path("/home/zomorod2")/name
+              if p.is_symlink() or not p.exists():continue
+              try:
+                  v=subprocess.run(["nice","-n","15","du","-skx",str(p)],
+                                   capture_output=True,text=True,timeout=50,check=False)
+                  if v.returncode==0 and v.stdout.split():
+                      classifications[name]=int(v.stdout.split()[0])*1024
+                  else:classifications[name]="not_available"
+              except (OSError,ValueError,subprocess.TimeoutExpired):
+                  classifications[name]="time_budget_or_denied"
+          print("MOJ_CPANEL_FIXED_DIR_USAGE="+json.dumps({
+              "schema":"moj.factory.cpanel.fixed-directory-usage.v1",
+              "read_only":True,"directory_allocated_bytes":classifications,
+              "source_deleted":0,"cpanel_deleted":0,
+              "account_quota_separately_provided":True
+          },sort_keys=True),flush=True)
           PY
           echo CPANEL_OFFSITE_SNAPSHOTS_RECHECK_PASSED=true
       - name: Preserve short offsite proof only
