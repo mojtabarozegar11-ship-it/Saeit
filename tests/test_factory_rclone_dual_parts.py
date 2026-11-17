@@ -436,4 +436,64 @@ class TestRcloneDualDrive(unittest.TestCase):
         with self.assertRaisesRegex(m.TransferHold,'INVALID_OR_UNBOUND_COMPLETION_MANIFEST'):
             a(name,manifest)
 
+
+    def _integrated_synthetic_backup(self, run_letter):
+        from factory_dual_stream_v2 import encrypt_stream_to_dual_stores
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives import serialization
+        private=rsa.generate_private_key(public_exponent=65537,key_size=3072)
+        public=private.public_key()
+        pem=public.public_bytes(serialization.Encoding.PEM,
+                                serialization.PublicFormat.SubjectPublicKeyInfo)
+        der=public.public_bytes(serialization.Encoding.DER,
+                                serialization.PublicFormat.SubjectPublicKeyInfo)
+        private_pem=private.private_bytes(serialization.Encoding.PEM,
+                     serialization.PrivateFormat.PKCS8,serialization.NoEncryption())
+        fp=m._sha(der)
+        self.fake.preflight()
+        a,b,ra,rb=self.fake.callbacks('factory-current-'+run_letter*32)
+        source=(b'PRIVATELESS_SYNTHETIC_BACKUP_BYTES_NO_CUSTOMER_DATA_'*450)
+        receipt=encrypt_stream_to_dual_stores(
+            io.BytesIO(source),public_pem=pem,trusted_public_spki_sha256=fp,
+            owner_a='synthetic-A',owner_b='synthetic-B',
+            upload_a=a,upload_b=b,read_a=ra,read_b=rb,
+            chunk_bytes=4096,max_source_bytes=len(source))
+        manifests=[k for k in self.fake.objects
+                    if k.startswith('factory_a:current-backups/factory-current-')
+                    and k.endswith('-manifest.json')]
+        self.assertEqual(len(manifests),1)
+        name=manifests[0].split('/')[-1]
+        manifest=self.fake.objects[manifests[0]]
+        self.assertEqual(manifest,self.fake.objects[
+            'factory_b:current-backups/factory-current-'+run_letter*32+'/'+name])
+        return source,receipt,private_pem,fp,manifest,ra,rb
+
+    def test_66_real_crypto_core_to_mock_dual_drive_and_isolated_restore(self):
+        from factory_dual_stream_v2 import decrypt_to_isolated_file
+        source,receipt,pem,fp,manifest,ra,rb=self._integrated_synthetic_backup('e')
+        self.assertGreater(receipt.parts,1)
+        self.assertTrue(receipt.cipher_parts_mirrored_and_readback_verified)
+        self.assertFalse(receipt.restores_verified)
+        dest=Path(self.temp.name)/'synthetic-isolated-recovered.bin'
+        recovered=decrypt_to_isolated_file(
+            manifest,read_chunk=ra,private_pem=pem,private_password=None,
+            expected_public_spki_sha256=fp,output_path=dest,
+            minimum_free_reserve_bytes=0)
+        self.assertEqual(recovered,len(source))
+        self.assertEqual(dest.read_bytes(),source)
+
+    def test_67_real_crypto_core_restoration_rejects_tampered_manifest(self):
+        from factory_dual_stream_v2 import decrypt_to_isolated_file
+        source,receipt,pem,fp,manifest,ra,rb=self._integrated_synthetic_backup('f')
+        bad=json.loads(manifest)
+        bad['owner_refs']=['c'*32,'d'*32]
+        altered=json.dumps(bad,sort_keys=True,separators=(',',':')).encode()
+        dest=Path(self.temp.name)/'must-not-exist.bin'
+        with self.assertRaisesRegex(ValueError,'MANIFEST_AUTHENTICATION_FAILED'):
+            decrypt_to_isolated_file(
+                altered,read_chunk=rb,private_pem=pem,private_password=None,
+                expected_public_spki_sha256=fp,output_path=dest,
+                minimum_free_reserve_bytes=0)
+        self.assertFalse(dest.exists())
+
 if __name__=='__main__':unittest.main()
