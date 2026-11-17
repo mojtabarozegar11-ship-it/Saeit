@@ -30,7 +30,11 @@ class MojPropManualSupportFallbackTests(unittest.TestCase):
         self.assertIn("/contact/", links.links)
         self.assertNotIn(MAILTO, links.links)
         self.assertNotIn("mailto:", page.lower())
-        self.assertIn("/moj-prop-intake/?format=html", links.links)
+        self.assertIn(
+            "/moj-prop-intake/?format=html&service=blueprint&package=moj-prop-01",
+            links.links,
+        )
+        self.assertNotIn("MOJPROP-STARTER30", page)
         self.assertIn("If the form is unavailable", page)
         self.assertIn("No response time is guaranteed", page)
         self.assertNotIn("mojtaba.rozegar11@gmail.com", page)
