@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - audit/mojprop-v141-selfhosted-relay-live-inventory-20261117
+    paths:
+      - .github/workflows/mojprop-v141-selfhosted-local-readonly-20261117.yml
 permissions:
   contents: read
 concurrency:
