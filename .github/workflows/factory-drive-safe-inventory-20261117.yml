@@ -96,6 +96,29 @@ jobs:
               else:data['factory_usage_bytes']={'state':'incomplete'}
           except (OSError,subprocess.TimeoutExpired):
               data['factory_usage_bytes']={'state':'time_budget'}
+          # One-pass bounded home and operations capacity mapping (no contents disclosed).
+          def breakdown(path,scope):
+              try:
+                  p=subprocess.run(['nice','-n','15','du','-x','-B1','-d1','--',str(path)],capture_output=True,text=True,timeout=70,check=False)
+                  if p.returncode!=0: return {'status':'incomplete'}
+                  rows=[]
+                  for line in p.stdout.splitlines():
+                      amount,sep,name=line.partition('\t')
+                      if not sep or not amount.isdigit() or name==str(path):continue
+                      key=pathlib.Path(name).name
+                      if scope=='home':
+                          category=key if key in {'factory-runtime','.cache','.local','.npm','.config'} else 'other'
+                      else:
+                          category='backups' if key=='backups' else 'toolchain' if key.startswith('toolchain') else 'logs' if 'log' in key else 'other'
+                      rows.append((key,category,int(amount)))
+                  totals={}
+                  for _,category,n in rows:totals[category]=totals.get(category,0)+n
+                  largest=sorted(rows,key=lambda x:x[2],reverse=True)[:8]
+                  return {'status':'observed','totals':totals,'top_hashed':[{'id':hashlib.sha256(x[0].encode()).hexdigest()[:12],'category':x[1],'bytes':x[2]} for x in largest]}
+              except (OSError,subprocess.TimeoutExpired):
+                  return {'status':'time_budget'}
+          data['home_usage']=breakdown(pathlib.Path('/home/githubops'),'home')
+          data['operations_usage']=breakdown(backup.parent,'operations')
           print('MOJ_FACTORY_BACKUP_INVENTORY='+json.dumps(data,sort_keys=True))
           PY
           echo MOJ_FACTORY_READONLY_AUDIT_COMPLETE=true
