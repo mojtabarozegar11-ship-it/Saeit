@@ -342,9 +342,15 @@ def main():
     with LOCK.open("a+") as f:
         fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)
         if args.mode=="check":
-            validate_stage(stage)
+            _src, expected_idx, expected_map = validate_stage(stage)
             check_origin()
             check_number_conflicts()
+            idx_match = digest(index_path()) == digest(expected_idx)
+            map_match = digest(map_path()) == digest(expected_map)
+            print("AUCTIONS_72_PRIOR_INDEX_SHA256_MATCH=" + str(idx_match),flush=True)
+            print("AUCTIONS_72_PRIOR_SITEMAP_SHA256_MATCH=" + str(map_match),flush=True)
+            insist(idx_match and map_match,
+                   "Previously published auction directory changed; refuse destructive replacement")
             print("AUCTIONS_72_PREFLIGHT=legacy_rewrite_origin_verified",flush=True)
         elif args.mode=="apply":
             apply(args.sha,stage)
