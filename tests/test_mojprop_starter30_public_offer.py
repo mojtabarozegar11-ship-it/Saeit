@@ -99,7 +99,8 @@ class Starter30PublicOfferTests(unittest.TestCase):
         self.assertIn(Path("starter-30-trx/index.html"), FILES)
         self.assertIn(Path("starter-30-trx/journal-template.csv"), FILES)
         self.assertIn(Path("starter-30-trx/journal-guide.txt"), FILES)
-        self.assertEqual(MANIFEST_SCHEMA, "mojprop.static.starter30.v3-preserve-signals")
+        self.assertEqual(MANIFEST_SCHEMA, "mojprop.static.plan1-c153.v4-contact-rollback")
+        self.assertIn(Path("contact/index.html"), FILES)
         from scripts.update_mojplaywin_moj_prop_catalog import PRESERVED_LIVE_FILES
         self.assertEqual(PRESERVED_LIVE_FILES, (Path("signals/index.html"),))
         self.assertNotIn(Path("signals/index.html"), FILES)

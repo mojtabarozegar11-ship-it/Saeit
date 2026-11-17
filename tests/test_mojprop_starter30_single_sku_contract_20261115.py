@@ -31,7 +31,12 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertIn("deterministic risk report", self.contract)
         self.assertIn("30 native TRX", self.contract)
         self.assertIn("10 self-reported simulated sessions", self.catalog)
-        self.assertIn("10-session self-reported simulation journal", self.home)
+        # Genuine Plan1 replaced the old educational public homepage.
+        # Keep the educational detail/catalog, not a false Starter30 CTA on Plan1.
+        self.assertIn("MOJ-PROP-01", self.home)
+        self.assertNotIn('href="/moj-prop-interest/form/"', self.home)
+        self.assertNotIn("MOJPROP-STARTER30", self.home)
+        self.assertIn("Dedicated Plan 1 form not live", self.home)
         self.assertIn("Ten-session journal template", self.detail)
         self.assertNotIn("two-page", self.home.lower())
         self.assertNotIn("two-page", self.catalog.lower())
@@ -49,8 +54,9 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertIn("Payment not enabled", self.detail)
 
     def test_single_consent_based_crm_route_and_no_unmarked_149_dollar_quote(self):
-        for page in (self.home, self.catalog, self.detail):
+        for page in (self.catalog, self.detail):
             self.assertIn("package=starter-30-trx#request", page)
+        self.assertNotIn("package=starter-30-trx#request", self.home)
         self.assertNotIn("mailto:", self.detail)
         code = QUOTE.read_text(encoding="utf-8")
         self.assertIn("MOJPROP-STARTER30", code)
@@ -69,8 +75,9 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertIn("freeTierRequested", self.home)
         self.assertIn("Requested free educational example:", self.home)
         self.assertIn("No automatic newsletter, payment or signal delivery", self.home)
-        self.assertIn("starterRequested=requestedService==='blueprint'", self.home)
-        self.assertIn("MOJPROP-STARTER30", self.home)
+        # Old educational prefill must not impersonate the real Plan1 CTA.
+        self.assertNotIn("starterRequested=requestedService==='blueprint'", self.home)
+        self.assertNotIn("MOJPROP-STARTER30", self.home)
 
     def test_no_wallet_key_trading_or_payment_in_starter_detail(self):
         lower = self.detail.lower()
