@@ -5,6 +5,7 @@ All old /moj-prop/ and /moj-prop-interest/ routes stay unchanged; this new
 independent root route MUST NOT be confused with the v1.2 form or paid sales.
 Owner-controlled production deployment is expressly outside this module.
 """
+from django.conf import settings
 from django.http import Http404, HttpResponseNotAllowed
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
@@ -28,6 +29,7 @@ def moj_prop_v141_public_info(request):
         raise Http404("Unexpected query data")
     response = render(
         request, "moj-prop-plan1-v141-prelaunch/index.html",
+        {"interest_enabled": getattr(settings, "MOJ_PROP_V141_INTEREST_ENABLED", False) is True},
         content_type="text/html; charset=utf-8",
     )
     response["Cache-Control"] = "private, no-store, max-age=0"
