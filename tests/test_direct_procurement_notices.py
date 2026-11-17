@@ -27,12 +27,16 @@ class DirectProcurementNoticesTests(unittest.TestCase):
             self.assertTrue(equipment["special_checks"])
             self.assertEqual(supply["contact_path"], "/contact/")
             self.assertEqual(equipment["contact_path"], "/contact/")
+            self.assertEqual(supply["proposed_public_number"], 349 + i)
+            self.assertEqual(equipment["proposed_public_number"], 385 + i)
 
     def test_no_date_or_deadline_or_binding_purchase(self):
         data = json.loads(NOTICE_PATH.read_text(encoding="utf-8"))
         self.assertTrue(data["policy"]["no_fixed_deadline"])
         self.assertIn("خرید قطعی نیست", data["policy"]["status"])
         self.assertEqual(data["policy"]["channel"], "/contact/")
+        self.assertEqual(data["proposed_numbering"]["highest_verified_public_number"], 349)
+        self.assertFalse(data["proposed_numbering"]["official_numbers_reserved_in_live_db"])
         forbidden = {"date", "created_at", "published_at", "starts_at", "ends_at", "deadline"}
         for notice in data["notices"]:
             self.assertFalse(forbidden.intersection(notice.keys()))
