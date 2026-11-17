@@ -1,0 +1,48 @@
+name: MOJ PROP C133 three-way merge conflicts (READ ONLY; not a release)
+on:
+  pull_request:
+    branches: [feature/prop-firm-policy-v11-20261114]
+    paths:
+      - 'scripts/mojprop_merge_conflict_readonly_c133.py'
+      - 'tests/test_mojprop_merge_conflict_readonly_c133_20261117.py'
+      - '.github/workflows/mojprop-c133-merge-conflicts-readonly-20261117.yml'
+  push:
+    branches: [audit/mojprop-c133-three-way-merge-conflicts-20261117]
+permissions:
+  contents: read
+jobs:
+  diagnostic-no-deploy:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact reviewed diagnostic commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify the diagnostic itself with ephemeral local Git histories
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mojprop_merge_conflict_readonly_c133.py tests/test_mojprop_merge_conflict_readonly_c133_20261117.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_merge_conflict_readonly_c133_20261117
+      - name: Fetch only public source refs; no server, buyer, or authenticated write
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --prune origin \
+            '+refs/heads/main:refs/remotes/origin/main' \
+            '+refs/heads/feature/prop-firm-policy-v11-20261114:refs/remotes/origin/feature/prop-firm-policy-v11-20261114' \
+            '+refs/heads/fix/mojprop-main-prelaunch-real-plan1-20261116:refs/remotes/origin/fix/mojprop-main-prelaunch-real-plan1-20261116'
+          git rev-parse --verify refs/remotes/origin/main^{commit} > /dev/null
+          git rev-parse --verify refs/remotes/origin/feature/prop-firm-policy-v11-20261114^{commit} > /dev/null
+          git rev-parse --verify refs/remotes/origin/fix/mojprop-main-prelaunch-real-plan1-20261116^{commit} > /dev/null
+      - name: Find exact conflicts by Git merge-tree, never merge or push
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_merge_conflict_readonly_c133.py
+          echo 'C133 read-only source conflict inventory completed; any conflicts MUST be resolved separately.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No merge, deploy, payment, email, customer POST, remote server access or new cost authorized.' >> "$GITHUB_STEP_SUMMARY"
