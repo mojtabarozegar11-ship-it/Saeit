@@ -90,10 +90,16 @@ class CanonicalMojPropContactFallback(unittest.TestCase):
                 self.assertNotIn("fetch('mailto:", data)
 
     def test_native_intake_not_replaced_with_fallible_email_transport(self):
-        for page in PUBLIC:
-            with self.subTest(page=page):
-                self.assertIn("/moj-prop-intake/?format=html", page.read_text("utf-8"))
         home = PUBLIC[0].read_text("utf-8")
+        # Genuine Plan1 no-JS path is its dedicated, consented GET form,
+        # not the older generic blueprint/educational-intake endpoint.
+        self.assertIn('href="/moj-prop-interest/form/"', home)
+        self.assertIn("Other service requests — not Plan 1", home)
+        self.assertNotIn("/moj-prop-intake/?format=html", home)
+        for page in PUBLIC[1:]:
+            with self.subTest(page=page):
+                self.assertIn("/moj-prop-intake/?format=html",
+                              page.read_text("utf-8"))
         self.assertIn('id="request-form"', home)
         self.assertIn('id="status-form"', home)
 
