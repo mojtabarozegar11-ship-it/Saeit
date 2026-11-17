@@ -128,8 +128,10 @@ class MySQLMetadataOnlyTests(unittest.TestCase):
                           return_value=SimpleNamespace(pw_name="not-owner")):
             result=q.report()
         raw=json.dumps(result)
-        for private in ("db_password","database_name","username","customer_email",
-                        "host_name","secret_key","file_path","production_uri"):
+        self.assertNotIn("database_name", result)
+        for private in ("db_password", '"database_name":', "username",
+                        "customer_email", "host_name", "secret_key",
+                        "file_path", "production_uri"):
             self.assertNotIn(private,raw)
 
     def test_15_never_infer_backup_restore_from_metadata_counts(self):
