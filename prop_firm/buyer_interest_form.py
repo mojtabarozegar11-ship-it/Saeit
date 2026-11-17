@@ -1,6 +1,10 @@
 """MOJ-PROP-01 applicant interest form: source-only, no PII or payments.
 
 Not an order, a KYC service, a lawful customer contract or an email lead.
+New private inquiries explicitly acknowledge the no-buyer-posting waiver and
+legally necessary purchase screening; LIVE BROKER KYC is not a condition to
+request information or start either demo assessment. Previously signed HMAC
+intents are preserved as historical records, never silently upgraded.
 Actual names, contacts, identity docs and approval country registry require a
 separate secured backend and independently reviewed privacy/legal basis.
 """
@@ -23,9 +27,9 @@ _REQUIRED = frozenset((
     "ack_two_phases_28_days", "ack_50_positions_6_days_per_phase",
     "ack_real_100_usd_funding_is_conditional",
     "ack_70_30_only_on_eligible_funded_profit",
-    "ack_social_requirement_subject_to_local_law",
+    "ack_no_buyer_social_posts_required",
     "ack_no_access_to_owner_social_accounts",
-    "ack_kyc_and_legal_country_check_required",
+    "ack_legal_purchase_screening_if_required",
     "ack_refund_policy_requires_legal_review",
     "ack_terms_can_be_reviewed_before_payment",
     "ack_privacy_and_specific_contact_purpose",
@@ -63,7 +67,10 @@ def validate_private_plan1_interest(*, form: dict, server_received_at: datetime)
     declarations are intentionally NOT treated as independently verified.
     """
     if type(form) is not dict or set(form) != _REQUIRED:
-        raise InterestFormBlocked("exact Plan 1 field list required")
+        # Historical v1.2 inquiries naming required social posts / live-broker
+        # screening are NOT fresh acceptance of the owner's revised policy.
+        # Do not silently migrate their consent or rewrite stored intent.
+        raise InterestFormBlocked("current no-post, demo-only Plan 1 comprehension required")
     if (type(form["request_ref"]) is not str or
             REQUEST_REF.fullmatch(form["request_ref"]) is None):
         raise InterestFormBlocked("server-issued opaque request reference required")
