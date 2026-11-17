@@ -141,7 +141,7 @@ class CanonicalFormQueryAndReleaseGateTests(unittest.TestCase):
         for fragment in ("@csrf_protect", "@require_POST", "request.is_secure()",
                          'status=400', "contact_consent", "PropInterest"):
             with self.subTest(missing=fragment):
-                self.assertFalse(_view_guards(GOOD_VIEWS.replace(fragment, "REMOVED", 1)))
+                self.assertFalse(_view_guards(GOOD_VIEWS.replace(fragment, "REMOVED")))
 
     def test_symlinked_model_never_counts_as_valid_source(self):
         with tempfile.TemporaryDirectory() as folder:
