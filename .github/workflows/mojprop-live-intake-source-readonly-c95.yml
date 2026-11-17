@@ -33,6 +33,8 @@ on:
       - "tests/test_mojprop_c156_cpanel_quota_cli_diagnostic_readonly.py"
       - "scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py"
       - "tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py"
+      - "scripts/mojprop_c158_cpanel_single_stats_readonly.py"
+      - "tests/test_mojprop_c158_cpanel_single_stats_readonly.py"
       - "scripts/mojprop_c157_offhost_stream_preflight_readonly.py"
       - "tests/test_mojprop_c157_offhost_stream_preflight_readonly.py"
 
@@ -124,6 +126,11 @@ jobs:
           test "$(git hash-object -- scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py)" = "c950f3f95d6a6e0d1b1eeb97089cdabe80a3a01a"
           test ! -L tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py
           test "$(git hash-object -- tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py)" = "57f074159ef00c44cdf83be92e7acb194e9bf5a2"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c158_cpanel_single_stats_readonly -q
+          test ! -L scripts/mojprop_c158_cpanel_single_stats_readonly.py
+          test "$(git hash-object -- scripts/mojprop_c158_cpanel_single_stats_readonly.py)" = "d02e4127adb92dcfed12dcf55907e317eab4e490"
+          test ! -L tests/test_mojprop_c158_cpanel_single_stats_readonly.py
+          test "$(git hash-object -- tests/test_mojprop_c158_cpanel_single_stats_readonly.py)" = "40537d567028852455094dae13b607e9b22c6d1f"
           python3 -B -m py_compile scripts/mojprop_c157_offhost_stream_preflight_readonly.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c157_offhost_stream_preflight_readonly -q
           test ! -L scripts/mojprop_c157_offhost_stream_preflight_readonly.py
@@ -323,6 +330,16 @@ jobs:
             < scripts/mojprop_c157_cpanel_statsbar_shape_readonly.py \
             | python3 -c 'import json,sys; raw=sys.stdin.read(9500); p="MOJPROP_C157_UAPI_SHAPE_READONLY="; a=[x for x in raw.splitlines() if x.startswith(p)]; assert len(a)==1,"MISSING_C157_SANITIZED_UAPI_SHAPE"; d=json.loads(a[0][len(p):]); assert d["schema"]=="mojprop.cpanel.statsbar_uapi_shape.c157.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; q=d["payload_shape"]; ids={"diskusage","mysqldiskusage","fileusage"}; assert set(q["known_id_matches"])==ids and set(q["known_name_matches"])==ids; assert all(type(v) is int and 0<=v<=128 for v in q["known_id_matches"].values()) and all(type(v) is int and 0<=v<=128 for v in q["known_name_matches"].values()); assert type(q["row_count"]) is int and 0<=q["row_count"]<=128; assert q["actual_account_quota_proven"] is False; assert all(d[k] is False for k in ("db_or_customer_content_accessed","provider_payload_logged","backup_created","offhost_backup_verified","independent_restore_verified","production_deploy_authorized","cost_incurred")); assert not set(d).intersection({"password","secret","token","email","customer","filename","path","api_key","wallet","domain","name","value","count","reason","errors"}); print(a[0])'
           echo 'C157_UAPI_STATS_STRUCTURE_ONLY_NO_VALUES_OR_QUOTA_CLAIM' >> "$GITHUB_STEP_SUMMARY"
+      - name: C158 parse official owner StatsBar usage with inline GB units (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 48s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_c158_cpanel_single_stats_readonly.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(6000); p="MOJPROP_C158_SINGLE_STATS_READONLY="; lines=[x for x in raw.splitlines() if x.startswith(p)]; assert len(lines)==1,"MISSING_C158_SANITIZED_REPORT"; d=json.loads(lines[0][len(p):]); assert d["schema"]=="mojprop.cpanel.single_stats_uapi.readonly.c158.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert set(d["usage"])=={"api_success","valid_list","items_count","diskusage","mysqldiskusage","quota_verified_for_backup_writes"}; assert all(d[k] is False for k in ("account_quota_confirmed_current","offhost_independent_app_db_media_restore_verified","database_or_customer_data_read","source_or_backup_written","public_form_deployed","production_deployment_authorized","cost_incurred")); assert d["usage"]["quota_verified_for_backup_writes"] is False; assert not set(d).intersection({"email","password","secret","user","host","path","token","wallet","customer","raw_response"}); print(lines[0])'
+          echo 'C158_UAPI_SINGLE_READ_NOT_DB_RESTORE_OR_PRODUCTION_RELEASE' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
