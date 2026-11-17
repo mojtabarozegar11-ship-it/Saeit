@@ -39,10 +39,11 @@ REQUIRED_TEST_MODULES = (
     ("tests.test_plan1_v141_replay_journal_policy", 74),
     ("tests.test_plan1_v141_django_journal_source", 32),
     ("tests.test_plan1_v141_mariadb_readonly_preflight", 35),
+    ("tests.test_plan1_v141_shared_company_master_review", 30),
 )
 LEGACY_TEST_MODULE = "tests.test_prop_firm_policy"
 EXPECTED_V13_TESTS = 194
-EXPECTED_V14_TESTS = 446
+EXPECTED_V14_TESTS = 476
 EXPECTED_ALL_TESTS = EXPECTED_V13_TESTS + EXPECTED_V14_TESTS
 
 
