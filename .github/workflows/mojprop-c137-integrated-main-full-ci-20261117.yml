@@ -30,15 +30,26 @@ jobs:
       ALLOWED_HOSTS: 'localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com'
       DATABASE_URL: 'sqlite:///./c137-synthetic-ci.sqlite3'
       PYTHONDONTWRITEBYTECODE: '1'
+      # Historical reviewed inputs used by C136 source regressions; never inferred.
+      C136_MAIN_SHA: '0af1a0415bb75354cb119a8653230486f95e1a96'
+      C136_PROP_SHA: '70c6607142d8ad90efe5e98bdcda04504b58c59b'
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          fetch-depth: 1
+          # Historic git-show assertions need full commit objects, not shallow checkout.
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: pip
+      - name: Validate reviewed merge ancestry and immutable source refs
+        run: |
+          set -euo pipefail
+          git cat-file -e "$C136_MAIN_SHA^{commit}"
+          git cat-file -e "$C136_PROP_SHA^{commit}"
+          git merge-base --is-ancestor 2ee98ecfa HEAD
+          test "$(git show -s --format=%P 2ee98ecfa)" = "$C136_MAIN_SHA $C136_PROP_SHA"
       - name: Install real project requirements
         run: |
           set -euo pipefail
