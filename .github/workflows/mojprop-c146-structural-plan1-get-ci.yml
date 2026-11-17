@@ -1,0 +1,35 @@
+name: MOJ PROP C146 structural consent GET contract (test-only, no release)
+on:
+  push:
+    branches: [fix/mojprop-c146-structural-consent-get-proof-20261117]
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+    paths:
+      - 'scripts/mojprop_c142_public_form_get_readonly.py'
+      - 'tests/test_mojprop_c142_public_form_get_readonly.py'
+      - '.github/workflows/mojprop-c146-structural-plan1-get-ci.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-c146-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  no-network-structural-proof:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fail on syntactic errors and ad hoc code injection
+        run: python3 -B -m py_compile scripts/mojprop_c142_public_form_get_readonly.py tests/test_mojprop_c142_public_form_get_readonly.py
+      - name: Run semantic adversarial no-network GET tests
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_c142_public_form_get_readonly
+          echo 'C146_FORM_FIELDS_PARSE_IN_ONE_VALIDATED_NONPAYABLE_POST=true'
+          echo 'C146_NETWORK_CUSTOMER_POST_EMAIL_PAYMENT_DEPLOY=false'

@@ -15,11 +15,13 @@ def form(locale="en", direction="ltr"):
             '<form method="post" action="/moj-prop-interest/">'
             '<input type="hidden" name="csrfmiddlewaretoken" value="test-only-token">'
             '<input type="hidden" name="plan_code" value="MOJ-PROP-01">'
-            '<input type="email" name="email">'
-            '<input type="checkbox" name="contact_consent">'
+            '<input type="hidden" name="consent_version" value="moj-prop-interest-v1">'
+            f'<input type="hidden" name="source_language" value="{locale}">'
+            '<input type="email" name="email" maxlength="254" required>'
+            '<input type="checkbox" name="contact_consent" value="yes" required>'
+            '<button type="submit">Request information</button>'
             'No invoice or settlement happens here. ' * 5 +
             '</form></body></html>').encode("utf-8")
-
 
 class FakeResponse:
     status = 200
@@ -92,6 +94,61 @@ class Plan1GetOnlyProbeContract(unittest.TestCase):
             html=form()+payload.encode()
             self.assertEqual(evaluate_page(status=200,body=html,language="en"),
                              "forbidden_payment_or_key_field")
+
+    def test_comment_markers_cannot_forge_an_actual_form(self):
+        # Strings in HTML comments must not establish a valid CSRF/consent form.
+        fake = (b'<!doctype html><html lang="en" dir="ltr"><head>'
+                b'<meta name="robots" content="noindex,nofollow"></head><body>'
+                b'<!-- '+form().split(b'<form',1)[1]+b' -->'
+                b'<p>MOJ PROP public information only.</p></body></html>')
+        self.assertEqual(evaluate_page(status=200,body=fake,language="en"),
+                         "200_not_a_real_consent_form")
+
+    def test_optional_consent_checkbox_cannot_masquerade_as_opt_in(self):
+        optional = form().replace(b' value="yes" required>', b' value="yes">')
+        self.assertEqual(evaluate_page(status=200,body=optional,language="en"),
+                         "200_not_a_real_consent_form")
+
+    def test_empty_csrf_or_duplicate_consent_denied(self):
+        for altered in (
+            form().replace(b'value="test-only-token"',b'value=""'),
+            form().replace(b'<button type="submit">',
+                           b'<input type="checkbox" name="contact_consent" value="yes" required>'
+                           b'<button type="submit">'),
+            form().replace(b'<input type="email" name="email" maxlength="254" required>',
+                           b'<input type="email" name="email" maxlength="254">'),
+        ):
+            with self.subTest(altered=altered[-60:]):
+                self.assertEqual(evaluate_page(status=200,body=altered,language="en"),
+                                 "200_not_a_real_consent_form")
+
+    def test_source_language_and_consent_version_are_consistent(self):
+        for altered in (
+            form("fa","rtl").replace(b'value="fa"',b'value="en"'),
+            form().replace(b'moj-prop-interest-v1',b'moj-prop-unknown'),
+            form().replace(b'type="hidden" name="plan_code"',
+                           b'type="text" name="plan_code"'),
+        ):
+            self.assertEqual(evaluate_page(status=200,body=altered,
+                                           language="fa" if b'lang="fa"' in altered else "en"),
+                             "200_not_a_real_consent_form")
+
+    def test_wrong_form_location_multi_form_or_external_script_denied(self):
+        for altered in (
+            form().replace(b'action="/moj-prop-interest/"',
+                           b'action="https://external.example/collect"'),
+            form().replace(b'</body>',b'<form method="post"></form></body>'),
+            form().replace(b'</body>',b'<script src="/unsafe.js"></script></body>'),
+        ):
+            self.assertEqual(evaluate_page(status=200,body=altered,language="en"),
+                             "200_not_a_real_consent_form")
+
+    def test_noindex_must_be_head_meta_not_body_marker(self):
+        forged = form().replace(
+            b'<meta name="robots" content="noindex,nofollow">',
+            b'<!-- noindex,nofollow --><p>noindex,nofollow</p>')
+        self.assertEqual(evaluate_page(status=200,body=forged,language="en"),
+                         "200_not_a_real_consent_form")
 
     def test_only_get_and_no_post_after_http_200(self):
         result=probe_one(FakeOpener(FakeResponse(form())), "en", ENDPOINTS[0][1])
