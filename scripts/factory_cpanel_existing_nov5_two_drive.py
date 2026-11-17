@@ -278,8 +278,8 @@ def run_export(args):
         max_source_bytes=SOURCE_BYTES, chunk_bytes=CHUNK_BYTES,
         free_reserve_bytes=MIN_FREE_RESERVE,rclone_exe=args.rclone_exe)
     admission = transport.preflight()
-    namespace = "factory-current-" + secrets.token_hex(16)
-    callbacks = transport.callbacks(namespace)
+    namespace = "factory-historical-" + secrets.token_hex(16)
+    callbacks = transport.callbacks(namespace, destination_kind="historical-nov5")
     with VerifiedCpanelStream(config, known, args.snapshot) as source:
         receipt = encrypt_stream_to_dual_stores(
             source, public_pem=pub,
@@ -301,7 +301,8 @@ def run_export(args):
             "factory_started":False,"source_deleted":False,
             "independent_isolated_restore_verified":False,
             "safe_to_delete":False,
-            "backup_uploaded":True}
+            "backup_uploaded":True,"historical_backup_only":True,
+            "new_current_factory_backup_created":False}
 
 
 def main(argv=None):
