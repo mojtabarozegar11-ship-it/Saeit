@@ -19,6 +19,7 @@ import select
 import shutil
 import stat
 import subprocess
+import time
 from dataclasses import dataclass
 
 MAX_CONFIG_BYTES = 131072
@@ -170,28 +171,88 @@ def _relative_path(path: str) -> bool:
 
 def _rclone_call(argv: list[str], *, input_bytes: bytes | None = None,
                  max_output: int = 0, timeout: int = 180) -> bytes:
-    """No shell, bounded stdout, discard potentially sensitive stderr."""
+    """Bound subprocess stdout WHILE reading; never buffer an arbitrary cloud reply.
+
+    Provider paths with output use nonblocking-select/read with a deadline and
+    hard byte ceiling. Upload paths use no stdout pipe at all. Never expose
+    provider stderr or authentication secrets in exceptions or CI logs.
+    """
     if not argv or not all(type(a) is str and a for a in argv):
         raise TransferHold('INVALID_RCLONE_ARGUMENTS')
+    if (type(max_output) is not int or max_output < 0
+            or max_output > MAX_CIPHER_PART_BYTES + MAX_MANIFEST_BYTES
+            or type(timeout) is not int or not 1 <= timeout <= 3600
+            or (input_bytes is not None and
+                (type(input_bytes) is not bytes or
+                 len(input_bytes) > MAX_CIPHER_PART_BYTES + MAX_MANIFEST_BYTES))
+            or (max_output and input_bytes is not None)):
+        raise TransferHold('RCLONE_IO_BOUNDS_INVALID')
+    if max_output == 0:
+        try:
+            res = subprocess.run(
+                argv, input=input_bytes,
+                stdin=subprocess.DEVNULL if input_bytes is None else None,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                check=False, timeout=timeout,
+            )
+            if res.returncode:
+                raise TransferHold('RCLONE_PROVIDER_OPERATION_FAILED')
+            return b''
+        except subprocess.TimeoutExpired:
+            raise TransferHold('RCLONE_TIMEOUT') from None
+        except FileNotFoundError:
+            raise TransferHold('RCLONE_EXECUTABLE_MISSING') from None
+        except (OSError, ValueError):
+            raise TransferHold('RCLONE_PIPELINE_FAILURE') from None
+
+    proc = None
     try:
-        res = subprocess.run(
-            argv, input=input_bytes, stdin=subprocess.DEVNULL if input_bytes is None else None,
-            stdout=subprocess.PIPE if max_output else subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, check=False, timeout=timeout,
+        proc = subprocess.Popen(
+            argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, close_fds=True,
         )
-        if res.returncode:
-            raise TransferHold('RCLONE_PROVIDER_OPERATION_FAILED')
-        raw = res.stdout or b''
-        if len(raw) > max_output:
-            raise TransferHold('RCLONE_OUTPUT_OVERSIZE')
-        return raw
-    except subprocess.TimeoutExpired:
-        raise TransferHold('RCLONE_TIMEOUT') from None
+        deadline = time.monotonic() + timeout
+        blocks = []
+        total = 0
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TransferHold('RCLONE_TIMEOUT')
+            readable, _, _ = select.select([proc.stdout], [], [], remaining)
+            if not readable:
+                raise TransferHold('RCLONE_TIMEOUT')
+            # Read no more than the strict cap plus ONE detection byte. Even
+            # a misbehaving provider process cannot accumulate unbounded data.
+            chunk = os.read(proc.stdout.fileno(), min(65536, max_output + 1 - total))
+            if not chunk:
+                try:
+                    rc = proc.wait(timeout=max(0.001, deadline - time.monotonic()))
+                except subprocess.TimeoutExpired:
+                    raise TransferHold('RCLONE_TIMEOUT') from None
+                if rc:
+                    raise TransferHold('RCLONE_PROVIDER_OPERATION_FAILED')
+                return b''.join(blocks)
+            total += len(chunk)
+            if total > max_output:
+                raise TransferHold('RCLONE_OUTPUT_OVERSIZE')
+            blocks.append(chunk)
+    except TransferHold:
+        raise
     except FileNotFoundError:
         raise TransferHold('RCLONE_EXECUTABLE_MISSING') from None
     except (OSError, ValueError):
         raise TransferHold('RCLONE_PIPELINE_FAILURE') from None
-
+    finally:
+        if proc is not None:
+            if proc.poll() is None:
+                proc.kill()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                # Never silently claim the remote command finished cleanly.
+                raise TransferHold('RCLONE_PROCESS_REAP_TIMEOUT') from None
+            if proc.stdout is not None:
+                proc.stdout.close()
 
 
 @dataclass(frozen=True)
