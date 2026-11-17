@@ -161,6 +161,7 @@ class FirstPlanOneContactTests(unittest.TestCase):
 
     def test_buyer_country_and_age_not_claimed_verified(self):
         self.assertIn("eligible countries", self.html)
+        self.assertIn("Age 18+ and residence-country eligibility", self.html)
         self.assertIn("KYC", self.html)
         self.assertIn("jurisdictional authorization", self.html) if "jurisdictional authorization" in self.html else self.assertIn("legal eligibility", self.html)
 
@@ -180,7 +181,7 @@ class FirstPlanOneContactTests(unittest.TestCase):
         self.assertIn("before", self.html)
 
     def test_support_is_neither_crm_lead_nor_paid_buyer(self):
-        self.assertIn("not a verified Plan 1 lead, a paid order", self.html)
+        self.assertIn("not</strong> a verified Plan 1 lead, a paid order", self.html)
         self.assertIn("not a verified CRM consent record", self.html)
 
     def test_minimal_data_and_no_secret_requests(self):
