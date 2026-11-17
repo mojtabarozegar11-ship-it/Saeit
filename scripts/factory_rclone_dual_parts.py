@@ -71,6 +71,92 @@ def _sha(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _dedupe_pairs(pairs):
+    record = {}
+    for name, value in pairs:
+        if name in record:
+            raise ValueError('DUPLICATE_MANIFEST_FIELD')
+        record[name] = value
+    return record
+
+
+def _validate_final_manifest(payload: bytes, name: str, parts: dict) -> bool:
+    """Bind terminal marker to EVERY uploaded ciphertext object, not just filename.
+
+    Structural parity is defense-in-depth; only the F01V2 cryptography core and
+    a real independent restore can authenticate the MAC and GCM plaintext.
+    """
+    try:
+        obj = json.loads(payload.decode('ascii'), object_pairs_hook=_dedupe_pairs)
+        if type(obj) is not dict or set(obj) != {
+                'schema','run_id','public_key_spki_sha256','wrapped_key',
+                'nonce_prefix','chunk_limit','plain_total','cipher_total',
+                'parts','owner_refs','source_consistency_external',
+                'restore_verified','manifest_mac_sha256'}:
+            return False
+        if obj['schema'] != 'factory.dual-encrypted-stream.f01v2':
+            return False
+        run = obj['run_id']
+        if type(run) is not str or not re.fullmatch(r'[0-9a-f]{32}', run):
+            return False
+        if name != 'f01v2-' + run + '-manifest.json':
+            return False
+        for key in ('public_key_spki_sha256','manifest_mac_sha256'):
+            if type(obj[key]) is not str or not SHA256.fullmatch(obj[key]):
+                return False
+        if (obj['source_consistency_external'] is not False or
+                obj['restore_verified'] is not False):
+            return False
+        if (type(obj['chunk_limit']) is not int or
+                not 4096 <= obj['chunk_limit'] <= 8 * 1024 * 1024):
+            return False
+        if (type(obj['owner_refs']) is not list or len(obj['owner_refs']) != 2 or
+                len(set(map(str,obj['owner_refs']))) != 2 or
+                any(type(x) is not str or not re.fullmatch(r'[0-9a-f]{32}', x)
+                    for x in obj['owner_refs'])):
+            return False
+        if (type(obj['wrapped_key']) is not str or
+                not 100 <= len(obj['wrapped_key']) <= 8192 or
+                type(obj['nonce_prefix']) is not str or
+                not 10 <= len(obj['nonce_prefix']) <= 32):
+            return False
+        listed = obj['parts']
+        if type(listed) is not list or not 1 <= len(listed) <= MAX_OBJECTS:
+            return False
+        if len(listed) != len(parts):
+            return False
+        total_cipher = total_plain = 0
+        for idx, entry in enumerate(listed, 1):
+            if type(entry) is not dict or set(entry) != {
+                    'name','index','cipher_bytes','cipher_sha256','plain_bytes'}:
+                return False
+            expected_name = f'f01v2-{run}-{idx:06d}.enc'
+            if (entry['name'] != expected_name or
+                    type(entry['index']) is not int or entry['index'] != idx or
+                    type(entry['cipher_bytes']) is not int or
+                    type(entry['plain_bytes']) is not int or
+                    not 1 <= entry['plain_bytes'] <= obj['chunk_limit'] or
+                    entry['cipher_bytes'] != entry['plain_bytes'] + len(F01_MAGIC) + 41 or
+                    type(entry['cipher_sha256']) is not str or
+                    not SHA256.fullmatch(entry['cipher_sha256']) or
+                    parts.get(expected_name) != (entry['cipher_bytes'], entry['cipher_sha256'])):
+                return False
+            total_cipher += entry['cipher_bytes']
+            total_plain += entry['plain_bytes']
+        if (type(obj['cipher_total']) is not int or
+                type(obj['plain_total']) is not int or
+                obj['cipher_total'] != total_cipher or
+                obj['plain_total'] != total_plain):
+            return False
+        # F01V2's canonical exact byte serialization excludes ambiguous JSON
+        # encodings and alternative manifest representations.
+        canonical = json.dumps(obj,sort_keys=True,ensure_ascii=True,
+                               separators=(',',':'),allow_nan=False).encode('ascii')
+        return payload == canonical
+    except (UnicodeError, ValueError, TypeError, KeyError, OverflowError, RecursionError):
+        return False
+
+
 def _relative_path(path: str) -> bool:
     # Google Drive existing private proof folder names can contain spaces.
     # Arguments are passed as argv without shell interpretation.
@@ -158,6 +244,8 @@ class RcloneDualStore:
         self._cipher_parts = {self.remote_a: {}, self.remote_b: {}}
         self._verified_parts = {self.remote_a: set(), self.remote_b: set()}
         self._manifest_object_name = None
+        self._manifest_payload_hash = None
+        self._manifest_payload_len = None
 
     def _run(self, *argv: str, max_output: int = 0, input_bytes: bytes | None = None) -> bytes:
         return _rclone_call([self.executable, '--config', str(self.config_path), '--quiet', *argv],
@@ -286,6 +374,12 @@ class RcloneDualStore:
                     raise TransferHold('MANIFEST_BEFORE_DUAL_PART_READBACK_DENIED')
                 if self._manifest_object_name is not None and self._manifest_object_name != name:
                     raise TransferHold('CONFLICTING_COMPLETION_MANIFEST_DENIED')
+                if not _validate_final_manifest(payload, name, parts_a):
+                    raise TransferHold('INVALID_OR_UNBOUND_COMPLETION_MANIFEST')
+                if (self._manifest_payload_hash is not None and
+                        (self._manifest_payload_len != len(payload) or
+                         not hmac.compare_digest(self._manifest_payload_hash, _sha(payload)))):
+                    raise TransferHold('TWO_DRIVES_MANIFEST_CONTENT_MISMATCH')
             path = prefix + '/' + name
             # Best-effort existence probe: rclone lsf on the whole folder; no
             # deletion or overwrite flags. Unique 128-bit run path is required.
@@ -295,6 +389,8 @@ class RcloneDualStore:
                 self._cipher_parts[remote][name] = (len(payload), _sha(payload))
             else:
                 self._manifest_object_name = name
+                self._manifest_payload_hash = _sha(payload)
+                self._manifest_payload_len = len(payload)
 
         def read(remote: str, name: str) -> bytes:
             if (remote, name) not in self._objects_written:
@@ -307,6 +403,11 @@ class RcloneDualStore:
                         or not hmac.compare_digest(_sha(observed), expected[1])):
                     raise TransferHold('REMOTE_CIPHERTEXT_READBACK_MISMATCH')
                 self._verified_parts[remote].add(name)
+            else:
+                if (self._manifest_payload_len != len(observed) or
+                        self._manifest_payload_hash is None or
+                        not hmac.compare_digest(self._manifest_payload_hash, _sha(observed))):
+                    raise TransferHold('REMOTE_MANIFEST_READBACK_MISMATCH')
             return observed
 
         return (lambda name,payload:upload(self.remote_a,name,payload),
