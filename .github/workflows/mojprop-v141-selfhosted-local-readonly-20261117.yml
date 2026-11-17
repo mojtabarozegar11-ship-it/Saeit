@@ -263,6 +263,64 @@ jobs:
           print('CPANEL_ACCOUNT_UAPI_READONLY='+json.dumps(uapi,sort_keys=True))
           print('CPANEL_PASSENGER_ROOT_AND_DB_BACKEND_NOT_PROVEN=true')
           REMOTE_ROUTE_PY
+          timeout 65s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_CAPACITY_PY'
+          """Low-priority bounded aggregate sizes only: never customer file contents."""
+          import json,os,subprocess
+          from pathlib import Path
+          home=Path('/home/zomorod2')
+          parts={
+              'django_candidate':home/'Saeit-staging',
+              'mojplaywin_public_docroot':home/'mojplaywin.com',
+              'public_html_legacy':home/'public_html',
+              'account_tmp':home/'tmp',
+          }
+          out={}
+          for label,path in parts.items():
+              record={'exists_regular_directory':False,'measurement_complete':False}
+              try:
+                  if not path.is_symlink() and path.is_dir():
+                      record['exists_regular_directory']=True
+                      probe=subprocess.run(['nice','-n','19','du','-skx',str(path)],
+                                           stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+                                           timeout=18,check=False)
+                      if probe.returncode==0 and len(probe.stdout)<4096:
+                          val=probe.stdout.decode('ascii').split()[0]
+                          record['apparent_allocated_bytes']=int(val)*1024
+                          record['measurement_complete']=True
+              except (OSError,ValueError,UnicodeError,IndexError,subprocess.TimeoutExpired):
+                  pass
+              out[label]=record
+          try:
+              p=subprocess.run(['uapi','--output=json','Mysql','list_databases'],
+                  stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=15,check=False)
+              payload=json.loads(p.stdout).get('result',{}) if p.returncode==0 and len(p.stdout)<250000 else {}
+              raw=payload.get('data')
+              dbs=raw if isinstance(raw,list) else (
+                  raw.get('databases',[]) if isinstance(raw,dict) else [])
+              sizes=[]
+              for row in dbs:
+                  value=row.get('disk_usage') if isinstance(row,dict) else None
+                  if isinstance(value,int) and value>=0: sizes.append(value)
+                  elif isinstance(value,str) and value.isdigit(): sizes.append(int(value))
+              mysql={
+                  'uapi_status_ok':payload.get('status') in (1,'1'),
+                  'db_count':len(dbs),
+                  'all_databases_have_size':len(sizes)==len(dbs),
+                  'reported_mysql_bytes_total':sum(sizes),
+                  'reported_largest_database_bytes':max(sizes) if sizes else None,
+              }
+          except (OSError,ValueError,TypeError,subprocess.TimeoutExpired):
+              mysql={'uapi_status_ok':False}
+          print('CPANEL_READONLY_CAPACITY_DISTRIBUTION='+json.dumps({
+              'measured_candidate_roots':out,
+              'mysql_account_aggregate':mysql,
+              'du_measurements_only_not_full_backup':True,
+              'no_files_deleted':True,
+              'no_db_rows_read':True,
+              'no_archives_created':True,
+              'release_permitted':False,
+          },sort_keys=True))
+          REMOTE_CAPACITY_PY
           echo "LOCAL_TO_CPANEL_READONLY_COMPLETED=true"
       - name: Verify source remains operational NO-GO
         if: always()
