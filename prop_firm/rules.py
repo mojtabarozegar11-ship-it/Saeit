@@ -255,6 +255,17 @@ def authorize_order(*, account_capital, equity, day_open_equity,
         reasons.append("per_order_risk_limit")
     if aggregate + single > percent(capital, POLICY.aggregate_risk_pct):
         reasons.append("aggregate_risk_limit")
+    # Static 0.8% / 1.6% caps do not protect a challenge that has already
+    # consumed nearly all of its 4% daily or 8% total drawdown allowance.
+    # The authoritative equity mark includes current floating P&L. The
+    # aggregate known loss-at-stop (existing positions + proposed order)
+    # must leave equity STRICTLY above both breach floors even at stop-out.
+    # This does not promise fills at stop: broker slippage/fees must already
+    # be included in the signed risk-at-stop inputs.
+    projected_equity_at_stop = dec(equity) - aggregate - single
+    if projected_equity_at_stop <= max(
+            state.daily_equity_floor, state.total_equity_floor):
+        reasons.append("stop_risk_exceeds_drawdown_headroom")
     if minimum > single:
         reasons.append("broker_minimum_lot_not_feasible")
     if mode == "real" and (execution_authorized is not True or POLICY.real_orders_enabled is not True):
