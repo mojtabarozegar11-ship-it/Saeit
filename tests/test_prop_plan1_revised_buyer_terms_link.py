@@ -11,6 +11,8 @@ import unittest
 
 from prop_firm.buyer_order_review import Plan1OrderGateClosed
 from prop_firm.plan1_orm_consent_review import VerifiedPrivateHandoff
+from prop_firm.plan1_owner_account_buyer_copy import current_owner_account_buyer_copy
+from prop_firm.plan1_owner_held_litefinance_policy import owner_held_real_account_policy, VERSION
 from prop_firm.plan1_buyer_no_social_amendment import (
     buyer_no_social_post_amendment, current_plan1_buyer_copy,
 )
@@ -40,7 +42,9 @@ def handoff():
 def packet(h=None):
     h=handoff() if h is None else h
     w=buyer_no_social_post_amendment()
-    c=current_plan1_buyer_copy()
+    c=current_owner_account_buyer_copy()
+    prior_copy=current_plan1_buyer_copy()
+    owner_policy=owner_held_real_account_policy()
     return {
         "schema":SCHEMA,"purpose":PURPOSE,
         "interest_pk":h.interest_pk,
@@ -48,18 +52,31 @@ def packet(h=None):
         "seller_ref":h.seller_ref,"prior_review_ref":h.private_review_ref,
         "sku":"MOJ-PROP-01",
         "historical_terms_version":"2026-11-15/v1.2",
-        "amendment_version":w.amendment_version,
+        "amendment_version":VERSION,
         "prior_contract_pdf_sha256":h.contract_pdf_sha256,
         "accepted_buyer_contract_pdf_sha256":CURRENT_DOC,
         "buyer_acceptance_proof_sha256":CURRENT_ACCEPTANCE,
         "current_copy_sha256":c.digest_sha256,
         "no_post_waiver_sha256":w.digest_sha256,
+        "prior_no_social_demo_copy_sha256":prior_copy.digest_sha256,
+        "owner_account_amendment_version":VERSION,
+        "owner_account_amendment_sha256":owner_policy.digest_sha256,
         "fee_native_sun":30000000,"network":"TRON-mainnet",
         "demo_phase_count":2,"no_real_account_during_evaluation":True,
         "live_broker_only_after_both_verified_passes":True,
         "no_buyer_instagram_or_facebook_post":True,
         "posting_is_not_pass_condition":True,
         "legal_purchase_screening_still_applies":True,
+        "buyer_principal_transfer_forbidden":True,
+        "existing_owner_account_only":True,
+        "broker_must_authorize_delegated_trading":True,
+        "owner_credentials_not_shared":True,
+        "realized_net_period_profit_only":True,
+        "profits_split_70_trader_30_organizer":True,
+        "actual_crypto_transfer_fee_deducted_once":True,
+        "broker_to_buyer_direct_withdrawal_forbidden":True,
+        "treasury_to_buyer_verified_crypto_payment_separate":True,
+        "payout_kyc_sanctions_and_beneficiary_checks_required":True,
         "accepted_at_sec":NOW-90,"expires_at_sec":NOW+300,
     }
 
@@ -109,9 +126,9 @@ class RevisedBuyerTermsLinkTests(unittest.TestCase):
     def test_new_buyer_specific_document_digest_is_bound(self):
         self.assertEqual(review().revised_buyer_document_digest,CURRENT_DOC)
 
-    def test_new_current_two_phase_no_social_copy_is_bound(self):
+    def test_new_current_two_phase_no_social_company_account_copy_is_bound(self):
         self.assertEqual(review().current_disclosure_digest,
-                         current_plan1_buyer_copy().digest_sha256)
+                         current_owner_account_buyer_copy().digest_sha256)
 
     def test_waiver_source_digest_is_bound(self):
         self.assertEqual(review().waiver_digest,
@@ -285,3 +302,70 @@ class RevisedBuyerTermsLinkTests(unittest.TestCase):
 
     def test_invalid_private_review_reference_is_denied(self):
         self.denied(existing_private_handoff=replace(handoff(),private_review_ref="REVIEW-UNBOUND"))
+
+    def test_owner_held_litefinance_policy_digest_is_bound(self):
+        self.assertEqual(review().owner_broker_amendment_digest,
+                         owner_held_real_account_policy().digest_sha256)
+
+    def test_previous_no_social_copy_digest_is_unchanged_and_separately_bound(self):
+        self.assertEqual(packet()["prior_no_social_demo_copy_sha256"],
+                         current_plan1_buyer_copy().digest_sha256)
+
+    def test_buyer_specific_copy_is_not_old_no_post_only_terms(self):
+        self.assertNotEqual(current_owner_account_buyer_copy().digest_sha256,
+                            current_plan1_buyer_copy().digest_sha256)
+
+    def test_new_contract_wont_allow_principal_transfer(self):
+        self.mutate_packet("buyer_principal_transfer_forbidden", False)
+
+    def test_new_contract_wont_promise_customer_owned_broker_account(self):
+        self.mutate_packet("existing_owner_account_only", False)
+
+    def test_new_contract_wont_skip_broker_authorization(self):
+        self.mutate_packet("broker_must_authorize_delegated_trading", False)
+
+    def test_new_contract_wont_share_litefinance_password(self):
+        self.mutate_packet("owner_credentials_not_shared", False)
+
+    def test_new_contract_wont_pay_floating_or_unrealized_pnl(self):
+        self.mutate_packet("realized_net_period_profit_only", False)
+
+    def test_new_contract_wont_tamper_with_seventy_thirty_split(self):
+        self.mutate_packet("profits_split_70_trader_30_organizer", False)
+
+    def test_new_contract_wont_hide_actual_crypto_fee_rule(self):
+        self.mutate_packet("actual_crypto_transfer_fee_deducted_once", False)
+
+    def test_new_contract_wont_allow_direct_broker_to_buyer_withdrawal(self):
+        self.mutate_packet("broker_to_buyer_direct_withdrawal_forbidden", False)
+
+    def test_new_contract_wont_treat_broker_wallet_as_customer_payout(self):
+        self.mutate_packet("treasury_to_buyer_verified_crypto_payment_separate", False)
+
+    def test_new_contract_wont_skip_crypto_beneficiary_compliance(self):
+        self.mutate_packet("payout_kyc_sanctions_and_beneficiary_checks_required", False)
+
+    def test_new_contract_wont_accept_old_owner_account_policy_hash(self):
+        self.mutate_packet("owner_account_amendment_sha256", "f"*64)
+
+    def test_new_contract_wont_accept_old_owner_account_version(self):
+        self.mutate_packet("owner_account_amendment_version",
+                           "2026-11-17/no-social-post-waiver-v1")
+
+    def test_new_contract_wont_accept_obsolete_funding_copy(self):
+        self.mutate_packet("current_copy_sha256", current_plan1_buyer_copy().digest_sha256)
+
+    def test_new_contract_wont_erase_previous_no_social_copy_digest(self):
+        self.mutate_packet("prior_no_social_demo_copy_sha256", None)
+
+    def test_new_contract_does_not_generate_broker_access_authority(self):
+        self.assertFalse(review().real_account_created)
+
+    def test_new_contract_does_not_generate_eligible_profit_or_payout(self):
+        self.assertFalse(review().customer_payment_received)
+
+    def test_new_terms_v2_purpose_is_not_legacy_v1(self):
+        self.assertIn("existing_broker_account", PURPOSE)
+
+    def test_signed_new_packet_requires_all_old_and_new_constraints(self):
+        self.assertEqual(set(packet()), REQUIRED_FIELDS)
