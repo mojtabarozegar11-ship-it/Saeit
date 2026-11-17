@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
 COMMAND = ROOT / "core/management/commands/mojprop_sales_action_queue.py"
-REVIEWED_SOURCE_GIT_SHA = "095dcf51e005694f4cb24df1e39ce8a4f6a0cf08"
+REVIEWED_SOURCE_GIT_SHA = "39594fd4fdb6e80803232fe5f642f0ad3948c57c"
 CATEGORIES = frozenset((
     "urgent_unreviewed", "new_over_24h", "reviewing_without_draft",
     "draft_over_24h", "approved_not_issued", "issued_expires_soon",
@@ -24,6 +24,7 @@ CATEGORIES = frozenset((
     "digital_without_issued_quote", "free_signals_awaiting_review",
     "signals_without_issued_quote", "terminal_offer_internal_review",
     "starter30_unquoted_manual_review",
+    "prop01_challenge_interest_review",
 ))
 
 
