@@ -156,6 +156,7 @@ def store_signed_v141_demo_manifest(*, state_pk: int, raw_manifest: bytes,
                 last_assessment_utc=state.last_as_of,
                 last_phase_one_accepted_utc=state.last_phase_one_accepted_at,
                 last_phase_one_evidence_sha256=state.last_phase_one_evidence_sha256,
+                last_phase_two_evidence_sha256=state.last_phase_two_evidence_sha256,
                 last_phase_two_started_utc=state.last_phase_two_started_at,
                 last_phase_two_completed_utc=state.last_phase_two_completed_at,
                 previous_receipt_sha256=state.last_receipt_sha256,
@@ -181,6 +182,7 @@ def store_signed_v141_demo_manifest(*, state_pk: int, raw_manifest: bytes,
     state.last_as_of = stamp
     state.last_phase_one_accepted_at = next_receipt.phase_one_accepted_utc
     state.last_phase_one_evidence_sha256 = next_receipt.phase_one_evidence_sha256 or ""
+    state.last_phase_two_evidence_sha256 = next_receipt.phase_two_evidence_sha256 or ""
     state.last_phase_two_started_at = next_receipt.phase_two_started_utc
     state.last_phase_two_completed_at = next_receipt.phase_two_completed_utc
     state.last_engine_state = next_receipt.resulting_engine_state
@@ -188,7 +190,7 @@ def store_signed_v141_demo_manifest(*, state_pk: int, raw_manifest: bytes,
     state.save(update_fields=(
         "last_sequence", "last_manifest_sha256", "last_replay_sha256",
         "last_as_of", "last_phase_one_accepted_at",
-        "last_phase_one_evidence_sha256",
+        "last_phase_one_evidence_sha256", "last_phase_two_evidence_sha256",
         "last_phase_two_started_at", "last_phase_two_completed_at",
         "last_engine_state", "last_receipt_sha256", "updated_at"
     ))
