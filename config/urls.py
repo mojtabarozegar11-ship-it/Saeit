@@ -133,11 +133,15 @@ from core.mojprop_v141_info_view import moj_prop_v141_public_info
 from core.mojprop_v141_lead_view import moj_prop_v141_interest
 from core.mojprop_v141_private_portfolio_view import moj_prop_v141_private_portfolio
 from core.mojprop_v141_private_statement_view import moj_prop_v141_private_statement
+from core.mojprop_v141_native_receipt_view import moj_prop_v141_native_invoice
 urlpatterns += [
     # New exact nonpayable v1.4.1 root URL; never fall through <str:lang>.
     # The old /moj-prop/plan1/ static/owner path remains untouched.
     path("moj-prop-v141-info/", moj_prop_v141_public_info, name="moj_prop_v141_info"),
     path("moj-prop-v141-interest/", moj_prop_v141_interest, name="moj_prop_v141_interest"),
+    # Existing authenticated private invoices only; NO public paid onboarding.
+    path("moj-prop-v141/payment/<slug:reference>/",
+         moj_prop_v141_native_invoice, name="moj_prop_v141_native_invoice"),
     # Disabled-by-default authenticated portfolio; no browser POST for trades.
     path("moj-prop-v141/portfolio/<slug:challenge_ref>/",
          moj_prop_v141_private_portfolio, name="moj_prop_v141_private_portfolio"),
