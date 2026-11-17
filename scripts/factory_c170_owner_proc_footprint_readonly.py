@@ -104,7 +104,7 @@ def scan(proc_root=Path('/proc'), uid=None):
                     continue
                 base = proc_root / de.name
                 try:
-                    st = base.stat(follow_symlinks=False)
+                    st = base.lstat()
                     if not stat.S_ISDIR(st.st_mode) or st.st_uid != uid:
                         continue
                     owned += 1
