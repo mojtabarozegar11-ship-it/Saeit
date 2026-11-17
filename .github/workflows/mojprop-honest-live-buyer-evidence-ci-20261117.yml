@@ -1,0 +1,51 @@
+name: MOJ PROP honest Plan1 landing and public buyer evidence
+on:
+  push:
+    branches: [fix/mojprop-live-honest-landing-contract-20261117]
+    paths:
+      - 'tests/test_mojprop_v4_buyer_funnel_20261115.py'
+      - 'scripts/mojprop_public_buyer_readiness_summary_20261117.py'
+      - 'tests/test_mojprop_public_buyer_readiness_summary_20261117.py'
+      - '.github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml'
+      - '.github/workflows/mojprop-honest-live-buyer-evidence-ci-20261117.yml'
+  pull_request:
+    branches: [fix/mojprop-main-prelaunch-real-plan1-20261116]
+    paths:
+      - 'tests/test_mojprop_v4_buyer_funnel_20261115.py'
+      - 'scripts/mojprop_public_buyer_readiness_summary_20261117.py'
+      - 'tests/test_mojprop_public_buyer_readiness_summary_20261117.py'
+      - '.github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml'
+      - '.github/workflows/mojprop-honest-live-buyer-evidence-ci-20261117.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  classify-and-verify-no-fake-commercial-ready:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SECRET_KEY: ci-only
+      DEBUG: 'true'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install existing project requirements
+        run: python -m pip install -r requirements.txt
+      - name: Verify honest nonpayable Plan1 landing, strict GET evidence and privacy
+        run: |
+          pytest -q \
+            tests/test_mojprop_v4_buyer_funnel_20261115.py \
+            tests/test_mojprop_plan1_static_prelaunch.py \
+            tests/test_mojprop_public_buyer_readiness_summary_20261117.py \
+            tests/test_mojprop_public_nojs_get_contract_c123_20261116.py \
+            tests/test_mojprop_backend_manual_plan1_smoke_20261117.py
+      - name: Compile the PII-safe readiness summarizer
+        run: python -m py_compile scripts/mojprop_public_buyer_readiness_summary_20261117.py
