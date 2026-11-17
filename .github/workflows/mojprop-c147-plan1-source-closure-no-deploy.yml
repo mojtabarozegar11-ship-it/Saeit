@@ -1,0 +1,53 @@
+name: MOJ PROP C147 exact Plan1 source + migrations package, not deployment
+on:
+  push:
+    branches: [fix/mojprop-c147-reviewable-plan1-release-source-closure-20261117]
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+    paths:
+      - 'scripts/mojprop_c147_plan1_source_bundle.py'
+      - 'tests/test_mojprop_c147_plan1_source_bundle.py'
+      - '.github/workflows/mojprop-c147-plan1-source-closure-no-deploy.yml'
+permissions:
+  contents: read
+jobs:
+  reviewed-source-only-no-production:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run all source-only and adversarial release-closure tests
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_c147_plan1_source_bundle
+      - name: Produce deterministic review-only source archive inside runner temp
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_c147_plan1_source_bundle.py --action audit
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_c147_plan1_source_bundle.py --action package
+          test -s "$RUNNER_TEMP/mojprop-c147/mojprop-plan1-source-closure-c147.tar"
+          test -s "$RUNNER_TEMP/mojprop-c147/mojprop-plan1-source-closure-c147.json"
+          python3 - <<'PY'
+          import json,os,pathlib,tarfile
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'mojprop-c147'
+          meta=json.loads((root/'mojprop-plan1-source-closure-c147.json').read_text('utf-8'))
+          assert meta['production_deploy_authorized'] is False
+          assert meta['db_app_media_restore_verified'] is False
+          assert meta['merchant_authorized'] is False
+          assert meta['file_count'] >= 40
+          with tarfile.open(root/'mojprop-plan1-source-closure-c147.tar') as tar:
+              assert len(tar.getmembers())==meta['file_count']
+              assert all(t.isfile() and not t.issym() for t in tar.getmembers())
+          print('C147_PACKAGE_CREATED_IN_TEMP_ONLY=true')
+          print('C147_PRODUCTION_DEPLOY_AUTHORIZE=false')
+          print('C147_DB_APP_MEDIA_RESTORE_PROVEN=false')
+          PY
