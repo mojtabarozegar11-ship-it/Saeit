@@ -59,7 +59,8 @@
       "special_checks": "درجه‌بندی، مبدأ باغ، سلامت محصول، زنجیره سرد و نوع بسته‌بندی",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 350
     },
     {
       "id": "ZM-EQP-001",
@@ -76,7 +77,8 @@
       "special_checks": "ظرفیت سورت بر ساعت، دقت جداسازی، آسیب مکانیکی و مصرف آب و برق",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 386
     },
     {
       "id": "ZM-SUP-002",
@@ -100,7 +102,8 @@
       "special_checks": "سلامت محصول، باقیمانده سموم در حدود مجاز، مبدأ و شرایط حمل",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 351
     },
     {
       "id": "ZM-EQP-002",
@@ -118,7 +121,8 @@
       "special_checks": "ظرفیت شست‌وشو، قابلیت نظافت بهداشتی، تماس غذایی و پسماند آب",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 387
     },
     {
       "id": "ZM-SUP-003",
@@ -139,7 +143,8 @@
       "special_checks": "رقم، درصد شکستگی، رطوبت، خلوص، آلودگی و وزن کیسه",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 352
     },
     {
       "id": "ZM-EQP-003",
@@ -159,7 +164,8 @@
       "special_checks": "ظرفیت تن در ساعت، درصد شکستگی، بازده جداسازی و غبارگیر",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 388
     },
     {
       "id": "ZM-SUP-004",
@@ -180,7 +186,8 @@
       "special_checks": "خلوص، سایز دانه، رطوبت، شکستگی، آفات انباری و بسته‌بندی",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 353
     },
     {
       "id": "ZM-EQP-004",
@@ -198,7 +205,8 @@
       "special_checks": "دقت جداسازی اپتیکی، ظرفیت، حفاظت گردوغبار و سهولت سرویس",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 389
     },
     {
       "id": "ZM-SUP-005",
@@ -222,7 +230,8 @@
       "special_checks": "آزمون آلودگی قارچی و آفلاتوکسین حسب محصول، درجه و شرایط نگهداری",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 354
     },
     {
       "id": "ZM-EQP-005",
@@ -241,7 +250,8 @@
       "special_checks": "کنترل دما، افت و شکستگی، تماس غذایی و قابلیت شست‌وشو",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 390
     },
     {
       "id": "ZM-SUP-006",
@@ -263,7 +273,8 @@
       "special_checks": "رقم، رطوبت، اندازه، آلودگی و اصالت مبدأ",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 355
     },
     {
       "id": "ZM-EQP-006",
@@ -281,7 +292,8 @@
       "special_checks": "توان هسته‌گیری، حفظ بافت، کنترل دمای فرآیند و بهداشت خط",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 391
     },
     {
       "id": "ZM-SUP-007",
@@ -302,7 +314,8 @@
       "special_checks": "اصالت و آزمایش زعفران، آلودگی میکروبی و فلزات سنگین در حدود مجاز",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 356
     },
     {
       "id": "ZM-EQP-007",
@@ -320,7 +333,8 @@
       "special_checks": "کنترل رطوبت و دما، افت مواد معطر، دقت وزن‌کشی و جلوگیری از اختلاط",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 392
     },
     {
       "id": "ZM-SUP-008",
@@ -339,7 +353,8 @@
       "special_checks": "هویت گیاهی، منشأ، آزمون آلودگی، مجوز محصول و منع ادعاهای درمانی تأییدنشده",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 357
     },
     {
       "id": "ZM-EQP-008",
@@ -359,7 +374,8 @@
       "special_checks": "کنترل فرآیند، حفاظت از رایحه، جنس تماس غذایی و قابلیت ردیابی بچ",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 393
     },
     {
       "id": "ZM-SUP-009",
@@ -379,7 +395,8 @@
       "special_checks": "آزمون‌های اسیدیته، پراکسید، اصالت و مشخصات بسته‌بندی",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 358
     },
     {
       "id": "ZM-EQP-009",
@@ -397,7 +414,8 @@
       "special_checks": "راندمان استخراج، تماس غذایی، کنترل دما و امکان شست‌وشوی تجهیزات",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 394
     },
     {
       "id": "ZM-SUP-010",
@@ -415,7 +433,8 @@
       "special_checks": "اصالت، آزمون ساکارز و سایر شاخص‌های کیفیت، منشأ زنبورستان و شرایط نگهداری",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 359
     },
     {
       "id": "ZM-EQP-010",
@@ -433,7 +452,8 @@
       "special_checks": "فرآوری با کنترل دما، حفظ کیفیت طبیعی، جنس استیل و دقت پرکن",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 395
     },
     {
       "id": "ZM-SUP-011",
@@ -451,7 +471,8 @@
       "special_checks": "شناسه گونه خوراکی، محل پرورش، سلامت و زنجیره سرد",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 360
     },
     {
       "id": "ZM-EQP-011",
@@ -469,7 +490,8 @@
       "special_checks": "کنترل رطوبت و CO2، بهداشت، ظرفیت بارگذاری و مصرف انرژی",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 396
     },
     {
       "id": "ZM-SUP-012",
@@ -488,7 +510,8 @@
       "special_checks": "اعتبار و دامنه گواهی، عدم اختلاط و قابلیت رهگیری زنجیره تأمین",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 361
     },
     {
       "id": "ZM-EQP-012",
@@ -505,7 +528,8 @@
       "special_checks": "یکپارچگی داده ردیابی، جداسازی خطوط، کنترل برچسب و قابلیت ممیزی",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 397
     },
     {
       "id": "ZM-SUP-013",
@@ -526,7 +550,8 @@
       "special_checks": "مجوز بهداشتی، زنجیره سرد، ویژگی میکروبی و درصد چربی",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 362
     },
     {
       "id": "ZM-EQP-013",
@@ -545,7 +570,8 @@
       "special_checks": "پایش زمان و دما، CIP، سطح تماس بهداشتی، ظرفیت فرآیند",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 398
     },
     {
       "id": "ZM-SUP-014",
@@ -562,7 +588,8 @@
       "special_checks": "گواهی دامپزشکی، کشتارگاه مجاز، زنجیره سرد و قابلیت رهگیری",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 363
     },
     {
       "id": "ZM-EQP-014",
@@ -580,7 +607,8 @@
       "special_checks": "ایمنی تیغه‌ها، قابلیت شست‌وشو، کنترل دما و الزامات دامپزشکی",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 399
     },
     {
       "id": "ZM-SUP-015",
@@ -597,7 +625,8 @@
       "special_checks": "تأیید دامپزشکی، مبدأ کشتار و زنجیره سرد",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 364
     },
     {
       "id": "ZM-EQP-015",
@@ -615,7 +644,8 @@
       "special_checks": "ظرفیت قطعه‌بندی، کنترل میکروبی و دمای انجماد",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 400
     },
     {
       "id": "ZM-SUP-016",
@@ -630,7 +660,8 @@
       "special_checks": "مبدأ واحد مجاز، سلامت پوسته، درجه وزنی و مشخصات حمل",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 365
     },
     {
       "id": "ZM-EQP-016",
@@ -648,7 +679,8 @@
       "special_checks": "شکستگی کمتر، دقت توزین، سرعت شانه‌گذاری و کنترل بهداشتی",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 401
     },
     {
       "id": "ZM-SUP-017",
@@ -667,7 +699,8 @@
       "special_checks": "پروانه صید یا پرورش حسب مورد، دامپزشکی و زنجیره سرد",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 366
     },
     {
       "id": "ZM-EQP-017",
@@ -686,7 +719,8 @@
       "special_checks": "کنترل دما، بازده فیله، بهداشت محیط مرطوب و خوردگی",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 402
     },
     {
       "id": "ZM-SUP-018",
@@ -709,7 +743,8 @@
       "special_checks": "مستندات تولید، ایمنی غذایی، انقضا و قابلیت رهگیری بچ کالا",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 367
     },
     {
       "id": "ZM-EQP-018",
@@ -728,7 +763,8 @@
       "special_checks": "ثبت و اعتبارسنجی زمان/دما، ایمنی فشار، تماس غذایی و CIP",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 403
     },
     {
       "id": "ZM-SUP-019",
@@ -750,7 +786,8 @@
       "special_checks": "مواد تشکیل‌دهنده، آلرژن‌ها، مجوز و مدت ماندگاری",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 368
     },
     {
       "id": "ZM-EQP-019",
@@ -769,7 +806,8 @@
       "special_checks": "ظرفیت، یکنواختی دما، کنترل آلرژن و بهداشت تماس غذایی",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 404
     },
     {
       "id": "ZM-SUP-020",
@@ -789,7 +827,8 @@
       "special_checks": "اصالت قهوه و چای، ترکیبات و گواهی‌های مجاز، کیفیت آب و بسته‌بندی",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 369
     },
     {
       "id": "ZM-EQP-020",
@@ -807,7 +846,8 @@
       "special_checks": "کنترل پروفایل رُست، انتشار و تهویه، دمای فرآوری و حجم پرکنی",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 405
     },
     {
       "id": "ZM-SUP-021",
@@ -824,7 +864,8 @@
       "special_checks": "اصالت رقم، درصد جوانه‌زنی، سلامت گواهی‌شده و مدارک تولید مجاز",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 370
     },
     {
       "id": "ZM-EQP-021",
@@ -841,7 +882,8 @@
       "special_checks": "دقت سایزبندی و شمارش، کنترل اقلیم، عدم اختلاط رقم و قابلیت ردیابی",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 406
     },
     {
       "id": "ZM-SUP-022",
@@ -863,7 +905,8 @@
       "special_checks": "آنالیز ترکیب، مجوز و ثبت حسب محصول، عناصر مضر، برچسب‌گذاری",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 371
     },
     {
       "id": "ZM-EQP-022",
@@ -882,7 +925,8 @@
       "special_checks": "کنترل گردوغبار، یکنواختی اختلاط، دقت توزین و حفاظت اپراتور",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 407
     },
     {
       "id": "ZM-SUP-023",
@@ -898,7 +942,8 @@
       "special_checks": "ثبت و مجوز معتبر، برگه ایمنی، مبدأ و محدودیت فروش محصول",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 372
     },
     {
       "id": "ZM-EQP-023",
@@ -915,7 +960,8 @@
       "special_checks": "مهار نشت، حفاظت کارکنان، جداسازی مواد و رعایت الزامات محیط‌زیستی",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 408
     },
     {
       "id": "ZM-SUP-024",
@@ -936,7 +982,8 @@
       "special_checks": "مشخصات فنی، گارانتی، قطعات یدکی، استاندارد و سازگاری اقلیمی",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 373
     },
     {
       "id": "ZM-EQP-024",
@@ -954,7 +1001,8 @@
       "special_checks": "ظرفیت مونتاژ، ایمنی مکانیکی/برقی و کنترل کیفیت اتصال",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 409
     },
     {
       "id": "ZM-SUP-025",
@@ -972,7 +1020,8 @@
       "special_checks": "اصالت گونه، سلامت گیاه، مجوزهای حمل گیاه حسب مورد و شرایط نگهداری",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 374
     },
     {
       "id": "ZM-EQP-025",
@@ -990,7 +1039,8 @@
       "special_checks": "دقت کنترل اقلیم، ظرفیت پرورش و مصرف انرژی",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 410
     },
     {
       "id": "ZM-SUP-026",
@@ -1009,7 +1059,8 @@
       "special_checks": "پروانه تولید حسب کالا، آنالیز خوراک، ایمنی زیستی و ردیابی",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 375
     },
     {
       "id": "ZM-EQP-026",
@@ -1026,7 +1077,8 @@
       "special_checks": "یکنواختی میکس، کیفیت پلت، جمع‌آوری گردوغبار و ظرفیت تولید",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 411
     },
     {
       "id": "ZM-SUP-027",
@@ -1046,7 +1098,8 @@
       "special_checks": "ترکیب الیاف، سایزبندی، استاندارد کیفیت دوخت و مسئولیت تولیدکننده",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 376
     },
     {
       "id": "ZM-EQP-027",
@@ -1065,7 +1118,8 @@
       "special_checks": "ظرفیت دوخت، کیفیت درز، مصرف انرژی و خدمات پس از فروش",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 412
     },
     {
       "id": "ZM-SUP-028",
@@ -1083,7 +1137,8 @@
       "special_checks": "اصالت و نوع چرم، مواد مصرفی، سایزبندی، کیفیت دوخت و ضمانت",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 377
     },
     {
       "id": "ZM-EQP-028",
@@ -1101,7 +1156,8 @@
       "special_checks": "دقت برش، ایمنی پرس، تهویه و سازگاری مواد",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 413
     },
     {
       "id": "ZM-SUP-029",
@@ -1123,7 +1179,8 @@
       "special_checks": "جنس و استاندارد تماس غذایی حسب محصول، اصالت و گارانتی",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 378
     },
     {
       "id": "ZM-EQP-029",
@@ -1141,7 +1198,8 @@
       "special_checks": "کیفیت قالب، کنترل ضایعات، ایمنی ماشین و آزمایش محصول",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 414
     },
     {
       "id": "ZM-SUP-030",
@@ -1158,7 +1216,8 @@
       "special_checks": "استاندارد ایمنی، سازگاری برق، گارانتی و منشأ قطعات",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 379
     },
     {
       "id": "ZM-EQP-030",
@@ -1175,7 +1234,8 @@
       "special_checks": "ایمنی الکتریکی، کنترل ESD، آزمون عملکرد و تست نهایی",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 415
     },
     {
       "id": "ZM-SUP-031",
@@ -1193,7 +1253,8 @@
       "special_checks": "مجوز بهداشتی، مواد تشکیل‌دهنده، بچ تولید و محدودیت ادعاها",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 380
     },
     {
       "id": "ZM-EQP-031",
@@ -1211,7 +1272,8 @@
       "special_checks": "کنترل اختلاط، جلوگیری از آلودگی متقاطع، ایمنی مواد و ردیابی",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 416
     },
     {
       "id": "ZM-SUP-032",
@@ -1231,7 +1293,8 @@
       "special_checks": "ایمنی کودک، رده سنی، گواهی مواد، عدم وجود قطعات خطرناک",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 381
     },
     {
       "id": "ZM-EQP-032",
@@ -1249,7 +1312,8 @@
       "special_checks": "ایمنی قالب و تجهیزات، دقت مونتاژ، آزمون قطعات ریز و لبه‌ها",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 417
     },
     {
       "id": "ZM-SUP-033",
@@ -1270,7 +1334,8 @@
       "special_checks": "اصالت اثر، جنس مواد، ابعاد، کیفیت ساخت و مدارک تولیدکننده",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 382
     },
     {
       "id": "ZM-EQP-033",
@@ -1288,7 +1353,8 @@
       "special_checks": "کنترل دما و تهویه، مصرف انرژی، ایمنی کوره و حفاظت آثار",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 418
     },
     {
       "id": "ZM-SUP-034",
@@ -1304,7 +1370,8 @@
       "special_checks": "مجوز فروش، اصالت و عیار، منشأ قانونی و الزامات امنیتی",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 383
     },
     {
       "id": "ZM-EQP-034",
@@ -1321,7 +1388,8 @@
       "special_checks": "دقت اندازه‌گیری، ایمنی حرارتی و گردوغبار، کالیبراسیون و امنیت کارگاه",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 419
     },
     {
       "id": "ZM-SUP-035",
@@ -1341,7 +1409,8 @@
       "special_checks": "استاندارد فنی و ایمنی، مشخصات مواد، گارانتی و خدمات",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 384
     },
     {
       "id": "ZM-EQP-035",
@@ -1359,7 +1428,8 @@
       "special_checks": "کنترل تلرانس، ایمنی پرس و برش، تهویه و آزمون فشار",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 420
     },
     {
       "id": "ZM-SUP-036",
@@ -1380,7 +1450,8 @@
       "special_checks": "مشخصات جنس، ابعاد، مجوز تماس غذایی حسب مصرف، تیراژ و تحمل حمل",
       "submission_requirements": "مدارک عمومی تأمین کالا همراه با مشخصات تخصصی گروه",
       "status": "دریافت پیشنهاد تأمین",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 385
     },
     {
       "id": "ZM-EQP-036",
@@ -1398,7 +1469,16 @@
       "special_checks": "دقت ابعادی، مقاومت بسته، مصرف انرژی و قابلیت تعویض قالب",
       "submission_requirements": "مدارک عمومی خرید ماشین‌آلات همراه با دیتاشیت و مشخصات گروه",
       "status": "دریافت پیشنهاد فنی و مالی",
-      "contact_path": "/contact/"
+      "contact_path": "/contact/",
+      "proposed_public_number": 421
     }
-  ]
+  ],
+  "proposed_numbering": {
+    "source": "Live ZomorodMelal auctions index, four live notices 346-349, sitemap-auctions.xml and corresponding GitHub PRs 2223-2234",
+    "highest_verified_public_number": 349,
+    "first_proposed_number": 350,
+    "last_proposed_number": 421,
+    "official_numbers_reserved_in_live_db": false,
+    "evidence_file": "docs/procurement/verified_public_auction_baseline_349.json"
+  }
 }
