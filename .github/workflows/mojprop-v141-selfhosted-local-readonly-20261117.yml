@@ -321,6 +321,77 @@ jobs:
               'release_permitted':False,
           },sort_keys=True))
           REMOTE_CAPACITY_PY
+          timeout 95s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_QUOTA_PY'
+          """Bounded read-only shallow cPanel top-level directory usage inventory."""
+          import json,os,subprocess,time
+          from pathlib import Path
+          home=Path('/home/zomorod2')
+          start=time.monotonic()
+          groups={}
+          errors=0
+          truncated=False
+          scanned=0
+          names={
+              'Saeit-staging':'candidate_django_tree',
+              'mojplaywin.com':'public_mojplaywin_docroot',
+              'public_html':'public_html_legacy',
+              'mail':'mail_storage',
+              'etc':'account_configuration',
+              'logs':'account_log_files',
+              'tmp':'account_temp_files',
+              '.trash':'account_trash',
+              '.cpanel':'cpanel_metadata',
+              '.local':'user_local_metadata',
+          }
+          def classify(name):
+              if name in names: return names[name]
+              if 'backup' in name.lower(): return 'unidentified_backup_like_directory'
+              return 'other_unclassified_directory'
+          try:
+              dirs=[]
+              with os.scandir(home) as stream:
+                  for ent in stream:
+                      if ent.is_dir(follow_symlinks=False) and not ent.is_symlink():
+                          dirs.append((ent.name,ent.path))
+                          if len(dirs)>90:
+                              truncated=True
+                              break
+              dirs.sort()
+          except OSError:
+              dirs=[]
+              truncated=True
+          for name,path in dirs:
+              if time.monotonic()-start>76:
+                  truncated=True
+                  break
+              scanned+=1
+              try:
+                  p=subprocess.run(['nice','-n','19','du','-skx',path],
+                      stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+                      timeout=18,check=False)
+                  if p.returncode!=0 or len(p.stdout)>4000:
+                      errors+=1
+                      continue
+                  allocated=int(p.stdout.decode('ascii').split()[0])*1024
+                  kind=classify(name)
+                  x=groups.setdefault(kind,{'count':0,'bytes':0,'max_single_bytes':0})
+                  x['count']+=1
+                  x['bytes']+=allocated
+                  x['max_single_bytes']=max(x['max_single_bytes'],allocated)
+              except (ValueError,UnicodeError,OSError,subprocess.TimeoutExpired,IndexError):
+                  errors+=1
+          print('CPANEL_TOPLEVEL_CLASSIFIED_DISK_USAGE_READONLY='+json.dumps({
+              'classified_usage':groups,
+              'scanned_directory_count':scanned,
+              'incomplete':bool(truncated or errors),
+              'errors_or_unreadable':errors,
+              'partial_data_may_overlap_quota_categories':True,
+              'only_directory_allocation_metadata_read':True,
+              'customer_files_or_email_contents_read':False,
+              'deleted_files':0,
+              'release_permitted':False,
+          },sort_keys=True))
+          REMOTE_QUOTA_PY
           echo "LOCAL_TO_CPANEL_READONLY_COMPLETED=true"
       - name: Verify source remains operational NO-GO
         if: always()
