@@ -29,7 +29,7 @@ ALLOWED_UNITS=frozenset(("MB","GB","KB","TB","B","bytes"))
 CALLS={
     "uapi_statsbar": [UAPI,"--output=json","StatsBar","get_stats",
                       "display="+DISPLAY],
-    "cpapi2_statsbar": [CPAPI2,"--output=json","StatsBar","stat",
+    "cpapi2_statsbar": [CPAPI2,"--output=json","--user=zomorod2","StatsBar","stat",
                        "display="+DISPLAY,"warnings=0","warninglevel=87",
                        "warnout=0","infinityimg=/dev/null",
                        "infinitylang=infinity","rowcounter=even"],
