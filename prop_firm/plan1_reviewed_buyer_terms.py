@@ -40,6 +40,7 @@ def bind_independently_reviewed_terms(
     trusted_independent_reviewer_key, expected_accepted_pdf_sha256,
     expected_buyer_signature_proof_sha256, server_now_sec,
     review_ref, reviewer_attestation, reviewer_hmac,
+    expected_reviewer_authority_ref,
 ):
     """Reject unsigned reviewer evidence; return a non-commerce review record.
 
@@ -76,6 +77,7 @@ def bind_independently_reviewed_terms(
             reviewer_key=trusted_independent_reviewer_key,
             acceptance_provider_key=trusted_acceptance_provider_key,
             now_sec=server_now_sec,
+            expected_reviewer_authority_ref=expected_reviewer_authority_ref,
         )
         raw = json.dumps(reviewer_attestation, sort_keys=True,
                          separators=(",", ":"), ensure_ascii=True,
