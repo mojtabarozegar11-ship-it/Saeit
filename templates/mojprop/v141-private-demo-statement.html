@@ -16,6 +16,11 @@
     <p class="flag">{{ labels.demo }}</p>
     <p class="lead">{{ labels.intro }}</p>
   </header>
+  <nav class="language-switch" aria-label="Language / زبان">
+    {% for option in language_options %}
+      <a href="/moj-prop-v141/statement/{{ challenge_ref }}/?lang={{ option.code }}" lang="{{ option.code }}"{% if option.active %} aria-current="page"{% endif %}>{{ option.name }}</a>
+    {% endfor %}
+  </nav>
   <section class="summary" aria-label="{{ labels.challenge }}">
     <dl class="metrics">
       <div><dt>{{ labels.challenge }}</dt><dd class="ref">{{ challenge_ref }}</dd></div>
