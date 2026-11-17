@@ -89,6 +89,8 @@ jobs:
           python3 manage.py test tests.test_moj_prop_interest_intake --verbosity 1
           python3 -B -m unittest -v tests.test_mojprop_c131_canonical_static_consent_integration
           python3 manage.py migrate --noinput
+          # ManifestStaticFilesStorage requires collectstatic before real render tests.
+          python3 manage.py collectstatic --noinput
           python3 -m pytest -q core/tests/test_mpw_store_real_template_render.py
           echo 'C136_MERGED_DJANGO_SYNTHETIC_TESTS_PASS=true'
           echo 'C136_PRODUCTION_DB_POST_DEPLOYMENT_PAYMENT=false'
