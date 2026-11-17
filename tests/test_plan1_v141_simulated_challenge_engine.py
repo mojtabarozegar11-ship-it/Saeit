@@ -249,10 +249,12 @@ class TwoStageEngineTests(unittest.TestCase):
 
     def test_26_equal_daily_loss_floor_is_breach(self):
         s=good_snapshot()
-        mark=replace(s.equity_marks[0],equity_usd="96",
-                     is_utc_day_open=True)
-        x=replay(replace(s,equity_marks=(mark,)+s.equity_marks[1:]))
-        self.assertTrue(x.phase_one.risk_breached) if False else self.assertFalse(x.phase_one.risk_breached)
+        mark=replace(s.equity_marks[0],external_event_id="floor-touch",
+                     observed_at=at(1,10),equity_usd="96",
+                     is_utc_day_open=False)
+        x=replay(replace(s,equity_marks=s.equity_marks+(mark,)))
+        self.assertTrue(x.phase_one.risk_breached)
+        self.assertIn("phase_1_daily_drawdown_breached",x.phase_one.blockers)
 
     def test_27_missing_day_open_equity_blocks(self):
         s=good_snapshot()
