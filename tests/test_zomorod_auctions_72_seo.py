@@ -46,7 +46,7 @@ class MetaParser(HTMLParser):
 
 def schema_blocks(markup):
     return [json.loads(x) for x in re.findall(
-        r'<script type="application/ld\\+json">([\\s\\S]*?)</script>',
+        r'<script type="application/ld\+json">([\s\S]*?)</script>',
         markup,
     )]
 
@@ -65,7 +65,7 @@ def test_seo_title_description_and_legal_notice_uniqueness_72():
         assert "zm-auctions-72-v1 official-" + str(n) in page
         assert "zm-auctions-seo-20261117-v1" in page
         assert notice["title"] in page and notice["special_checks"] in page
-        assert all(part in page for part in notice["scope"])
+        assert all(part in html.unescape(page) for part in notice["scope"])
         assert "zomorodmelal@gmail.com" in page
         assert "مهلت پایان ثابت تعیین نشده است" in page
         assert "قرارداد" in page and "تعهد خرید" in page
