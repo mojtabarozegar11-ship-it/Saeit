@@ -94,7 +94,9 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
             "core/management/commands/mojprop_sales_action_queue.py",
         })
         self.assertTrue(all(len(value) == 40 for value in EXPECTED.values()))
-        self.assertEqual(EXPECTED["config/urls.py"],\n                         "74e52d8755788da12375a0605f506b64efd27b1e")\n        # A stale four-file pin returned misleading "drift" after current-main
+        self.assertEqual(EXPECTED["config/urls.py"],
+                         "74e52d8755788da12375a0605f506b64efd27b1e")
+        # A stale four-file pin returned misleading "drift" after current-main
         # source was actually merged. Public HTML must be audited as well.
         self.assertEqual(EXPECTED["core/mojprop_views.py"],
                          "12ee5e408f2a50e0571d5e6d91a760644ec210a9")
