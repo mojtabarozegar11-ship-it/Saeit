@@ -90,6 +90,7 @@ jobs:
             tests.test_mojprop_v141_mariadb_integration \
             tests.test_mojprop_v141_private_statement_mariadb \
             tests.test_mojprop_v141_interest_intake \
+            tests.test_mojprop_v141_public_info_20_mariadb \
             --settings=config.mojprop_v141_ci_mariadb_settings \
             --verbosity=2 --noinput
       - name: Explicit release status
