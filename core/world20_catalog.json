@@ -1,0 +1,503 @@
+{
+  "schema": "mojplaywin.world20.l1l2.2026.v1",
+  "ranking_method": "total speakers (L1+L2); ICLS 2026 secondary compilation of Ethnologue; rank may evolve",
+  "ranking_source": "https://www.icls.edu/blog/most-spoken-languages-in-the-world",
+  "ranked_codes": [
+    "en",
+    "zh",
+    "hi",
+    "es",
+    "ar",
+    "fr",
+    "bn",
+    "pt",
+    "id",
+    "ur",
+    "ru",
+    "de",
+    "ja",
+    "pcm",
+    "arz",
+    "mr",
+    "vi",
+    "te",
+    "sw",
+    "ha"
+  ],
+  "supplementary_codes": [
+    "fa"
+  ],
+  "sections": [
+    {
+      "key": "prop",
+      "url": "/moj-prop/"
+    },
+    {
+      "key": "store",
+      "url": "/store/"
+    },
+    {
+      "key": "games",
+      "url": "/studio/"
+    },
+    {
+      "key": "research",
+      "url": "/research/"
+    },
+    {
+      "key": "learning",
+      "url": "/knowledge/"
+    },
+    {
+      "key": "ai",
+      "url": "/agents/"
+    },
+    {
+      "key": "company",
+      "url": "/company/"
+    }
+  ],
+  "locales": {
+    "en": {
+      "name": "English",
+      "direction": "ltr",
+      "headline": "Explore MojPlayWin in your language",
+      "intro": "Discover our research, digital products, games, learning and the MOJ PROP division.",
+      "prop_title": "MOJ PROP — challenge information",
+      "prop_body": "Learn about the proposed proprietary-trading evaluation and its conditions.",
+      "payment_notice": "No payments or funded trading accounts are available through this language portal. No return or funding is guaranteed.",
+      "prop_link": "View MOJ PROP information",
+      "fallback_notice": "Linked original sections may still display English content; this translated portal does not change their checkout or eligibility.",
+      "language_label": "Languages",
+      "sections": [
+        "Moj Prop",
+        "Digital store",
+        "Games and studio",
+        "Research",
+        "Learning",
+        "AI tools",
+        "Company"
+      ]
+    },
+    "zh": {
+      "name": "简体中文",
+      "direction": "ltr",
+      "headline": "以您的语言探索 MojPlayWin",
+      "intro": "了解我们的研究、数字产品、游戏、学习资源以及 MOJ PROP 业务。",
+      "prop_title": "MOJ PROP — 挑战信息",
+      "prop_body": "了解拟议的自营交易能力评估及其相关条件。",
+      "payment_notice": "本语言门户不接受付款，也不提供已注资的真实交易账户。不保证收益或资金。",
+      "prop_link": "查看 MOJ PROP 信息",
+      "fallback_notice": "所链接的原始栏目可能仍显示英文；本翻译页面不会改变其结算或资格规则。",
+      "language_label": "语言",
+      "sections": [
+        "Moj Prop",
+        "数字商店",
+        "游戏与创意工作室",
+        "研究",
+        "学习",
+        "人工智能工具",
+        "公司"
+      ]
+    },
+    "hi": {
+      "name": "हिन्दी",
+      "direction": "ltr",
+      "headline": "अपनी भाषा में MojPlayWin देखें",
+      "intro": "हमारे अनुसंधान, डिजिटल उत्पादों, खेलों, शिक्षा और MOJ PROP विभाग के बारे में जानें।",
+      "prop_title": "MOJ PROP — चुनौती संबंधी जानकारी",
+      "prop_body": "प्रस्तावित प्रॉप ट्रेडिंग मूल्यांकन और उसकी शर्तों को समझें।",
+      "payment_notice": "इस भाषा पोर्टल पर कोई भुगतान या वित्तपोषित ट्रेडिंग खाता उपलब्ध नहीं है। लाभ या पूंजी की गारंटी नहीं है।",
+      "prop_link": "MOJ PROP की जानकारी देखें",
+      "fallback_notice": "लिंक किए गए मूल अनुभाग अभी अंग्रेज़ी में हो सकते हैं; यह अनुवाद भुगतान या पात्रता की शर्तें नहीं बदलता।",
+      "language_label": "भाषाएँ",
+      "sections": [
+        "Moj Prop",
+        "डिजिटल स्टोर",
+        "खेल और स्टूडियो",
+        "अनुसंधान",
+        "शिक्षा",
+        "एआई उपकरण",
+        "कंपनी"
+      ]
+    },
+    "es": {
+      "name": "Español",
+      "direction": "ltr",
+      "headline": "Descubra MojPlayWin en su idioma",
+      "intro": "Explore nuestra investigación, productos digitales, juegos, formación y la división MOJ PROP.",
+      "prop_title": "MOJ PROP — información del desafío",
+      "prop_body": "Conozca la evaluación de trading propietario propuesta y sus condiciones.",
+      "payment_notice": "Este portal de idiomas no acepta pagos ni ofrece cuentas de trading financiadas. No se garantizan beneficios ni financiación.",
+      "prop_link": "Ver información de MOJ PROP",
+      "fallback_notice": "Las secciones originales enlazadas pueden seguir en inglés; esta traducción no modifica sus pagos ni requisitos de elegibilidad.",
+      "language_label": "Idiomas",
+      "sections": [
+        "Moj Prop",
+        "Tienda digital",
+        "Juegos y estudio",
+        "Investigación",
+        "Formación",
+        "Herramientas de IA",
+        "Empresa"
+      ]
+    },
+    "ar": {
+      "name": "العربية الفصحى",
+      "direction": "rtl",
+      "headline": "استكشف MojPlayWin بلغتك",
+      "intro": "اكتشف أبحاثنا ومنتجاتنا الرقمية وألعابنا ومواد التعلم وقسم MOJ PROP.",
+      "prop_title": "MOJ PROP — معلومات التحدي",
+      "prop_body": "تعرّف على التقييم المقترح لمهارات التداول لحساب الشركة وشروطه.",
+      "payment_notice": "لا يقبل هذا الموقع المترجم أي دفعات ولا يوفر حسابات تداول ممولة. لا يوجد ضمان للربح أو التمويل.",
+      "prop_link": "عرض معلومات MOJ PROP",
+      "fallback_notice": "قد تبقى الصفحات الأصلية المرتبطة باللغة الإنجليزية؛ لا تغيّر هذه الترجمة شروط الدفع أو الأهلية فيها.",
+      "language_label": "اللغات",
+      "sections": [
+        "Moj Prop",
+        "المتجر الرقمي",
+        "الألعاب والاستوديو",
+        "الأبحاث",
+        "التعلم",
+        "أدوات الذكاء الاصطناعي",
+        "الشركة"
+      ]
+    },
+    "fr": {
+      "name": "Français",
+      "direction": "ltr",
+      "headline": "Découvrez MojPlayWin dans votre langue",
+      "intro": "Explorez nos recherches, produits numériques, jeux, formations et la division MOJ PROP.",
+      "prop_title": "MOJ PROP — informations sur le défi",
+      "prop_body": "Consultez les conditions de l'évaluation de trading pour compte propre envisagée.",
+      "payment_notice": "Ce portail linguistique ne collecte aucun paiement et ne fournit aucun compte de trading financé. Aucun gain ni financement n'est garanti.",
+      "prop_link": "Voir les informations MOJ PROP",
+      "fallback_notice": "Les rubriques d'origine liées peuvent rester en anglais ; cette traduction ne change ni leurs paiements ni leurs conditions d'éligibilité.",
+      "language_label": "Langues",
+      "sections": [
+        "Moj Prop",
+        "Boutique numérique",
+        "Jeux et studio",
+        "Recherche",
+        "Apprentissage",
+        "Outils d'IA",
+        "Entreprise"
+      ]
+    },
+    "bn": {
+      "name": "বাংলা",
+      "direction": "ltr",
+      "headline": "আপনার ভাষায় MojPlayWin দেখুন",
+      "intro": "আমাদের গবেষণা, ডিজিটাল পণ্য, গেম, শিক্ষার উপকরণ এবং MOJ PROP বিভাগ সম্পর্কে জানুন।",
+      "prop_title": "MOJ PROP — চ্যালেঞ্জের তথ্য",
+      "prop_body": "প্রস্তাবিত প্রপ ট্রেডিং মূল্যায়ন এবং তার শর্তগুলো জানুন।",
+      "payment_notice": "এই ভাষার পোর্টালে অর্থপ্রদান নেওয়া হয় না এবং অর্থায়িত ট্রেডিং অ্যাকাউন্ট দেওয়া হয় না। লাভ বা অর্থায়নের নিশ্চয়তা নেই।",
+      "prop_link": "MOJ PROP সম্পর্কে জানুন",
+      "fallback_notice": "সংযুক্ত মূল বিভাগগুলো এখনো ইংরেজিতে থাকতে পারে; এই অনুবাদ তাদের পেমেন্ট বা যোগ্যতার শর্ত পরিবর্তন করে না।",
+      "language_label": "ভাষা",
+      "sections": [
+        "Moj Prop",
+        "ডিজিটাল দোকান",
+        "গেম ও স্টুডিও",
+        "গবেষণা",
+        "শিক্ষা",
+        "এআই সরঞ্জাম",
+        "প্রতিষ্ঠান"
+      ]
+    },
+    "pt": {
+      "name": "Português",
+      "direction": "ltr",
+      "headline": "Explore o MojPlayWin no seu idioma",
+      "intro": "Conheça nossas pesquisas, produtos digitais, jogos, materiais educativos e a divisão MOJ PROP.",
+      "prop_title": "MOJ PROP — informações sobre o desafio",
+      "prop_body": "Saiba mais sobre a avaliação proposta de trading proprietário e suas condições.",
+      "payment_notice": "Este portal traduzido não recebe pagamentos nem disponibiliza contas de negociação financiadas. Lucros ou financiamento não são garantidos.",
+      "prop_link": "Ver informações do MOJ PROP",
+      "fallback_notice": "As páginas originais vinculadas ainda podem estar em inglês; esta tradução não altera pagamentos ou critérios de elegibilidade.",
+      "language_label": "Idiomas",
+      "sections": [
+        "Moj Prop",
+        "Loja digital",
+        "Jogos e estúdio",
+        "Pesquisa",
+        "Aprendizagem",
+        "Ferramentas de IA",
+        "Empresa"
+      ]
+    },
+    "id": {
+      "name": "Bahasa Indonesia",
+      "direction": "ltr",
+      "headline": "Jelajahi MojPlayWin dalam bahasa Anda",
+      "intro": "Kenali riset, produk digital, permainan, materi pembelajaran, dan divisi MOJ PROP kami.",
+      "prop_title": "MOJ PROP — informasi tantangan",
+      "prop_body": "Pelajari evaluasi keterampilan trading proprietary yang diusulkan beserta syaratnya.",
+      "payment_notice": "Portal bahasa ini tidak menerima pembayaran atau menyediakan akun trading yang didanai. Keuntungan atau pendanaan tidak dijamin.",
+      "prop_link": "Lihat informasi MOJ PROP",
+      "fallback_notice": "Halaman asli yang ditautkan mungkin masih berbahasa Inggris; terjemahan ini tidak mengubah pembayaran atau persyaratan kelayakannya.",
+      "language_label": "Bahasa",
+      "sections": [
+        "Moj Prop",
+        "Toko digital",
+        "Permainan dan studio",
+        "Riset",
+        "Pembelajaran",
+        "Alat AI",
+        "Perusahaan"
+      ]
+    },
+    "ur": {
+      "name": "اردو",
+      "direction": "rtl",
+      "headline": "اپنی زبان میں MojPlayWin دریافت کریں",
+      "intro": "ہماری تحقیق، ڈیجیٹل مصنوعات، گیمز، تعلیمی مواد اور MOJ PROP شعبے کے بارے میں جانیں۔",
+      "prop_title": "MOJ PROP — چیلنج کی معلومات",
+      "prop_body": "مجوزہ پراپ ٹریڈنگ تشخیص اور اس کی شرائط کے بارے میں معلوم کریں۔",
+      "payment_notice": "اس زبان کے پورٹل پر ادائیگی وصول نہیں کی جاتی اور نہ ہی فنڈڈ ٹریڈنگ اکاؤنٹ دیا جاتا ہے۔ منافع یا فنڈنگ کی ضمانت نہیں۔",
+      "prop_link": "MOJ PROP کی معلومات دیکھیں",
+      "fallback_notice": "منسلک اصل صفحات ابھی انگریزی میں ہو سکتے ہیں؛ یہ ترجمہ ان کی ادائیگی یا اہلیت کی شرائط نہیں بدلتا۔",
+      "language_label": "زبانیں",
+      "sections": [
+        "Moj Prop",
+        "ڈیجیٹل اسٹور",
+        "گیمز اور اسٹوڈیو",
+        "تحقیق",
+        "تعلیم",
+        "اے آئی ٹولز",
+        "کمپنی"
+      ]
+    },
+    "ru": {
+      "name": "Русский",
+      "direction": "ltr",
+      "headline": "Откройте MojPlayWin на своём языке",
+      "intro": "Узнайте о наших исследованиях, цифровых товарах, играх, обучении и подразделении MOJ PROP.",
+      "prop_title": "MOJ PROP — информация об испытании",
+      "prop_body": "Изучите предлагаемые условия оценки навыков проп-трейдинга.",
+      "payment_notice": "Этот языковой портал не принимает оплату и не предоставляет финансируемые торговые счета. Прибыль и финансирование не гарантируются.",
+      "prop_link": "Информация о MOJ PROP",
+      "fallback_notice": "Ссылки могут вести на англоязычные страницы; этот перевод не меняет правила оплаты и допуска.",
+      "language_label": "Языки",
+      "sections": [
+        "Moj Prop",
+        "Цифровой магазин",
+        "Игры и студия",
+        "Исследования",
+        "Обучение",
+        "Инструменты ИИ",
+        "Компания"
+      ]
+    },
+    "de": {
+      "name": "Deutsch",
+      "direction": "ltr",
+      "headline": "Entdecken Sie MojPlayWin in Ihrer Sprache",
+      "intro": "Entdecken Sie Forschung, digitale Produkte, Spiele, Lernangebote und den MOJ-PROP-Bereich.",
+      "prop_title": "MOJ PROP — Challenge-Informationen",
+      "prop_body": "Informieren Sie sich über die vorgeschlagene Prop-Trading-Eignungsprüfung und ihre Bedingungen.",
+      "payment_notice": "Dieses Sprachenportal nimmt keine Zahlungen entgegen und bietet keine finanzierten Handelskonten. Gewinn oder Finanzierung sind nicht garantiert.",
+      "prop_link": "MOJ-PROP-Informationen ansehen",
+      "fallback_notice": "Verlinkte Originalseiten können weiterhin Englisch anzeigen; die Übersetzung ändert keine Zahlungs- oder Teilnahmebedingungen.",
+      "language_label": "Sprachen",
+      "sections": [
+        "Moj Prop",
+        "Digitaler Shop",
+        "Spiele und Studio",
+        "Forschung",
+        "Lernen",
+        "KI-Werkzeuge",
+        "Unternehmen"
+      ]
+    },
+    "ja": {
+      "name": "日本語",
+      "direction": "ltr",
+      "headline": "あなたの言語で MojPlayWin を探す",
+      "intro": "研究、デジタル商品、ゲーム、学習コンテンツ、MOJ PROP 事業をご覧ください。",
+      "prop_title": "MOJ PROP — チャレンジ情報",
+      "prop_body": "提案中のプロップ取引スキル評価とその条件をご確認ください。",
+      "payment_notice": "この言語ポータルでは支払いを受け付けず、資金提供済みの取引口座も提供していません。利益や資金提供は保証されません。",
+      "prop_link": "MOJ PROP の情報を見る",
+      "fallback_notice": "リンク先の元ページは英語のままの場合があります。この翻訳は支払いや参加資格の条件を変更しません。",
+      "language_label": "言語",
+      "sections": [
+        "Moj Prop",
+        "デジタルストア",
+        "ゲームとスタジオ",
+        "研究",
+        "学習",
+        "AIツール",
+        "会社"
+      ]
+    },
+    "pcm": {
+      "name": "Naijá (Nigerian Pidgin)",
+      "direction": "ltr",
+      "headline": "See MojPlayWin for your language",
+      "intro": "Find our research, digital products, games, things wey you fit learn, and MOJ PROP section.",
+      "prop_title": "MOJ PROP — challenge information",
+      "prop_body": "Read about the prop trading skill test wey dem dey plan and the conditions.",
+      "payment_notice": "Dem no dey collect payment for this language page, and no funded trading account dey here. Nobody promise profit or funding.",
+      "prop_link": "See MOJ PROP information",
+      "fallback_notice": "Original pages wey these links open fit still dey for English. This translation no change payment or who qualify.",
+      "language_label": "Languages",
+      "sections": [
+        "Moj Prop",
+        "Digital shop",
+        "Games and studio",
+        "Research",
+        "Learning",
+        "AI tools",
+        "Company"
+      ]
+    },
+    "arz": {
+      "name": "العامية المصرية",
+      "direction": "rtl",
+      "headline": "اكتشف MojPlayWin بلغتك",
+      "intro": "شوف أبحاثنا ومنتجاتنا الرقمية والألعاب ومواد التعلُّم وقسم MOJ PROP.",
+      "prop_title": "MOJ PROP — معلومات التحدي",
+      "prop_body": "اعرف أكتر عن تقييم مهارات التداول لحساب الشركة المقترح وشروطه.",
+      "payment_notice": "الصفحة دي مش بتستقبل فلوس ومش بتوفر حسابات تداول ممولة. مفيش أي ضمان للربح أو التمويل.",
+      "prop_link": "شوف معلومات MOJ PROP",
+      "fallback_notice": "الصفحات الأصلية في الروابط ممكن تفضل بالإنجليزي؛ الترجمة دي مش بتغيّر شروط الدفع أو الأهلية.",
+      "language_label": "اللغات",
+      "sections": [
+        "Moj Prop",
+        "المتجر الرقمي",
+        "الألعاب والاستوديو",
+        "الأبحاث",
+        "التعلُّم",
+        "أدوات الذكاء الاصطناعي",
+        "الشركة"
+      ]
+    },
+    "mr": {
+      "name": "मराठी",
+      "direction": "ltr",
+      "headline": "तुमच्या भाषेत MojPlayWin पाहा",
+      "intro": "आमचे संशोधन, डिजिटल उत्पादने, खेळ, शैक्षणिक साधने आणि MOJ PROP विभाग जाणून घ्या.",
+      "prop_title": "MOJ PROP — आव्हानाची माहिती",
+      "prop_body": "प्रस्तावित प्रॉप ट्रेडिंग कौशल्य मूल्यांकन आणि त्याच्या अटी समजून घ्या.",
+      "payment_notice": "या भाषिक पृष्ठावर कोणतेही पेमेंट घेतले जात नाही किंवा निधी असलेली ट्रेडिंग खाती दिली जात नाहीत. नफा किंवा निधीची हमी नाही.",
+      "prop_link": "MOJ PROP ची माहिती पाहा",
+      "fallback_notice": "जोडलेल्या मूळ विभागांमध्ये अजून इंग्रजी मजकूर असू शकतो; हा अनुवाद त्यांच्या पेमेंट किंवा पात्रता अटी बदलत नाही.",
+      "language_label": "भाषा",
+      "sections": [
+        "Moj Prop",
+        "डिजिटल दुकान",
+        "खेळ आणि स्टुडिओ",
+        "संशोधन",
+        "शिक्षण",
+        "एआय साधने",
+        "कंपनी"
+      ]
+    },
+    "vi": {
+      "name": "Tiếng Việt",
+      "direction": "ltr",
+      "headline": "Khám phá MojPlayWin bằng ngôn ngữ của bạn",
+      "intro": "Tìm hiểu nghiên cứu, sản phẩm số, trò chơi, tài liệu học tập và bộ phận MOJ PROP.",
+      "prop_title": "MOJ PROP — thông tin thử thách",
+      "prop_body": "Tìm hiểu bài đánh giá kỹ năng giao dịch tự doanh được đề xuất và các điều kiện.",
+      "payment_notice": "Cổng ngôn ngữ này không nhận thanh toán hoặc cung cấp tài khoản giao dịch được cấp vốn. Không bảo đảm lợi nhuận hay nguồn vốn.",
+      "prop_link": "Xem thông tin MOJ PROP",
+      "fallback_notice": "Các mục gốc được liên kết có thể vẫn bằng tiếng Anh; bản dịch này không thay đổi điều kiện thanh toán hoặc tư cách tham gia.",
+      "language_label": "Ngôn ngữ",
+      "sections": [
+        "Moj Prop",
+        "Cửa hàng số",
+        "Trò chơi và studio",
+        "Nghiên cứu",
+        "Học tập",
+        "Công cụ AI",
+        "Công ty"
+      ]
+    },
+    "te": {
+      "name": "తెలుగు",
+      "direction": "ltr",
+      "headline": "మీ భాషలో MojPlayWin‌ను తెలుసుకోండి",
+      "intro": "మా పరిశోధన, డిజిటల్ ఉత్పత్తులు, ఆటలు, అభ్యాస వనరులు మరియు MOJ PROP విభాగాన్ని చూడండి.",
+      "prop_title": "MOJ PROP — ఛాలెంజ్ సమాచారం",
+      "prop_body": "ప్రతిపాదిత ప్రాప్ ట్రేడింగ్ నైపుణ్య పరీక్ష మరియు దాని షరతులను తెలుసుకోండి.",
+      "payment_notice": "ఈ భాషా పోర్టల్‌లో చెల్లింపులు స్వీకరించరు; నిధులతో కూడిన ట్రేడింగ్ ఖాతాలు అందుబాటులో లేవు. లాభం లేదా నిధుల హామీ లేదు.",
+      "prop_link": "MOJ PROP సమాచారం చూడండి",
+      "fallback_notice": "లింక్ చేసిన అసలు విభాగాలు ఇప్పటికీ ఆంగ్లంలో ఉండవచ్చు; ఈ అనువాదం చెల్లింపు లేదా అర్హత నిబంధనలను మార్చదు.",
+      "language_label": "భాషలు",
+      "sections": [
+        "Moj Prop",
+        "డిజిటల్ దుకాణం",
+        "ఆటలు మరియు స్టూడియో",
+        "పరిశోధన",
+        "అభ్యాసం",
+        "AI సాధనాలు",
+        "సంస్థ"
+      ]
+    },
+    "sw": {
+      "name": "Kiswahili",
+      "direction": "ltr",
+      "headline": "Gundua MojPlayWin kwa lugha yako",
+      "intro": "Fahamu utafiti wetu, bidhaa za kidijitali, michezo, mafunzo na kitengo cha MOJ PROP.",
+      "prop_title": "MOJ PROP — taarifa za changamoto",
+      "prop_body": "Jifunze kuhusu tathmini ya ujuzi wa biashara ya prop inayopendekezwa na masharti yake.",
+      "payment_notice": "Tovuti hii ya lugha haipokei malipo wala kutoa akaunti za biashara zilizofadhiliwa. Hakuna dhamana ya faida au ufadhili.",
+      "prop_link": "Tazama taarifa za MOJ PROP",
+      "fallback_notice": "Kurasa asili zilizounganishwa huenda bado ziko kwa Kiingereza; tafsiri hii haibadilishi masharti ya malipo au ustahiki.",
+      "language_label": "Lugha",
+      "sections": [
+        "Moj Prop",
+        "Duka la kidijitali",
+        "Michezo na studio",
+        "Utafiti",
+        "Mafunzo",
+        "Zana za AI",
+        "Kampuni"
+      ]
+    },
+    "ha": {
+      "name": "Hausa",
+      "direction": "ltr",
+      "headline": "Binciki MojPlayWin da harshenka",
+      "intro": "Duba bincikenmu, kayayyakin dijital, wasanni, ilmantarwa da sashen MOJ PROP.",
+      "prop_title": "MOJ PROP — bayanin ƙalubale",
+      "prop_body": "Karanta game da gwajin ƙwarewar cinikin prop da ake shirin yi da sharudɗansa.",
+      "payment_notice": "Wannan shafin harsuna ba ya karɓar kuɗi kuma ba ya bayar da asusun ciniki mai tallafin kuɗi. Ba a tabbatar da riba ko tallafi ba.",
+      "prop_link": "Duba bayanin MOJ PROP",
+      "fallback_notice": "Shafukan asali da aka danganta za su iya kasancewa da Turanci; wannan fassarar ba ta canza biyan kuɗi ko sharudɗan cancanta ba.",
+      "language_label": "Harsuna",
+      "sections": [
+        "Moj Prop",
+        "Shagon dijital",
+        "Wasanni da studio",
+        "Bincike",
+        "Koyo",
+        "Kayan AI",
+        "Kamfani"
+      ]
+    },
+    "fa": {
+      "name": "فارسی",
+      "direction": "rtl",
+      "headline": "مج پلی وین را به زبان خودتان بشناسید",
+      "intro": "با پژوهش‌ها، محصولات دیجیتال، بازی‌ها، محتوای آموزشی و بخش مج پراپ آشنا شوید.",
+      "prop_title": "مج پراپ — اطلاعات چالش",
+      "prop_body": "شرایط پیشنهادی ارزیابی مهارت معامله‌گری با سرمایه احتمالی شرکت را مطالعه کنید.",
+      "payment_notice": "این درگاه چندزبانه هیچ وجهی دریافت نمی‌کند و حساب معاملاتی دارای سرمایه ارائه نمی‌دهد. سود یا تأمین سرمایه تضمین نشده است.",
+      "prop_link": "مشاهده اطلاعات مج پراپ",
+      "fallback_notice": "صفحات اصلی پیوندخورده ممکن است هنوز انگلیسی باشند؛ این ترجمه شرایط پرداخت یا احراز صلاحیت را تغییر نمی‌دهد.",
+      "language_label": "زبان‌ها",
+      "sections": [
+        "مج پراپ",
+        "فروشگاه دیجیتال",
+        "بازی و استودیو",
+        "پژوهش",
+        "آموزش",
+        "ابزارهای هوش مصنوعی",
+        "شرکت"
+      ]
+    }
+  }
+}
