@@ -62,8 +62,7 @@ two-consecutive-stage contract.
 
 The isolated fix now reads the **persisted** stage-one acceptance timestamp
 and stage-two start timestamp from `PropV141SimState` through the internal
-writer. Stage-one fills must execute from the first start **up to but excluding**
-its acceptance/deadline. Stage-two fills must execute from the recorded second
+writer. Stage-one fills must execute from the first start **up to and including** its recorded acceptance instant (but strictly before its own deadline). Stage-two fills must execute from the recorded second
 start **up to but excluding** that stage's own 28-day deadline. A second stage
 requires stage-one acceptance within the first deadline, followed by its own
 recorded start; future or reversed transitions fail closed. Any still-open
@@ -71,7 +70,7 @@ stage-one inventory prevents second-stage review. No database schema change
 is needed for this correction, since both transition fields already exist
 in the independent `0009` state schema.
 
-Regression checks: 15 additional pure replay tests and 2 new Django source
+Regression checks: 16 additional pure replay tests and 2 new Django source
 checks. These prove only the checked Python behavior and wiring; they do not
 prove that MariaDB transitions have been applied, that an upstream source is
 genuine, or that the broker and payment service may operate.
