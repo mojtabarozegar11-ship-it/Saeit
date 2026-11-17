@@ -28,7 +28,6 @@ jobs:
       DEBUG: 'true'
       SECRET_KEY: 'c137-synthetic-full-ci-only'
       ALLOWED_HOSTS: 'localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com'
-      DATABASE_URL: 'sqlite:///./c137-synthetic-ci.sqlite3'
       PYTHONDONTWRITEBYTECODE: '1'
       # Historical reviewed inputs used by C136 source regressions; never inferred.
       C136_MAIN_SHA: '0af1a0415bb75354cb119a8653230486f95e1a96'

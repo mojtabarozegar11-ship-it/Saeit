@@ -90,11 +90,12 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertEqual(dispatch.call_count, 2)
             # A rejected invoice is not a completed checkout; never report it
-            # as an invoice_created event.
+            # as an invoice_created event. Both HTTP 201 (without exact signed
+            # invoice redirect) and HTTP 400 must leave the count at zero.
             rejected = types.SimpleNamespace(status_code=400)
             dispatch.return_value = rejected
             self.assertIs(namespace["start_order"](request, product_id=72), rejected)
-            self.assertEqual(record.call_count, 1)
+            self.assertEqual(record.call_count, 0)
             self.assertEqual(dispatch.call_count, 3)
 
 
