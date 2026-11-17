@@ -27,8 +27,25 @@ def source_at(sha, path):
 class MojPropC136MergeResolver(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.main_sha = os.environ.get("C136_MAIN_SHA", "")
-        cls.prop_sha = os.environ.get("C136_PROP_SHA", "")
+        # The approved C136 merge has two independently proven real parents.
+        # Full-repository CI does not inject the special C136 runner variables.
+        # Verify Git ancestry rather than treating absent variables as 18 errors
+        # or substituting synthetic source files.
+        reviewed_merge = "2ee98ecfab950903e9cb550908f8242255c39e9d"
+        reviewed_main = "0af1a0415bb75354cb119a8653230486f95e1a96"
+        reviewed_prop = "70c6607142d8ad90efe5e98bdcda04504b58c59b"
+        ancestry = subprocess.run(
+            ["git", "show", "-s", "--format=%P", reviewed_merge],
+            capture_output=True, text=True, check=False, timeout=12,
+        )
+        if ancestry.returncode or ancestry.stdout.strip().split() != [reviewed_main, reviewed_prop]:
+            raise RuntimeError("C136 reviewed merge parent identity unavailable or changed")
+        env_main = os.environ.get("C136_MAIN_SHA")
+        env_prop = os.environ.get("C136_PROP_SHA")
+        if bool(env_main) != bool(env_prop):
+            raise RuntimeError("C136 both source SHAs required together")
+        cls.main_sha = env_main or reviewed_main
+        cls.prop_sha = env_prop or reviewed_prop
         if len(cls.main_sha) != 40 or len(cls.prop_sha) != 40:
             raise RuntimeError("C136 real ref SHAs mandatory; cannot silently fake input")
         cls.main = {p: source_at(cls.main_sha, p) for p in CONFLICT_PATHS}
