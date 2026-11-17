@@ -107,6 +107,8 @@ def _book_snapshot(book, events, *, now):
         opened_at_utc=book.evaluation_started_at,
         max_unlocked_stage=book.max_unlocked_stage,
         trusted_feed_source=book.trusted_feed_source,
+        stage_one_accepted_at_utc=book.state.last_phase_one_accepted_at,
+        phase_two_started_at_utc=book.state.last_phase_two_started_at,
     )
     return replay_provisioned_virtual_books(
         challenges=(provisioned,), events=tuple(events), server_now=now,
