@@ -26,9 +26,10 @@ REQUIRED_TEST_MODULES = (
     ("tests.test_xauusd_v13_qualification_preview", 32),
     ("tests.test_xauusd_v13_cross_source_guard", 12),
     ("tests.test_xauusd_v13_phase_day_audit", 20),
+    ("tests.test_xauusd_v13_social_evidence", 30),
 )
 LEGACY_TEST_MODULE = "tests.test_prop_firm_policy"
-EXPECTED_V13_TESTS = 164
+EXPECTED_V13_TESTS = 194
 
 
 def run_full_review() -> int:
