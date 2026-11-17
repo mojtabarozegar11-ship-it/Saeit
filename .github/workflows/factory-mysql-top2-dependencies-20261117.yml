@@ -2,10 +2,6 @@ name: Factory MySQL top2 dependencies — read only metadata
 on:
   issue_comment:
     types: [created]
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/factory-mysql-top2-dependencies-20261117.yml'
 permissions:
   contents: read
 concurrency:
@@ -15,19 +11,13 @@ jobs:
   external-quota:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
-      ((github.event_name == 'issue_comment' &&
-        github.event.issue.number == 1600 &&
-        !github.event.issue.pull_request &&
-        github.actor == 'mojtabarozegar11-ship-it' &&
-        github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
-        github.event.comment.author_association == 'OWNER' &&
-        github.event.comment.body == 'MOJ-FACTORY-MYSQL-TOP2-DEPENDENCIES-20261117') ||
-       (github.event_name == 'push' &&
-        github.ref == 'refs/heads/main' &&
-        (github.actor == 'chatgpt-codex-connector[bot]' ||
-         github.actor == 'mojtabarozegar11-ship-it') &&
-        startsWith(github.event.head_commit.message,
-                   'Factory: one-time top2 MySQL metadata and dependencies census')))
+      github.event_name == 'issue_comment' &&
+      github.event.issue.number == 1600 &&
+      !github.event.issue.pull_request &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'MOJ-FACTORY-MYSQL-TOP2-DEPENDENCIES-20261117'
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 12
     steps:
