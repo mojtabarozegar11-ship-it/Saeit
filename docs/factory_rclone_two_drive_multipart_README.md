@@ -70,3 +70,21 @@ Google Drive**, and it does not replace official provider quota/consistency
 admission. Both `current-backups` parent folders have been created privately
 and independently: A folder `10CwlKyd_I3iaiCVbdH82IbzVJD_8z475`, B folder
 `1EXF8_gl5xZDQBjnrcOVxd_rdznLAj78j`; both verified empty at creation.
+
+
+## Enforced manifest-order admission (2026-11-17, hardening review)
+
+The transport callbacks now record the exact ciphertext SHA-256 and length of
+EVERY successful per-provider uploaded part and independently confirm its
+bounded provider readback. Even if an unrelated caller invokes the low-level
+callbacks outside the core's correct ordering, **neither provider is allowed to
+receive a completion manifest until both provider part sets are nonempty,
+identical, and every part has been independently read back**. A mismatched
+provider blob fails closed and is not credited. Different manifest object names
+are rejected; no ciphertext part may be appended once either manifest starts.
+These additional checks are defense in depth and do NOT cryptographically
+validate the manifest: the core's authenticated MAC and offline decrypt are still
+mandatory. Provider rcat does not implement atomic no-overwrite; the fresh
+one-time run namespace remains mandatory. Nine independent adversarial cases
+were added (55 total); source-only CI run must pass before treating the
+candidate as reviewed. No live backup or cloud credential change is authorized.
