@@ -80,5 +80,8 @@ class MojPropV4ConversionTests(SimpleTestCase):
 
     def test_no_wallet_or_guaranteed_profit_path(self):
         self.assertIn("No payment was taken.", self.html)
-        self.assertIn("This form sends a request", self.html)
+        self.assertIn("Other service requests — not Plan 1", self.html)
+        self.assertIn('href="/moj-prop-interest/form/"', self.html)
+        self.assertIn("No payment was taken.", self.html)
+        self.assertNotIn("MOJPROP-STARTER30", self.html)
         self.assertNotIn("localStorage.setItem('mojprop-last-request'", self.html)
