@@ -22,11 +22,11 @@ APP_USER = "zomorod2"
 EXPECTED = {
     # Candidate source hash reviewed on the Plan1 prelaunch PR head;
     # different live source must report DRIFT until a verified release.
-    # This is source identity only, not a live Passenger release.
+    # 2026-11-18 reviewed additive /world/ routes: no intake view was removed.\n    # This is source identity only, not a live Passenger release.
     "core/mojprop_views.py": "12ee5e408f2a50e0571d5e6d91a760644ec210a9",
     "core/mojprop_receipts.py": "9fe6eb1ad13857143440517b14b3f2ebcfef6db3",
     "core/mojprop_accessible_intake.py": "505a1d237e3deb156e7e394e94b1c34ddf1e0071",
-    "config/urls.py": "07c2b6e10a7ec77ed6225f55d30ed655d61a37b3",
+    "config/urls.py": "74e52d8755788da12375a0605f506b64efd27b1e",
     "core/management/commands/mojprop_sales_action_queue.py":
         "095dcf51e005694f4cb24df1e39ce8a4f6a0cf08",
 }
