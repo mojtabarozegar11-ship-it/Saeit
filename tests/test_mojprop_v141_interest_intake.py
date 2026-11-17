@@ -39,6 +39,7 @@ class V141LeadIntakeTests(TestCase):
         return (client or self.client).post(
             path, data=body, content_type="application/x-www-form-urlencoded",
             secure=secure, HTTP_HOST=host,
+            HTTP_REFERER=("https://" if secure else "http://") + host + PATH,
         )
 
     def test_flag_off_blocks_get_and_post_with_no_database_write(self):
