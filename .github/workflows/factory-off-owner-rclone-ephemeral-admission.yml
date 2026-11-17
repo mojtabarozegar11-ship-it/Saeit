@@ -1,0 +1,60 @@
+name: Factory OFF owner rclone ephemeral executable preflight — no OAuth/no data
+on:
+  pull_request:
+    paths:
+      - 'scripts/factory_rclone_ephemeral_binary.py'
+      - 'tests/test_factory_rclone_ephemeral_binary.py'
+      - '.github/workflows/factory-off-owner-rclone-ephemeral-admission.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-off-rclone-ephemeral-admission-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  pinned-free-client:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit' &&
+        github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'))
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline source pin and 21 adversarial test cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/factory_rclone_ephemeral_binary.py)" = 'fa088e6531c302b95044d014ac8e8c568fb9ca7a'
+          test "$(git hash-object tests/test_factory_rclone_ephemeral_binary.py)" = 'df5924adf2a39dece73e31371795fa7d18dcdf42'
+          PYTHONPATH=scripts PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_factory_rclone_ephemeral_binary
+          echo FACTORY_RCLONE_PINNED_OFFLINE_TESTS_PASS=true
+      - name: Verify one-time executable with official pinned SHA/size in temporary 0700 directory
+        shell: bash
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -B -m scripts.factory_rclone_ephemeral_binary | tee "$RUNNER_TEMP/factory-rclone-ephemeral-owner-$GITHUB_RUN_ID.json"
+          python3 -B - "$RUNNER_TEMP/factory-rclone-ephemeral-owner-$GITHUB_RUN_ID.json" <<'PY'
+          import json,sys
+          obj=json.load(open(sys.argv[1]))
+          assert obj['artifact_sha256_verified'] is True
+          assert obj['ephemeral_binary_version_verified'] is True
+          assert obj['no_system_install'] is True
+          assert obj['oauth_tokens_read'] is False
+          assert obj['cloud_provider_queried'] is False
+          assert obj['new_backup_created'] is False
+          assert obj['production_modified'] is False
+          assert obj['failure'] is None
+          print("FACTORY_RCLONE_EPHEMERAL_REAL_BINARY_VERIFIED=true")
+          PY
+      - name: Remove tiny runner receipt
+        if: always()
+        shell: bash
+        run: |
+          rm -f -- "$RUNNER_TEMP/factory-rclone-ephemeral-owner-$GITHUB_RUN_ID.json"
