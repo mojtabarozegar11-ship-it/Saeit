@@ -157,6 +157,81 @@ jobs:
           print("LIVE_MOJPROP_WSGI_CRM_AGGREGATE_PROBE="+json.dumps(result,sort_keys=True))
           PY
           echo "LIVE_CRM_READONLY_COMPLETE=true"
+      - name: Public HTTPS GET only — verify real Moj Prop direct customer contact fallback
+        shell: bash
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          from html.parser import HTMLParser
+          from urllib.request import Request, build_opener, HTTPRedirectHandler
+          from urllib.error import HTTPError, URLError
+          import json
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          class Contact(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.forms=0;self.mailto=0;self.form_external=0
+                  self.email_fields=0;self.tel_links=0;self.links=0
+              def handle_starttag(self,tag,attrs):
+                  x=dict(attrs)
+                  if tag=='form':
+                      self.forms+=1
+                      a=x.get('action','')
+                      self.form_external+=int(
+                          a.startswith(('http:','https:')) or a.startswith('//'))
+                  elif tag=='a':
+                      self.links+=1
+                      href=x.get('href','')
+                      if href.startswith('mailto:'):self.mailto+=1
+                      if href.startswith('tel:'):self.tel_links+=1
+                  elif tag=='input' and x.get('type')=='email':
+                      self.email_fields+=1
+          names={
+              'real_prop_contact_fallback':'/moj-prop/contact/',
+              'generic_support_contact':'/contact/',
+              'prop_home':'/moj-prop/',
+              'original_intake_api':'/moj-prop-intake/',
+              'new_prop_optin':'/moj-prop-interest/form/',
+              'real_prop_detail_candidate':'/moj-prop/plan1/',
+          }
+          opener=build_opener(NoRedirect)
+          out={}
+          for name,path in names.items():
+              status=0;data=b'';ctype='';location=False
+              req=Request('https://mojplaywin.com'+path,method='GET',
+                          headers={'Accept':'text/html,application/json',
+                                   'Cache-Control':'no-cache','User-Agent':'MOJPROP-owner-public-contact-get-only/1.0'})
+              try:
+                  with opener.open(req,timeout=10) as resp:
+                      status=resp.status
+                      data=resp.read(65001)
+                      ctype=resp.headers.get('Content-Type','').split(';',1)[0].lower()
+              except HTTPError as ex:
+                  status=ex.code
+                  location=bool(ex.headers.get('Location'))
+                  ex.close()
+              except (OSError,URLError,TimeoutError):pass
+              result={'status':status,'http_redirect_has_location':location,
+                      'content_type':ctype,'bounded':len(data)<=65000}
+              if status==200 and ctype=='text/html' and len(data)<=65000:
+                  text=data.decode('utf-8',errors='replace')
+                  parser=Contact()
+                  parser.feed(text)
+                  low=text.lower()
+                  result.update({
+                      'form_count':parser.forms,'email_fields':parser.email_fields,
+                      'mailto_links':parser.mailto,'tel_links':parser.tel_links,
+                      'forms_external_action':parser.form_external,
+                      'mentions_real_moj_prop_01':'moj-prop-01' in low,
+                      'mentions_educational_starter30':'starter30' in low or 'starter-30' in low,
+                      'mentions_nonpayable':'no payment' in low or 'not payable' in low,
+                  })
+              out[name]=result
+          print('MOJPROP_LIVE_PUBLIC_CONTACT_GET_ONLY='+json.dumps({
+              'routes':out,'post_submitted':False,'personal_data_sent':False,
+              'email_sent':False,'payment_enabled':False
+          },sort_keys=True))
+          PY
       - name: Declare no release or buyer simulation
         if: always()
         run: |
