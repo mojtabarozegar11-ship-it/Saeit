@@ -24,6 +24,7 @@ class PropV141NativeOrder(models.Model):
     terms_version = models.CharField(max_length=96)
     terms_sha256 = models.CharField(max_length=64)
     consent_digest = models.CharField(max_length=64)
+    payer_wallet_attestation_sha256 = models.CharField(max_length=64)
     legal_clearance_digest = models.CharField(max_length=64)
     clearance_document_ref = models.CharField(max_length=128)
     issued_at = models.DateTimeField()
@@ -96,3 +97,8 @@ class PropV141NativeReceipt(models.Model):
     )
     confirmed_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+# Separately versioned native TRX merchant orders and atomic DEMO delivery.
+from .plan1_v141_native_payment_models import (  # noqa: E402,F401
+    PropV141NativeOrder, PropGlobalTRXSettlement, PropV141NativeReceipt,
+)
