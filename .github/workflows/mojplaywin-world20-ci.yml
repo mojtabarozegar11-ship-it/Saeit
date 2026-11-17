@@ -7,6 +7,8 @@ on:
       - 'core/world20_views.py'
       - 'core/templates/mojplaywin/world20.html'
       - 'core/templates/mojplaywin/footer.html'
+      - 'core/templates/mojplaywin/theme.html'
+      - 'core/templates/mojplaywin/home.html'
       - 'config/urls.py'
       - 'config/world20_ci_settings.py'
       - 'config/world20_ci_urls.py'
