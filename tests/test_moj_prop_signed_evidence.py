@@ -432,3 +432,167 @@ class BrokerSignedEvidenceTests(TestCase):
         self.assertEqual(
             PropEquityObservation.objects.filter(external_event_id="scientific-max").count(), 1
         )
+
+    # Cycle A C154: a message digest alone authenticates neither its signer
+    # identity nor the continued integrity of immutable ledger attributes.
+    # All packets here are CI-only HMAC test data, not real LiteFinance trades.
+    def _second_source_packet(self, **kwargs):
+        source = "independent-ci-signer-2"
+        key = "different-independent-ci-key-which-is-not-real"
+        return self.packet(source=source, key=key, **kwargs)
+
+    def test_replay_switch_to_other_valid_signer_must_not_be_idempotent(self):
+        original = self.packet(event_id="c154-execution")
+        ingest_signed_evidence(**original)
+        with override_settings(MOJ_PROP_TRUSTED_EVIDENCE_KEYS={
+            SOURCE: KEY,
+            "independent-ci-signer-2": "different-independent-ci-key-which-is-not-real",
+        }):
+            with self.assertRaisesRegex(EvidenceRejected, "source identity differs"):
+                ingest_signed_evidence(**self._second_source_packet(
+                    event_id="c154-execution",
+                ))
+        row = PropExecution.objects.get(external_event_id="c154-execution")
+        self.assertEqual(row.data_source, SOURCE)
+        self.assertEqual(row.reconciliation_status, "pending")
+
+    def test_equity_replay_from_other_valid_signer_must_not_be_idempotent(self):
+        data = {"equity_usd": "100.25", "is_session_open": True}
+        original = self.packet(
+            event_type="equity", event_id="c154-equity", data=data
+        )
+        ingest_signed_evidence(**original)
+        with override_settings(MOJ_PROP_TRUSTED_EVIDENCE_KEYS={
+            SOURCE: KEY,
+            "independent-ci-signer-2": "different-independent-ci-key-which-is-not-real",
+        }):
+            with self.assertRaisesRegex(EvidenceRejected, "source identity differs"):
+                ingest_signed_evidence(**self._second_source_packet(
+                    event_type="equity", event_id="c154-equity", data=data
+                ))
+        mark = PropEquityObservation.objects.get(external_event_id="c154-equity")
+        self.assertEqual(mark.data_source, SOURCE)
+        self.assertEqual(mark.reconciliation_status, "pending")
+
+    def test_repeat_original_signed_execution_remains_idempotent(self):
+        packet = self.packet(event_id="c154-same-signer")
+        self.assertEqual(ingest_signed_evidence(**packet)["result"], "recorded_pending")
+        self.assertEqual(ingest_signed_evidence(**packet)["result"], "already_recorded")
+        self.assertEqual(PropExecution.objects.count(), 1)
+
+    def test_repeat_original_signed_equity_remains_idempotent(self):
+        packet = self.packet(
+            event_type="equity", event_id="c154-same-equity",
+            data={"equity_usd": "101", "is_session_open": False},
+        )
+        self.assertEqual(ingest_signed_evidence(**packet)["result"], "recorded_pending")
+        self.assertEqual(ingest_signed_evidence(**packet)["result"], "already_recorded")
+        self.assertEqual(PropEquityObservation.objects.count(), 1)
+
+    def test_independent_reconciliation_status_may_advance_without_replay_mutation(self):
+        packet = self.packet(event_id="c154-reconciled")
+        ingest_signed_evidence(**packet)
+        PropExecution.objects.filter(external_event_id="c154-reconciled").update(
+            reconciliation_status="verified"
+        )
+        result = ingest_signed_evidence(**packet)
+        self.assertEqual(result["result"], "already_recorded")
+        self.assertFalse(result["verified"])
+        self.assertEqual(PropExecution.objects.get(
+            external_event_id="c154-reconciled"
+        ).reconciliation_status, "verified")
+
+    def _modified_execution_replay(self, **alteration):
+        packet = self.packet(event_id="c154-signed-row")
+        ingest_signed_evidence(**packet)
+        PropExecution.objects.filter(external_event_id="c154-signed-row").update(
+            **alteration
+        )
+        with self.assertRaisesRegex(EvidenceRejected, "signed field changed"):
+            ingest_signed_evidence(**packet)
+        self.assertEqual(PropExecution.objects.count(), 1)
+
+    def test_modified_realized_profit_cannot_hide_behind_original_digest(self):
+        self._modified_execution_replay(gross_realized_usd=Decimal("5000"))
+
+    def test_modified_fee_cannot_hide_behind_original_digest(self):
+        self._modified_execution_replay(total_fees_usd=Decimal("0.00"))
+
+    def test_modified_symbol_cannot_hide_behind_original_digest(self):
+        self._modified_execution_replay(symbol="XAUUSD")
+
+    def test_modified_execution_timestamp_cannot_hide_behind_digest(self):
+        self._modified_execution_replay(
+            closed_at=datetime(2026, 11, 14, 17, 58, tzinfo=timezone.utc)
+        )
+
+    def test_modified_origin_cannot_hide_behind_original_digest(self):
+        data = {"symbol": "EURUSD", "gross_usd": "5.50", "fees_usd": "0.50",
+                "position_id": "c154-position", "execution_origin": "bot"}
+        packet = self.packet(event_id="c154-enriched", data=data)
+        ingest_signed_evidence(**packet)
+        PropExecution.objects.filter(external_event_id="c154-enriched").update(
+            execution_origin="manual"
+        )
+        with self.assertRaisesRegex(EvidenceRejected, "signed field changed"):
+            ingest_signed_evidence(**packet)
+
+    def test_modified_broker_position_id_cannot_hide_behind_original_digest(self):
+        data = {"symbol": "EURUSD", "gross_usd": "5.50", "fees_usd": "0.50",
+                "position_id": "c154-position", "execution_origin": "bot"}
+        packet = self.packet(event_id="c154-pos", data=data)
+        ingest_signed_evidence(**packet)
+        PropExecution.objects.filter(external_event_id="c154-pos").update(
+            external_position_id="other-position"
+        )
+        with self.assertRaisesRegex(EvidenceRejected, "signed field changed"):
+            ingest_signed_evidence(**packet)
+
+    def _modified_equity_replay(self, **alteration):
+        packet = self.packet(
+            event_type="equity", event_id="c154-signed-equity",
+            data={"equity_usd": "99.50", "is_session_open": False},
+        )
+        ingest_signed_evidence(**packet)
+        PropEquityObservation.objects.filter(
+            external_event_id="c154-signed-equity"
+        ).update(**alteration)
+        with self.assertRaisesRegex(EvidenceRejected, "signed field changed"):
+            ingest_signed_evidence(**packet)
+        self.assertEqual(PropEquityObservation.objects.count(), 1)
+
+    def test_modified_equity_mark_cannot_hide_behind_original_digest(self):
+        self._modified_equity_replay(equity_usd=Decimal("999.00"))
+
+    def test_modified_session_open_marker_cannot_hide_behind_original_digest(self):
+        self._modified_equity_replay(is_session_open=True)
+
+    def test_modified_equity_observation_time_cannot_hide_behind_digest(self):
+        self._modified_equity_replay(
+            observed_at=datetime(2026, 11, 14, 17, 58, tzinfo=timezone.utc)
+        )
+
+    def test_altered_equity_source_with_same_digest_is_not_idempotent(self):
+        packet = self.packet(
+            event_type="equity", event_id="c154-source-tamper",
+            data={"equity_usd": "100", "is_session_open": False},
+        )
+        ingest_signed_evidence(**packet)
+        PropEquityObservation.objects.filter(
+            external_event_id="c154-source-tamper"
+        ).update(data_source="edited-in-db")
+        with self.assertRaisesRegex(EvidenceRejected, "source identity differs"):
+            ingest_signed_evidence(**packet)
+
+    def test_rejected_evidence_row_is_not_silently_restored_by_replay(self):
+        packet = self.packet(event_id="c154-rejected")
+        ingest_signed_evidence(**packet)
+        PropExecution.objects.filter(external_event_id="c154-rejected").update(
+            reconciliation_status="rejected"
+        )
+        result = ingest_signed_evidence(**packet)
+        self.assertEqual(result["result"], "already_recorded")
+        self.assertFalse(result["verified"])
+        self.assertEqual(PropExecution.objects.get(
+            external_event_id="c154-rejected"
+        ).reconciliation_status, "rejected")
