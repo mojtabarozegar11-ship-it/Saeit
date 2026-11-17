@@ -75,7 +75,8 @@ def _canonical_links(html: str) -> bool:
         if params not in ([], [("lang", "fa")]):
             return False
         found.append((url.path, tuple(params)))
-    return (set(found) == {(FORM, ()), (FORM, (("lang", "fa"),))}\n            and len(found) >= 2)
+    return (set(found) == {(FORM, ()), (FORM, (("lang", "fa"),))}
+            and len(found) >= 2)
 
 
 def _source_routes(urls: str) -> tuple[bool, bool]:
