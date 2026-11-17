@@ -19,7 +19,7 @@ import subprocess
 OWNER="zomorod2"
 BIN="/usr/local/cpanel/bin/uapi"
 ARGS=(BIN,"--output=json","StatsBar","get_stats",
-      "display=diskusage|mysqldiskusage|fileusage")
+      "display=diskusage|mysqldiskusage")
 MAX_BYTES=65536
 MAX_ITEMS=128
 KNOWN=("diskusage","mysqldiskusage","fileusage")
