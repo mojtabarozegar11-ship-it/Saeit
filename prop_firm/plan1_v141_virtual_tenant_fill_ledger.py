@@ -68,7 +68,9 @@ def _dec(x, field, *, ceiling, strictly_positive=False):
     if (not v.is_finite() or v < 0 or v > ceiling
             or (strictly_positive and v == 0) or v.as_tuple().exponent < -4):
         raise VirtualLedgerRejected(field + ": bounded nonnegative four-decimal number required")
-    return v
+    # Always normalize the same numeric value to a fixed ledger scale.
+    # Django DecimalField reloads 1 as 1.0000; the audit hash MUST NOT drift.
+    return v.quantize(D("0.0001"))
 
 
 @dataclass(frozen=True)
