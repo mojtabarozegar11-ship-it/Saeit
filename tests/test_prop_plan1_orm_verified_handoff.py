@@ -18,9 +18,9 @@ from prop_firm.plan1_orm_consent_review import (
     review_verified_precontract_for_interest,
 )
 from prop_firm.plan1_private_order_draft import _DOCUMENT_BINDINGS
-from test_prop_buyer_precontract_chain import NOW, sign
-from test_prop_plan1_private_order_draft import inputs as review_inputs
-from test_prop_plan1_canonical_interest_bridge import args as consent_args
+from tests.test_prop_buyer_precontract_chain import NOW, sign
+from tests.test_prop_plan1_private_order_draft import inputs as review_inputs
+from tests.test_prop_plan1_canonical_interest_bridge import args as consent_args
 
 
 class Plan1VerifiedOrmHandoffTests(SimpleTestCase):
@@ -472,7 +472,7 @@ class Plan1VerifiedOrmHandoffTests(SimpleTestCase):
 
 from django.test import TestCase
 from prop_firm.lead_models import PropInterest
-from test_prop_plan1_canonical_interest_bridge import sign as consent_sign
+from tests.test_prop_plan1_canonical_interest_bridge import sign as consent_sign
 
 
 class Plan1PersistedConsentReviewTests(TestCase):
