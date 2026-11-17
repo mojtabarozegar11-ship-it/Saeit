@@ -14,14 +14,10 @@ class ProcurementSerialRegistrationTests(TestCase):
 
     def register(self, last=100, apply=False):
         out = StringIO()
-        options = {
-            "last_existing_number": last,
-            "evidence": self.EVIDENCE,
-            "stdout": out,
-        }
+        cli = ["--last-existing-number", str(last), "--evidence", self.EVIDENCE]
         if apply:
-            options["apply"] = True
-        call_command("register_direct_procurement_notices", **options)
+            cli.append("--apply")
+        call_command("register_direct_procurement_notices", *cli, stdout=out)
         return out.getvalue()
 
     def test_dry_run_does_not_claim_numbers(self):
