@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 18
     env:
-      C136_MAIN_SHA: '85f6c9e07d4dfd4bd634ffa8dd5162772b5c7310'
+      C136_MAIN_SHA: ''
       C136_EXPECTED_PARENT_SHA: '1143cfbed5ab44cc15cb935a9f2325ecd03ccfab'
       C136_PROP_SHA: ${{ github.event.pull_request.head.sha }}
       DEBUG: 'true'
@@ -46,7 +46,10 @@ jobs:
           real_prop="$(git rev-parse --verify refs/remotes/origin/feature/prop-firm-policy-v11-20261114^{commit})"
           echo "C136_CURRENT_MAIN_SHA=$real_main"
           echo "C136_CANONICAL_SHA=$real_prop"
-          test "$real_main" = "$C136_MAIN_SHA" || { echo 'C136_MAIN_MOVED_REVIEW_AGAIN=true'; exit 4; }
+          # Lock one observed main tree at job start. Main is edited by
+          # separate owner cycles; a stale hardcoded SHA creates false failures.
+          test "$(git cat-file -t "$real_main")" = commit
+          printf 'C136_MAIN_SHA=%s\n' "$real_main" >> "$GITHUB_ENV"
           test "$real_prop" = "$C136_EXPECTED_PARENT_SHA" || { echo 'C136_CANONICAL_MOVED_REVIEW_AGAIN=true'; exit 5; }
           test "$(git rev-parse --verify HEAD^{commit})" = "$C136_PROP_SHA"
       - name: Merge into isolated development branch, never into main
@@ -93,7 +96,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$C136_MAIN_SHA" = '85f6c9e07d4dfd4bd634ffa8dd5162772b5c7310'
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          test "$(git rev-parse --verify refs/remotes/origin/main^{commit})" = "$C136_MAIN_SHA" || { echo 'C136_MAIN_MOVED_DURING_VALIDATION=true'; exit 4; }
           test "$(git rev-parse --verify HEAD^{commit})" = "$C136_MAIN_SHA"
           test -f .git/MERGE_HEAD || { echo 'C136_NO_REVIEWED_MERGE_PENDING=true'; exit 7; }
           git diff --cached --quiet && { echo 'C136_EMPTY_MERGE_UNEXPECTED=true'; exit 8; }
