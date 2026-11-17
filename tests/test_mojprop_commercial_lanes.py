@@ -4,7 +4,12 @@ from services.mojprop_commercial_lanes import LegalEvidence, Lane, PaymentMethod
 
 def evidence(**changes):
     base = LegalEvidence(True, "IR", True, "AE", True, True, True, True,
-                         True, True, True, "COUNSEL-SIGNED-2026-123")
+                         True, True, True, "COUNSEL-SIGNED-2026-123",
+                         seller_role="natural_person_independent_service",
+                         seller_role_verified=True,
+                         iran_foreign_trx_receipt_rights_verified=True,
+                         us_person_and_us_nexus_excluded=True,
+                         relevant_sanctions_screen_verified=True)
     return replace(base, **changes)
 
 class CommercialLanesTests(unittest.TestCase):
@@ -38,6 +43,27 @@ class CommercialLanesTests(unittest.TestCase):
             self.assertFalse(r.eligible_for_next_step, missing)
         self.assertFalse(decide_preinvoice(Lane.EVALUATION, PaymentMethod.NATIVE_TRX,
                                           None).eligible_for_next_step)
+
+    def test_licensee_cannot_merchant_accept_trx(self):
+        r = decide_preinvoice(Lane.EVALUATION, PaymentMethod.NATIVE_TRX,
+                              evidence(seller_role="licensed_crypto_broker"))
+        self.assertFalse(r.eligible_for_next_step)
+        self.assertIn("art.38", r.reason)
+
+    def test_unknown_or_fictitious_independent_seller_not_approved(self):
+        for e in (evidence(seller_role="unknown"),
+                  evidence(seller_role_verified=False),
+                  evidence(seller_role="other")):
+            self.assertFalse(decide_preinvoice(
+                Lane.EVALUATION, PaymentMethod.NATIVE_TRX, e).eligible_for_next_step)
+
+    def test_foreign_trx_and_sanctions_evidence_required(self):
+        for missing in ("iran_foreign_trx_receipt_rights_verified",
+                        "us_person_and_us_nexus_excluded",
+                        "relevant_sanctions_screen_verified"):
+            decision = decide_preinvoice(Lane.EVALUATION, PaymentMethod.NATIVE_TRX,
+                                         evidence(**{missing: False}))
+            self.assertFalse(decision.eligible_for_next_step, missing)
 
     def test_qualified_foreign_quote_no_receipt(self):
         r = decide_preinvoice(Lane.EVALUATION, PaymentMethod.NATIVE_TRX, evidence())
