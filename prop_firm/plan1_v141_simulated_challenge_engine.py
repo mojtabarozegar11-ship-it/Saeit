@@ -126,6 +126,9 @@ class ChallengeReplayDecision:
     paid_enrollment_authorized: bool = False
     real_broker_orders_authorized: bool = False
     payout_authorized: bool = False
+    phase_one_accepted_at_utc: str | None = None
+    phase_two_started_at_utc: str | None = None
+    phase_two_completed_at_utc: str | None = None
 
 
 def _utc(value, name):
@@ -474,4 +477,7 @@ def replay_simulated_challenge(*, snapshot: EngineSnapshot,
         phase_math_complete=phase_math, social_math_complete=social_ok,
         combined_math_complete=combined_math, state=state,
         blockers=tuple(dict.fromkeys(blockers)),
+        phase_one_accepted_at_utc=accept.isoformat() if accept else None,
+        phase_two_started_at_utc=second.isoformat() if second else None,
+        phase_two_completed_at_utc=final.isoformat() if final else None,
     )
