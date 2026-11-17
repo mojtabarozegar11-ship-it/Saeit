@@ -1,0 +1,60 @@
+name: Factory SQLite pair content equality proof — owner-only read-only
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+concurrency:
+  group: factory-sqlite-pair-hash-20261117
+  cancel-in-progress: false
+jobs:
+  equivalence:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.number == 1600 &&
+      !github.event.issue.pull_request &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'MOJ-FACTORY-SQLITE-EQUIVALENCE-20261117'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Hash the two immutable SQLite snapshots over pinned read-only SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$(mktemp -d)"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          target=""
+          for host in 127.0.0.1 178.239.147.150; do
+            ssh-keyscan -T 5 -p 22 -t rsa "$host" > "$work/known" 2>/dev/null || true
+            test -s "$work/known" || continue
+            actual="$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)"
+            if test "$actual" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then target="$host"; break; fi
+          done
+          test -n "$target" || { echo FACTORY_HOST_KEY_NOT_MATCHED; exit 78; }
+          timeout 480s ssh -T -i "$work/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ForwardAgent=no "githubops@$target" 'test "$(id -un)" = githubops && nice -n 15 python3 -B -' < scripts/factory_sqlite_equivalence_readonly_20261117.py | tee "$RUNNER_TEMP/factory-sqlite-hash-$GITHUB_RUN_ID.log"
+      - name: Save short-lived hash proof artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-sqlite-hash-${{ github.run_id }}
+          path: ${{ runner.temp }}/factory-sqlite-hash-${{ github.run_id }}.log
+          if-no-files-found: error
+          retention-days: 2
+      - name: Remove runner-only evidence
+        if: always()
+        shell: bash
+        run: rm -f -- "${RUNNER_TEMP}/factory-sqlite-hash-${GITHUB_RUN_ID}.log"
