@@ -51,7 +51,7 @@ class OwnerDiskRestoreTruthTests(unittest.TestCase):
             root=Path(td)
             file=root/"file"
             file.write_text("dummy")
-            (root/"other").hardlink_to(file)
+            os.link(file, root/"other")
             self.assertEqual(mod.classify_path(file,os.geteuid(),file=True),
                              "hardlinked")
 
