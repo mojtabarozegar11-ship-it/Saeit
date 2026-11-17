@@ -109,5 +109,16 @@ class DjangoReplayJournalSourceChecks(unittest.TestCase):
                 self.assertNotIn(forbidden,fns)
 
 
+    def test_21_first_stage_evidence_digest_schema_is_migration_aligned(self):
+        self.assertIn("last_phase_one_evidence_sha256",source("models"))
+        self.assertIn('("last_phase_one_evidence_sha256", models.CharField',source("migration"))
+
+    def test_22_atomic_writer_persists_exact_stage_one_evidence_digest(self):
+        x=source("service")
+        self.assertIn("last_phase_one_evidence_sha256=state.last_phase_one_evidence_sha256",x)
+        self.assertIn("state.last_phase_one_evidence_sha256 = next_receipt.phase_one_evidence_sha256",x)
+        self.assertIn('"last_phase_one_evidence_sha256"',x)
+
+
 if __name__=="__main__":
     unittest.main()
