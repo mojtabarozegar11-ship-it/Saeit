@@ -45,6 +45,17 @@ class Plan1PhaseAccountBoundary:
     legal_buyer_checks_may_apply_to_challenge_purchase: bool = True
     real_broker_account_only_after_two_verified_passes: bool = True
     no_instant_real_funding_promised: bool = True
+    # Owner-reported existing verified LiteFinance account. Broker's explicit
+    # authorization for delegated order routing remains a separate proof.
+    owner_existing_litefinance_account_declared: bool = True
+    existing_owner_account_broker_verified_by_this_code: bool = False
+    delegated_customer_trading_authorized_by_this_code: bool = False
+    buyer_specific_broker_account_opening_required: bool = False
+    buyer_receives_real_trading_principal: bool = False
+    buyer_receives_owner_password_or_2fa: bool = False
+    buyer_can_withdraw_from_broker: bool = False
+    buyer_receives_broker_direct_crypto_payout: bool = False
+    crypto_profit_payment_from_separate_treasury_only: bool = True
     real_account_created: bool = False
     invoice_created: bool = False
     payment_processed: bool = False
@@ -82,6 +93,10 @@ def review_demo_to_real_transition(
 
     Inputs MUST be set by trusted independent reviewers, not a buyer's form,
     demo results alone, a broker URL, or a signed but unverified JSON object.
+    Here "broker_kyc_fully_verified" is evidence of identity verification
+    for the ACTUAL lawful holder of the existing LiteFinance account, NOT
+    a requirement to open a new customer-owned brokerage account. All other
+    bidder/beneficiary eligibility and sanctions checks still apply.
     Even all True authorizes a review ONLY, never opens the account.
     """
     phase_account_boundary(sku=sku, terms_version=terms_version)
