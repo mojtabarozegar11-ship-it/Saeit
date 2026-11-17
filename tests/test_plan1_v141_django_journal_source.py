@@ -143,5 +143,32 @@ class DjangoReplayJournalSourceChecks(unittest.TestCase):
 
 
 
+    def test_28_writer_imports_same_canonical_policy_hash_function(self):
+        self.assertIn("calculate_v141_receipt_sha256,",source("service"))
+        self.assertIn("def calculate_v141_receipt_sha256(",source("policy"))
+
+    def test_29_journal_verifies_head_receipt_before_new_append(self):
+        x=source("service")
+        self.assertIn("_assert_saved_receipt_integrity(state=state, receipt=head)",x)
+        self.assertIn("state does not match stored latest receipt",x)
+
+    def test_30_journal_verifies_predecessor_chain_link(self):
+        x=source("service")
+        self.assertIn("head.previous_receipt_sha256 != previous_head.receipt_sha256",x)
+        self.assertIn("_assert_saved_receipt_integrity(state=state, receipt=previous_head)",x)
+
+    def test_31_repeat_receipt_also_verifies_stored_digest(self):
+        x=source("service")
+        self.assertIn("_assert_saved_receipt_integrity(state=state, receipt=old)",x)
+        self.assertIn("historical replay does not match stored immutable receipt",x)
+
+    def test_32_journal_does_not_reissue_or_modify_old_records(self):
+        x=source("service")
+        self.assertNotIn("PropV141SimReceipt.objects.update(",x)
+        self.assertNotIn("PropV141SimReceipt.objects.delete(",x)
+        self.assertIn("PropV141SimReceipt.objects.create(",x)
+
+
+
 if __name__=="__main__":
     unittest.main()
