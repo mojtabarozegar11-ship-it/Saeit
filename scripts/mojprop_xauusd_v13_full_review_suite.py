@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run *every* nonproduction Moj Prop XAUUSD v1.3 unit test explicitly.
+"""Run every nonproduction MOJ PROP XAUUSD v1.3 and social v1.4 unit test.
 
 Local/manual only. This file does NOT modify GitHub Actions, create payment
 requests, interact with a broker, deploy code, or write to customer databases.
@@ -21,14 +21,19 @@ from pathlib import Path
 REQUIRED_TEST_MODULES = (
     ("tests.test_xauusd_v13_preflight", 28),
     ("tests.test_xauusd_v13_broker_evidence", 31),
-    ("tests.test_xauusd_v13_contract_gate", 12),
-    ("tests.test_xauusd_v13_draft_terms", 26),
+    ("tests.test_xauusd_v13_contract_gate", 14),
+    ("tests.test_xauusd_v13_draft_terms", 27),
     ("tests.test_xauusd_v13_qualification_preview", 32),
     ("tests.test_xauusd_v13_cross_source_guard", 12),
     ("tests.test_xauusd_v13_phase_day_audit", 20),
+    ("tests.test_xauusd_v13_social_evidence", 30),
+    ("tests.test_plan1_v14_social_or_28d", 32),
+    ("tests.test_plan1_v14_combined_qualification", 17),
 )
 LEGACY_TEST_MODULE = "tests.test_prop_firm_policy"
-EXPECTED_V13_TESTS = 161
+EXPECTED_V13_TESTS = 194
+EXPECTED_V14_TESTS = 49
+EXPECTED_ALL_TESTS = EXPECTED_V13_TESTS + EXPECTED_V14_TESTS
 
 
 def run_full_review() -> int:
@@ -52,7 +57,7 @@ def run_full_review() -> int:
             }, ensure_ascii=False), file=sys.stderr)
             return 2
         all_tests.addTests(suite)
-    if sum(observed.values()) != EXPECTED_V13_TESTS:
+    if sum(observed.values()) != EXPECTED_ALL_TESTS:
         print("Unexpected v1.3 test count; fail closed", file=sys.stderr)
         return 2
     historical = loader.loadTestsFromName(LEGACY_TEST_MODULE)
@@ -64,6 +69,8 @@ def run_full_review() -> int:
     print(json.dumps({
         "status": "UNIT_TESTS_PASS_NOT_RELEASE" if result.wasSuccessful() else "UNIT_TESTS_FAIL",
         "v13_expected_test_cases": EXPECTED_V13_TESTS,
+        "v14_expected_test_cases": EXPECTED_V14_TESTS,
+        "combined_v13_v14_expected_test_cases": EXPECTED_ALL_TESTS,
         "v13_test_modules": observed,
         "total_unit_tests_run": result.testsRun,
         "failures": len(result.failures),
