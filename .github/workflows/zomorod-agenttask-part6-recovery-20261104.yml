@@ -11,6 +11,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   chunks:
+    # FAIL-CLOSED: legacy export would duplicate SQL archives on the VPS,
+    # currently ~4.63GB free and without an independent, restorable offsite copy.
+    # Require owner-reviewed current full-backup and restore proof before reactivation.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
