@@ -1,0 +1,40 @@
+name: MOJ PROP C135 public Plan1 EN FA consent GET (read-only evidence, NOT launch)
+on:
+  push:
+    branches: [audit/mojprop-c135-dedicated-optin-live-get-20261117]
+  pull_request:
+    branches: [feature/prop-firm-policy-v11-20261114]
+    paths:
+      - 'scripts/mojprop_live_plan1_optin_get_readonly_c135.py'
+      - 'tests/test_mojprop_live_plan1_optin_get_readonly_c135.py'
+      - '.github/workflows/mojprop-c135-public-plan1-form-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  exact-public-en-fa-form-readonly:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate exact no-POST probe and synthetic hostile response cases
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mojprop_live_plan1_optin_get_readonly_c135.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_live_plan1_optin_get_readonly_c135
+      - name: GET only EN and FA canonical opt-in routes with fixed HTTPS destination
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_live_plan1_optin_get_readonly_c135.py
+          echo 'Public GET only. This scan does NOT submit any buyer, email or wallet transaction.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'An HTTP 200 is not accepted without the exact method, CSRF, consent, language and privacy headers.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Job success means diagnostic completed, NOT that production is ready.' >> "$GITHUB_STEP_SUMMARY"
