@@ -106,6 +106,17 @@ class HistoricalSqlArchiveNoDuplicateExport(unittest.TestCase):
 
 
 class LegacyPackageCleanupOwnerAndBackupSafety(unittest.TestCase):
+    def test_cache_cleanup_is_manual_owner_only_via_pinned_local_vps(self):
+        s=(ROOT/".github/workflows/zomorod-safe-package-cache-cleanup-20261018.yml").read_text(encoding="utf-8")
+        self.assertIn("on:\n  workflow_dispatch:",s)
+        self.assertNotIn("\n  push:",s)
+        self.assertNotIn("\n  pull_request:",s)
+        self.assertIn("github.event_name == 'workflow_dispatch'",s)
+        self.assertIn("github.actor == 'mojtabarozegar11-ship-it'",s)
+        self.assertIn("runs-on: [self-hosted, factory-vps]",s)
+        self.assertIn("ssh-keyscan -T 10 -p 22 -t rsa 127.0.0.1",s)
+        self.assertIn("HostName 127.0.0.1",s)
+        self.assertIn("SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs",s)
     def test_backup_relocation_is_unavailable_and_both_steps_disabled(self):
         p=ROOT/".github/workflows/zomorod-safe-package-cache-cleanup-20261018.yml"
         s=p.read_text(encoding="utf-8")
