@@ -27,7 +27,7 @@ MIN_EPOCH = 1735689600
 MAX_ACCEPTANCE_WINDOW_SEC = 3600
 REQUIRED_FIELDS = frozenset((
     "schema", "purpose", "interest_pk", "request_ref", "buyer_ref",
-    "seller_ref", "sku", "historical_terms_version", "amendment_version",
+    "seller_ref", "prior_review_ref", "sku", "historical_terms_version", "amendment_version",
     "prior_contract_pdf_sha256", "accepted_buyer_contract_pdf_sha256",
     "buyer_acceptance_proof_sha256", "current_copy_sha256",
     "no_post_waiver_sha256", "fee_native_sun", "network",
@@ -84,6 +84,8 @@ def bind_revised_buyer_terms(
             or type(h.request_ref) is not str or REF.fullmatch(h.request_ref) is None
             or type(h.buyer_ref) is not str or REF.fullmatch(h.buyer_ref) is None
             or type(h.seller_ref) is not str or REF.fullmatch(h.seller_ref) is None
+            or type(h.private_review_ref) is not str
+            or REVIEW_REF.fullmatch(h.private_review_ref) is None
             or h.state != "PRIVATE_SIGNED_EVIDENCE_REVIEW_ONLY"
             or any(getattr(h, field) is not False for field in (
                 "contact_authorized", "marketing_authorized",
@@ -98,6 +100,9 @@ def bind_revised_buyer_terms(
     ):
         if type(v) is not str or PROOF.fullmatch(v) is None or v == "0"*64:
             raise Plan1OrderGateClosed("independent prior/current contract proof missing")
+    if (expected_accepted_pdf_sha256 == h.contract_pdf_sha256
+            or expected_buyer_signature_proof_sha256 == h.buyer_signature_proof_sha256):
+        raise Plan1OrderGateClosed("historic document or signature cannot be recycled as amendment acceptance")
     if (type(trusted_acceptance_provider_key) is not bytes
             or type(trusted_independent_reviewer_key) is not bytes
             or len(trusted_acceptance_provider_key) < 32
@@ -120,6 +125,7 @@ def bind_revised_buyer_terms(
         "schema": SCHEMA, "purpose": PURPOSE,
         "interest_pk": h.interest_pk, "request_ref": h.request_ref,
         "buyer_ref": h.buyer_ref, "seller_ref": h.seller_ref,
+        "prior_review_ref": h.private_review_ref,
         "sku": SKU, "historical_terms_version": TERMS_VERSION,
         "amendment_version": waiver.amendment_version,
         "prior_contract_pdf_sha256": h.contract_pdf_sha256,
