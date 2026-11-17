@@ -16,7 +16,7 @@ from test_prop_plan1_canonical_interest_bridge import (
     args as consent_args, sign as consent_sign, synthetic_draft,
 )
 from test_prop_plan1_demo_email_interest import (
-    OTP_KEY, CONSENT_KEY, NOW, receipt as otp_receipt, sign as otp_sign,
+    OTP_KEY, NOW, receipt as otp_receipt, sign as otp_sign,
 )
 
 
@@ -47,7 +47,7 @@ class RealDatabaseDemoEmailConsentTests(TestCase):
             inquiry=c["inquiry"],
             consent_attestation=att,
             consent_tag_hex=consent_sign(att),
-            consent_key=CONSENT_KEY,
+            consent_key=c["trusted_consent_key"],
             request_ref=c["expected_request_ref"],
             inquiry_sha256=c["expected_inquiry_sha256"],
             consent_evidence_sha256=c["expected_consent_evidence_sha256"],
@@ -116,8 +116,12 @@ class RealDatabaseDemoEmailConsentTests(TestCase):
             self.review()
 
     def test_educational_sku_cannot_use_existing_optin(self):
-        self.interest.plan_code="MOJPROP-STARTER30"
-        self.interest.save()
+        self.interest=PropInterest.objects.create(
+            email="synthetic-other-starter@example.invalid",
+            plan_code="MOJPROP-STARTER30",
+            consent_version="moj-prop-interest-v1",
+            source_language="en",
+        )
         with self.assertRaises(Plan1OrderGateClosed):
             self.review()
 
@@ -143,7 +147,7 @@ class RealDatabaseDemoEmailConsentTests(TestCase):
 
     def test_otp_from_same_key_as_consent_registry_denied(self):
         data=self.data()
-        data["trusted_otp_service_key"]=CONSENT_KEY
+        data["trusted_otp_service_key"]=data["consent_key"]
         with self.assertRaises(Plan1OrderGateClosed):
             self.review(data)
 
