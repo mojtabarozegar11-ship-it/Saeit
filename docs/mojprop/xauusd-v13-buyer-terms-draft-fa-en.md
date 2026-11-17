@@ -8,6 +8,8 @@
 
 هر دو مرحله ارزیابی صرفاً شبیه‌سازی/DEMO هستند. حساب واقعی معامله‌گر پس از قبولی دو مرحله **به‌طور خودکار** فعال یا افتتاح نمی‌شود. تخصیص ریسک اولیه ۱۰۰ دلاری در حساب واقعی متعلق به برگزارکننده فقط مشروط به سرمایه قابل اثبات، اجازه صریح کارگزار، KYC و قرارداد قانونی جداگانه است؛ پول به کیف پول معامله‌گر واریز نمی‌شود.
 
+**سقف سازگاری سود:** سود بهترین روز معاملاتی حداکثر ۳۲٪ سود خالص مستقل تأییدشده همان مرحله است؛ عبور از این نسبت به معنی رد ارزیابی خواهد بود. این شرط علاوه بر اهداف سود مرحله اول ۹٫۶٪ و مرحله دوم ۶٪ و شرط حداقل روزهای معاملاتی است.
+
 **فقط نماد XAUUSD**، سقف اسمی ریسک هر معامله ۳٪ از سرمایه مبنا و مجموع زیان احتمالی موقعیت‌های باز ۸٪ از سرمایه مبنا. سقف افت روزانه ۴٪ و افت کل ۸٪ همچنان الزام‌آور است. درخواست معامله وقتی حد ضرر احتمالی، کارمزد، اسپرد و لغزش قیمت از ظرفیت افت باقی‌مانده بیشتر باشد رد می‌شود. اجرای حد ضرر تضمین قیمت نیست و شکاف قیمت/لغزش می‌تواند زیان را افزایش دهد.
 
 تقسیم سود تحقق‌یافته و تطبیق‌شده در مرحله واقعی: ۷۰٪ معامله‌گر و ۳۰٪ برگزارکننده، طبق قرارداد و پس از کسر زیان‌های قبلی و هزینه‌های اعلام‌شده.
@@ -21,6 +23,8 @@
 `MOJ-PROP-01` is the genuine prop-trading evaluation challenge, not the `MOJPROP-STARTER30` educational product. Proposed challenge entry fee: 30 native TRX (30,000,000 SUN), not payable yet.
 
 Both evaluation phases are simulated/demo. A real trading allocation is **not** opened or provided automatically. A nominal initial $100 risk allocation on the organizer-controlled real brokerage account is conditional on independently demonstrated unencumbered funds, explicit broker permissions, legally appropriate KYC and a separate executed agreement; no customer-owned brokerage account, wallet capital deposit or withdrawal entitlement is promised.
+
+**Best-day consistency rule:** the most profitable trading day must not exceed 32% of the relevant phase's independently verified net profit. The two phase profit targets (9.6% and 6%) and trading-day minima apply separately; this cap can cause a failed evaluation even when net profit exceeds its target.
 
 **XAUUSD only.** Nominal stop-risk budget is at most 3% of starting tier capital for a trade and 8% across currently open positions. Binding drawdown thresholds remain 4% daily and 8% total. An order review must deny any projected stop-out, including spread, fees and slippage reserve, that would breach the remaining drawdown headroom. A stop order does not guarantee fill price in a gap/slippage scenario.
 
