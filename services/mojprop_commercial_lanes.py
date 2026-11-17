@@ -11,7 +11,7 @@ import re
 
 PRODUCT = "MOJ-PROP-01"
 NATIVE_TRX_SUN = 30_000_000
-COUNTRY = re.compile(r"[A-Z]{2}\\Z")
+COUNTRY = re.compile(r"[A-Z]{2}\Z")
 
 
 class Lane(str, Enum):
