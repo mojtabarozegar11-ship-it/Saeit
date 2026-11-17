@@ -11,6 +11,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   schema:
+    # FAIL-CLOSED: legacy export would duplicate SQL archives on the VPS,
+    # currently ~4.63GB free and without an independent, restorable offsite copy.
+    # Require owner-reviewed current full-backup and restore proof before reactivation.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -107,6 +111,10 @@ jobs:
           echo SCHEMA_ARCHIVE_VERIFIED=yes
           REMOTE
   chunks:
+    # FAIL-CLOSED: legacy export would duplicate SQL archives on the VPS,
+    # currently ~4.63GB free and without an independent, restorable offsite copy.
+    # Require owner-reviewed current full-backup and restore proof before reactivation.
+    if: false
     needs: schema
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -238,6 +246,10 @@ jobs:
           echo VERIFIED_VPS_SQL_SEGMENT=yes
           REMOTE
   finalize:
+    # FAIL-CLOSED: legacy export would duplicate SQL archives on the VPS,
+    # currently ~4.63GB free and without an independent, restorable offsite copy.
+    # Require owner-reviewed current full-backup and restore proof before reactivation.
+    if: false
     needs: chunks
     runs-on: ubuntu-latest
     timeout-minutes: 22
