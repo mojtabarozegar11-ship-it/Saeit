@@ -1,0 +1,55 @@
+name: MojProp cPanel dual Drive streaming bridge — source-only CI
+on:
+  pull_request:
+    paths:
+      - 'scripts/mojprop_cpanel_direct_dual_cloud.py'
+      - 'scripts/mojplaywin_backup_stream_cpanel.py'
+      - 'scripts/factory_dual_stream_v2.py'
+      - 'scripts/factory_rclone_dual_parts.py'
+      - 'tests/test_mojprop_cpanel_direct_dual_cloud.py'
+      - 'tests/test_factory_rclone_dual_parts.py'
+      - '.github/workflows/mojprop-cpanel-direct-dual-cloud-ci.yml'
+  push:
+    branches:
+      - feature/mojprop-cpanel-direct-dual-cloud-20261118
+
+permissions:
+  contents: read
+
+jobs:
+  offline-stream-crypto-and-admission:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Check out immutable requested SHA without GitHub write credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install open-source public crypto dependency (no provider authentication)
+        run: python -m pip install --disable-pip-version-check 'cryptography>=41,<50'
+      - name: Verify original reviewed cPanel source Git object
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojplaywin_backup_stream_cpanel.py
+          test "$(git hash-object scripts/mojplaywin_backup_stream_cpanel.py)" = '7b330168b4ca1d597616e8724bc634910e769ea5'
+          echo 'CPANEL_SOURCE_EXACT_BLOB=PASS'
+      - name: Compile stream, source, tests and existing dual crypto transport
+        run: |
+          python -B -m py_compile scripts/mojprop_cpanel_direct_dual_cloud.py scripts/mojplaywin_backup_stream_cpanel.py scripts/factory_dual_stream_v2.py scripts/factory_rclone_dual_parts.py tests/test_mojprop_cpanel_direct_dual_cloud.py
+      - name: Run all new source and previous 67 adversarial cloud adapter checks
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          PYTHONPATH=scripts python -B -m unittest -v tests.test_mojprop_cpanel_direct_dual_cloud tests.test_factory_rclone_dual_parts
+      - name: Assert offline metadata can never claim storage, restore, payments or release
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python -B scripts/mojprop_cpanel_direct_dual_cloud.py \
+            | python -c 'import json,sys;d=json.load(sys.stdin); assert d["schema"]=="mojprop.cpanel.dual-cloud.readiness.v1"; assert d["reviewed_source_blob_present"] is True; assert all(d[k] is False for k in ("provider_quota_verified","ssh_runtime_authenticated","key_offsite_recovery_proven","current_backup_created","restore_performed","production_modified","payment_created")); print("OFFSITE_BACKUP_BRIDGE_OFFLINE_GUARDS=PASS")'
+          echo 'ZERO_BACKUP_UPLOADED_ZERO_PRODUCTION_READS_NO_OAUTH_NO_SSH_NO_PAYMENT' >> "$GITHUB_STEP_SUMMARY"
