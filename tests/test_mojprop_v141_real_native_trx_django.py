@@ -25,6 +25,7 @@ VERSION = "2026-11-18/v1.5-commercial"
 
 SETTINGS = dict(
     MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED=True,
+    MOJPROP_TRX_GLOBAL_LEDGER_RECONCILED=True,
     MOJPROP_V141_NATIVE_TERMS_VERSION=VERSION,
     MOJPROP_V141_NATIVE_TERMS_SHA256=D,
     MOJPROP_V141_TRON_RECEIVER=RECEIVER,
@@ -123,6 +124,12 @@ class RealNativePaymentStorageTests(TestCase):
 
     def test_invoice_only_in_released_merchant(self):
         with override_settings(MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED=False):
+            with self.assertRaises(CheckoutRejected):
+                self.invoice()
+        self.assertEqual(PropV141NativeOrder.objects.count(), 0)
+
+    def test_missing_legacy_global_replay_reconciliation_blocks_invoice(self):
+        with override_settings(MOJPROP_TRX_GLOBAL_LEDGER_RECONCILED=False):
             with self.assertRaises(CheckoutRejected):
                 self.invoice()
         self.assertEqual(PropV141NativeOrder.objects.count(), 0)
