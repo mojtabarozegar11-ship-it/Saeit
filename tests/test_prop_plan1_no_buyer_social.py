@@ -196,3 +196,20 @@ class NoBuyerPostingTests(unittest.TestCase):
         ):
             with self.subTest(gate=gate):
                 self.assertIn(gate, REQUIRED)
+
+    def test_current_farsi_buyer_copy_says_both_stages_demo(self):
+        from prop_firm.plan1_buyer_no_social_amendment import current_plan1_buyer_copy
+        self.assertIn("هر دو مرحله چالش تنها با حساب دمو", current_plan1_buyer_copy().fa)
+
+    def test_current_english_buyer_copy_says_live_broker_account_not_needed(self):
+        from prop_firm.plan1_buyer_no_social_amendment import current_plan1_buyer_copy
+        self.assertIn("live LiteFinance or other broker account is NOT a prerequisite",
+                      current_plan1_buyer_copy().en)
+
+    def test_current_buyer_copy_says_real_only_after_two_passes(self):
+        from prop_firm.plan1_buyer_no_social_amendment import current_plan1_buyer_copy
+        self.assertIn("AFTER independently passing BOTH", current_plan1_buyer_copy().en)
+
+    def test_current_buyer_copy_preserves_legal_sale_checks(self):
+        from prop_firm.plan1_buyer_no_social_amendment import current_plan1_buyer_copy
+        self.assertIn("legally required", current_plan1_buyer_copy().en)
