@@ -216,6 +216,15 @@ def store_v141_virtual_fill(
             fully_closed_positions=before.fully_closed_positions_total,
             idempotent_replay=True,
         )
+    # A previously finalized stage is immutable even if a later internally
+    # signed event tries to introduce an extra backdated position/fee.
+    if fill.stage == 1 and book.state.last_phase_one_accepted_at is not None:
+        raise DurableVirtualFillRejected("stage-one virtual history already accepted and frozen")
+    if fill.stage == 2:
+        started = book.state.last_phase_two_started_at
+        if (started is None or fill.executed_at_utc < started
+                or book.state.last_phase_two_completed_at is not None):
+            raise DurableVirtualFillRejected("stage-two event outside independently recorded active stage")
     if type(fill.sequence) is not int or fill.sequence != book.last_sequence + 1:
         raise DurableVirtualFillRejected("noncontiguous internal source event sequence")
     if PropV141VirtualFill.objects.filter(event_id=fill.event_id).exists():
