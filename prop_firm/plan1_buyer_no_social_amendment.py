@@ -70,6 +70,20 @@ class NoBuyerSocialPostAmendment:
 
 def buyer_no_social_post_amendment():
     history = buyer_disclosure()
+    historical_fields = (
+        "schema", "sku", "contract_version", "fee_sun", "network",
+        "two_phases_simulated", "initial_real_usd_conditional",
+        "max_funded_usd_conditional", "currency", "fa", "en",
+    )
+    historical_canonical = {
+        key: getattr(history, key) for key in historical_fields
+    }
+    historical_digest = sha256(json.dumps(
+        historical_canonical, sort_keys=True, separators=(",", ":"),
+        ensure_ascii=False, allow_nan=False,
+    ).encode("utf-8")).hexdigest()
+    if historical_digest != history.digest_sha256:
+        raise ValueError("historic v1.2 disclosure digest mismatch")
     if (history.sku != SKU or history.contract_version != HISTORICAL_TERMS_VERSION
             or history.fee_sun != 30_000_000 or history.network != "TRON-mainnet"
             or history.two_phases_simulated is not True
