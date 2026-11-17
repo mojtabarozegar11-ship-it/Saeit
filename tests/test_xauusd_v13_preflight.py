@@ -127,6 +127,14 @@ class DraftRiskTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             review_gold_order(candidate(free_margin_usd="NaN"))
 
+    def test_pathological_decimal_exponent_rejected(self):
+        with self.assertRaises(ValueError):
+            review_gold_order(candidate(lot_step="1e-999999999"))
+
+    def test_excessive_decimal_digits_rejected(self):
+        with self.assertRaises(ValueError):
+            review_gold_order(candidate(lot_step="0.0000000000000000000000000001"))
+
     def test_no_capital_promise_from_math(self):
         d=review_gold_order(candidate())
         self.assertFalse(d.funding_enabled)
