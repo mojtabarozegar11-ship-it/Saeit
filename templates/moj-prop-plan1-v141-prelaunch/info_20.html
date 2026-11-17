@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="{{ language }}" dir="{{ direction }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; object-src 'none'; connect-src 'none'; frame-ancestors 'none'">
+<title>{{ details.heading }} | MojPlayWin</title>
+<meta name="description" content="{{ copy.warning }}">
+<style>
+:root{color-scheme:dark;--gold:#e8c27b;--bg:#0b1018;--text:#f6f4ed;--muted:#c6d3e1}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.75 system-ui,Arial,sans-serif}
+main{width:min(1000px,calc(100% - 32px));margin:auto}
+header{padding:24px 0;border-bottom:1px solid #566171;color:var(--gold);letter-spacing:.08em;font-weight:800}
+h1{font-size:clamp(30px,5vw,54px);line-height:1.2;color:var(--gold)}
+p{color:var(--muted)}.notice{background:#34271a;border:1px solid #d7a45c;color:#fff1d5;padding:17px;border-radius:12px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.card{background:#182330;border:1px solid #49566b;padding:20px;border-radius:12px}
+.metrics{display:flex;flex-wrap:wrap;gap:12px;margin:20px 0}
+.metrics span{border:1px solid #6e778a;border-radius:10px;padding:8px 14px;font-weight:650}
+nav{margin:20px 0}.langs{display:flex;flex-wrap:wrap;gap:7px;list-style:none;padding:0}
+.langs a{display:inline-block;padding:5px 10px;border:1px solid #536274;border-radius:7px;color:#f6daa0;text-decoration:none}
+.langs a[aria-current=page]{background:#3d3940;border-color:#e8c27b}
+.action{display:inline-block;background:#e8c27b;color:#171b24;padding:12px 18px;border-radius:9px;text-decoration:none;font-weight:800;margin:10px 0}
+footer{border-top:1px solid #536274;padding:30px 0 40px;color:var(--muted);font-size:14px}
+@media(max-width:720px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body><main>
+<header>MOJPLAYWIN / MOJ PROP / MOJ-PROP-01</header>
+<nav aria-label="{{ copy.language }}">
+<strong>{{ copy.language }}</strong>
+<ul class="langs">
+{% for option in language_options %}
+<li><a href="/moj-prop-v141-info/?lang={{ option.code }}" lang="{{ option.code }}"{% if option.active %} aria-current="page"{% endif %}>{{ option.name }}</a></li>
+{% endfor %}
+</ul>
+</nav>
+<h1>{{ details.heading }}</h1>
+<p class="notice"><strong>{{ copy.warning }}</strong></p>
+<div class="metrics"><span>30 TRX</span><span>2 DEMO</span><span>28 days</span><span>50 CLOSED</span><span>6 days / phase</span><span>70 / 30</span></div>
+<div class="grid">
+<section class="card"><h2>01</h2><p>{{ details.overview }}</p></section>
+<section class="card"><h2>02</h2><p>{{ details.risk }}</p></section>
+<section class="card"><h2>03</h2><p>{{ details.social }}</p></section>
+<section class="card"><h2>04</h2><p>{{ details.funding }}</p></section>
+</div>
+<p class="notice">{{ details.legal }}</p>
+{% if interest_enabled %}
+<p><a class="action" href="/moj-prop-v141-interest/?lang={{ language }}">{{ copy.button }}</a></p>
+{% endif %}
+<p><a href="mailto:mojplaywin@gmail.com?subject=MOJ-PROP-01%20Information%20request">mojplaywin@gmail.com</a></p>
+<footer>MOJ PROP — v1.4.1 PROSPECTIVE / NO SALE / NO PAYMENT / NO BROKER EXECUTION</footer>
+</main></body></html>
