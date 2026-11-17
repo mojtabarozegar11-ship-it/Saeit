@@ -513,3 +513,6 @@ from .plan1_v141_persistence_models import PropV141SimState, PropV141SimReceipt 
 # Prospective separately versioned per-trader VIRTUAL fill books (migration 0010).
 # Deliberately no public HTTP write path or real broker execution.
 from .plan1_v141_virtual_tenant_models import PropV141VirtualBook, PropV141VirtualFill  # noqa: E402,F401
+
+# Isolated v1.4.1 information enquiries; never rewrite v1.2 consent.
+from .plan1_v141_lead_models import PropV141Interest  # noqa: E402,F401
