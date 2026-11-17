@@ -21,6 +21,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "FACTORY_RUNNER_ACCOUNT_NAME=$(id -un)"
+          echo "FACTORY_RUNNER_EFFECTIVE_UID=$(id -u)"
+          if [[ -d "$HOME/factory-runtime" && ! -L "$HOME/factory-runtime" ]]; then
+            echo "FACTORY_RUNNER_HOME_HAS_FACTORY_RUNTIME=true"
+          else
+            echo "FACTORY_RUNNER_HOME_HAS_FACTORY_RUNTIME=false"
+          fi
+          if [[ -d "/home/githubops/factory-runtime" && ! -L "/home/githubops/factory-runtime" ]]; then
+            echo "FACTORY_KNOWN_GITHUBOPS_RUNTIME_EXISTS=true"
+          else
+            echo "FACTORY_KNOWN_GITHUBOPS_RUNTIME_EXISTS=false"
+          fi
           if [[ "$(id -un)" != "githubops" ]]; then
             echo "FACTORY_LOCAL_READONLY=BLOCKED_UNEXPECTED_USER"
             exit 1
