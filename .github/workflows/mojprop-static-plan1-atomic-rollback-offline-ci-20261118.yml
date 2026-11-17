@@ -36,7 +36,7 @@ jobs:
           print("REVIEWED_STATIC_PLAN1_PAGE_BYTES="+str(release.CANDIDATE_SIZE))
           print("RELEASE_INSTALL_UNAVAILABLE_FROM_CLI=true")
           PY
-      - name: Exercise full 45-part isolated synthetic static transaction matrix
+      - name: Exercise full 52-part isolated synthetic static transaction matrix
         shell: bash
         run: |
           set -euo pipefail
