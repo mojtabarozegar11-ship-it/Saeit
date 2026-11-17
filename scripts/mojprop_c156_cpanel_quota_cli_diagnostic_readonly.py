@@ -18,7 +18,7 @@ import stat
 import subprocess
 
 OWNER="zomorod2"
-UAPI="/usr/local/cpanel/bin/uapi"
+UAPI="/usr/bin/uapi"
 CPAPI2="/usr/local/cpanel/bin/cpapi2"
 MAX_BYTES=65536
 TIMEOUT=15
@@ -27,8 +27,8 @@ NUMBER=re.compile(r"^(?:0|[1-9][0-9]{0,12})(?:\.[0-9]{1,3})?$")
 ALLOWED_UNITS=frozenset(("MB","GB","KB","TB","B","bytes"))
 
 CALLS={
-    "uapi_statsbar": [UAPI,"--output=json","StatsBar","get_stats",
-                      "display="+DISPLAY],
+    "uapi_statsbar": [UAPI,"--output=json","--user="+OWNER,"StatsBar",
+                      "get_stats","display="+DISPLAY],
     "cpapi2_statsbar": [CPAPI2,"--output=json","--user=zomorod2","StatsBar","stat",
                        "display="+DISPLAY,"warnings=0","warninglevel=87",
                        "warnout=0","infinityimg=/dev/null",
@@ -133,12 +133,26 @@ def _one(name):
     try:
         cp=subprocess.run(
             CALLS[name],capture_output=True,timeout=TIMEOUT,check=False,
-            env={"HOME":"/home/zomorod2","USER":OWNER,
-                 "PATH":"/usr/local/cpanel/bin:/usr/bin:/bin"},
+            env={"HOME":"/home/zomorod2","USER":OWNER,"LOGNAME":OWNER,
+                 "LC_ALL":"C","PATH":"/usr/bin:/bin:/usr/local/bin"},
         )
     except (OSError,subprocess.TimeoutExpired):
         out["diagnostic"]="timeout_or_os_error"
         return out
+    if cp.returncode!=0 and name=="uapi_statsbar":
+        # Audited C120 account-only CLI fallback: the first `--user`
+        # mode may be denied to non-WHM users, even for their own account.
+        try:
+            cp=subprocess.run(
+                [UAPI,"--output=json","StatsBar","get_stats",
+                 "display="+DISPLAY],
+                capture_output=True,timeout=TIMEOUT,check=False,
+                env={"HOME":"/home/zomorod2","USER":OWNER,"LOGNAME":OWNER,
+                     "LC_ALL":"C","PATH":"/usr/bin:/bin:/usr/local/bin"},
+            )
+        except (OSError,subprocess.TimeoutExpired):
+            out["diagnostic"]="timeout_or_os_error"
+            return out
     if cp.returncode!=0:
         out["diagnostic"]="process_failed"
         return out
