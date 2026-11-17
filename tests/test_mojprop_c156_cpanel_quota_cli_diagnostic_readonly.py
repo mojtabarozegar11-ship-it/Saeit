@@ -209,6 +209,36 @@ class ActualCpanelQuotaFallbackTests(unittest.TestCase):
         self.assertEqual(r["diagnostic"],"process_failed")
         self.assertEqual(runner.call_count,1)
 
+    def test_22_empty_uapi_stats_with_user_retry_no_user_matches_real_quota(self):
+        first=b'{"result":{"status":1,"data":[]}}'
+        second=b'{"result":{"status":1,"data":[{"id":"diskusage","count":"25000","max":"20000","units":"MB"}]}}'
+        with patch.object(q.os,"lstat",return_value=SimpleNamespace(
+                          st_mode=stat.S_IFREG | 0o755,st_uid=0)), \
+             patch.object(q.os,"access",return_value=True), \
+             patch.object(q.subprocess,"run",side_effect=[
+                 SimpleNamespace(returncode=0,stdout=first,stderr=b""),
+                 SimpleNamespace(returncode=0,stdout=second,stderr=b"")
+             ]) as runner:
+            out=q._one("uapi_statsbar")
+        self.assertEqual(out["diagnostic"],"success_numeric_quota")
+        self.assertEqual(out["account_disk"]["percent_used"],125.0)
+        self.assertEqual(runner.call_count,2)
+        self.assertEqual(runner.call_args_list[1].args[0],
+                         [q.UAPI,"--output=json","StatsBar","get_stats",
+                          "display="+q.DISPLAY])
+
+    def test_23_empty_uapi_both_modes_must_stay_unknown(self):
+        empty=b'{"result":{"status":1,"data":[]}}'
+        with patch.object(q.os,"lstat",return_value=SimpleNamespace(
+                          st_mode=stat.S_IFREG | 0o755,st_uid=0)), \
+             patch.object(q.os,"access",return_value=True), \
+             patch.object(q.subprocess,"run",return_value=SimpleNamespace(
+                           returncode=0,stdout=empty,stderr=b"")) as runner:
+            out=q._one("uapi_statsbar")
+        self.assertEqual(runner.call_count,2)
+        self.assertEqual(out["diagnostic"],"success_no_matching_quota")
+        self.assertFalse(out["account_disk"]["found"])
+
     def test_16_no_valid_quota_does_not_authorize_backups(self):
         with patch.object(q.pwd,"getpwuid",
                           return_value=SimpleNamespace(pw_name="foreign")), \
