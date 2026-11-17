@@ -182,7 +182,7 @@ def resolve_source(path: str, main: str, canonical: str) -> str:
             'href="/moj-prop-interest/form/?lang=fa"',
             "Other service requests — not Plan 1",
         ), "canonical prelaunch Plan1 CTA")
-        require(main, ("MOJ-PROP-01",), "main existing Plan1")
+        require(main, ("Moj Prop",), "main previous nonpayable product page")
         if 'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01"' in canonical:
             raise ValueError("misrouted blueprint CTA reappeared")
         return canonical
