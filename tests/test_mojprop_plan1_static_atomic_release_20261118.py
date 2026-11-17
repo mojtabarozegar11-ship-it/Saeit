@@ -310,6 +310,65 @@ class SafeStaticReleaseTests(unittest.TestCase):
         self.assertNotIn('transact("install"',source)
         self.assertNotIn('transact("rollback"',source)
 
+    def nested_backup(self):
+        base=self.root/".backups"
+        base.chmod(0o755)
+        private=base/"mojprop-plan1-private-20261118"
+        self.backup=private/"original.html"
+        return private
+
+    def test_46_existing_cpanel_shared_backups_parent_allows_readonly_preflight(self):
+        private=self.nested_backup()
+        result=self.call("preflight")
+        self.assertFalse(result["private_rollback_folder_exists"])
+        self.assertTrue(result["private_rollback_folder_requires_approved_creation"])
+        self.assertFalse(private.exists())
+
+    def test_47_owner_approved_install_creates_new_only_0700_private_child(self):
+        private=self.nested_backup()
+        self.call("install",reviews=self.approve(),owner_ack=m.OWNER_ACK)
+        self.assertTrue(private.is_dir())
+        self.assertEqual(stat.S_IMODE(private.stat().st_mode),0o700)
+        self.assertEqual(stat.S_IMODE(private.parent.stat().st_mode),0o755)
+        self.assertEqual(stat.S_IMODE(self.backup.stat().st_mode),0o600)
+        self.assertEqual(self.backup.read_bytes(),ORIGINAL)
+
+    def test_48_existing_symlinked_private_child_is_never_followed(self):
+        private=self.nested_backup()
+        real=self.root/"foreign-private"
+        real.mkdir(mode=0o700)
+        private.symlink_to(real,target_is_directory=True)
+        with self.assertRaises(m.ExactStaticReleaseDenied):
+            self.call("preflight")
+        self.assertEqual(list(real.iterdir()),[])
+
+    def test_49_existing_group_readable_private_child_is_refused(self):
+        private=self.nested_backup()
+        private.mkdir(mode=0o755)
+        with self.assertRaisesRegex(m.ExactStaticReleaseDenied,"ROLLBACK_FOLDER_NOT_OWNER_PRIVATE"):
+            self.call("preflight")
+        self.assertEqual(stat.S_IMODE(private.stat().st_mode),0o755)
+
+    def test_50_world_writable_shared_parent_rejected(self):
+        private=self.nested_backup()
+        private.parent.chmod(0o777)
+        with self.assertRaisesRegex(m.ExactStaticReleaseDenied,"UNSAFE_RELEASE_DIRECTORY"):
+            self.call("preflight")
+
+    def test_51_rollback_does_not_create_missing_private_child(self):
+        private=self.nested_backup()
+        with self.assertRaisesRegex(m.ExactStaticReleaseDenied,"PRIVATE_ROLLBACK_FOLDER_MISSING"):
+            self.call("rollback")
+        self.assertFalse(private.exists())
+
+    def test_52_dedicated_private_child_rollback_preserves_parent_mode(self):
+        private=self.nested_backup()
+        self.call("install",reviews=self.approve(),owner_ack=m.OWNER_ACK)
+        self.call("rollback")
+        self.assertEqual(self.live.read_bytes(),ORIGINAL)
+        self.assertEqual(stat.S_IMODE(private.parent.stat().st_mode),0o755)
+        self.assertEqual(stat.S_IMODE(private.stat().st_mode),0o700)
+
 
 if __name__=="__main__":
     unittest.main()
