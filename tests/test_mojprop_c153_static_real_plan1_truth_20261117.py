@@ -91,7 +91,7 @@ class Plan1StaticTruth(unittest.TestCase):
         baseline = ROOT / "templates/moj-prop-v4/baselines/index-main-before-plan1-c153.html"
         import hashlib
         data = baseline.read_bytes()
-        blob = b"blob " + str(len(data)).encode("ascii") + b"\\0" + data
+        blob = b"blob " + str(len(data)).encode("ascii") + b"\0" + data
         expected = "30b7fe4400f88252f3b71a581f96a796ca853b6c"
         self.assertEqual(hashlib.sha1(blob).hexdigest(), expected)
         self.assertIn(f'BASELINE_MAIN_HOME_GIT_BLOB = "{expected}"', script)

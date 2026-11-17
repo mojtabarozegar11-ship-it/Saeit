@@ -112,7 +112,7 @@ def source_root(run_id: str) -> Path:
     # blob of main (679d2fefd349f580e765fee1a5fc823c48e01851). A
     # manipulated staged baseline must NEVER authorize rewriting owner edits.
     reviewed = (path / BASELINE_MAIN_HOME).read_bytes()
-    blob = b"blob " + str(len(reviewed)).encode("ascii") + b"\\0" + reviewed
+    blob = b"blob " + str(len(reviewed)).encode("ascii") + b"\0" + reviewed
     if hashlib.sha1(blob).hexdigest() != BASELINE_MAIN_HOME_GIT_BLOB:
         raise RuntimeError("Unreviewed current-main homepage baseline denied")
     html = {str(relative): (path / relative).read_text("utf-8") for relative in HTML_FILES}
