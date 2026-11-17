@@ -54,3 +54,19 @@ This change is to be stacked on top of existing **draft PR #2680**, not silently
 - Transport: actual `rclone` installed + two owner-authorized server-side OAuth remotes, provider-confirmed free bytes: **unknown** until the runner preflight completes.
 - Recovery: independent, full current DB+app/media service restore in safe nonproduction environment: **not performed**.
 - Current complete backup copies: **0/2**. Historical F01 archive is not current data.
+
+### Crash/retry isolation hardening (17 Nov 2026)
+
+Before creating any `factory-current-<128-bit-hex>` run folder, the provider
+adapter now demands bounded `rclone lsf` listings of the preprovisioned
+`current-backups` parent in **both** independent private Drive accounts. Any
+existing matching namespace (case insensitive), listing error, malformed
+listing, or nonempty just-created run folder **HOLDs before any ciphertext
+upload**. A transport object cannot start two backup runs. A failure leaving
+orphan encrypted parts must be investigated; restarting with the same run ID
+is deliberately denied. Do not delete orphan bytes automatically. This
+is a race-resistance safeguard, **not an atomic create-if-absent guarantee on
+Google Drive**, and it does not replace official provider quota/consistency
+admission. Both `current-backups` parent folders have been created privately
+and independently: A folder `10CwlKyd_I3iaiCVbdH82IbzVJD_8z475`, B folder
+`1EXF8_gl5xZDQBjnrcOVxd_rdznLAj78j`; both verified empty at creation.
