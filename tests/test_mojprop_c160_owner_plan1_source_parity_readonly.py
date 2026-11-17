@@ -140,7 +140,7 @@ class C160ParityTests(unittest.TestCase):
         self.assertFalse(doc["comparison_completed"])
         self.assertFalse(doc["production_deployment_authorized"])
 
-    def test_12_no_local_io_or_customer_privacy_claim_in_no-manifest_case(self):
+    def test_12_no_local_io_or_customer_privacy_claim_without_manifest(self):
         with patch.object(probe.pwd,"getpwuid",
               return_value=SimpleNamespace(pw_name=probe.OWNER)), \
              patch.object(probe,"safe_owner_dir",return_value=True):
