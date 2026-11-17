@@ -99,7 +99,3 @@ class PropV141NativeReceipt(models.Model):
     confirmed_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
 
-# Separately versioned native TRX merchant orders and atomic DEMO delivery.
-from .plan1_v141_native_payment_models import (  # noqa: E402,F401
-    PropV141NativeOrder, PropGlobalTRXSettlement, PropV141NativeReceipt,
-)
