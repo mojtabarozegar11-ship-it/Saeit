@@ -1,0 +1,72 @@
+name: MOJ PROP release gate
+
+on:
+  push:
+    branches:
+      - "feature/prop-firm-policy-v11-20261114"
+      - "a/mojprop-evidence-*"
+      - "a/mojprop-risk-*"
+  pull_request:
+    branches:
+      - "main"
+      - "feature/prop-firm-policy-v11-20261114"
+    paths:
+      - "prop_firm/**"
+      - "core/commercialization_readiness.py"
+      - "core/tron_tenant_policy.py"
+      - "core/tron_rollout_inventory.py"
+      - "core/tron_manual_reconciliation.py"
+      - "tests/test_moj_prop_*.py"
+      - "tests/test_tron_rollout_inventory.py"
+      - "tests/test_tron_manual_reconciliation.py"
+      - "prop_firm/independent_attestation.py"
+      - "tests/test_moj_prop_independent_attestation.py"
+      - ".github/workflows/moj-prop-release-gate-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "ci-only-moj-prop-key"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Check migrations
+        run: python manage.py makemigrations --check --dry-run prop_firm
+      - name: Run canonical Moj Prop and TRX inventory regression tests
+        run: >
+          python manage.py test
+          tests.test_moj_prop_policy_integrity
+          tests.test_moj_prop_challenge_commerce
+          tests.test_moj_prop_release_gate
+          tests.test_tron_rollout_inventory
+          tests.test_moj_prop_independent_attestation
+          tests.test_moj_prop_allocation_service
+          tests.test_moj_prop_funded_kyc_projection_c147
+          tests.test_moj_prop_plan_enrollment
+          tests.test_moj_prop_signed_evidence
+          tests.test_moj_prop_phase_sequence_c141
+          tests.test_moj_prop_future_evidence_c144
+          tests.test_moj_prop_verified_purchase_binding_c145
+          tests.test_moj_prop_enrollment_immutability_c145
+          tests.test_moj_prop_plan_qualification
+          tests.test_moj_prop_cohort_buyer_binding_a148
+          tests.test_moj_prop_fifty_trades
+          tests.test_moj_prop_order_headroom_a153
+          tests.test_prop_firm_policy
+          tests.test_tron_manual_reconciliation
+          --verbosity 2

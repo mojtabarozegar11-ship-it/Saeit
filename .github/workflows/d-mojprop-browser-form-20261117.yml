@@ -1,0 +1,55 @@
+name: D Plan1 real prelaunch non-JS root consent, no checkout
+on:
+  push:
+    branches:
+      - d/plan1-consent-nonjs-root-20261117
+  pull_request:
+    branches:
+      - feature/prop-firm-policy-v11-20261114
+    paths:
+      - "config/urls.py"
+      - "core/moj_prop_views.py"
+      - "core/templates/mojplaywin/moj_prop_interest_form_d.html"
+      - "tests/test_moj_prop_browser_form_d.py"
+      - ".github/workflows/d-mojprop-browser-form-20261117.yml"
+permissions:
+  contents: read
+jobs:
+  root-form-source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "synthetic-only-no-payment-d"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com,zomorodmelal.ir"
+      EMAIL_BACKEND: django.core.mail.backends.locmem.EmailBackend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Check model migration drift
+        run: python manage.py makemigrations --check --dry-run prop_firm
+      - name: Run 35 real-form HTTP and existing Plan1 consent regressions
+        run: >
+          python manage.py test
+          tests.test_moj_prop_browser_form_d
+          tests.test_moj_prop_interest_intake
+          tests.test_moj_prop_release_gate
+          tests.test_moj_prop_phase2_db_binding_d2
+          --verbosity 2
+      - name: Confirm payment and real-order feature switches still off
+        run: |
+          python - <<'PY'
+          from prop_firm.rules import POLICY
+          from prop_firm.plans import CHALLENGE_PLANS
+          assert POLICY.trx_checkout_enabled is False
+          assert POLICY.real_orders_enabled is False
+          assert all(not p.checkout_enabled and not p.account_activation_enabled for p in CHALLENGE_PLANS)
+          print('CONSENT_PRELAUNCH_ONLY_NO_LIVE_INVOICE_OR_TRADE')
+          PY

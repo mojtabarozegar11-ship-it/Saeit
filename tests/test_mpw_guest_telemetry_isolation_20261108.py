@@ -83,7 +83,9 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             installer(namespace)
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertTrue(namespace["_mpw_guest_checkout_installed"])
-            self.assertEqual(record.call_count, 1)
+            # An arbitrary success object is not a committed invoice
+            # redirect; it must never count as a new paid funnel step.
+            self.assertEqual(record.call_count, 0)
             product_model.objects.filter.side_effect = RuntimeError("query unavailable")
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertEqual(dispatch.call_count, 2)
@@ -94,6 +96,39 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertIs(namespace["start_order"](request, product_id=72), rejected)
             self.assertEqual(record.call_count, 1)
             self.assertEqual(dispatch.call_count, 3)
+
+
+    def test_only_server_issued_invoice_redirect_creates_funnel_event(self):
+        request = object()
+        product = object()
+        invoice = types.SimpleNamespace(
+            status_code=302,
+            get=lambda name, default="": (
+                "/commerce/trx-easy/invoice/8/" if name == "Location" else default
+            ),
+        )
+        product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
+            filter=Mock(return_value=types.SimpleNamespace(first=lambda: product))))
+        record = Mock(side_effect=RuntimeError("no logging secret"))
+        modules = stub_modules(record, product_model)
+        dispatch = Mock(return_value=invoice)
+        with patch.dict(sys.modules, modules):
+            helper = source_function("_record_funnel_event_best_effort")
+            installer = source_function("patch_commercial", {
+                "_dispatch": dispatch, "_record_funnel_event_best_effort": helper,
+            })
+            namespace = {"_" + name: (lambda *args, **kwargs: invoice) for name in (
+                "start_order", "show_invoice", "invoice_status",
+                "reconcile_invoice", "download_paid",
+            )}
+            installer(namespace)
+            self.assertIs(namespace["start_order"](request, product_id=72), invoice)
+            self.assertEqual(record.call_count, 1)
+            dispatch.return_value = types.SimpleNamespace(
+                status_code=503, get=lambda *args: "/commerce/trx-easy/invoice/8/"
+            )
+            namespace["start_order"](request, product_id=72)
+            self.assertEqual(record.call_count, 1)
 
 
 if __name__ == "__main__":

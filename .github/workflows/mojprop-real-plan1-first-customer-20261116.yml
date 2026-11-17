@@ -1,0 +1,112 @@
+name: MOJ PROP v1.2 newest-parent customer intake integrity
+on:
+  push:
+    branches:
+      - "feature/mojprop-first-customer-clean-parent-20261116"
+    paths:
+      - "prop_firm/**"
+      - "core/moj_prop_views.py"
+      - "core/contact_intake.py"
+      - "core/consent_guard_queryset.py"
+      - "core/templates/mojplaywin/moj_prop.html"
+      - "config/urls.py"
+      - "prop_firm/portal.py"
+      - "tests/test_moj_prop_interest_intake.py"
+      - "tests/test_moj_prop_plan_qualification.py"
+      - ".github/workflows/mojprop-real-plan1-first-customer-20261116.yml"
+  pull_request:
+    branches:
+      - "feature/prop-firm-policy-v11-20261114"
+    paths:
+      - "prop_firm/**"
+      - "core/moj_prop_views.py"
+      - "core/contact_intake.py"
+      - "core/consent_guard_queryset.py"
+      - "core/templates/mojplaywin/moj_prop.html"
+      - "config/urls.py"
+      - "prop_firm/portal.py"
+      - "tests/test_moj_prop_interest_intake.py"
+      - "tests/test_moj_prop_plan_qualification.py"
+      - ".github/workflows/mojprop-real-plan1-first-customer-20261116.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-first-customer-newparent-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-only-prop-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      DEBUG: "False"
+      SECRET_KEY: "source-only-ci-do-not-use-in-production"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com,zomorodmelal.ir"
+    steps:
+      - name: Checkout source without push access
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Verify precise non-educational Plan 1 contract
+        run: |
+          python - <<'PY'
+          from prop_firm.rules import POLICY, LEVELS
+          from prop_firm.plans import plan_for_code, CHALLENGE_PLANS
+          assert POLICY.version == '2026-11-15/v1.2'
+          assert len(CHALLENGE_PLANS) == 10 and len(LEVELS) == 14
+          p = plan_for_code('MOJ-PROP-01')
+          assert str(p.entry_fee_trx) == '30'
+          assert str(p.starting_capital_usd) == '100'
+          assert POLICY.min_closed_trades_per_challenge == 50
+          assert POLICY.completion_deadline_days == 28
+          assert not POLICY.trx_checkout_enabled and not POLICY.real_orders_enabled
+          try:
+              plan_for_code('MOJPROP-STARTER30')
+          except ValueError:
+              pass
+          else:
+              raise AssertionError('Educational SKU must not activate funded challenge')
+          PY
+      - name: Ensure first prospect POST bypasses Apache static /moj-prop/ directory
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          urlconf=Path('config/urls.py').read_text(encoding='utf-8')
+          landing=Path('core/templates/mojplaywin/moj_prop.html').read_text(encoding='utf-8')
+          tests=Path('tests/test_moj_prop_interest_intake.py').read_text(encoding='utf-8')
+          assert 'path("moj-prop-interest/", moj_prop_interest' in urlconf
+          assert 'action="/moj-prop-interest/"' in landing
+          assert 'PATH = "/moj-prop-interest/"' in tests
+          assert 'path("moj-prop/interest/", moj_prop_interest' not in urlconf
+          print('MOJ_PROP_ROOT_WSGI_INTEREST_INTAKE=PASS')
+          PY
+      - name: Schema and isolated migrations
+        run: |
+          python manage.py makemigrations --check --dry-run prop_firm
+          python manage.py migrate --noinput
+      - name: Resolve static assets for Django templates
+        run: python manage.py collectstatic --noinput
+      - name: Run Plan 1 consent, newest-parent challenge, release gate regressions
+        run: |
+          python manage.py test \
+            tests.test_moj_prop_interest_intake \
+            tests.test_moj_prop_plan_enrollment \
+            tests.test_moj_prop_plan_qualification \
+            tests.test_moj_prop_ten_plans \
+            tests.test_moj_prop_release_gate \
+            --verbosity 1
+      - name: Explicitly retain no-payment scope
+        run: |
+          python - <<'PY'
+          from prop_firm.plans import CHALLENGE_PLANS
+          assert all(not p.checkout_enabled for p in CHALLENGE_PLANS)
+          assert all(not p.account_activation_enabled for p in CHALLENGE_PLANS)
+          assert all(not p.funding_independently_verified for p in CHALLENGE_PLANS)
+          print('SOURCE_ONLY_NOT_A_LIVE_SALE')
+          PY

@@ -1,0 +1,114 @@
+name: MOJ PROP C136 reconcile main and prop safely in DEVELOPMENT only
+on:
+  push:
+    branches: [ops/mojprop-c136-safe-main-canonical-merge-20261117]
+  pull_request:
+    branches: [feature/prop-firm-policy-v11-20261114]
+permissions:
+  contents: write
+concurrency:
+  group: mojprop-c136-review-only
+  cancel-in-progress: false
+jobs:
+  validate-then-create-dev-merge:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'ops/mojprop-c136-safe-main-canonical-merge-20261117'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      C136_MAIN_SHA: ''
+      C136_EXPECTED_PARENT_SHA: '1143cfbed5ab44cc15cb935a9f2325ecd03ccfab'
+      C136_PROP_SHA: ${{ github.event.pull_request.head.sha }}
+      DEBUG: 'true'
+      SECRET_KEY: 'c136-ephemeral-merge-testing-not-production'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com'
+      PYTHONDONTWRITEBYTECODE: '1'
+      DATABASE_URL: 'sqlite:///./c136-ephemeral.db'
+    steps:
+      - name: Checkout exact source review with full merge ancestry
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Fetch and pin two reviewed branch heads
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            '+refs/heads/main:refs/remotes/origin/main' \
+            '+refs/heads/feature/prop-firm-policy-v11-20261114:refs/remotes/origin/feature/prop-firm-policy-v11-20261114'
+          real_main="$(git rev-parse --verify refs/remotes/origin/main^{commit})"
+          real_prop="$(git rev-parse --verify refs/remotes/origin/feature/prop-firm-policy-v11-20261114^{commit})"
+          echo "C136_CURRENT_MAIN_SHA=$real_main"
+          echo "C136_CANONICAL_SHA=$real_prop"
+          # Lock one observed main tree at job start. Main is edited by
+          # separate owner cycles; a stale hardcoded SHA creates false failures.
+          test "$(git cat-file -t "$real_main")" = commit
+          printf 'C136_MAIN_SHA=%s\n' "$real_main" >> "$GITHUB_ENV"
+          test "$real_prop" = "$C136_EXPECTED_PARENT_SHA" || { echo 'C136_CANONICAL_MOVED_REVIEW_AGAIN=true'; exit 5; }
+          test "$(git rev-parse --verify HEAD^{commit})" = "$C136_PROP_SHA"
+      - name: Merge into isolated development branch, never into main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.email 'mojprop-source-integration@users.noreply.github.com'
+          git config user.name 'MOJ PROP protected source integration'
+          git switch --quiet --create integration/mojprop-c136-merged-main-prop-20261117 "$C136_MAIN_SHA"
+          set +e
+          git merge --no-commit --no-ff "$C136_PROP_SHA" > "$RUNNER_TEMP/c136-merge-status.txt" 2>&1
+          status=$?
+          set -e
+          # Only the PRECISE expected eight conflicted business files may be resolved.
+          # Do not interpret automatic clean merge as proof of commercial readiness.
+          if test "$status" -ne 1; then
+            echo 'C136_EXPECTED_EIGHT_CONFLICTS_NOT_OBSERVED=true'
+            exit 6
+          fi
+          python3 -B scripts/mojprop_c136_preserve_main_merge_resolver.py "$C136_MAIN_SHA" "$C136_PROP_SHA"
+          git diff --check --cached
+          test -z "$(git diff --name-only --diff-filter=U)"
+      - name: Install project dependencies in ephemeral GitHub runner
+        run: python3 -m pip install -r requirements.txt
+      - name: Validate migration compatibility and all conflict-resolution invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 manage.py check
+          python3 manage.py makemigrations --check --dry-run
+          python3 -B -m unittest -v tests.test_mojprop_c136_preserve_main_merge_resolver
+          python3 -B scripts/mojprop_plan1_form_source_gate_c130.py --require-source-ready
+      - name: Real Django synthetic consent and store/view unit tests, ephemeral DB only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 manage.py test tests.test_moj_prop_interest_intake --verbosity 1
+          python3 -B -m unittest -v tests.test_mojprop_c131_canonical_static_consent_integration
+          python3 manage.py migrate --noinput
+          # ManifestStaticFilesStorage requires collectstatic before real render tests.
+          python3 manage.py collectstatic --noinput
+          python3 -m pytest -q core/tests/test_mpw_store_real_template_render.py
+          echo 'C136_MERGED_DJANGO_SYNTHETIC_TESTS_PASS=true'
+          echo 'C136_PRODUCTION_DB_POST_DEPLOYMENT_PAYMENT=false'
+      - name: Create only isolated development integration branch after all passes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          test "$(git rev-parse --verify refs/remotes/origin/main^{commit})" = "$C136_MAIN_SHA" || { echo 'C136_MAIN_MOVED_DURING_VALIDATION=true'; exit 4; }
+          test "$(git rev-parse --verify HEAD^{commit})" = "$C136_MAIN_SHA"
+          test -f .git/MERGE_HEAD || { echo 'C136_NO_REVIEWED_MERGE_PENDING=true'; exit 7; }
+          git diff --cached --quiet && { echo 'C136_EMPTY_MERGE_UNEXPECTED=true'; exit 8; }
+          git commit -m 'MOJ PROP C136: preserve main merchant/brand/store plus canonical Plan1 consent'
+          parents="$(git show -s --format=%P HEAD)"
+          test "$parents" = "$C136_MAIN_SHA $C136_PROP_SHA" || { echo 'C136_TWO_PARENT_IDENTITY_FAILED=true'; exit 9; }
+          # Branch name is fixed and NEVER main; failure on competing branch, no force.
+          git push origin HEAD:refs/heads/integration/mojprop-c136-merged-main-prop-20261117
+          echo 'C136_DEVELOPMENT_MERGE_COMMIT_CREATED=true'
+          echo 'C136_MAIN_UPDATED=false'
+          echo 'C136_LIVE_DEPLOYMENT=false'
+          echo 'C136_MERCHANT_CANARY_AND_INVOICE_PROOF_PRESERVED=true'
