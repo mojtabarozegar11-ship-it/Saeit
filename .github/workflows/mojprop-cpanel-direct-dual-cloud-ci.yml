@@ -78,3 +78,33 @@ jobs:
           PYTHONPATH=scripts python3 -B scripts/factory_rclone_dual_parts.py |
             python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["schema"]=="factory.rclone.runner-readiness.readonly.v1"; assert all(d[k] is False for k in ("oauth_tokens_read","provider_queried","provider_free_quota_verified","new_backup_created","production_modified","two_independent_remotes_verified")); print("OWNER_RUNNER_OFFLINE_RCLONE_PRESENT="+str(d["rclone_installed"]).lower()); print("OWNER_RUNNER_PRIVATE_RCLONE_CONFIG_PRESENT="+str(d["owner_local_config_secure_file_present"]).lower())'
           echo 'NO_REMOTE_OAUTH_READ_NO_PROVIDER_QUERY_NO_PRODUCTION_BACKUP' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify free official rclone 1.76.0 binary in disposable owner-runner temp only
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          command -v curl
+          command -v unzip
+          command -v sha256sum
+          work="$(mktemp -d "$RUNNER_TEMP/mojprop-verified-rclone-XXXXXXXX")"
+          trap 'rm -rf -- "$work"' EXIT
+          curl --proto '=https' --tlsv1.2 --fail --location \
+            --silent --show-error --retry 2 --max-time 120 \
+            'https://downloads.rclone.org/v1.76.0/rclone-v1.76.0-linux-amd64.zip' \
+            -o "$work/rclone.zip"
+          test "$(stat -c %s "$work/rclone.zip")" -lt 44000000
+          (cd "$work"; echo 'b00f00b3266c3764413afe599d3ec316f6f43b3e0ea8a0bc1d186d2133e46df7  rclone.zip' | sha256sum -c --status)
+          unzip -p "$work/rclone.zip" 'rclone-v1.76.0-linux-amd64/rclone' > "$work/rclone"
+          test -s "$work/rclone"
+          test "$(stat -c %s "$work/rclone")" -lt 155000000
+          chmod 700 "$work/rclone"
+          "$work/rclone" version | head -1 | grep -Fqx 'rclone v1.76.0'
+          echo 'OWNER_RUNNER_EPHEMERAL_RCLONE_SHA256=VERIFIED'
+          echo 'OWNER_RUNNER_RCLONE_VERSION=1.76.0'
+          echo 'OWNER_RUNNER_RCLONE_INSTALLED_PERSISTENTLY=FALSE'
+          echo 'OWNER_RUNNER_PROVIDER_OAUTH_READ=FALSE'
+          echo 'OWNER_RUNNER_CLOUD_UPLOAD=FALSE'
+          echo 'EPHEMERAL_RCLONE_BINARY_CLEANED_ON_STEP_EXIT' >> "$GITHUB_STEP_SUMMARY"
+
