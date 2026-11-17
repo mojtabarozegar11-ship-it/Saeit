@@ -23,6 +23,7 @@ from .plan1_orm_consent_review import VerifiedPrivateHandoff
 SCHEMA = "mojprop.plan1.waived-post-demo-buyer-contract-provenance.v1"
 PURPOSE = "buyer_specific_terms_and_no_social_demo_clarification_private"
 PROOF = re.compile(r"[0-9a-f]{64}\Z")
+REVIEW_REF = re.compile(r"PROP1-REVIEW-[A-F0-9]{32}\Z")
 MIN_EPOCH = 1735689600
 MAX_ACCEPTANCE_WINDOW_SEC = 3600
 REQUIRED_FIELDS = frozenset((
