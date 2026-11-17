@@ -1,0 +1,68 @@
+name: MOJPROP Plan1 exact owner route occupancy read-only (NO SITE WRITES)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/mojprop-plan1-vacancy-owner-readonly.yml'
+      - 'scripts/mojprop_plan1_sidecar_vacancy_readonly.py'
+      - 'tests/test_mojprop_plan1_sidecar_vacancy_readonly.py'
+permissions:
+  contents: read
+jobs:
+  owner_actual_route_occupancy:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Pin exact read-only diagnostics, run all twenty synthetic security tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_plan1_sidecar_vacancy_readonly.py
+          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_vacancy_readonly.py)" = "eacf8da1ddeb38bd899651183ef5fc863b33c7ea"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_plan1_sidecar_vacancy_readonly
+      - name: Verify existing pinned owner cPanel route from factory runner only
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/mojprop-plan1-vacancy"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/id"
+          chmod 600 "$work/id"
+          ssh-keygen -y -P '' -f "$work/id" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host owner-cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/id\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 40s ssh -T -F "$work/config" owner-cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/mojplaywin.com/moj-prop'
+      - name: Read only fixed plan1 route occupancy and one public GET status
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-plan1-vacancy"
+          timeout 50s ssh -T -F "$work/config" owner-cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_plan1_sidecar_vacancy_readonly.py \
+            | python3 -c 'import json,sys; prefix="MOJPROP_OWNER_PLAN1_VACANCY_READONLY="; rows=[l for l in sys.stdin.read(3000).splitlines() if l.startswith(prefix)]; assert len(rows)==1,"MISSING_VACANCY"; r=json.loads(rows[0][len(prefix):]); assert r["schema"]=="mojprop.sidecar.owner_route_vacancy.readonly.v1" and r["read_only"] is True and r["production_release_authorized"] is False and r["payment_or_email_sent"] is False and r["existing_home_contact_preserved"] is True and r["no_file_data_or_customer_data_read"] is True; assert r["route_status"] in ("safe_absent","safe_empty_directory","occupied_do_not_replace","unsafe_or_unavailable") and type(r["public_http_status"]) is int and 0<=r["public_http_status"]<=599; assert set(r)=={"schema","route_status","public_http_status","vacant_for_new_additive_source","read_only","existing_home_contact_preserved","no_file_data_or_customer_data_read","production_release_authorized","payment_or_email_sent"}; print(rows[0])'
+          echo 'MOJPROP_OWNER_PLAN1_DESTINATION_PROBED_READ_ONLY=true'
+          echo 'NO_SITE_WRITES_NO_CUSTOMER_DATA_NO_DEPLOY=true'
+      - name: Erase only ephemeral SSH files on factory runner
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/mojprop-plan1-vacancy"
+          if test -d "$work"; then rm -f "$work/id" "$work/known" "$work/config"; rmdir "$work" || true; fi
