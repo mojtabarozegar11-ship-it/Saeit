@@ -20,8 +20,9 @@ ROOT = Path("/home/zomorod2/Saeit-staging")
 WEBROOT = Path("/home/zomorod2/mojplaywin.com")
 APP_USER = "zomorod2"
 EXPECTED = {
-    # Pinned to GitHub's reviewed main source at the branch base commit;
-    # this can establish source identity only, not a live Passenger release.
+    # Candidate source hash reviewed on the Plan1 prelaunch PR head;
+    # different live source must report DRIFT until a verified release.
+    # This is source identity only, not a live Passenger release.
     "core/mojprop_views.py": "12ee5e408f2a50e0571d5e6d91a760644ec210a9",
     "core/mojprop_receipts.py": "9fe6eb1ad13857143440517b14b3f2ebcfef6db3",
     "core/mojprop_accessible_intake.py": "505a1d237e3deb156e7e394e94b1c34ddf1e0071",
