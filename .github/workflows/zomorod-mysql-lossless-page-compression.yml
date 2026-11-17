@@ -11,6 +11,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   compress:
+    # FAIL-CLOSED: historical Oct28 backup SHA-256 mismatches; no complete
+    # current offsite copy or isolated restore has been demonstrated.
+    # Do NOT execute ALTER TABLE/page compression until independent recovery
+    # evidence and a fresh owner-reviewed release PR exist.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:
