@@ -31,7 +31,7 @@ REQUIRED_TEST_MODULES = (
     ("tests.test_plan1_v14_combined_qualification", 17),
     ("tests.test_plan1_v14_private_interest_review", 30),
     ("tests.test_plan1_v141_precontract_boundary", 33),
-    ("tests.test_mojprop_v141_prelaunch_copy", 25),
+    ("tests.test_mojprop_v141_prelaunch_copy", 30),
     ("tests.test_plan1_v141_simulated_challenge_engine", 73),
     ("tests.test_plan1_v141_demo_order_risk_review", 28),
     ("tests.test_plan1_v141_signed_simulator_manifest", 40),
@@ -41,7 +41,7 @@ REQUIRED_TEST_MODULES = (
 )
 LEGACY_TEST_MODULE = "tests.test_prop_firm_policy"
 EXPECTED_V13_TESTS = 194
-EXPECTED_V14_TESTS = 421
+EXPECTED_V14_TESTS = 426
 EXPECTED_ALL_TESTS = EXPECTED_V13_TESTS + EXPECTED_V14_TESTS
 
 
