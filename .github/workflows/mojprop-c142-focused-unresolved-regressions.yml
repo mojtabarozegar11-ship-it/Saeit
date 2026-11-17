@@ -1,0 +1,59 @@
+name: MOJ PROP C142 focused outstanding global regressions - NO RELEASE
+on:
+  push:
+    branches: [fix/mojprop-c142-consolidated-legacy-route-consent-20261117]
+  pull_request:
+    branches: [integration/mojprop-c136-merged-main-prop-20261117]
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-c142-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  remaining-contracts:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    env:
+      DEBUG: 'true'
+      SECRET_KEY: 'mojprop-c142-ephemeral-ci-only'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install project dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Verify Django code and migration closure
+        run: |
+          set -euo pipefail
+          python3 manage.py check
+          python3 manage.py makemigrations --check --dry-run
+          python3 manage.py collectstatic --noinput
+      - name: Execute remaining 12 previously failing real modules
+        run: |
+          set -euo pipefail
+          python3 -m pytest -q --tb=short --disable-warnings \
+            tests/test_mojprop_signal_plan_inquiry_20261115.py \
+            tests/test_mojprop_contact_fallback_c110_20261116.py \
+            tests/test_mojprop_direct_support_fallback_c134_20261116.py \
+            tests/test_mojprop_nojs_signed_db_reconciliation_c102.py \
+            tests/test_mojprop_v4_buyer_funnel_20261115.py \
+            tests/test_moj_prop_site.py \
+            tests/test_mpw_contact_business_php_20261019.py \
+            tests/test_mojprop_commercial_samples_release.py \
+            tests/test_mojprop_starter30_single_sku_contract_20261115.py \
+            tests/test_moj_prop_social_review.py \
+            tests/test_mpw_cutover_current_catalog_guard_20261115.py \
+            tests/test_mpw_guest_telemetry_isolation_20261108.py
+          echo 'C142_FOCUSED_REAL_CONTRACT_TESTS=PASS'
+          echo 'C142_CUSTOMER_POST_PAYMENT_RELEASE=false'
