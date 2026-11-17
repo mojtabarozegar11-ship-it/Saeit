@@ -66,6 +66,7 @@ class PreviousReplayState:
     last_phase_two_completed_utc: datetime | None
     previous_receipt_sha256: str = ""
     last_phase_one_evidence_sha256: str = ""
+    last_phase_two_evidence_sha256: str = ""
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,7 @@ class ReviewedReceiptTransition:
     phase_two_started_utc: datetime | None
     phase_two_completed_utc: datetime | None
     phase_one_evidence_sha256: str | None
+    phase_two_evidence_sha256: str | None
     resulting_engine_state: str
     mathematical_only: bool = True
     paid_enrollment_authorized: bool = False
@@ -138,6 +140,7 @@ def decide_next_signed_replay_receipt(*, previous: PreviousReplayState,
         if previous.engine_state != _GENESIS:
             raise JournalTransitionRejected("genesis cannot forge an already progressed status")
         if (previous.last_phase_one_evidence_sha256
+                or previous.last_phase_two_evidence_sha256
                 or previous.last_assessment_utc is not None
                 or previous.last_phase_one_accepted_utc is not None
                 or previous.last_phase_two_started_utc is not None
@@ -148,6 +151,12 @@ def decide_next_signed_replay_receipt(*, previous: PreviousReplayState,
     else:
         if previous.engine_state not in _RECORDED_STATES:
             raise JournalTransitionRejected("unrecognized persisted challenge state")
+        if previous.last_phase_two_completed_utc is None and previous.last_phase_two_evidence_sha256:
+            raise JournalTransitionRejected("uncompleted stage two has unexpected frozen evidence")
+        if previous.last_phase_two_completed_utc is not None and (
+                type(previous.last_phase_two_evidence_sha256) is not str
+                or _SHA.fullmatch(previous.last_phase_two_evidence_sha256) is None):
+            raise JournalTransitionRejected("completed stage two lacks frozen evidence fingerprint")
         if (previous.last_phase_one_accepted_utc is None
                 and previous.last_phase_one_evidence_sha256):
             raise JournalTransitionRejected("unaccepted stage one has unexpected frozen evidence")
@@ -193,6 +202,18 @@ def decide_next_signed_replay_receipt(*, previous: PreviousReplayState,
             raise JournalTransitionRejected("previously accepted phase-one evidence changed")
     elif frozen is not None:
         raise JournalTransitionRejected("unaccepted stage one cannot have a frozen evidence digest")
+    frozen_two = calculated.phase_two_frozen_evidence_sha256
+    if done is not None:
+        if (calculated.phase_math_complete is not True
+                or calculated.phase_two.mathematical_pass is not True
+                or any(code in _CRITICAL_INPUT_BLOCKERS for code in calculated.blockers)
+                or type(frozen_two) is not str or _SHA.fullmatch(frozen_two) is None):
+            raise JournalTransitionRejected("stage-two completion lacks validated trading evidence")
+        if (previous.last_phase_two_evidence_sha256
+                and previous.last_phase_two_evidence_sha256 != frozen_two):
+            raise JournalTransitionRejected("previously completed phase-two evidence changed")
+    elif frozen_two is not None:
+        raise JournalTransitionRejected("uncompleted phase two cannot have frozen evidence")
     for old, new, label in (
         (previous.last_phase_one_accepted_utc, stage_one, "stage_one_accepted"),
         (previous.last_phase_two_started_utc, stage_two, "stage_two_started"),
@@ -232,5 +253,6 @@ def decide_next_signed_replay_receipt(*, previous: PreviousReplayState,
         phase_two_started_utc=stage_two,
         phase_two_completed_utc=done,
         phase_one_evidence_sha256=frozen,
+        phase_two_evidence_sha256=frozen_two,
         resulting_engine_state=calculated.state,
     )
