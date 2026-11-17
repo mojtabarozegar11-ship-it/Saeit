@@ -120,9 +120,15 @@ jobs:
           done
           # Sensitive GET content (including CSRF) remains only in ephemeral runner
           # files. Print Boolean shape diagnostics, never response bodies.
+          # C123 must continue to collect GET evidence even when the site
+          # is degraded. The step summary below makes that explicit, never
+          # mistaking successful evidence collection for commercial readiness.
           python3 -B scripts/mojprop_public_nojs_get_contract_c123.py \
             "$check_dir/mojprop_intake_html.body" \
-            "$check_dir/mojprop_status_html.body"
+            "$check_dir/mojprop_status_html.body" | tee "$RUNNER_TEMP/mojprop-nojs-sanitized-decisions.txt"
+          python3 -B scripts/mojprop_public_buyer_readiness_summary_20261117.py \
+            "$RUNNER_TEMP/mojprop-nojs-sanitized-decisions.txt" \
+            "$GITHUB_STEP_SUMMARY"
           # Compare ONLY existing downloaded PUBLIC GET response; never submit
           # buyer details or echo HTML/CSRF. Current main may have fixed the
           # source while an older cPanel public document is still served.
