@@ -25,7 +25,7 @@ DAYS_PER_PHASE = 6
 RISK_PER_ORDER_PCT = Decimal("3")
 OPEN_RISK_PCT = Decimal("8")
 MAX_BEST_DAY_SHARE_PCT = Decimal("32")
-CANDIDATE_SCHEMA = "mojprop.plan1.xauusd.v13.review-only.fa-en.1"
+CANDIDATE_SCHEMA = "mojprop.plan1.xauusd.v13.review-only.fa-en.2"
 
 FA = (
     "پیش‌نویس غیرقابل پرداخت MOJ-PROP-01؛ بهای پیشنهادی ۳۰ TRX بومی شبکه ترون. "
@@ -35,7 +35,10 @@ FA = (
     "۳۲٪ سود خالص تأییدشده هر مرحله باشد. فقط XAUUSD. ریسک هر معامله حداکثر "
     "۳٪ و مجموع ریسک باز حداکثر ۸٪ سرمایه مبناست؛ سقف افت روزانه ۴٪ و کل ۸٪ "
     "همواره مقدم است. کارمزد، اسپرد، لغزش و خطر شکاف قیمت نیز لحاظ می‌شود. "
-    "الزام به انتشار پست در اینستاگرام یا فیس‌بوک وجود ندارد. تخصیص ریسک اولیه "
+    "شرط پیشنهادی آینده: یک پست اصیل در اینستاگرام یا فیس‌بوک (یکی کافی است)، " 
+    "با افشای شفاف رابطه تبلیغاتی و ماندگاری ۲۸ روز متوالی، تنها پس از " 
+    "تأیید حقوقی و رضایت مستقل قراردادی؛ تأیید مثبت اجباری نیست و حساب " 
+    "شخصی مالک استفاده نمی‌شود. تخصیص ریسک اولیه "
     "۱۰۰ دلار در حساب واقعی متعلق به برگزارکننده پس از قبولی دو مرحله، "
     "مشروط به احراز مستقل سرمایه، اجازه کارگزار، هویت، قرارداد و مجوز قانونی است. "
     "تقسیم سود تحقق‌یافته خالص پس از زیان‌های قبلی: ۷۰٪ معامله‌گر و ۳۰٪ برگزارکننده. "
@@ -53,8 +56,12 @@ EN = (
     "Nominal single-order stop risk is at most 3% and total open stop risk is at most "
     "8% of starting tier capital; binding 4% daily and 8% total drawdown floors "
     "take priority. Fees, full spread and slippage reserve are included, with "
-    "additional gap risk acknowledged. No Instagram or Facebook posting or links "
-    "are required. A conditional initial USD 100 risk allocation on the organizer's "
+    "additional gap risk acknowledged. One authentic post on EITHER Instagram "
+    "OR Facebook (not both), continuously visible for 28 days with a clear "
+    "commercial-participation disclosure, is PROPOSED only if independently "
+    "lawful, platform-compliant and separately accepted by the buyer; no forced "
+    "positive endorsement or owner personal account use. A conditional initial "
+    "USD 100 risk allocation on the organizer's "
     "existing REAL broker account follows TWO verified DEMO passes only after "
     "independent funding evidence, broker authorization, KYC, legal clearance "
     "and a separate signed contract. Independently reconciled realized net "
@@ -89,6 +96,10 @@ class DraftV13GoldTerms:
     organizer_share_pct: Decimal
     instagram_posts_required: int
     facebook_posts_required: int
+    minimum_posts_on_either_platform: int
+    continuous_visibility_days: int
+    social_legality_independently_approved: bool
+    social_customer_terms_signed: bool
     fa: str
     en: str
     digest_sha256: str
@@ -128,7 +139,11 @@ def draft_gold_terms_v13() -> DraftV13GoldTerms:
             p.checkout_enabled is not False or
             p.account_activation_enabled is not False):
         raise ValueError("canonical Plan1 v1.2 financial sources drift; review required")
-    if (waiver.instagram_posts_required != 0 or
+    # Historical no-post waiver is preserved ONLY as an immutable v1.2
+    # reference. This new, unsigned v1.3 proposal is not a retroactive change.
+    if (waiver.historical_terms_version != TERMS_VERSION or
+            waiver.current_signed_terms_verified_by_this_module is not False or
+            waiver.instagram_posts_required != 0 or
             waiver.facebook_posts_required != 0 or
             waiver.posting_a_condition_of_challenge_pass is not False or
             waiver.posting_a_condition_of_funded_profit is not False):
@@ -163,6 +178,9 @@ def draft_gold_terms_v13() -> DraftV13GoldTerms:
         trader_share_pct=POLICY.trader_profit_share_pct,
         organizer_share_pct=POLICY.company_profit_share_pct,
         instagram_posts_required=0, facebook_posts_required=0,
+        minimum_posts_on_either_platform=1, continuous_visibility_days=28,
+        social_legality_independently_approved=False,
+        social_customer_terms_signed=False,
         fa=FA, en=EN,
     )
     encoded = json.dumps(
