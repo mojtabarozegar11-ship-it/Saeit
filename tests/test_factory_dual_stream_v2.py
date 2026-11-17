@@ -70,7 +70,7 @@ class TestDualEncryptedStreaming(unittest.TestCase):
     def test_01_3chunk_happy_path_authentic_dual_readback(self):
         r=self.create()
         self.assertIsInstance(r,DualStoreReceipt)
-        self.assertTrue(r.complete)
+        self.assertTrue(r.cipher_parts_mirrored_and_readback_verified)
         self.assertFalse(r.restores_verified)
         self.assertFalse(r.commercial_release_authorized)
         self.assertEqual(r.plaintext_bytes,len(self.raw))
@@ -242,8 +242,18 @@ class TestDualEncryptedStreaming(unittest.TestCase):
         self.assertFalse(json.loads(self.manifest())['restore_verified'])
     def test_40_dual_independence_is_not_provider_legal_proof(self):
         receipt=self.create()
-        self.assertEqual(receipt.owner_a,'Drive-A')
-        self.assertEqual(receipt.owner_b,'Drive-B')
+        self.assertEqual(receipt.claimed_owner_a,'Drive-A')
+        self.assertEqual(receipt.claimed_owner_b,'Drive-B')
         self.assertNotIn(b'private-key',self.manifest())
+
+    def test_41_never_report_verified_cloud_identity_without_oauth_adapter(self):
+        receipt=self.create()
+        self.assertFalse(receipt.cloud_account_identity_verified_by_this_code)
+        self.assertFalse(receipt.current_source_consistency_verified)
+    def test_42_no_generic_complete_or_live_ready_property(self):
+        receipt=self.create()
+        self.assertFalse(hasattr(receipt,'complete'))
+        self.assertFalse(hasattr(receipt,'payable'))
+        self.assertFalse(receipt.commercial_release_authorized)
 
 if __name__=='__main__':unittest.main()
