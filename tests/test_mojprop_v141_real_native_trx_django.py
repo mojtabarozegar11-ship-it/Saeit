@@ -3,6 +3,9 @@ from datetime import datetime, timezone as utc, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from io import StringIO
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -471,3 +474,18 @@ class RealNativePaymentStorageTests(TestCase):
         self.assertContains(response, "Payment confirmed")
         self.assertContains(response, TX_A)
         self.assertNotContains(response, RECEIVER)
+
+    def test_private_watcher_command_not_enabled_by_default(self):
+        with self.assertRaises(CommandError):
+            call_command("mojprop_reconcile_native_trx", stdout=StringIO())
+
+    def test_private_watcher_command_uses_mariadb_advisory_lock(self):
+        self.invoice()
+        output = StringIO()
+        with override_settings(MOJPROP_TRX_AUTORECONCILE_ENABLED=True), \
+             patch("prop_firm.management.commands.mojprop_reconcile_native_trx.reconcile_pending_invoices",
+                   return_value={"checked_invoices": 1, "settled": 0, "dry_run": True}):
+            call_command("mojprop_reconcile_native_trx", "--dry-run",
+                         stdout=output)
+        self.assertIn('"checked_invoices": 1', output.getvalue())
+        self.assertIn('"dry_run": true', output.getvalue())
