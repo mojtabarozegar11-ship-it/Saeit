@@ -8,18 +8,13 @@ on:
   workflow_dispatch:
     inputs:
       cleanup_action:
-        description: "Preview, clear safe package caches, or relocate two checksum-pinned old backups"
+        description: "Preview or clear only disposable package download caches"
         type: choice
         required: true
         default: preview
         options:
           - preview
           - apply
-          - migrate_backup
-      confirm_backup_relocation:
-        description: "I confirm relocation only after verified VPS copies and process safety checks"
-        type: boolean
-        default: false
       confirm_disposable_only:
         description: "I confirm: delete only package download caches, never apps/databases/backups"
         type: boolean
@@ -562,6 +557,7 @@ jobs:
           d="$RUNNER_TEMP/zomorod-baseline-inventory"
           mode=preview
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "${REQUESTED_ACTION:-preview}" == "apply" ]]; then
+            test "$GITHUB_ACTOR" = "mojtabarozegar11-ship-it" || { echo "CACHE_CLEANUP_BLOCKED_NON_OWNER"; exit 8; }
             if [[ "${CONFIRM_DISPOSABLE_ONLY:-false}" != "true" ]]; then
               echo "CLEANUP_BLOCKED_EXPLICIT_CONFIRMATION_REQUIRED"
               exit 8
@@ -851,10 +847,10 @@ jobs:
           fi
           REMOTE
       - name: Checkout verified relocation program
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.cleanup_action == 'migrate_backup' }}
+        if: false  # Source backup deletion/relocation blocked pending independent restore
         uses: actions/checkout@v4
       - name: Relocate two pinned root backups after VPS SHA256 verification
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.cleanup_action == 'migrate_backup' }}
+        if: false  # Source backup deletion/relocation blocked pending independent restore
         shell: bash
         env:
           CONFIRM_BACKUP_RELOCATION: ${{ inputs.confirm_backup_relocation }}
@@ -876,6 +872,7 @@ jobs:
           set -euo pipefail
           mode=preview
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${REQUESTED_ACTION:-preview}" == "apply" ]]; then
+            test "$GITHUB_ACTOR" = "mojtabarozegar11-ship-it" || { echo "STALE_CLEANUP_BLOCKED_NON_OWNER"; exit 8; }
             [[ "${CONFIRM_DISPOSABLE_ONLY:-false}" == "true" ]] || { echo "STALE_CLEANUP_BLOCKED_EXPLICIT_CONFIRMATION_REQUIRED"; exit 8; }
             mode=apply
           fi
