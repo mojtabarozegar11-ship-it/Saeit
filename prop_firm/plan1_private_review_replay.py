@@ -7,7 +7,7 @@ claim is a review-only event; legal/KYC/funding checks remain separate.
 import re
 import sqlite3
 
-_REVIEW = re.compile(r"PROP1-REVIEW-[A-F0-9]{32}\\Z")
+_REVIEW = re.compile(r"PROP1-REVIEW-[A-F0-9]{32}\Z")
 _DIGEST = re.compile(r"[0-9a-f]{64}\\Z")
 
 
