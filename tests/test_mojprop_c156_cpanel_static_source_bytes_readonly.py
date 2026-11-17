@@ -78,7 +78,7 @@ class ReadOnlyDiskClassifier(unittest.TestCase):
 
     def test_hardlink_refused(self):
         self.put("home", b"not-meaningful")
-        (self.root / "copy").hardlink_to(self.root / "index.html")
+        os.link(self.root / "index.html", self.root / "copy")
         with patch.object(c156, "classify", side_effect=AssertionError("unsafe read")):
             r = c156.inspect_disk(self.root)
         self.assertEqual(r["pages"]["home"], "unreviewed_or_unavailable")
