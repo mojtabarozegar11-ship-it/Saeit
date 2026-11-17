@@ -13,7 +13,7 @@ from core.models import MojPropOffer, MojPropRequest
 
 HOST = "mojplaywin.com"
 FORM = "/world/fa/moj-prop-interest/"
-POST = "/moj-prop-intake/?format=html"
+POST = FORM
 
 
 @override_settings(ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "testserver"])
@@ -63,7 +63,14 @@ class World20MojPropRealCRMTests(TestCase):
         self.assertTrue(form["notes"].startswith("Prelaunch interest only: MOJ-PROP-01"))
         result = self._post(form)
         self.assertEqual(result.status_code, 201)
-        self.assertIn(b"No payment", result.content)
+        self.assertIn("درخواست شما برای بررسی ثبت شد", result.content.decode("utf-8"))
+        self.assertIn('id="private-receipt"', result.content.decode("utf-8"))
+        self.assertIn("/moj-prop-status/?format=html", result.content.decode("utf-8"))
+        self.assertIn("no-store", result["Cache-Control"])
+        self.assertEqual(result["Referrer-Policy"], "no-referrer")
+        self.assertEqual(result["Content-Language"], "fa")
+        self.assertNotIn(form["email"], result.content.decode("utf-8"))
+        self.assertNotIn(form["name"], result.content.decode("utf-8"))
         self.assertEqual(MojPropRequest.objects.count(), 1)
         lead = MojPropRequest.objects.get()
         self.assertEqual(lead.source, "moj-prop-public")
@@ -75,6 +82,7 @@ class World20MojPropRealCRMTests(TestCase):
         self.assertEqual(MojPropOffer.objects.count(), 0)
         duplicate = self._post(form)
         self.assertEqual(duplicate.status_code, 200)
+        self.assertIn("درخواست قبلی بازیابی شد", duplicate.content.decode("utf-8"))
         self.assertEqual(MojPropRequest.objects.count(), 1)
         self.assertEqual(MojPropOffer.objects.count(), 0)
 
@@ -93,6 +101,7 @@ class World20MojPropRealCRMTests(TestCase):
         form.pop("consent")
         result = self._post(form)
         self.assertEqual(result.status_code, 400)
+        self.assertIn("ثبت یا بررسی درخواست در دسترس نیست", result.content.decode("utf-8"))
         self.assertEqual(MojPropRequest.objects.count(), 0)
 
     def test_locale_selection_is_not_acceptance_of_contract_or_payment(self):
@@ -104,4 +113,44 @@ class World20MojPropRealCRMTests(TestCase):
         self.assertNotIn('name="payment"', body)
         self.assertNotIn('name="wallet"', body)
         self.assertEqual(MojPropRequest.objects.count(), 0)
+        self.assertEqual(MojPropOffer.objects.count(), 0)
+
+    def test_new_leads_keep_customer_language_and_receipt_token_private(self):
+        import re
+        from core.mojprop_receipts import verify_receipt_token
+        for code, email in (
+            ("bn", "prospect-bn@example.org"),
+            ("ar", "prospect-ar@example.org"),
+            ("de", "prospect-de@example.org"),
+        ):
+            with self.subTest(locale=code):
+                page = self.browser.get(
+                    "/world/" + code + "/moj-prop-interest/",
+                    secure=True, HTTP_HOST=HOST,
+                )
+                values = self._form_values(page)
+                values["email"] = email
+                response = self.browser.post(
+                    "/world/" + code + "/moj-prop-interest/",
+                    data=urlencode(values),
+                    content_type="application/x-www-form-urlencoded",
+                    secure=True, HTTP_HOST=HOST,
+                    HTTP_REFERER="https://mojplaywin.com/world/" + code + "/moj-prop-interest/",
+                )
+                self.assertEqual(response.status_code, 201)
+                self.assertEqual(response["Content-Language"], code)
+                self.assertIn("no-store", response["Cache-Control"])
+                rendered = response.content.decode("utf-8")
+                self.assertIn('lang="' + code + '"', rendered)
+                match = re.search(
+                    r'<pre class="token" id="private-receipt">(.*?)</pre>',
+                    rendered, re.S,
+                )
+                self.assertIsNotNone(match)
+                receipt = match.group(1)
+                ref = MojPropRequest.objects.get(email=email).request_id
+                self.assertEqual(verify_receipt_token(receipt), ref)
+                self.assertNotIn(email, rendered)
+                self.assertIn("/moj-prop-status/?format=html", rendered)
+        self.assertEqual(MojPropRequest.objects.count(), 3)
         self.assertEqual(MojPropOffer.objects.count(), 0)
