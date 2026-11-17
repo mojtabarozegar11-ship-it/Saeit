@@ -42,7 +42,7 @@ jobs:
             if test "$actual" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then target="$host"; break; fi
           done
           test -n "$target" || { echo FACTORY_SSH_HOST_PIN_UNAVAILABLE; exit 78; }
-          timeout 240s ssh -T -i "$work/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -o ForwardAgent=no "githubops@$target" 'test "$(id -un)" = githubops && PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'PY'
+          timeout 240s ssh -T -i "$work/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -o ForwardAgent=no "githubops@$target" 'test "$(id -un)" = githubops && PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'PY' | tee "$RUNNER_TEMP/factory-inventory-$GITHUB_RUN_ID.log"
           import datetime, hashlib, json, os, pathlib, re, sqlite3, stat
           root=pathlib.Path('/home/githubops/factory-runtime')
           backup=root/'operations'/'backups'
@@ -167,3 +167,16 @@ jobs:
           print('MOJ_FACTORY_BACKUP_INVENTORY='+json.dumps(data,sort_keys=True))
           PY
           echo MOJ_FACTORY_READONLY_AUDIT_COMPLETE=true
+      - name: Store bounded live VPS inventory as downloadable recovery metadata
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-inventory-${{ github.run_id }}
+          path: ${{ runner.temp }}/factory-inventory-${{ github.run_id }}.log
+          if-no-files-found: error
+          retention-days: 2
+      - name: Delete only temporary runner inventory report
+        if: always()
+        shell: bash
+        run: rm -f -- "${RUNNER_TEMP}/factory-inventory-${GITHUB_RUN_ID}.log"
+
