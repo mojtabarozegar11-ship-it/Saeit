@@ -47,7 +47,7 @@ class Plan1CanonicalAcquisition(unittest.TestCase):
     def test_11_status_unverified_warning(self):
         self.assertIn("not independently verified on production",self.page)
     def test_12_no_automatic_customer_submission_by_link(self):
-        self.assertIn("not a confirmed live CRM submission",self.page)
+        self.assertIn("not an order or a confirmed live CRM submission",self.page)
     def test_13_no_fake_order(self):
         self.assertIn("not an order",self.page)
     def test_14_old_route_is_labeled_fallback(self):
