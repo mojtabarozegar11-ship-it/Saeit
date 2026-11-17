@@ -59,6 +59,14 @@ def run_full_review() -> int:
             }, ensure_ascii=False), file=sys.stderr)
             return 2
         all_tests.addTests(suite)
+    v13_modules = {name: count for name, count in observed.items()
+                   if name.startswith("tests.test_xauusd_v13_")}
+    v14_modules = {name: count for name, count in observed.items()
+                   if name.startswith("tests.test_plan1_v14")}
+    if (sum(v13_modules.values()) != EXPECTED_V13_TESTS
+            or sum(v14_modules.values()) != EXPECTED_V14_TESTS):
+        print("Version-specific unit test inventory drift; fail closed", file=sys.stderr)
+        return 2
     if sum(observed.values()) != EXPECTED_ALL_TESTS:
         print("Unexpected v1.3 test count; fail closed", file=sys.stderr)
         return 2
@@ -73,7 +81,8 @@ def run_full_review() -> int:
         "v13_expected_test_cases": EXPECTED_V13_TESTS,
         "v14_expected_test_cases": EXPECTED_V14_TESTS,
         "combined_v13_v14_expected_test_cases": EXPECTED_ALL_TESTS,
-        "v13_test_modules": observed,
+        "v13_test_modules": v13_modules,
+        "v14_test_modules": v14_modules,
         "total_unit_tests_run": result.testsRun,
         "failures": len(result.failures),
         "errors": len(result.errors),
