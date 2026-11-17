@@ -175,3 +175,35 @@ class DemoToRealBoundaryTests(unittest.TestCase):
             review_demo_to_real_transition(
                 independently_verified=self.all_evidence()).live_order_authorized=True
 
+
+    def test_existing_litefinance_account_is_owner_declared_not_independently_verified(self):
+        self.assertTrue(phase_account_boundary().owner_existing_litefinance_account_declared)
+        self.assertFalse(phase_account_boundary().existing_owner_account_broker_verified_by_this_code)
+
+    def test_broker_mandate_for_trader_is_not_assumed(self):
+        self.assertFalse(phase_account_boundary().delegated_customer_trading_authorized_by_this_code)
+
+    def test_customer_does_not_need_new_real_broker_account(self):
+        self.assertFalse(phase_account_boundary().buyer_specific_broker_account_opening_required)
+
+    def test_customer_does_not_receive_principal(self):
+        self.assertFalse(phase_account_boundary().buyer_receives_real_trading_principal)
+
+    def test_customer_does_not_receive_owner_account_password_or_2fa(self):
+        self.assertFalse(phase_account_boundary().buyer_receives_owner_password_or_2fa)
+
+    def test_customer_cannot_withdraw_from_litefinance(self):
+        self.assertFalse(phase_account_boundary().buyer_can_withdraw_from_broker)
+
+    def test_customer_does_not_get_direct_broker_crypto_withdrawal(self):
+        self.assertFalse(phase_account_boundary().buyer_receives_broker_direct_crypto_payout)
+
+    def test_own_treasury_is_separate_from_broker_withdrawal(self):
+        self.assertTrue(phase_account_boundary().crypto_profit_payment_from_separate_treasury_only)
+
+    def test_no_trading_or_real_payout_if_broker_mandate_undefined(self):
+        decision=review_demo_to_real_transition(
+            independently_verified=dict.fromkeys(REQUIRED_REAL_ACCOUNT_PROOFS,False))
+        self.assertFalse(decision.broker_account_opened_by_this_module)
+        self.assertFalse(decision.live_order_authorized)
+        self.assertFalse(decision.real_capital_transferred_by_this_module)
