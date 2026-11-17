@@ -96,7 +96,7 @@ class MojPropStarter30NativeAccessTests(TestCase):
 
     def test_12_public_catalog_has_sku_bound_nojs_link(self):
         for relative in (
-            "templates/moj-prop-v4/index.html",
+            "tests/fixtures/mojprop-starter30-home-before-plan1-20261117.html",
             "templates/moj-prop-v4/catalog/index.html",
             "templates/moj-prop-v4/starter-30-trx/index.html",
         ):
@@ -106,6 +106,12 @@ class MojPropStarter30NativeAccessTests(TestCase):
                     '/moj-prop-intake/?format=html&amp;service=blueprint'
                     '&amp;package=starter-30-trx', html,
                 )
+        active = (ROOT / "templates/moj-prop-v4/index.html").read_text("utf-8")
+        self.assertIn(
+            '/moj-prop-intake/?format=html&amp;service=blueprint'
+            '&amp;package=moj-prop-01', active,
+        )
+        self.assertNotIn("MOJPROP-STARTER30", active)
 
     def _submit_from_real_rendered_form(self):
         page = self.fetch(STARTER_URL)
