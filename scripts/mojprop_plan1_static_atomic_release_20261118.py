@@ -36,6 +36,7 @@ CANDIDATE_SIZE = 46455
 MAX_BYTES = 256 * 1024
 MIN_STATIC_FILESYSTEM_FREE = 4 * 1024 * 1024
 OWNER_ACK = "AUTHORIZE-MOJPROP-01-STATIC-ONLY-20261118"
+OWNER_ROLLBACK_ACK = "AUTHORIZE-MOJPROP-01-ROLLBACK-20261118"
 NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 
@@ -214,6 +215,8 @@ def transact(mode: str, *, live: Path = LIVE, backup: Path = BACKUP,
         exact(current, ORIGINAL_SHA, ORIGINAL_SIZE, "CURRENT")
         payload = _validate_candidate(candidate, uid, live=live, backup=backup)
     else:
+        if owner_ack != OWNER_ROLLBACK_ACK:
+            raise ExactStaticReleaseDenied("ROLLBACK_OWNER_APPROVAL_REQUIRED")
         exact(current, CANDIDATE_SHA, CANDIDATE_SIZE, "CURRENT_INSTALL")
         if not _backup_valid(backup, uid):
             raise ExactStaticReleaseDenied("VALID_PRIVATE_ROLLBACK_MISSING")
@@ -244,22 +247,20 @@ def transact(mode: str, *, live: Path = LIVE, backup: Path = BACKUP,
 
 
 def main() -> None:
-    # The CLI only permits preflight and rollback. An install requires a
-    # separate, independently reviewed owner release orchestration that passes
-    # proven gate objects; no automatic GitHub push may enable "install".
+    # CLI is READ ONLY. Both install and rollback require a separate,
+    # explicitly owner-approved orchestration of this module's transact().
+    # No GitHub push or arbitrary cPanel user may write by invoking main().
     if len(sys.argv) not in (2,3) or os.geteuid()==0:
         raise SystemExit("MOJPROP_STATIC_CLI_BAD_ARGUMENTS_OR_ROOT")
     if pwd.getpwuid(os.geteuid()).pw_name != ACCOUNT:
         raise SystemExit("MOJPROP_STATIC_CLI_NOT_CPANEL_OWNER")
     mode=sys.argv[1]
-    if mode not in ("preflight","rollback"):
-        raise SystemExit("MOJPROP_STATIC_CLI_INSTALL_NOT_EXPOSED")
-    if mode=="preflight" and len(sys.argv)!=3:
+    if mode != "preflight":
+        raise SystemExit("MOJPROP_STATIC_CLI_WRITES_NOT_EXPOSED")
+    if len(sys.argv) != 3:
         raise SystemExit("MOJPROP_STATIC_CLI_NEEDS_REVIEWED_CANDIDATE_PATH")
-    if mode=="rollback" and len(sys.argv)!=2:
-        raise SystemExit("MOJPROP_STATIC_CLI_ROLLBACK_NO_CANDIDATE")
     try:
-        result=transact(mode,candidate=Path(sys.argv[2]) if mode=="preflight" else None)
+        result=transact(mode,candidate=Path(sys.argv[2]))
     except (OSError,ExactStaticReleaseDenied,BlockingIOError):
         raise SystemExit("MOJPROP_STATIC_EXACT_GUARD_BLOCKED") from None
     print("MOJPROP_STATIC_RELEASE_STATE="+json.dumps(result,sort_keys=True))
