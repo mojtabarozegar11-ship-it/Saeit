@@ -10,16 +10,14 @@ from __future__ import annotations
 from datetime import timezone as utc
 import json
 import re
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from django.conf import settings
-from django.db import transaction
-from django.utils import timezone
 
 from .plan1_v141_native_payment_models import PropV141NativeOrder
 from .plan1_v141_native_checkout import (
-    AMOUNT_SUN, RECEIVER, NETWORK, CheckoutRejected,
+    AMOUNT_SUN, RECEIVER, CheckoutRejected,
     _addr_hex, _release_enabled, confirm_native_trx_and_deliver,
 )
 
@@ -125,10 +123,11 @@ def _candidates(open_orders):
             candidates.append((txid, sender.lower(), block_ms))
         # For a FULL page without cursor we cannot prove coverage. Fail closed.
         next_cursor = meta.get("fingerprint")
-        if next_cursor is None:
-            if len(records) >= PAGE_LIMIT:
-                raise CheckoutRejected("Indexer omitted full-page continuation")
+        if len(records) < PAGE_LIMIT:
+            # A short page is complete irrespective of a continuation hint.
             return candidates
+        if next_cursor is None:
+            raise CheckoutRejected("Indexer omitted full-page continuation")
         if (type(next_cursor) is not str
                 or not _FINGERPRINT.fullmatch(next_cursor)
                 or next_cursor in seen_cursors):
