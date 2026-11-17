@@ -27,7 +27,12 @@ class Plan1CanonicalAcquisition(unittest.TestCase):
     def test_01_canonical_lead_route_present(self):
         self.assertIn(CANON,self.page)
     def test_02_two_localized_lead_links(self):
-        self.assertGreaterEqual(sum(x.get("href")==CANON for x in self.parser.links),2)
+        self.assertEqual(sum(x.get("href")==CANON for x in self.parser.links),1)
+        self.assertEqual(sum(x.get("href")==CANON+"?lang=fa" for x in self.parser.links),1)
+    def test_02b_farsi_route_is_not_english_default(self):
+        self.assertIn('href="/moj-prop-interest/form/?lang=fa"', self.page)
+        self.assertNotIn("moj-prop-interest/form/?service=", self.page)
+
     def test_03_english_lead_cta_accessible(self):
         self.assertIn('aria-label="Open dedicated Plan 1 consent-only prelaunch interest form',self.page)
     def test_04_farsi_lead_cta_accessible(self):
