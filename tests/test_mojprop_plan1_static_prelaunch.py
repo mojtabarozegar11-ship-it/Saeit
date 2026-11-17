@@ -173,7 +173,7 @@ class RealFundedPlanOneStaticTests(unittest.TestCase):
 
     def test_review_consent_not_bulk_marketing(self):
         self.assertIn("does <strong>not</strong> opt you into bulk email", self.page)
-        self.assertIn("Consent to one-to-one review", self.page)
+        self.assertIn("Voluntarily contacting support authorizes only a response", self.page)
 
     def test_pii_never_requested_for_prelaunch(self):
         self.assertIn("Never submit a password, ID scan", self.page)
