@@ -2,7 +2,7 @@
 
 **Status: DEV-ONLY / NO COMMERCIAL RELEASE / NO DATA UPLOADED.**
 
-This package is a complete, standalone Python encryption/read-back/isolated-decryption module and its 40 independent synthetic unit tests. It does **not** include Google Drive OAuth upload adapters, a production-compatible MySQL/MariaDB snapshot implementation, owner-held private key custody, cloud quota verification, a consistency proof, or an independently restored current factory database.
+This package is a complete, standalone Python encryption/read-back/isolated-decryption module and its 42 independent synthetic unit tests. It does **not** include Google Drive OAuth upload adapters, a production-compatible MySQL/MariaDB snapshot implementation, owner-held private key custody, cloud quota verification, a consistency proof, or an independently restored current factory database.
 
 It addresses one precisely observed deficiency in the legacy F-01 workflow: `scripts/f01_encrypted_stream_v1.py` accepts only a regular file no larger than 3 GiB, while the legacy GitHub workflow staged an entire compressed archive on a hosted runner before encrypting local chunks. The current cPanel MariaDB footprint is ~16.68 GB, and neither large on-host staging nor unapproved paid hosted runner execution is acceptable.
 
@@ -30,14 +30,16 @@ It addresses one precisely observed deficiency in the legacy F-01 workflow: `scr
 PYTHONPATH=scripts python -B -m unittest -v tests.test_factory_dual_stream_v2
 ```
 
-At packaging time: **40/40 pass** with locally generated, ephemeral RSA keys and synthetic bytes (no real bank data). Correctness on a live MariaDB backup, Google Drive API and independent restore remains **unverified**.
+At packaging time: **42/42 pass** with locally generated, ephemeral RSA keys and synthetic bytes (no real bank data). Correctness on a live MariaDB backup, Google Drive API and independent restore remains **unverified**.
 
 ## Files
 
 - `scripts/factory_dual_stream_v2.py` — transport and offline restore source
-- `tests/test_factory_dual_stream_v2.py` — 40 negative/positive synthetic tests
+- `tests/test_factory_dual_stream_v2.py` — 42 negative/positive synthetic tests
 - `docs/factory_dual_stream_v2_DEVONLY.md` — actual scope and gates
 - For isolated execution install the existing open-source Python package `cryptography>=41` only if already available or separately approved
 
 **No costs, wallet/TRON transfers, orders, customer contacts, deletions of existing files, live site deploys or live DB writes.**
 **Development-only branch:** `feature/factory-f01v2-direct-dual-offsite-devonly-20261117`. Not merged into `main` or deployed. The Python implementation has no cPanel/Drive adapter, so it cannot start a backup by itself.
+
+**Receipt terminology:** `cipher_parts_mirrored_and_readback_verified` is a cryptographic read-back fact only; `cloud_account_identity_verified_by_this_code=false`, `current_source_consistency_verified=false`, `restores_verified=false` and `commercial_release_authorized=false` remain explicit. Neither a manifest in one Drive nor this source code proves a live backup.
