@@ -128,9 +128,9 @@ jobs:
           test "$(git hash-object -- tests/test_mojprop_c157_cpanel_statsbar_shape_readonly.py)" = "57f074159ef00c44cdf83be92e7acb194e9bf5a2"
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c158_cpanel_single_stats_readonly -q
           test ! -L scripts/mojprop_c158_cpanel_single_stats_readonly.py
-          test "$(git hash-object -- scripts/mojprop_c158_cpanel_single_stats_readonly.py)" = "d02e4127adb92dcfed12dcf55907e317eab4e490"
+          test "$(git hash-object -- scripts/mojprop_c158_cpanel_single_stats_readonly.py)" = "fddb72182b19cc2487077aa40f5acf63030d299a"
           test ! -L tests/test_mojprop_c158_cpanel_single_stats_readonly.py
-          test "$(git hash-object -- tests/test_mojprop_c158_cpanel_single_stats_readonly.py)" = "40537d567028852455094dae13b607e9b22c6d1f"
+          test "$(git hash-object -- tests/test_mojprop_c158_cpanel_single_stats_readonly.py)" = "dba7a0e414f0dbaf2f8aa925a81b725182b29b38"
           python3 -B -m py_compile scripts/mojprop_c157_offhost_stream_preflight_readonly.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_c157_offhost_stream_preflight_readonly -q
           test ! -L scripts/mojprop_c157_offhost_stream_preflight_readonly.py
