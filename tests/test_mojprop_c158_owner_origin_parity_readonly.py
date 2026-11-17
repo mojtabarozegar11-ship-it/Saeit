@@ -139,6 +139,49 @@ class SyntheticOriginParity(unittest.TestCase):
         self.assertNotIn("token",text)
         self.assertNotIn("/home/",text)
 
+    def test_17_pure_structural_summary_never_contains_content_or_attr(self):
+        html = (b'<!doctype html><html><head><title>PRIVATE-TITLE-123</title>'
+                b'<meta http-equiv="refresh" content="1;url=/private">'
+                b'</head><body><script src="/private.js">location.replace("/abc")'
+                b'</script><a href="/private-path">Visible</a><iframe src="/secret">'
+                b'</iframe></body></html>')
+        shape = c.structural_flags(html)
+        self.assertTrue(shape["doctype_html"])
+        self.assertTrue(shape["script_element"])
+        self.assertTrue(shape["external_script"])
+        self.assertTrue(shape["iframe_element"])
+        self.assertTrue(shape["meta_refresh"])
+        self.assertTrue(shape["javascript_location_navigation"])
+        self.assertTrue(shape["title_element"])
+        self.assertTrue(shape["anchor_element"])
+        self.assertNotIn("PRIVATE-TITLE-123", str(shape))
+        self.assertNotIn("/private", str(shape))
+
+    def test_18_loader_shell_is_structurally_observable_but_not_ready(self):
+        raw = b'<html><body><script src="/app.js"></script></body></html>'
+        flags = c.structural_flags(raw)
+        self.assertTrue(flags["external_script"])
+        self.assertEqual(flags["visible_text_band"], "none")
+        self.assertFalse(flags["anchor_element"])
+        self.assertFalse(flags["form_element"])
+        self.assertFalse(flags["doctype_html"])
+
+    def test_19_missing_disk_source_has_no_shape_and_never_approves(self):
+        report = c.inspect(self.root, self.fake({
+            c.FILES["home"][1]: (200, b"fake"),
+            c.FILES["contact"][1]: (200, b"fake"),
+        }))
+        self.assertIsNone(report["pages"]["home"]["disk_shape"])
+        self.assertFalse(report["all_public_pages_exact_disk"])
+
+    def test_20_bounded_bands_never_return_lengths(self):
+        self.assertEqual(c._band(0), "none")
+        self.assertEqual(c._band(1), "tiny")
+        self.assertEqual(c._band(2048), "small")
+        self.assertEqual(c._band(8192), "medium")
+        self.assertEqual(c._band(32768), "large")
+        self.assertEqual(c._band(98304), "very_large")
+
     def test_16_source_declares_no_POST_or_body_logging(self):
         src=Path(c.__file__).read_text("utf-8")
         self.assertIn('method="GET"',src)

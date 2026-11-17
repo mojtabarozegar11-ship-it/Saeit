@@ -146,6 +146,78 @@ def semantic_flags(raw: bytes) -> dict[str, bool]:
     }
 
 
+class Shape(HTMLParser):
+    """Fixed counters only. Never emit element attributes, text, URL or title."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.tags = {}
+        self.skip_depth = 0
+        self.visible_char_count = 0
+        self.external_script = False
+        self.meta_refresh = False
+
+    def handle_starttag(self, tag, attrs):
+        self.tags[tag] = self.tags.get(tag, 0) + 1
+        values = dict(attrs)
+        if tag in ("script", "style"):
+            self.skip_depth += 1
+            if tag == "script" and values.get("src"):
+                self.external_script = True
+        if tag == "meta" and (values.get("http-equiv") or "").lower() == "refresh":
+            self.meta_refresh = True
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style"):
+            self.skip_depth = max(0, self.skip_depth - 1)
+
+    def handle_data(self, data):
+        if self.skip_depth == 0:
+            self.visible_char_count += len(data.strip())
+
+
+def _band(value: int) -> str:
+    if value == 0:
+        return "none"
+    if value < 2048:
+        return "tiny"
+    if value < 8192:
+        return "small"
+    if value < 32768:
+        return "medium"
+    if value < 98304:
+        return "large"
+    return "very_large"
+
+
+def structural_flags(raw: bytes) -> dict:
+    """Privacy-preserving indicator of a real content page versus loader shell.
+
+    These are structural hints only, not content approval or legal compliance.
+    """
+    text = raw.decode("utf-8", "replace")
+    parser = Shape()
+    parser.feed(text)
+    lower = text.lower()
+    return {
+        "byte_band": _band(len(raw)),
+        "visible_text_band": _band(parser.visible_char_count),
+        "doctype_html": raw.lstrip().lower().startswith(b"<!doctype html"),
+        "html_element": bool(parser.tags.get("html")),
+        "body_element": bool(parser.tags.get("body")),
+        "title_element": bool(parser.tags.get("title")),
+        "script_element": bool(parser.tags.get("script")),
+        "external_script": parser.external_script,
+        "iframe_element": bool(parser.tags.get("iframe")),
+        "form_element": bool(parser.tags.get("form")),
+        "anchor_element": bool(parser.tags.get("a")),
+        "meta_refresh": parser.meta_refresh,
+        "javascript_location_navigation": (
+            "location.href" in lower or "location.replace" in lower
+            or "location.assign" in lower
+        ),
+    }
+
+
 def inspect(root: Path = ROOT, getter=public_get, uid: int | None = None) -> dict:
     pages = {}
     for name, (_, url) in FILES.items():
@@ -163,6 +235,7 @@ def inspect(root: Path = ROOT, getter=public_get, uid: int | None = None) -> dic
             "http_status": int(code),
             "http_vs_disk": parity,
             "disk_flags": semantic_flags(disk) if state == "readable" else None,
+            "disk_shape": structural_flags(disk) if state == "readable" else None,
         }
     return {
         "schema": "mojprop.cpanel.public_origin_parity.readonly.c158.v1",
