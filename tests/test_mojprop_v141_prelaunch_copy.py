@@ -63,7 +63,7 @@ class V141NonPayableLandingTests(unittest.TestCase):
         self.assertNotIn("object", self.parsed.tags)
 
     def test_no_trackers_or_remotes(self):
-        self.assertFalse(self.parsed.extras)
+        allowed = {\n            ("a", "href", "mailto:mojplaywin@gmail.com?subject=MOJ-PROP-01%20v1.4.1%20Information%20request"),\n            ("a", "href", "mailto:mojplaywin@gmail.com?subject=MOJ-PROP-01%20v1.4.1%20FA%20Information%20request"),\n        }\n        self.assertEqual(set(self.parsed.extras), allowed)\n        self.assertEqual(len(self.parsed.extras), 2)
 
     def test_csp_blocks_connections_and_forms(self):
         csp = [m.get("content") for m in self.parsed.meta
@@ -155,11 +155,40 @@ class V141NonPayableLandingTests(unittest.TestCase):
     def test_no_deceptive_active_offer_or_email_collection(self):
         self.assertIn("NOT OPEN FOR PAID ENROLLMENT", self.html)
         self.assertIn("cannot accept customer information", self.html)
-        self.assertNotIn("mailto:", self.html.lower())
-        self.assertNotIn("Pay now", self.html)
+        self.assertEqual(self.html.lower().count("mailto:"), 2)
+        self.assertNotIn("Pay now", self.html)\n        self.assertIn("An email request is", self.html)\n        self.assertIn("NOT", self.html)\n        self.assertIn("اجازه بازاریابی", self.html)
 
     def test_not_the_educational_product(self):
         self.assertIn("NOT MOJPROP-STARTER30 educational content", self.html)
+
+
+    def test_interest_link_purpose_is_email_only_nonpayable(self):
+        self.assertEqual(self.html.count('href="mailto:'), 2)
+        self.assertNotIn("body=", self.html.lower())
+        self.assertIn("Optional contact only", self.html)
+        self.assertIn("not a purchase", self.html.lower())
+
+    def test_prospect_never_promised_eligibility_or_funding(self):
+        self.assertIn("Eligibility, local law, broker approval", self.html)
+        self.assertIn("not an active offer", self.html.lower())
+        self.assertIn("no automated marketing consent", self.html)
+
+    def test_personal_document_and_secret_warning_is_bilingual(self):
+        self.assertIn("Never include identity documents", self.html)
+        self.assertIn("مدارک هویتی", self.html)
+        self.assertIn("کلید کیف پول", self.html)
+
+    def test_contact_does_not_create_legacy_v12_contract_acceptance(self):
+        self.assertIn("v1.4.1%20Information%20request", self.html)
+        self.assertIn("v1.4.1%20FA%20Information%20request", self.html)
+        self.assertIn("ثبت‌نام، پذیرش قرارداد", self.html)
+
+    def test_page_has_no_http_post_webhook_or_remote_exfiltration(self):
+        self.assertNotRegex(self.html, r'https?://')
+        self.assertNotIn("fetch(", self.html)
+        self.assertNotIn("<form", self.html)
+        self.assertNotIn("<input", self.html)
+        self.assertNotIn("name=\"email\"", self.html)
 
 
 if __name__ == "__main__":
