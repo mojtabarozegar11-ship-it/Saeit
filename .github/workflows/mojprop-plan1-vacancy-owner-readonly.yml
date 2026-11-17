@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           test ! -L scripts/mojprop_plan1_sidecar_vacancy_readonly.py
-          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_vacancy_readonly.py)" = "eacf8da1ddeb38bd899651183ef5fc863b33c7ea"
+          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_vacancy_readonly.py)" = "6c62a74df64852e49380f2aa53dd08ba9cf425b6"
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_plan1_sidecar_vacancy_readonly
       - name: Verify existing pinned owner cPanel route from factory runner only
         shell: bash
