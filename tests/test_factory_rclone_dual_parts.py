@@ -441,7 +441,11 @@ class TestRcloneDualDrive(unittest.TestCase):
         from factory_dual_stream_v2 import encrypt_stream_to_dual_stores
         from cryptography.hazmat.primitives.asymmetric import rsa
         from cryptography.hazmat.primitives import serialization
-        private=rsa.generate_private_key(public_exponent=65537,key_size=3072)
+        from cryptography.hazmat.backends import default_backend
+        # Factory runner uses a pre-cryptography-3.x interface that requires
+        # an explicit backend; modern cryptography accepts it as optional.
+        private=rsa.generate_private_key(public_exponent=65537,key_size=3072,
+                                          backend=default_backend())
         public=private.public_key()
         pem=public.public_bytes(serialization.Encoding.PEM,
                                 serialization.PublicFormat.SubjectPublicKeyInfo)
