@@ -79,6 +79,23 @@ jobs:
               data['files'].append(row)
           data['other_bytes']=sum(st.st_size for p,st in all_files if not pattern.fullmatch(p.name))
           data['backup_dir_disk']=disk(backup) if status(backup)=='directory' else None
+          # Low-priority bounded disk usage inventory; never read file contents or remove paths.
+          import subprocess
+          try:
+              p=subprocess.run(['nice','-n','15','du','-x','-B1','-d1','--',str(root)],capture_output=True,text=True,timeout=90,check=False)
+              if p.returncode==0:
+                  observed={}
+                  for line in p.stdout.splitlines():
+                      amount,sep,path=line.partition('\t')
+                      if not sep or not amount.isdigit(): continue
+                      name=pathlib.Path(path).name
+                      if path==str(root):name='factory_total'
+                      if name in {'factory_total','operations','django-app','private','autonomous_factory','.venv','models','warehouse'}:
+                          observed[name]=int(amount)
+                  data['factory_usage_bytes']=observed
+              else:data['factory_usage_bytes']={'state':'incomplete'}
+          except (OSError,subprocess.TimeoutExpired):
+              data['factory_usage_bytes']={'state':'time_budget'}
           print('MOJ_FACTORY_BACKUP_INVENTORY='+json.dumps(data,sort_keys=True))
           PY
           echo MOJ_FACTORY_READONLY_AUDIT_COMPLETE=true
