@@ -59,8 +59,8 @@ class GlobalProofContractTests(unittest.TestCase):
             EXPECTED["config/urls.py"],
             exact_git_blob(urls),
         )
-        self.assertIn(b'/moj-prop-interest/form/', urls)
-        self.assertIn(b'/moj-prop-intake/', urls)
+        self.assertIn(b'moj-prop-interest/form/', urls)
+        self.assertIn(b'moj-prop-intake/', urls)
 
     def test_c95_identity_has_no_side_effect_and_matches_runner_pin(self):
         import hashlib
