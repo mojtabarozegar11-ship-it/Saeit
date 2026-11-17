@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from prop_firm.plan1_v141_replay_journal_policy import (
     PreviousReplayState, JournalTransitionRejected,
     decide_next_signed_replay_receipt,
+    calculate_v141_receipt_sha256,
 )
 from prop_firm.plan1_v141_simulated_challenge_engine import replay_simulated_challenge
 from prop_firm.plan1_v14_social_or_50_terms import review_prospective_terms
@@ -462,6 +463,66 @@ class FinishedStageTwoEvidenceGuards(unittest.TestCase):
             policy(state=previous_phase_one_passed(),
                    calculated=replace(calc,phase_two_frozen_evidence_sha256="c"*64),
                    sequence=2)
+
+
+
+def receipt_data(**overrides):
+    x=policy()
+    fields=dict(
+        challenge_ref=good_snapshot().challenge_ref,
+        sequence=x.new_sequence,
+        manifest_sha256=x.manifest_sha256,
+        replay_sha256=x.replay_sha256,
+        previous_receipt_sha256=x.previous_receipt_sha256,
+        reported_engine_state=x.resulting_engine_state,
+        as_of_utc=x.assessment_utc,
+    )
+    fields.update(overrides)
+    return fields
+
+
+class StoredReceiptDigestRecomputationTests(unittest.TestCase):
+    def test_65_stored_record_digest_matches_new_policy_receipt(self):
+        self.assertEqual(calculate_v141_receipt_sha256(**receipt_data()),
+                         policy().receipt_sha256)
+
+    def test_66_record_historical_time_tamper_changes_digest(self):
+        x=receipt_data()
+        x["as_of_utc"]=x["as_of_utc"]+timedelta(seconds=1)
+        self.assertNotEqual(calculate_v141_receipt_sha256(**x),policy().receipt_sha256)
+
+    def test_67_record_historical_state_tamper_changes_digest(self):
+        x=receipt_data(reported_engine_state="SIMULATED_STAGE_TWO_IN_REVIEW")
+        self.assertNotEqual(calculate_v141_receipt_sha256(**x),policy().receipt_sha256)
+
+    def test_68_record_previous_hash_tamper_changes_digest(self):
+        x=receipt_data(previous_receipt_sha256="a"*64)
+        self.assertNotEqual(calculate_v141_receipt_sha256(**x),policy().receipt_sha256)
+
+    def test_69_record_manifest_sha_tamper_changes_digest(self):
+        x=receipt_data(manifest_sha256="c"*64)
+        self.assertNotEqual(calculate_v141_receipt_sha256(**x),policy().receipt_sha256)
+
+    def test_70_record_sequence_tamper_changes_digest(self):
+        x=receipt_data(sequence=2)
+        self.assertNotEqual(calculate_v141_receipt_sha256(**x),policy().receipt_sha256)
+
+    def test_71_corrupt_historical_digest_format_rejected(self):
+        with self.assertRaises(JournalTransitionRejected):
+            calculate_v141_receipt_sha256(**receipt_data(replay_sha256="bad"))
+
+    def test_72_incorrect_history_state_enum_rejected(self):
+        with self.assertRaises(JournalTransitionRejected):
+            calculate_v141_receipt_sha256(**receipt_data(reported_engine_state="PAID"))
+
+    def test_73_naive_database_assessment_rejected(self):
+        with self.assertRaises(JournalTransitionRejected):
+            calculate_v141_receipt_sha256(**receipt_data(
+                as_of_utc=NOW.replace(tzinfo=None)))
+
+    def test_74_boolean_database_sequence_rejected(self):
+        with self.assertRaises(JournalTransitionRejected):
+            calculate_v141_receipt_sha256(**receipt_data(sequence=True))
 
 
 
