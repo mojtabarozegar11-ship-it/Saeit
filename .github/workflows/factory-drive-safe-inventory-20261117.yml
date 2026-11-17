@@ -75,13 +75,7 @@ jobs:
           data['known_snapshot_bytes']=sum(st.st_size for p,st in snapshots)
           for p,st in snapshots[:25]:
               row={'name':p.name,'bytes':st.st_size,'mtime_utc':datetime.datetime.fromtimestamp(st.st_mtime,datetime.timezone.utc).isoformat(),'sqlite_quick_check':'not_run'}
-              if len(data['files']) < 2 and st.st_size < 3*1024**3 and not p.with_name(p.name+'-wal').exists():
-                  try:
-                      db=sqlite3.connect(p.as_uri()+'?mode=ro&immutable=1',uri=True,timeout=30)
-                      try: row['sqlite_quick_check']=db.execute('PRAGMA quick_check').fetchone()[0]
-                      finally: db.close()
-                  except Exception as e:
-                      row['sqlite_quick_check']='failed_'+type(e).__name__
+              # Metadata only: avoid multi-minute SQLite scans in inventory.
               data['files'].append(row)
           data['other_bytes']=sum(st.st_size for p,st in all_files if not pattern.fullmatch(p.name))
           data['backup_dir_disk']=disk(backup) if status(backup)=='directory' else None
