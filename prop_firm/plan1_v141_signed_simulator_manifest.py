@@ -104,13 +104,15 @@ def _id(value,name):
     return value
 
 
-def _rows(raw, schema, cls, time_key):
+def _rows(raw, schema, cls, time_key, *, expected_feed_source):
     if type(raw) is not list or len(raw) > 5000:
         raise LedgerManifestRejected("bounded event list required")
     rows = []
     for entry in raw:
         _shape(entry,schema,"signed event")
         data=dict(entry)
+        if data["data_source"] != expected_feed_source:
+            raise LedgerManifestRejected("signed event feed source not permitted for this challenge")
         data[time_key]=_timestamp(data[time_key],time_key)
         rows.append(cls(**data))
     return tuple(rows)
@@ -119,6 +121,7 @@ def _rows(raw, schema, cls, time_key):
 def verify_and_replay_signed_simulator_manifest(
     *, raw_manifest: bytes, hmac_signature: str,
     trusted_signer_keys: dict, expected_source: str, expected_key_id: str,
+    expected_feed_source: str,
     expected_manifest_id: str, expected_challenge_ref: str,
     expected_sequence: int, now: datetime,
 ) -> HmacLedgerReview:
@@ -134,6 +137,7 @@ def verify_and_replay_signed_simulator_manifest(
     if type(trusted_signer_keys) is not dict:
         raise LedgerManifestRejected("trusted signer registry required")
     for value,name in ((expected_source,"source"),(expected_key_id,"key_id"),
+                       (expected_feed_source,"feed_source"),
                        (expected_manifest_id,"manifest_id"),
                        (expected_challenge_ref,"challenge_ref")):
         _id(value,name)
@@ -175,8 +179,10 @@ def verify_and_replay_signed_simulator_manifest(
     for key in ("phase_one_accepted_at","phase_two_started_at","phase_two_completed_at"):
         if data[key] is not None:
             data[key]=_timestamp(data[key],key)
-    data["closed_fills"]=_rows(data["closed_fills"],_FILL,SimulatedClosedFill,"closed_at")
-    data["equity_marks"]=_rows(data["equity_marks"],_MARK,SimulatedEquityMark,"observed_at")
+    data["closed_fills"]=_rows(data["closed_fills"],_FILL,SimulatedClosedFill,"closed_at",
+                               expected_feed_source=expected_feed_source)
+    data["equity_marks"]=_rows(data["equity_marks"],_MARK,SimulatedEquityMark,"observed_at",
+                               expected_feed_source=expected_feed_source)
     if len(data["closed_fills"])+len(data["equity_marks"]) > 5000:
         raise LedgerManifestRejected("combined ledger exceeds bounded replay")
     if data["as_of"] > issued:
