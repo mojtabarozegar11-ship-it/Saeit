@@ -78,7 +78,15 @@
         "AI tools",
         "Company"
       ],
-      "contact_label": "Ask about the challenge"
+      "contact_label": "Ask about the challenge",
+      "lead": {
+        "name": "Your name",
+        "email": "Contact email",
+        "reason": "Reason for your inquiry",
+        "consent": "I agree to storing my name and email solely to review this information request. I understand this is not a purchase or enrollment.",
+        "submit": "Submit information request",
+        "receipt": "An English-language review receipt will appear after submission."
+      }
     },
     "zh": {
       "name": "简体中文",
@@ -100,7 +108,15 @@
         "人工智能工具",
         "公司"
       ],
-      "contact_label": "咨询挑战详情"
+      "contact_label": "咨询挑战详情",
+      "lead": {
+        "name": "您的姓名",
+        "email": "联系邮箱",
+        "reason": "咨询目的",
+        "consent": "我同意仅为审核本次信息咨询而保存我的姓名和邮箱。我理解这不是购买或报名。",
+        "submit": "提交信息咨询",
+        "receipt": "提交后将显示英文审核回执。"
+      }
     },
     "hi": {
       "name": "हिन्दी",
@@ -122,7 +138,15 @@
         "एआई उपकरण",
         "कंपनी"
       ],
-      "contact_label": "चुनौती के बारे में पूछें"
+      "contact_label": "चुनौती के बारे में पूछें",
+      "lead": {
+        "name": "आपका नाम",
+        "email": "संपर्क ईमेल",
+        "reason": "आपके प्रश्न का उद्देश्य",
+        "consent": "मैं इस जानकारी के अनुरोध की समीक्षा हेतु ही अपना नाम और ईमेल संग्रहित करने की सहमति देता/देती हूँ। यह खरीद या पंजीकरण नहीं है।",
+        "submit": "जानकारी का अनुरोध भेजें",
+        "receipt": "भेजने के बाद अंग्रेज़ी में समीक्षा रसीद दिखाई जाएगी।"
+      }
     },
     "es": {
       "name": "Español",
@@ -144,7 +168,15 @@
         "Herramientas de IA",
         "Empresa"
       ],
-      "contact_label": "Consultar sobre el desafío"
+      "contact_label": "Consultar sobre el desafío",
+      "lead": {
+        "name": "Su nombre",
+        "email": "Correo de contacto",
+        "reason": "Motivo de la consulta",
+        "consent": "Acepto que mi nombre y correo se almacenen solo para revisar esta solicitud. Entiendo que no es una compra ni una inscripción.",
+        "submit": "Enviar consulta",
+        "receipt": "Después de enviar, aparecerá un recibo de revisión en inglés."
+      }
     },
     "ar": {
       "name": "العربية الفصحى",
@@ -166,7 +198,15 @@
         "أدوات الذكاء الاصطناعي",
         "الشركة"
       ],
-      "contact_label": "الاستفسار عن التحدي"
+      "contact_label": "الاستفسار عن التحدي",
+      "lead": {
+        "name": "اسمك",
+        "email": "البريد الإلكتروني للتواصل",
+        "reason": "سبب الاستفسار",
+        "consent": "أوافق على حفظ اسمي وبريدي الإلكتروني لمراجعة طلب المعلومات هذا فقط. أعلم أن هذا ليس شراءً أو تسجيلًا.",
+        "submit": "إرسال طلب المعلومات",
+        "receipt": "ستظهر رسالة تأكيد المراجعة باللغة الإنجليزية بعد الإرسال."
+      }
     },
     "fr": {
       "name": "Français",
@@ -188,7 +228,15 @@
         "Outils d'IA",
         "Entreprise"
       ],
-      "contact_label": "Poser une question sur le défi"
+      "contact_label": "Poser une question sur le défi",
+      "lead": {
+        "name": "Votre nom",
+        "email": "E-mail de contact",
+        "reason": "Objet de votre demande",
+        "consent": "J'accepte l'enregistrement de mon nom et de mon e-mail uniquement pour examiner cette demande d'information. Il ne s'agit ni d'un achat ni d'une inscription.",
+        "submit": "Envoyer la demande",
+        "receipt": "Un reçu de suivi en anglais apparaîtra après l'envoi."
+      }
     },
     "bn": {
       "name": "বাংলা",
@@ -210,7 +258,15 @@
         "এআই সরঞ্জাম",
         "প্রতিষ্ঠান"
       ],
-      "contact_label": "চ্যালেঞ্জ সম্পর্কে প্রশ্ন করুন"
+      "contact_label": "চ্যালেঞ্জ সম্পর্কে প্রশ্ন করুন",
+      "lead": {
+        "name": "আপনার নাম",
+        "email": "যোগাযোগের ইমেইল",
+        "reason": "প্রশ্নের উদ্দেশ্য",
+        "consent": "আমি শুধু এই তথ্যের অনুরোধ পর্যালোচনার জন্য আমার নাম ও ইমেইল সংরক্ষণে সম্মতি দিচ্ছি। এটি কেনাকাটা বা নিবন্ধন নয়।",
+        "submit": "তথ্যের অনুরোধ পাঠান",
+        "receipt": "পাঠানোর পর ইংরেজিতে পর্যালোচনার রসিদ দেখানো হবে।"
+      }
     },
     "pt": {
       "name": "Português",
@@ -232,7 +288,15 @@
         "Ferramentas de IA",
         "Empresa"
       ],
-      "contact_label": "Perguntar sobre o desafio"
+      "contact_label": "Perguntar sobre o desafio",
+      "lead": {
+        "name": "Seu nome",
+        "email": "E-mail de contato",
+        "reason": "Motivo da consulta",
+        "consent": "Autorizo o armazenamento do meu nome e e-mail somente para análise desta solicitação de informações. Isso não é compra nem inscrição.",
+        "submit": "Enviar solicitação",
+        "receipt": "Um recibo de análise em inglês será exibido após o envio."
+      }
     },
     "id": {
       "name": "Bahasa Indonesia",
@@ -254,7 +318,15 @@
         "Alat AI",
         "Perusahaan"
       ],
-      "contact_label": "Tanyakan tentang tantangan"
+      "contact_label": "Tanyakan tentang tantangan",
+      "lead": {
+        "name": "Nama Anda",
+        "email": "Email kontak",
+        "reason": "Tujuan pertanyaan",
+        "consent": "Saya setuju nama dan email saya disimpan hanya untuk meninjau permintaan informasi ini. Ini bukan pembelian atau pendaftaran.",
+        "submit": "Kirim permintaan",
+        "receipt": "Tanda terima peninjauan berbahasa Inggris akan muncul setelah pengiriman."
+      }
     },
     "ur": {
       "name": "اردو",
@@ -276,7 +348,15 @@
         "اے آئی ٹولز",
         "کمپنی"
       ],
-      "contact_label": "چیلنج کے بارے میں پوچھیں"
+      "contact_label": "چیلنج کے بارے میں پوچھیں",
+      "lead": {
+        "name": "آپ کا نام",
+        "email": "رابطے کا ای میل",
+        "reason": "آپ کے سوال کی وجہ",
+        "consent": "میں صرف اس معلوماتی درخواست کے جائزے کے لیے اپنا نام اور ای میل محفوظ کرنے کی اجازت دیتا/دیتی ہوں۔ یہ خریداری یا اندراج نہیں ہے۔",
+        "submit": "معلومات کی درخواست بھیجیں",
+        "receipt": "بھیجنے کے بعد انگریزی میں جائزے کی رسید ظاہر ہوگی۔"
+      }
     },
     "ru": {
       "name": "Русский",
@@ -298,7 +378,15 @@
         "Инструменты ИИ",
         "Компания"
       ],
-      "contact_label": "Задать вопрос об испытании"
+      "contact_label": "Задать вопрос об испытании",
+      "lead": {
+        "name": "Ваше имя",
+        "email": "Контактная почта",
+        "reason": "Цель обращения",
+        "consent": "Я согласен(на) на хранение имени и почты только для рассмотрения этого запроса. Это не покупка и не регистрация.",
+        "submit": "Отправить запрос",
+        "receipt": "После отправки появится квитанция о рассмотрении на английском языке."
+      }
     },
     "de": {
       "name": "Deutsch",
@@ -320,7 +408,15 @@
         "KI-Werkzeuge",
         "Unternehmen"
       ],
-      "contact_label": "Frage zur Challenge stellen"
+      "contact_label": "Frage zur Challenge stellen",
+      "lead": {
+        "name": "Ihr Name",
+        "email": "Kontakt-E-Mail",
+        "reason": "Grund der Anfrage",
+        "consent": "Ich stimme zu, dass Name und E-Mail ausschließlich zur Prüfung dieser Informationsanfrage gespeichert werden. Dies ist weder ein Kauf noch eine Anmeldung.",
+        "submit": "Anfrage senden",
+        "receipt": "Nach dem Absenden wird eine englische Bestätigung zur Prüfung angezeigt."
+      }
     },
     "ja": {
       "name": "日本語",
@@ -342,7 +438,15 @@
         "AIツール",
         "会社"
       ],
-      "contact_label": "チャレンジについて問い合わせる"
+      "contact_label": "チャレンジについて問い合わせる",
+      "lead": {
+        "name": "お名前",
+        "email": "連絡用メールアドレス",
+        "reason": "お問い合わせの目的",
+        "consent": "この情報照会の確認に限り、氏名とメールアドレスを保存することに同意します。購入や登録ではありません。",
+        "submit": "お問い合わせを送信",
+        "receipt": "送信後、審査受付票が英語で表示されます。"
+      }
     },
     "pcm": {
       "name": "Naijá (Nigerian Pidgin)",
@@ -364,7 +468,15 @@
         "AI tools",
         "Company"
       ],
-      "contact_label": "Ask question about di challenge"
+      "contact_label": "Ask question about di challenge",
+      "lead": {
+        "name": "Your name",
+        "email": "Email wey dem fit reach you",
+        "reason": "Why you dey ask",
+        "consent": "I agree make dem keep my name and email only to check this information request. E no be purchase or registration.",
+        "submit": "Send information request",
+        "receipt": "After you send am, review receipt go show for English."
+      }
     },
     "arz": {
       "name": "العامية المصرية",
@@ -386,7 +498,15 @@
         "أدوات الذكاء الاصطناعي",
         "الشركة"
       ],
-      "contact_label": "اسأل عن التحدي"
+      "contact_label": "اسأل عن التحدي",
+      "lead": {
+        "name": "اسمك",
+        "email": "إيميل التواصل",
+        "reason": "سبب الاستفسار",
+        "consent": "أنا موافق إن اسمي وإيميلي يتحفظوا بس لمراجعة طلب المعلومات ده. ده مش شراء ولا تسجيل.",
+        "submit": "ابعت طلب المعلومات",
+        "receipt": "بعد الإرسال هيظهر إيصال المراجعة بالإنجليزي."
+      }
     },
     "mr": {
       "name": "मराठी",
@@ -408,7 +528,15 @@
         "एआय साधने",
         "कंपनी"
       ],
-      "contact_label": "आव्हानाबद्दल चौकशी करा"
+      "contact_label": "आव्हानाबद्दल चौकशी करा",
+      "lead": {
+        "name": "तुमचे नाव",
+        "email": "संपर्क ईमेल",
+        "reason": "चौकशीचे कारण",
+        "consent": "ही माहितीची विनंती तपासण्यासाठीच माझे नाव आणि ईमेल साठवण्यास मी संमती देतो/देते. ही खरेदी किंवा नोंदणी नाही.",
+        "submit": "माहितीची विनंती पाठवा",
+        "receipt": "पाठवल्यावर इंग्रजीत तपासणी पावती दिसेल."
+      }
     },
     "vi": {
       "name": "Tiếng Việt",
@@ -430,7 +558,15 @@
         "Công cụ AI",
         "Công ty"
       ],
-      "contact_label": "Hỏi về thử thách"
+      "contact_label": "Hỏi về thử thách",
+      "lead": {
+        "name": "Tên của bạn",
+        "email": "Email liên hệ",
+        "reason": "Lý do liên hệ",
+        "consent": "Tôi đồng ý lưu tên và email chỉ để xem xét yêu cầu thông tin này. Đây không phải mua hàng hay đăng ký.",
+        "submit": "Gửi yêu cầu thông tin",
+        "receipt": "Sau khi gửi, biên nhận xem xét bằng tiếng Anh sẽ xuất hiện."
+      }
     },
     "te": {
       "name": "తెలుగు",
@@ -452,7 +588,15 @@
         "AI సాధనాలు",
         "సంస్థ"
       ],
-      "contact_label": "ఛాలెంజ్ గురించి అడగండి"
+      "contact_label": "ఛాలెంజ్ గురించి అడగండి",
+      "lead": {
+        "name": "మీ పేరు",
+        "email": "సంప్రదింపు ఈమెయిల్",
+        "reason": "ప్రశ్నించడానికి కారణం",
+        "consent": "ఈ సమాచార అభ్యర్థనను పరిశీలించడానికి మాత్రమే నా పేరు మరియు ఈమెయిల్ నిల్వ చేయడానికి నేను అంగీకరిస్తున్నాను. ఇది కొనుగోలు లేదా నమోదు కాదు.",
+        "submit": "సమాచార అభ్యర్థన పంపండి",
+        "receipt": "పంపిన తర్వాత ఆంగ్లంలో సమీక్ష రసీదు కనిపిస్తుంది."
+      }
     },
     "sw": {
       "name": "Kiswahili",
@@ -474,7 +618,15 @@
         "Zana za AI",
         "Kampuni"
       ],
-      "contact_label": "Uliza kuhusu changamoto"
+      "contact_label": "Uliza kuhusu changamoto",
+      "lead": {
+        "name": "Jina lako",
+        "email": "Barua pepe ya mawasiliano",
+        "reason": "Sababu ya swali",
+        "consent": "Ninakubali jina na barua pepe yangu zihifadhiwe kwa ajili ya kukagua ombi hili la taarifa pekee. Huu si ununuzi wala usajili.",
+        "submit": "Tuma ombi la taarifa",
+        "receipt": "Risiti ya ukaguzi kwa Kiingereza itaonekana baada ya kutuma."
+      }
     },
     "ha": {
       "name": "Hausa",
@@ -496,7 +648,15 @@
         "Kayan AI",
         "Kamfani"
       ],
-      "contact_label": "Yi tambaya game da ƙalubale"
+      "contact_label": "Yi tambaya game da ƙalubale",
+      "lead": {
+        "name": "Sunanka",
+        "email": "Imel na tuntuɓa",
+        "reason": "Dalilin tambayarka",
+        "consent": "Na amince a adana sunana da imel ɗina kawai domin duba wannan neman bayani. Wannan ba saye ko rajista ba ne.",
+        "submit": "Aika neman bayani",
+        "receipt": "Bayan aikawa, rasidin dubawa zai bayyana da Turanci."
+      }
     },
     "fa": {
       "name": "فارسی",
@@ -518,7 +678,15 @@
         "ابزارهای هوش مصنوعی",
         "شرکت"
       ],
-      "contact_label": "پرسش درباره چالش"
+      "contact_label": "پرسش درباره چالش",
+      "lead": {
+        "name": "نام شما",
+        "email": "ایمیل تماس",
+        "reason": "دلیل درخواست",
+        "consent": "رضایت می‌دهم نام و ایمیلم صرفاً برای بررسی همین درخواست اطلاعات ذخیره شود. این اقدام خرید یا ثبت‌نام نیست.",
+        "submit": "ثبت درخواست اطلاعات",
+        "receipt": "پس از ثبت، رسید پیگیری به زبان انگلیسی نمایش داده می‌شود."
+      }
     }
   }
 }
