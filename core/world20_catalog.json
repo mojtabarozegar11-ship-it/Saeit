@@ -85,7 +85,12 @@
         "reason": "Reason for your inquiry",
         "consent": "I agree to storing my name and email solely to review this information request. I understand this is not a purchase or enrollment.",
         "submit": "Submit information request",
-        "receipt": "An English-language review receipt will appear after submission."
+        "receipt": "An English-language review receipt will appear after submission.",
+        "received": "Your request was recorded for review.",
+        "duplicate": "The previous request was found; no duplicate was created.",
+        "private_token": "Private receipt token — keep it confidential.",
+        "failed": "Request unavailable. Return to the form; do not send payment.",
+        "status_link": "Check review status (English-language form)"
       }
     },
     "zh": {
@@ -115,7 +120,12 @@
         "reason": "咨询目的",
         "consent": "我同意仅为审核本次信息咨询而保存我的姓名和邮箱。我理解这不是购买或报名。",
         "submit": "提交信息咨询",
-        "receipt": "提交后将显示英文审核回执。"
+        "receipt": "提交后将显示英文审核回执。",
+        "received": "您的信息请求已记录，等待审核。",
+        "duplicate": "已找到此前的请求，未创建重复记录。",
+        "private_token": "私人回执令牌——请保密。",
+        "failed": "请求暂时不可用。请返回表单，不要付款。",
+        "status_link": "查询审核状态（英文表单）"
       }
     },
     "hi": {
@@ -145,7 +155,12 @@
         "reason": "आपके प्रश्न का उद्देश्य",
         "consent": "मैं इस जानकारी के अनुरोध की समीक्षा हेतु ही अपना नाम और ईमेल संग्रहित करने की सहमति देता/देती हूँ। यह खरीद या पंजीकरण नहीं है।",
         "submit": "जानकारी का अनुरोध भेजें",
-        "receipt": "भेजने के बाद अंग्रेज़ी में समीक्षा रसीद दिखाई जाएगी।"
+        "receipt": "भेजने के बाद अंग्रेज़ी में समीक्षा रसीद दिखाई जाएगी।",
+        "received": "आपका अनुरोध समीक्षा के लिए दर्ज कर लिया गया है।",
+        "duplicate": "पिछला अनुरोध मिल गया; कोई नई प्रति नहीं बनी।",
+        "private_token": "निजी रसीद टोकन — इसे गोपनीय रखें।",
+        "failed": "अनुरोध उपलब्ध नहीं है। फ़ॉर्म पर लौटें; भुगतान न करें।",
+        "status_link": "समीक्षा की स्थिति देखें (अंग्रेज़ी फ़ॉर्म)"
       }
     },
     "es": {
@@ -175,7 +190,12 @@
         "reason": "Motivo de la consulta",
         "consent": "Acepto que mi nombre y correo se almacenen solo para revisar esta solicitud. Entiendo que no es una compra ni una inscripción.",
         "submit": "Enviar consulta",
-        "receipt": "Después de enviar, aparecerá un recibo de revisión en inglés."
+        "receipt": "Después de enviar, aparecerá un recibo de revisión en inglés.",
+        "received": "Su solicitud quedó registrada para revisión.",
+        "duplicate": "Se encontró la solicitud anterior; no se creó un duplicado.",
+        "private_token": "Token privado de recibo: manténgalo confidencial.",
+        "failed": "Solicitud no disponible. Vuelva al formulario y no realice pagos.",
+        "status_link": "Consultar estado de revisión (formulario en inglés)"
       }
     },
     "ar": {
@@ -205,7 +225,12 @@
         "reason": "سبب الاستفسار",
         "consent": "أوافق على حفظ اسمي وبريدي الإلكتروني لمراجعة طلب المعلومات هذا فقط. أعلم أن هذا ليس شراءً أو تسجيلًا.",
         "submit": "إرسال طلب المعلومات",
-        "receipt": "ستظهر رسالة تأكيد المراجعة باللغة الإنجليزية بعد الإرسال."
+        "receipt": "ستظهر رسالة تأكيد المراجعة باللغة الإنجليزية بعد الإرسال.",
+        "received": "تم تسجيل طلبك للمراجعة.",
+        "duplicate": "عُثر على طلبك السابق ولم يُنشأ طلب مكرر.",
+        "private_token": "رمز الإيصال الخاص — احتفظ به سريًا.",
+        "failed": "الطلب غير متاح. ارجع إلى النموذج ولا تدفع أي مبلغ.",
+        "status_link": "التحقق من حالة المراجعة (نموذج باللغة الإنجليزية)"
       }
     },
     "fr": {
@@ -235,7 +260,12 @@
         "reason": "Objet de votre demande",
         "consent": "J'accepte l'enregistrement de mon nom et de mon e-mail uniquement pour examiner cette demande d'information. Il ne s'agit ni d'un achat ni d'une inscription.",
         "submit": "Envoyer la demande",
-        "receipt": "Un reçu de suivi en anglais apparaîtra après l'envoi."
+        "receipt": "Un reçu de suivi en anglais apparaîtra après l'envoi.",
+        "received": "Votre demande a été enregistrée pour examen.",
+        "duplicate": "Votre demande précédente a été retrouvée ; aucun doublon n'a été créé.",
+        "private_token": "Jeton de reçu privé : gardez-le confidentiel.",
+        "failed": "Demande indisponible. Revenez au formulaire et n'effectuez aucun paiement.",
+        "status_link": "Consulter le suivi (formulaire en anglais)"
       }
     },
     "bn": {
@@ -265,7 +295,12 @@
         "reason": "প্রশ্নের উদ্দেশ্য",
         "consent": "আমি শুধু এই তথ্যের অনুরোধ পর্যালোচনার জন্য আমার নাম ও ইমেইল সংরক্ষণে সম্মতি দিচ্ছি। এটি কেনাকাটা বা নিবন্ধন নয়।",
         "submit": "তথ্যের অনুরোধ পাঠান",
-        "receipt": "পাঠানোর পর ইংরেজিতে পর্যালোচনার রসিদ দেখানো হবে।"
+        "receipt": "পাঠানোর পর ইংরেজিতে পর্যালোচনার রসিদ দেখানো হবে।",
+        "received": "আপনার অনুরোধ পর্যালোচনার জন্য নথিভুক্ত হয়েছে।",
+        "duplicate": "আগের অনুরোধটি পাওয়া গেছে; কোনো অনুলিপি তৈরি হয়নি।",
+        "private_token": "ব্যক্তিগত রসিদ টোকেন — গোপন রাখুন।",
+        "failed": "অনুরোধ এখন উপলব্ধ নয়। ফর্মে ফিরুন; অর্থ পাঠাবেন না।",
+        "status_link": "পর্যালোচনার অবস্থা দেখুন (ইংরেজি ফর্ম)"
       }
     },
     "pt": {
@@ -295,7 +330,12 @@
         "reason": "Motivo da consulta",
         "consent": "Autorizo o armazenamento do meu nome e e-mail somente para análise desta solicitação de informações. Isso não é compra nem inscrição.",
         "submit": "Enviar solicitação",
-        "receipt": "Um recibo de análise em inglês será exibido após o envio."
+        "receipt": "Um recibo de análise em inglês será exibido após o envio.",
+        "received": "Sua solicitação foi registrada para análise.",
+        "duplicate": "A solicitação anterior foi recuperada; nenhuma duplicata foi criada.",
+        "private_token": "Token privado do recibo — mantenha-o em sigilo.",
+        "failed": "Solicitação indisponível. Volte ao formulário e não efetue pagamentos.",
+        "status_link": "Verificar andamento (formulário em inglês)"
       }
     },
     "id": {
@@ -325,7 +365,12 @@
         "reason": "Tujuan pertanyaan",
         "consent": "Saya setuju nama dan email saya disimpan hanya untuk meninjau permintaan informasi ini. Ini bukan pembelian atau pendaftaran.",
         "submit": "Kirim permintaan",
-        "receipt": "Tanda terima peninjauan berbahasa Inggris akan muncul setelah pengiriman."
+        "receipt": "Tanda terima peninjauan berbahasa Inggris akan muncul setelah pengiriman.",
+        "received": "Permintaan Anda telah dicatat untuk ditinjau.",
+        "duplicate": "Permintaan sebelumnya ditemukan; tidak dibuat duplikat.",
+        "private_token": "Token tanda terima pribadi — simpan dengan aman.",
+        "failed": "Permintaan tidak tersedia. Kembali ke formulir dan jangan membayar.",
+        "status_link": "Periksa status peninjauan (formulir bahasa Inggris)"
       }
     },
     "ur": {
@@ -355,7 +400,12 @@
         "reason": "آپ کے سوال کی وجہ",
         "consent": "میں صرف اس معلوماتی درخواست کے جائزے کے لیے اپنا نام اور ای میل محفوظ کرنے کی اجازت دیتا/دیتی ہوں۔ یہ خریداری یا اندراج نہیں ہے۔",
         "submit": "معلومات کی درخواست بھیجیں",
-        "receipt": "بھیجنے کے بعد انگریزی میں جائزے کی رسید ظاہر ہوگی۔"
+        "receipt": "بھیجنے کے بعد انگریزی میں جائزے کی رسید ظاہر ہوگی۔",
+        "received": "آپ کی درخواست جائزے کے لیے درج کر لی گئی ہے۔",
+        "duplicate": "پچھلی درخواست مل گئی؛ کوئی نقل نہیں بنائی گئی۔",
+        "private_token": "نجی رسید کا ٹوکن — اسے خفیہ رکھیں۔",
+        "failed": "درخواست دستیاب نہیں۔ فارم پر واپس جائیں اور رقم نہ بھیجیں۔",
+        "status_link": "جائزے کی صورتحال دیکھیں (انگریزی فارم)"
       }
     },
     "ru": {
@@ -385,7 +435,12 @@
         "reason": "Цель обращения",
         "consent": "Я согласен(на) на хранение имени и почты только для рассмотрения этого запроса. Это не покупка и не регистрация.",
         "submit": "Отправить запрос",
-        "receipt": "После отправки появится квитанция о рассмотрении на английском языке."
+        "receipt": "После отправки появится квитанция о рассмотрении на английском языке.",
+        "received": "Ваш запрос зарегистрирован для рассмотрения.",
+        "duplicate": "Предыдущий запрос найден, дубликат не создан.",
+        "private_token": "Личный токен квитанции — храните его в тайне.",
+        "failed": "Запрос недоступен. Вернитесь к форме и не переводите деньги.",
+        "status_link": "Проверить статус (форма на английском)"
       }
     },
     "de": {
@@ -415,7 +470,12 @@
         "reason": "Grund der Anfrage",
         "consent": "Ich stimme zu, dass Name und E-Mail ausschließlich zur Prüfung dieser Informationsanfrage gespeichert werden. Dies ist weder ein Kauf noch eine Anmeldung.",
         "submit": "Anfrage senden",
-        "receipt": "Nach dem Absenden wird eine englische Bestätigung zur Prüfung angezeigt."
+        "receipt": "Nach dem Absenden wird eine englische Bestätigung zur Prüfung angezeigt.",
+        "received": "Ihre Anfrage wurde zur Prüfung erfasst.",
+        "duplicate": "Die frühere Anfrage wurde gefunden; kein Duplikat erstellt.",
+        "private_token": "Privater Beleg-Token – vertraulich aufbewahren.",
+        "failed": "Anfrage nicht verfügbar. Kehren Sie zum Formular zurück und zahlen Sie nichts.",
+        "status_link": "Bearbeitungsstatus prüfen (englisches Formular)"
       }
     },
     "ja": {
@@ -445,7 +505,12 @@
         "reason": "お問い合わせの目的",
         "consent": "この情報照会の確認に限り、氏名とメールアドレスを保存することに同意します。購入や登録ではありません。",
         "submit": "お問い合わせを送信",
-        "receipt": "送信後、審査受付票が英語で表示されます。"
+        "receipt": "送信後、審査受付票が英語で表示されます。",
+        "received": "お問い合わせを審査用に記録しました。",
+        "duplicate": "以前の申請が見つかりました。重複登録はありません。",
+        "private_token": "非公開の受付トークンです。機密として保管してください。",
+        "failed": "申請を処理できません。フォームに戻り、支払いはしないでください。",
+        "status_link": "審査状況を確認する（英語フォーム）"
       }
     },
     "pcm": {
@@ -475,7 +540,12 @@
         "reason": "Why you dey ask",
         "consent": "I agree make dem keep my name and email only to check this information request. E no be purchase or registration.",
         "submit": "Send information request",
-        "receipt": "After you send am, review receipt go show for English."
+        "receipt": "After you send am, review receipt go show for English.",
+        "received": "Dem don record your request make dem review am.",
+        "duplicate": "Dem find your old request; dem no create another one.",
+        "private_token": "Private receipt token — keep am secret.",
+        "failed": "Request no dey available. Go back to di form; no send money.",
+        "status_link": "Check review status (English form)"
       }
     },
     "arz": {
@@ -505,7 +575,12 @@
         "reason": "سبب الاستفسار",
         "consent": "أنا موافق إن اسمي وإيميلي يتحفظوا بس لمراجعة طلب المعلومات ده. ده مش شراء ولا تسجيل.",
         "submit": "ابعت طلب المعلومات",
-        "receipt": "بعد الإرسال هيظهر إيصال المراجعة بالإنجليزي."
+        "receipt": "بعد الإرسال هيظهر إيصال المراجعة بالإنجليزي.",
+        "received": "طلبك اتسجل للمراجعة.",
+        "duplicate": "لقينا طلبك القديم ومفيش طلب متكرر اتعمل.",
+        "private_token": "رمز الإيصال الخاص — خليه سري.",
+        "failed": "الطلب مش متاح. ارجع للفورم ومتدفعش أي فلوس.",
+        "status_link": "راجع حالة الطلب (فورم بالإنجليزي)"
       }
     },
     "mr": {
@@ -535,7 +610,12 @@
         "reason": "चौकशीचे कारण",
         "consent": "ही माहितीची विनंती तपासण्यासाठीच माझे नाव आणि ईमेल साठवण्यास मी संमती देतो/देते. ही खरेदी किंवा नोंदणी नाही.",
         "submit": "माहितीची विनंती पाठवा",
-        "receipt": "पाठवल्यावर इंग्रजीत तपासणी पावती दिसेल."
+        "receipt": "पाठवल्यावर इंग्रजीत तपासणी पावती दिसेल.",
+        "received": "तुमची विनंती तपासणीसाठी नोंदवली आहे.",
+        "duplicate": "तुमची पूर्वीची विनंती सापडली; डुप्लिकेट तयार झाले नाही.",
+        "private_token": "खासगी पावती टोकन — गोपनीय ठेवा.",
+        "failed": "विनंती उपलब्ध नाही. फॉर्मवर परत जा; पैसे देऊ नका.",
+        "status_link": "तपासणीची स्थिती पाहा (इंग्रजी फॉर्म)"
       }
     },
     "vi": {
@@ -565,7 +645,12 @@
         "reason": "Lý do liên hệ",
         "consent": "Tôi đồng ý lưu tên và email chỉ để xem xét yêu cầu thông tin này. Đây không phải mua hàng hay đăng ký.",
         "submit": "Gửi yêu cầu thông tin",
-        "receipt": "Sau khi gửi, biên nhận xem xét bằng tiếng Anh sẽ xuất hiện."
+        "receipt": "Sau khi gửi, biên nhận xem xét bằng tiếng Anh sẽ xuất hiện.",
+        "received": "Yêu cầu của bạn đã được ghi nhận để xem xét.",
+        "duplicate": "Đã tìm thấy yêu cầu trước đó; không tạo bản trùng lặp.",
+        "private_token": "Mã biên nhận riêng tư — hãy giữ bí mật.",
+        "failed": "Không thể xử lý yêu cầu. Hãy trở lại biểu mẫu và đừng thanh toán.",
+        "status_link": "Kiểm tra trạng thái (biểu mẫu tiếng Anh)"
       }
     },
     "te": {
@@ -595,7 +680,12 @@
         "reason": "ప్రశ్నించడానికి కారణం",
         "consent": "ఈ సమాచార అభ్యర్థనను పరిశీలించడానికి మాత్రమే నా పేరు మరియు ఈమెయిల్ నిల్వ చేయడానికి నేను అంగీకరిస్తున్నాను. ఇది కొనుగోలు లేదా నమోదు కాదు.",
         "submit": "సమాచార అభ్యర్థన పంపండి",
-        "receipt": "పంపిన తర్వాత ఆంగ్లంలో సమీక్ష రసీదు కనిపిస్తుంది."
+        "receipt": "పంపిన తర్వాత ఆంగ్లంలో సమీక్ష రసీదు కనిపిస్తుంది.",
+        "received": "మీ అభ్యర్థన సమీక్ష కోసం నమోదైంది.",
+        "duplicate": "మునుపటి అభ్యర్థన లభించింది; మరొక ప్రతిని సృష్టించలేదు.",
+        "private_token": "వ్యక్తిగత రసీదు టోకెన్ — రహస్యంగా ఉంచండి.",
+        "failed": "అభ్యర్థన అందుబాటులో లేదు. ఫారమ్‌కు తిరిగి వెళ్లండి; చెల్లింపు చేయవద్దు.",
+        "status_link": "సమీక్ష స్థితిని చూడండి (ఇంగ్లీష్ ఫారమ్)"
       }
     },
     "sw": {
@@ -625,7 +715,12 @@
         "reason": "Sababu ya swali",
         "consent": "Ninakubali jina na barua pepe yangu zihifadhiwe kwa ajili ya kukagua ombi hili la taarifa pekee. Huu si ununuzi wala usajili.",
         "submit": "Tuma ombi la taarifa",
-        "receipt": "Risiti ya ukaguzi kwa Kiingereza itaonekana baada ya kutuma."
+        "receipt": "Risiti ya ukaguzi kwa Kiingereza itaonekana baada ya kutuma.",
+        "received": "Ombi lako limerekodiwa kwa ukaguzi.",
+        "duplicate": "Ombi la awali limepatikana; hakuna nakala mpya iliyoundwa.",
+        "private_token": "Tokeni ya risiti binafsi — itunze kwa siri.",
+        "failed": "Ombi halipatikani. Rudi kwenye fomu; usifanye malipo.",
+        "status_link": "Angalia hali ya ukaguzi (fomu ya Kiingereza)"
       }
     },
     "ha": {
@@ -655,7 +750,12 @@
         "reason": "Dalilin tambayarka",
         "consent": "Na amince a adana sunana da imel ɗina kawai domin duba wannan neman bayani. Wannan ba saye ko rajista ba ne.",
         "submit": "Aika neman bayani",
-        "receipt": "Bayan aikawa, rasidin dubawa zai bayyana da Turanci."
+        "receipt": "Bayan aikawa, rasidin dubawa zai bayyana da Turanci.",
+        "received": "An rubuta buƙatarka don dubawa.",
+        "duplicate": "An gano buƙatarka ta baya; ba a ƙirƙiri kwafi ba.",
+        "private_token": "Lambar rasidin sirri — ka ɓoye ta.",
+        "failed": "Ba a iya karɓar buƙata ba. Koma fom ɗin; kada ka biya kuɗi.",
+        "status_link": "Duba matsayin nazari (fom ɗin Turanci)"
       }
     },
     "fa": {
@@ -685,7 +785,12 @@
         "reason": "دلیل درخواست",
         "consent": "رضایت می‌دهم نام و ایمیلم صرفاً برای بررسی همین درخواست اطلاعات ذخیره شود. این اقدام خرید یا ثبت‌نام نیست.",
         "submit": "ثبت درخواست اطلاعات",
-        "receipt": "پس از ثبت، رسید پیگیری به زبان انگلیسی نمایش داده می‌شود."
+        "receipt": "پس از ثبت، رسید پیگیری به زبان انگلیسی نمایش داده می‌شود.",
+        "received": "درخواست شما برای بررسی ثبت شد.",
+        "duplicate": "درخواست قبلی بازیابی شد و مورد تکراری ساخته نشد.",
+        "private_token": "توکن خصوصی پیگیری — آن را محرمانه نگه دارید.",
+        "failed": "ثبت یا بررسی درخواست در دسترس نیست. به فرم بازگردید؛ وجهی پرداخت نکنید.",
+        "status_link": "بررسی وضعیت درخواست (فرم انگلیسی)"
       }
     }
   }
