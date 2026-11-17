@@ -52,6 +52,84 @@ jobs:
           echo "FACTORY_SELFHOSTED_RUNNER_ENVIRONMENT=verified_for_readonly_checks"
           echo "FACTORY_LOCAL_CHECKOUT_CREATED=false"
           echo "FACTORY_SQL_MODIFIED=false"
+      - name: Examine live legacy prospect API/HTML via public GET only, no real leads submitted
+        shell: bash
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PUBLIC_GET_PY'
+          import json
+          from html.parser import HTMLParser
+          from urllib.request import Request,build_opener,HTTPRedirectHandler
+          from urllib.error import HTTPError,URLError
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,*a,**k):return None
+          class FormProbe(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.forms=0
+                  self.input_names=set()
+                  self.action_root_intake=False
+                  self.script_count=0
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=='form':
+                      self.forms+=1
+                      self.action_root_intake |= a.get('action','').startswith('/moj-prop-intake/')
+                  elif tag in ('input','select','textarea'):
+                      name=a.get('name')
+                      if name in {'name','email','service','horizon','notes',
+                                  'consent','website','idempotency_key','product_id',
+                                  'csrfmiddlewaretoken'}:
+                          self.input_names.add(name)
+                  elif tag=='script':
+                      self.script_count+=1
+          routes=(
+              ('legacy_public_page','/moj-prop/'),
+              ('legacy_intake_api','/moj-prop-intake/'),
+              ('legacy_intake_html','/moj-prop-intake/?format=html'),
+              ('legacy_receipt_status','/moj-prop-status/?format=html'),
+          )
+          opener=build_opener(NoRedirect)
+          result={}
+          for key,path in routes:
+              request=Request('https://mojplaywin.com'+path,method='GET',
+                  headers={'Accept':'application/json,text/html','Cache-Control':'no-cache'})
+              status=0
+              content_type='unavailable'
+              body=b''
+              try:
+                  with opener.open(request,timeout=10) as response:
+                      status=response.status
+                      content_type=response.headers.get('Content-Type','').split(';')[0].lower()
+                      body=response.read(64001)
+              except HTTPError as exc:
+                  status=exc.code
+                  exc.close()
+              except (URLError,OSError,TimeoutError):
+                  pass
+              rec={'status':status,'content_type':content_type,
+                   'bounded_body':len(body)<=64000}
+              if body and len(body)<=64000:
+                  if content_type=='application/json':
+                      try:
+                          obj=json.loads(body)
+                          rec['json_object']=isinstance(obj,dict)
+                          if isinstance(obj,dict):
+                              rec['csrf_token_present']=bool(obj.get('csrf_token'))
+                              rec['public_catalog_present']='service_catalog' in obj
+                              rec['public_ok_true']=obj.get('ok') is True
+                      except (ValueError,TypeError):rec['json_parse_error']=True
+                  elif content_type=='text/html':
+                      p=FormProbe()
+                      try:p.feed(body.decode('utf-8'))
+                      except (ValueError,UnicodeError):pass
+                      rec['form_count']=p.forms
+                      rec['known_form_fields']=sorted(p.input_names)
+                      rec['form_action_root_intake']=p.action_root_intake
+                      rec['script_count']=p.script_count
+              result[key]=rec
+          print('PUBLIC_MOJPROP_LEGACY_GET_API_CLASSIFICATION='+json.dumps(result,sort_keys=True))
+          print('POST_SUBMITTED=false;CRM_LEAD_CREATED=false;PAID_ORDER_CREATED=false')
+          PUBLIC_GET_PY
       - name: Measure VPS off-host backup and recovery-key metadata in place (no secrets, no write)
         shell: bash
         run: |
