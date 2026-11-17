@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 
 from core.consent_guard_queryset import ConsentStatusQuerySet
+from .moj_prop_page import SUPPORTED_CODES
 
 
 CONSENT_VERSION = "moj-prop-v141-info-contact-v1"
@@ -56,7 +57,7 @@ class PropV141Interest(models.Model):
         super().clean()
         if self.plan_code != "MOJ-PROP-01" or self.consent_version != CONSENT_VERSION:
             raise ValidationError("Only the isolated current Plan 1 inquiry is allowed")
-        if self.source_language not in ("en", "fa"):
+        if self.source_language not in SUPPORTED_CODES:
             raise ValidationError("Unsupported inquiry language")
         self._verify_original()
 
