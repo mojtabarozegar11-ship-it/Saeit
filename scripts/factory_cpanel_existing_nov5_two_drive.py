@@ -293,7 +293,7 @@ def run_export(args):
     return {"schema":"factory.cpanel.nov5.off-only.v1","mode":"transfer",
             "snapshot_id":args.snapshot,"source_metadata_verified":True,
             "source_sha256_verified":True,"source_bytes":SOURCE_BYTES,
-            "encrypted_parts":receipt.part_count,
+            "encrypted_parts":receipt.parts,
             "encrypted_bytes":receipt.ciphertext_bytes,
             "manifest_sha256":receipt.manifest_sha256,
             "remote_two_provider_exact_readback":True,
