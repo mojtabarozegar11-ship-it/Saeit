@@ -28,6 +28,10 @@ jobs:
     name: Validate all 76 static notices and both sitemaps
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    env:
+      SECRET_KEY: "auctions-static-release-ci-only-not-for-production"
+      DEBUG: "0"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,testserver"
     steps:
       - uses: actions/checkout@v4
         with:
