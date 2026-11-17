@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="{{ locale }}" dir="{{ copy.direction }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="no-referrer">
+<title>{{ copy.lead.received }} | MOJ PROP</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0d1119;color:#f6f3eb;font:16px/1.8 system-ui,"Segoe UI",Arial,sans-serif}
+main{width:min(750px,calc(100% - 28px));margin:34px auto;padding:clamp(16px,4vw,34px);border:1px solid #677485;border-radius:13px;background:#18232e}
+h1{color:#e8c780;line-height:1.3;font-size:clamp(1.6rem,5vw,2.3rem)}
+p{max-width:70ch}.note{border:1px solid #bc9065;border-radius:9px;background:#39281e;padding:15px}
+.token{display:block;direction:ltr;unicode-bidi:isolate;text-align:left;word-break:break-all;white-space:pre-wrap;color:#15171c;background:#fff2d5;padding:14px;border-radius:8px}
+a{color:#f2d38f}a:focus-visible{outline:3px solid white;outline-offset:4px}
+</style>
+</head>
+<body><main>
+<h1>{% if reused %}{{ copy.lead.duplicate }}{% else %}{{ copy.lead.received }}{% endif %}</h1>
+<p class="note">{{ copy.payment_notice }}</p>
+<p>{{ copy.lead.private_token }}</p>
+<p><strong>{{ reference }}</strong></p>
+<pre class="token" id="private-receipt">{{ private_receipt }}</pre>
+<p>{{ copy.lead.receipt }}</p>
+<p><a href="/moj-prop-status/?format=html">{{ copy.lead.status_link }}</a></p>
+<p><a href="/world/{{ locale }}/">{{ copy.language_label }} — {{ copy.name }}</a></p>
+</main></body></html>
