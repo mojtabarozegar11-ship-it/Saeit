@@ -45,11 +45,14 @@ jobs:
             result="$(curl --proto '=https' -I -sS --max-time 12 --connect-timeout 5 \
               -o /dev/null \
               -w 'status=%{http_code};tls_verify=%{ssl_verify_result};ip=%{remote_ip}' "$url" 2>/dev/null)"
+            curl_exit=$?
             echo "PUBLIC_HEAD_RESULT=$result"
-            echo "PUBLIC_HEAD_EXIT=$?"
+            echo "PUBLIC_HEAD_EXIT=$curl_exit"
           done
           echo "HEAD_IS_READ_ONLY_AND_DOES_NOT_PROVE_DEPLOYMENT=true"
       - name: Inspect candidate cPanel runtime, quota and DB connection through pinned SSH
+        id: cpanel
+        continue-on-error: true
         shell: bash
         env:
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
@@ -70,7 +73,7 @@ jobs:
             exit 1
           fi
           timeout 18s ssh-keyscan -T 9 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null || true
-          fingerprint="$(ssh-keygen -lf "$d/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u)"
+          fingerprint="$(ssh-keygen -lf "$d/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
           if [[ "$fingerprint" != 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' ]]; then
             echo "CPANEL_AUDIT=BLOCKED_HOST_KEY_UNREACHABLE_OR_MISMATCH"
             exit 1
@@ -105,6 +108,8 @@ jobs:
             | python3 -B scripts/mojplaywin_mysql_quota_sanitize_readonly.py quota
           echo "CPANEL_AUDIT=READ_ONLY_OBSERVATIONS_COMPLETED_NOT_RELEASE"
       - name: Inspect VPS private off-host archive pair metadata and recovery prerequisites
+        id: vps
+        continue-on-error: true
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -125,7 +130,7 @@ jobs:
             exit 1
           fi
           timeout 16s ssh-keyscan -T 8 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null || true
-          fingerprint="$(ssh-keygen -lf "$d/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u)"
+          fingerprint="$(ssh-keygen -lf "$d/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
           if [[ "$fingerprint" != 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' ]]; then
             echo "VPS_AUDIT=BLOCKED_HOST_KEY_UNREACHABLE_OR_MISMATCH"
             exit 1
@@ -166,3 +171,10 @@ jobs:
           echo "BROKER_ORDER_SUBMITTED=false"
           echo "PUBLIC_DEPLOYMENT_PERFORMED=false"
           echo "RELEASE_AUTHORIZED=false"
+          echo "CPANEL_AUDIT_STEP_OUTCOME=${{ steps.cpanel.outcome }}"
+          echo "VPS_AUDIT_STEP_OUTCOME=${{ steps.vps.outcome }}"
+          if [[ "${{ steps.cpanel.outcome }}" != "success" || "${{ steps.vps.outcome }}" != "success" ]]; then
+            echo "LIVE_RECOVERY_EVIDENCE=BLOCKED_PINNED_SSH_OR_READONLY_PREFLIGHT"
+            exit 1
+          fi
+          echo "LIVE_RECOVERY_EVIDENCE=OBSERVED_ONLY_NOT_RESTORED"
