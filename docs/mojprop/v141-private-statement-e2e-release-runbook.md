@@ -34,12 +34,12 @@ both phases, not 28 days each.
 
 - Original source baseline: 837 / 837 Python 3.11 checks on #2688
   [run #44156441327](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44156441327).
-- This stacked PR adds **31** actual MariaDB/Django request tests to
-  the original **13** MariaDB transactional checks. The complete **44**
+- This stacked PR adds **32** actual MariaDB/Django request tests to
+  the original **13** MariaDB transactional checks. The previous **44**
   integration tests passed on head
   `ff569f0bfecf39077fcb01fdc2323d35a5302205` in
   [GitHub Actions #44157899387](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44157899387).
-  They include actual session middleware and URL routing, ownership
+  An added inactive-user check brings the new 45-case integration target\n  to be confirmed separately on its current SHA. The preceding 44-case\n  evidence remains valid only for its historical commit.\n  They include actual session middleware and URL routing, ownership
   isolation, anonymous redirect, HTTPS and query denials, flag OFF,
   writer-to-template persistence, bilingual rendering, date boundaries,
   25-row limit, cache policies, and existing JSON separation.
