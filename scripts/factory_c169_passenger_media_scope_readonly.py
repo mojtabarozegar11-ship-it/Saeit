@@ -70,8 +70,13 @@ def wsgi_signals(source:bytes)->dict:
     out['django_settings_literal']='config.settings' in values
     out['wsgi_loader_symbol_present']=any(isinstance(x,ast.Name) and x.id=='get_wsgi_application' for x in ast.walk(tree))
     out['application_declared']=any(
-        isinstance(n,(ast.Assign,ast.AnnAssign)) and any(isinstance(t,ast.Name) and t.id=='application'
-               for t in (n.targets if isinstance(n,ast.Assign) else [n.target]))
+        (isinstance(n,(ast.Assign,ast.AnnAssign)) and any(
+            isinstance(t,ast.Name) and t.id=='application'
+            for t in (n.targets if isinstance(n,ast.Assign) else [n.target])))
+        or (isinstance(n,ast.ImportFrom) and any(
+            alias.asname=='application' or
+            (alias.name=='application' and alias.asname is None)
+            for alias in n.names))
         for n in tree.body)
     return out
 
