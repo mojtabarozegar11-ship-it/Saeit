@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run *every* nonproduction Moj Prop XAUUSD v1.3 unit test explicitly.
+"""Run every nonproduction MOJ PROP XAUUSD v1.3 and social v1.4 unit test.
 
 Local/manual only. This file does NOT modify GitHub Actions, create payment
 requests, interact with a broker, deploy code, or write to customer databases.
@@ -27,9 +27,16 @@ REQUIRED_TEST_MODULES = (
     ("tests.test_xauusd_v13_cross_source_guard", 12),
     ("tests.test_xauusd_v13_phase_day_audit", 20),
     ("tests.test_xauusd_v13_social_evidence", 30),
+    ("tests.test_plan1_v14_social_or_28d", 34),
+    ("tests.test_plan1_v14_combined_qualification", 17),
+    ("tests.test_plan1_v14_private_interest_review", 30),
+    ("tests.test_plan1_v141_precontract_boundary", 33),
+    ("tests.test_mojprop_v141_prelaunch_copy", 25),
 )
 LEGACY_TEST_MODULE = "tests.test_prop_firm_policy"
 EXPECTED_V13_TESTS = 194
+EXPECTED_V14_TESTS = 139
+EXPECTED_ALL_TESTS = EXPECTED_V13_TESTS + EXPECTED_V14_TESTS
 
 
 def run_full_review() -> int:
@@ -53,8 +60,17 @@ def run_full_review() -> int:
             }, ensure_ascii=False), file=sys.stderr)
             return 2
         all_tests.addTests(suite)
-    if sum(observed.values()) != EXPECTED_V13_TESTS:
-        print("Unexpected v1.3 test count; fail closed", file=sys.stderr)
+    v13_modules = {name: count for name, count in observed.items()
+                   if name.startswith("tests.test_xauusd_v13_")}
+    v14_modules = {name: count for name, count in observed.items()
+                   if name.startswith("tests.test_plan1_v14")
+                   or name == "tests.test_mojprop_v141_prelaunch_copy"}
+    if (sum(v13_modules.values()) != EXPECTED_V13_TESTS
+            or sum(v14_modules.values()) != EXPECTED_V14_TESTS):
+        print("Version-specific unit test inventory drift; fail closed", file=sys.stderr)
+        return 2
+    if sum(observed.values()) != EXPECTED_ALL_TESTS:
+        print("Unexpected v1.3/v1.4.1 combined test count; fail closed", file=sys.stderr)
         return 2
     historical = loader.loadTestsFromName(LEGACY_TEST_MODULE)
     if loader.errors or historical.countTestCases() == 0:
@@ -65,7 +81,10 @@ def run_full_review() -> int:
     print(json.dumps({
         "status": "UNIT_TESTS_PASS_NOT_RELEASE" if result.wasSuccessful() else "UNIT_TESTS_FAIL",
         "v13_expected_test_cases": EXPECTED_V13_TESTS,
-        "v13_test_modules": observed,
+        "v14_expected_test_cases": EXPECTED_V14_TESTS,
+        "combined_v13_v14_expected_test_cases": EXPECTED_ALL_TESTS,
+        "v13_test_modules": v13_modules,
+        "v14_test_modules": v14_modules,
         "total_unit_tests_run": result.testsRun,
         "failures": len(result.failures),
         "errors": len(result.errors),
