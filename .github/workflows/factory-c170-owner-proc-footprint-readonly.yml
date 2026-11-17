@@ -1,0 +1,58 @@
+name: Factory C170 owner Passenger live process footprint (READ ONLY)
+on:
+  pull_request:
+    paths:
+      - 'scripts/factory_c170_owner_proc_footprint_readonly.py'
+      - 'tests/test_factory_c170_owner_proc_footprint_readonly.py'
+      - '.github/workflows/factory-c170-owner-proc-footprint-readonly.yml'
+permissions:
+  contents: read
+concurrency:
+  group: factory-c170-owner-proc-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  one_owner_readonly_preflight:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Source hash pins and 20 offline tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/factory_c170_owner_proc_footprint_readonly.py
+          test ! -L tests/test_factory_c170_owner_proc_footprint_readonly.py
+          test "$(git hash-object scripts/factory_c170_owner_proc_footprint_readonly.py)" = '40d59411f9a59d65e212efc14519160bcacbebca'
+          test "$(git hash-object tests/test_factory_c170_owner_proc_footprint_readonly.py)" = 'fbe8bf98d216c4616233eb4842a5e7462531c832'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_c170_owner_proc_footprint_readonly.py' -q
+      - name: One owner-only cPanel process-name and cwd hint observation
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY" || exit 65
+          umask 077
+          work="$(mktemp -d -p "$RUNNER_TEMP" c170.owner.XXXXXXXX)"
+          trap 'rm -f -- "$work/host.key" "$work/known" "$work/config"; rmdir -- "$work" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 35s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2"'
+          timeout 80s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/factory_c170_owner_proc_footprint_readonly.py \
+            | python3 -c 'import sys,json; s=sys.stdin.read(11000); p="FACTORY_C170_PROC_FOOTPRINT_READONLY="; a=[v for v in s.splitlines() if v.startswith(p)]; assert len(a)==1,"NO_SANITIZED_RESULT"; d=json.loads(a[0][len(p):]); assert d["schema"]=="factory.cpanel.owner-proc-footprint.readonly.c170.v1" and d["read_only"] is True and d["owner_verified"] is True,"WRONG_OWNER"; assert set(d)=={"schema","read_only","owner_verified","scan_completed","candidate_processes_observed","candidate_staging_cwd_hints","candidate_webroot_cwd_hints","candidate_other_cwd_hints","candidate_cwd_unverified","process_limit_exceeded","proc_scan_limit_exceeded","proc_error_occurred","customer_contents_read","cmdline_read","environ_read","mysql_connected","passenger_live_db_identity_proven","worker_code_identity_proven","complete_media_scope_proven","backup_created","production_modified"}; assert all(d[k] is False for k in ("customer_contents_read","cmdline_read","environ_read","mysql_connected","passenger_live_db_identity_proven","worker_code_identity_proven","complete_media_scope_proven","backup_created","production_modified")); print(a[0]); print("C170_DECISION=PROC_FOOTPRINT_ONLY_NO_DB_IDENTITY_OR_BACKUP")'
