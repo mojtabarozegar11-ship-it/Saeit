@@ -166,10 +166,24 @@ def store_signed_v141_demo_manifest(*, state_pk: int, raw_manifest: bytes,
             mathematical_state=old.reported_engine_state,
             idempotent_replay=True,
         )
-    from django.utils import timezone
     stamp = datetime.fromisoformat(calc.assessment_utc)
     if state.last_as_of is not None and stamp <= state.last_as_of:
         raise DurableSimReplayRejected("assessment must advance from last stored snapshot")
+    first_transition = (datetime.fromisoformat(calc.phase_one_accepted_at_utc)
+                        if calc.phase_one_accepted_at_utc else None)
+    second_transition = (datetime.fromisoformat(calc.phase_two_started_at_utc)
+                         if calc.phase_two_started_at_utc else None)
+    completed_transition = (datetime.fromisoformat(calc.phase_two_completed_at_utc)
+                            if calc.phase_two_completed_at_utc else None)
+    # A later signed full snapshot cannot rewrite or erase a previously
+    # persisted stage transition, even under the same configured adapter key.
+    for historical, proposed, field in (
+        (state.last_phase_one_accepted_at, first_transition, "phase-one acceptance"),
+        (state.last_phase_two_started_at, second_transition, "phase-two start"),
+        (state.last_phase_two_completed_at, completed_transition, "phase-two completion"),
+    ):
+        if historical is not None and historical != proposed:
+            raise DurableSimReplayRejected(field + " cannot be revised")
     # A first-stage acceptance must be observed as a SEPARATE checkpoint
     # before phase two can be recorded; source HMAC cannot skip this step.
     if (calc.phase_two.verified_closed_positions
@@ -199,11 +213,16 @@ def store_signed_v141_demo_manifest(*, state_pk: int, raw_manifest: bytes,
     state.last_manifest_sha256 = digest
     state.last_replay_sha256 = calc.snapshot_sha256
     state.last_as_of = stamp
+    state.last_phase_one_accepted_at = first_transition
+    state.last_phase_two_started_at = second_transition
+    state.last_phase_two_completed_at = completed_transition
     state.last_engine_state = calc.state
     state.last_receipt_sha256 = receipt_digest
     state.save(update_fields=(
         "last_sequence", "last_manifest_sha256", "last_replay_sha256",
-        "last_as_of", "last_engine_state", "last_receipt_sha256", "updated_at"
+        "last_as_of", "last_phase_one_accepted_at",
+        "last_phase_two_started_at", "last_phase_two_completed_at",
+        "last_engine_state", "last_receipt_sha256", "updated_at"
     ))
     return StoredSimReplayResult(
         state_pk=state.pk, receipt_pk=record.pk,
