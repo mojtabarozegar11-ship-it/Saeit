@@ -3,7 +3,13 @@ name: MOJ PROP XAUUSD v1.3 offline risk tests
 on:
   pull_request:
     paths:
+      - 'prop_firm/xauusd_v13_*.py'
       - 'prop_firm/xauusd_v13_preflight.py'
+      - 'prop_firm/xauusd_v13_contract_gate.py'
+      - 'prop_firm/xauusd_v13_qualification_preview.py'
+      - 'docs/mojprop/xauusd-v13-buyer-terms-draft-fa-en.md'
+      - 'scripts/mojprop_xauusd_v13_full_review_suite.py'
+      - 'tests/test_xauusd_v13_*.py'
       - 'tests/test_xauusd_v13_preflight.py'
       - 'prop_firm/xauusd_v13_broker_evidence.py'
       - 'tests/test_xauusd_v13_broker_evidence.py'
@@ -28,5 +34,5 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Exact new v1.3 math and legacy v1.2 policy unit tests
-        run: python -m unittest tests.test_xauusd_v13_preflight tests.test_xauusd_v13_broker_evidence tests.test_prop_firm_policy -v
+      - name: Exact full v1.3 contract, 50-trades, social, XAUUSD and legacy v1.2 regressions
+        run: python -B scripts/mojprop_xauusd_v13_full_review_suite.py
