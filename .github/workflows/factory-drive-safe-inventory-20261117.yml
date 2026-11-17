@@ -164,6 +164,34 @@ jobs:
               entries.sort(key=lambda x:x['logical_bytes'],reverse=True)
               return {'status':'complete' if not stacks and visited<=limit else 'truncated','visited':visited,'errors':errors,'buckets':entries[:16],'suffixes':dict(kinds)}
           data['backup_tree']=classify_backup_tree(backup)
+          # Evidence for the four SQLite backup files, with paths redacted in public logs.
+          # Metadata and first 16 bytes only: no expensive integrity scans on live storage.
+          def sqlite_candidates(base, maximum=6000):
+              if status(base)!='directory':return {'status':'unsafe_root'}
+              found=[]
+              scanned=0
+              for dirpath,dirs,files in os.walk(base,followlinks=False):
+                  if pathlib.Path(dirpath).relative_to(base).parts.__len__()>4:dirs[:]=[];continue
+                  dirs[:]=[d for d in dirs if not (pathlib.Path(dirpath)/d).is_symlink()]
+                  for name in files:
+                      scanned+=1
+                      if scanned>maximum:return {'status':'truncated','records':found,'visited':scanned}
+                      if not name.endswith('.sqlite3'):continue
+                      p=pathlib.Path(dirpath)/name
+                      try:
+                          st=p.lstat()
+                          if not stat.S_ISREG(st.st_mode):continue
+                          with p.open('rb') as stream:header=stream.read(16)
+                          rel=p.relative_to(base).as_posix()
+                          group='root' if p.parent==base else hashlib.sha256(p.relative_to(base).parts[0].encode()).hexdigest()[:12]
+                          found.append({'path_hash':hashlib.sha256(rel.encode()).hexdigest()[:16],
+                                        'group_hash':group,'root':p.parent==base,'exact_master_before':bool(pattern.fullmatch(name)),
+                                        'bytes':st.st_size,'allocated_bytes':st.st_blocks*512,
+                                        'mtime_utc':datetime.datetime.fromtimestamp(st.st_mtime,datetime.timezone.utc).isoformat(),
+                                        'links':st.st_nlink,'sqlite_header_ok':header==b'SQLite format 3\\x00'})
+                      except OSError:continue
+              return {'status':'complete','visited':scanned,'records':sorted(found,key=lambda x:(x['root'],x['bytes']),reverse=True)}
+          data['sqlite_candidates']=sqlite_candidates(backup)
           print('MOJ_FACTORY_BACKUP_INVENTORY='+json.dumps(data,sort_keys=True))
           PY
           echo MOJ_FACTORY_READONLY_AUDIT_COMPLETE=true
