@@ -100,6 +100,7 @@ class ReservationLedgerTests(unittest.TestCase):
             reservation_id="RES-002", idempotency_key="IDEM-002",
             trader_ref="TRADER-B", order_ref="ORDER-002",
             max_account_risk_usd=D("3.2"),
+            max_account_capital_usd=D("200"),
         )
         self.assertEqual(
             self.ledger.exposure("OWNER-LIVE", "TRADER-A").reserved_risk_usd,
@@ -145,6 +146,7 @@ class ReservationLedgerTests(unittest.TestCase):
             reservation_id="RES-002", idempotency_key="IDEM-002",
             trader_ref="TRADER-B", order_ref="ORDER-002",
             max_account_risk_usd=D("3.2"),
+            max_account_capital_usd=D("200"),
         )
         self.ledger.bind_broker_order(
             reservation_id="RES-001", broker_order_ref="BROKER-001"
