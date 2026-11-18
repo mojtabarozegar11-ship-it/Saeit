@@ -1,0 +1,56 @@
+name: "MOJ PROP — encrypt ZERO-CUSTOMER tiny isolated DB on owner VPS and verify restore"
+on:
+  push:
+    branches: [audit/mojprop-isolated-django-host-rehearsal-20261118]
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-v141-first-offhost-private-db-backup-20261118
+  cancel-in-progress: false
+jobs:
+  initial-backup-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect source syntax and crypto runtime
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          f=Path("scripts/mojprop_v141_encrypt_initial_private_db_offhost_20261118.py")
+          compile(f.read_text("utf8"),str(f),"exec")
+          assert hasattr(sqlite3.connect(":memory:"),"deserialize")
+          print("OFFHOST_SQLITE_MEMORY_RESTORE_SUPPORT=true")
+          PY
+          command -v openssl
+          openssl version
+      - name: Securely stream pinned cPanel EMPTY payment snapshot to private off-host encrypted store
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?OWNER_CPANEL_SSH_CREDENTIAL_UNAVAILABLE}"
+          umask 077
+          dir="$RUNNER_TEMP/mojprop-offhost-ssh"
+          install -d -m 700 "$dir"
+          trap 'rm -f -- "$dir/key" "$dir/known"; rmdir "$dir" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$dir/key"
+          chmod 600 "$dir/key"
+          ssh-keygen -y -P '' -f "$dir/key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$dir/known"
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 120s ssh -T -i "$dir/key" -p 1396 \
+            -o UserKnownHostsFile="$dir/known" -o StrictHostKeyChecking=yes \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ForwardAgent=no \
+            -o RequestTTY=no -o ConnectTimeout=15 -o ConnectionAttempts=1 \
+            zomorod2@178.239.147.125 \
+            'set -eu; test "$(id -un)" = zomorod2; p=/home/zomorod2/.mojprop-native-v141-isolated-20261118/merchant-initial-snapshot.sqlite3; test -f "$p" && test ! -L "$p" && test "$(stat -c %a "$p")" = 600 && test "$(stat -c %s "$p")" -lt 8388608; cat "$p"' \
+            | PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_v141_encrypt_initial_private_db_offhost_20261118.py \
+            | python3 -B -c 'import json,sys;raw=sys.stdin.read(10000);rows=[s for s in raw.splitlines() if s.startswith("MOJPROP_INITIAL_OFFHOST_ENCRYPTED_DB=")];assert len(rows)==1,raw[-2000:];r=json.loads(rows[0].split("=",1)[1]);print(rows[0]);assert r.get("encrypted_copy_stored") is True and r.get("key_private_vps_only") is True and r.get("in_memory_decrypt_restore_verified") is True and r.get("all_paid_tables_zero_rows") is True'
+          echo "ONLY_EMPTY_ISOLATED_DB_ENCRYPTED_TO_OWNER_VPS_NO_LIVE_PAYMENTS=true"
