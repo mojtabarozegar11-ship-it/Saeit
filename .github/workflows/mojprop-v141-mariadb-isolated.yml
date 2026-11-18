@@ -5,6 +5,10 @@ on:
     branches:
       - fix/mojprop-v141-stage-specific-28d-windows-20261117
       - feature/mojprop-v141-secure-customer-statement-20261117
+      - feature/mojprop-v141-prelaunch-lead-intake-20261117
+  pull_request:
+    branches:
+      - audit/mojprop-v141-readonly-production-restore-gates-20261117
   workflow_dispatch:
 
 permissions:
@@ -80,11 +84,13 @@ jobs:
                       raise SystemExit("Unsafe existing disposable test schema; refusing destructive test setup")
           print("Verified fresh disposable test schema only; no external DB connection")
           PY
-      - name: Migrate 0001-0010 into DISPOSABLE test database and execute real transactional tests
+      - name: Migrate 0001-0011 into DISPOSABLE test database and execute real transactional tests
         run: |
           python -m django test \
             tests.test_mojprop_v141_mariadb_integration \
             tests.test_mojprop_v141_private_statement_mariadb \
+            tests.test_mojprop_v141_interest_intake \
+            tests.test_mojprop_v141_public_info_20_mariadb \
             --settings=config.mojprop_v141_ci_mariadb_settings \
             --verbosity=2 --noinput
       - name: Explicit release status

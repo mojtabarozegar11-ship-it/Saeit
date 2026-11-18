@@ -130,12 +130,14 @@ urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/",
 # Moj Prop is a MojPlayWin-only informational division. Checkout and broker execution are disabled.
 from core.moj_prop_views import moj_prop_landing, moj_prop_dashboard, moj_prop_interest, moj_prop_interest_form
 from core.mojprop_v141_info_view import moj_prop_v141_public_info
+from core.mojprop_v141_lead_view import moj_prop_v141_interest
 from core.mojprop_v141_private_portfolio_view import moj_prop_v141_private_portfolio
 from core.mojprop_v141_private_statement_view import moj_prop_v141_private_statement
 urlpatterns += [
     # New exact nonpayable v1.4.1 root URL; never fall through <str:lang>.
     # The old /moj-prop/plan1/ static/owner path remains untouched.
     path("moj-prop-v141-info/", moj_prop_v141_public_info, name="moj_prop_v141_info"),
+    path("moj-prop-v141-interest/", moj_prop_v141_interest, name="moj_prop_v141_interest"),
     # Disabled-by-default authenticated portfolio; no browser POST for trades.
     path("moj-prop-v141/portfolio/<slug:challenge_ref>/",
          moj_prop_v141_private_portfolio, name="moj_prop_v141_private_portfolio"),

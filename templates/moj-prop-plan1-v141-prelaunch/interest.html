@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="{{ language }}" dir="{{ direction }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="same-origin">
+<title>{{ copy.title }} — MOJ PROP</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}
+body{background:#0c1018;color:#eef2f6;font:16px/1.7 system-ui,Arial,sans-serif;margin:0}
+main{max-width:720px;margin:30px auto;padding:28px;background:#19212c;border:1px solid #5c6780;border-radius:15px}
+h1{color:#edcc89;font-size:clamp(24px,5vw,34px)}p,small{color:#d0d8e1}
+label{display:block;margin:16px 0 7px;font-weight:600}
+input[type=email]{width:100%;border:2px solid #aeb8c5;background:#fff;color:#121821;border-radius:7px;padding:13px;font:inherit;direction:ltr;text-align:start}
+.choice{display:flex;gap:10px;align-items:flex-start}.choice input{margin-top:8px;width:20px;height:20px;flex-shrink:0}
+button{margin-top:20px;border:0;border-radius:8px;padding:13px 20px;background:#e7be72;color:#151b25;font:inherit;font-weight:bold;cursor:pointer}
+a{color:#f6d89b}.warn{padding:12px;border:1px solid #cc9d5a;border-radius:8px;background:#30241b}
+.lang-nav{display:flex;flex-wrap:wrap;gap:8px;padding:0;margin:15px 0 26px;list-style:none}
+.lang-nav a{display:inline-block;padding:4px 8px;border:1px solid #5c6780;border-radius:6px;text-decoration:none}
+.lang-nav a[aria-current=page]{background:#3f3940;border-color:#edcc89}
+</style>
+</head>
+<body><main>
+<nav aria-label="{{ copy.language }}">
+<strong>{{ copy.language }}</strong>
+<ul class="lang-nav">
+{% for option in language_options %}
+<li><a href="/moj-prop-v141-interest/?lang={{ option.code }}" lang="{{ option.code }}"{% if option.active %} aria-current="page"{% endif %}>{{ option.name }}</a></li>
+{% endfor %}
+</ul>
+</nav>
+<h1>{{ copy.title }}</h1>
+<p class="warn"><strong>{{ copy.warning }}</strong></p>
+<p>{{ copy.intro }}</p>
+<form method="post" action="/moj-prop-v141-interest/" enctype="application/x-www-form-urlencoded">
+{% csrf_token %}
+<input type="hidden" name="plan_code" value="MOJ-PROP-01">
+<input type="hidden" name="consent_version" value="{{ consent_version }}">
+<input type="hidden" name="language" value="{{ language }}">
+<label for="email">{{ copy.email }}</label>
+<input id="email" type="email" name="email" required maxlength="254" autocomplete="email">
+<label class="choice">
+<input type="checkbox" name="contact_consent" value="yes" required>
+<span>{{ copy.consent }}</span>
+</label>
+<button type="submit">{{ copy.button }}</button>
+</form>
+<p><small>{{ copy.privacy }} <a href="mailto:mojplaywin@gmail.com">mojplaywin@gmail.com</a>.</small></p>
+<p><a href="/moj-prop-v141-info/?lang={{ language }}">{{ copy.back }}</a></p>
+</main></body></html>

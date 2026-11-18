@@ -322,3 +322,31 @@ class PrivateStatementMariaDBTests(TransactionTestCase):
         self.owner.save(update_fields=["is_active"])
         with self.assertRaises(Http404):
             self._call(user=self.owner)
+
+    def test_33_private_statement_all_20_locale_gets_are_owner_scoped(self):
+        from prop_firm.moj_prop_page import SUPPORTED_CODES
+        from prop_firm.mojprop_v141_statement_i18n import statement_labels
+        from core.mojprop_v141_private_statement_view import _LOCALIZED
+        from django.utils.html import escape
+        for code in SUPPORTED_CODES:
+            with self.subTest(code=code):
+                response = self._call(query="lang=" + code)
+                self.assertEqual(response.status_code, 200)
+                html = response.content.decode("utf-8")
+                direction = "rtl" if code in ("fa", "ar", "ur") else "ltr"
+                self.assertIn('lang="' + code + '" dir="' + direction + '"', html)
+                self.assertIn(CHALLENGE, html)
+                self.assertIn(escape(statement_labels(code, _LOCALIZED)["title"]), html)
+                self.assertIn("no-store", response["Cache-Control"])
+                for other in SUPPORTED_CODES:
+                    self.assertIn(
+                        "/moj-prop-v141/statement/" + CHALLENGE + "/?lang=" + other,
+                        html,
+                    )
+
+    def test_34_invalid_private_language_query_fails_closed(self):
+        from django.http import Http404
+        for query in ("lang=xx", "lang=fa&lang=en", "lang=en&amount=30"):
+            with self.subTest(query=query):
+                with self.assertRaises(Http404):
+                    self._call(query=query)

@@ -101,7 +101,8 @@ class V141InfoRouteSourceTests(unittest.TestCase):
         self.assertNotIn("metatrader", self.view.lower())
 
     def test_18_fixed_render_template(self):
-        self.assertIn('render(\n        request, "moj-prop-plan1-v141-prelaunch/index.html"',self.view)
+        self.assertIn('"moj-prop-plan1-v141-prelaunch/index.html"', self.view)
+        self.assertIn('"moj-prop-plan1-v141-prelaunch/info_20.html"', self.view)
 
     def test_19_no_untrusted_forwarded_host_lookup(self):
         self.assertIn('request.get_host()',self.view)
