@@ -7,6 +7,8 @@ on:
       - 'templates/moj-prop-plan1-sidecar/**'
       - 'scripts/mojprop_plan1_sidecar_release.py'
       - 'tests/test_mojprop_plan1_sidecar_release.py'
+      - 'scripts/mojprop_plan1_buyer_terms_release_gate.py'
+      - 'tests/test_mojprop_plan1_buyer_terms_release_gate.py'
       - '.github/workflows/mojprop-plan1-sidecar-release.yml'
   workflow_dispatch:
     inputs:
@@ -49,7 +51,7 @@ jobs:
       - name: Run owner-preservation, exact staged source and security regressions
         run: |
           set -euo pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_plan1_sidecar_release
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v tests.test_mojprop_plan1_sidecar_release tests.test_mojprop_plan1_buyer_terms_release_gate
       - name: Validate public-static-only scope
         run: |
           echo 'SIDECAR_SOURCE_AND_SECURITY_TESTED=true'
@@ -67,7 +69,9 @@ jobs:
       vars.MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED == 'true' &&
       vars.MOJPROP_STATIC_ROLLBACK_VERIFIED == 'true' &&
       vars.MOJPROP_SIDECAR_SOURCE_REVIEWED == 'true' &&
-      vars.MOJPROP_SIDECAR_APPROVED_MAIN_SHA == github.sha
+      vars.MOJPROP_SIDECAR_APPROVED_MAIN_SHA == github.sha &&
+      vars.MOJPROP_PLAN1_BUYER_TERMS_APPROVED_VERSION != '' &&
+      vars.MOJPROP_PLAN1_BUYER_TERMS_APPROVED_COPY_SHA256 != ''
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     steps:
@@ -81,7 +85,18 @@ jobs:
           set -euo pipefail
           test "$(git hash-object -- templates/moj-prop-plan1-sidecar/index.html)" = "d310d21cff88fad44770c0130260efa5414a1f5e"
           test "$(git hash-object -- scripts/mojprop_plan1_sidecar_release.py)" = "63f0c4471b02ee0863c8c95608218a1bf3928dc8"
-          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_mojprop_plan1_sidecar_release
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_mojprop_plan1_sidecar_release tests.test_mojprop_plan1_buyer_terms_release_gate
+      - name: Reject stale or unresolved buyer terms before any owner-side staging
+        shell: bash
+        env:
+          APPROVED_VERSION: ${{ vars.MOJPROP_PLAN1_BUYER_TERMS_APPROVED_VERSION }}
+          APPROVED_SHA256: ${{ vars.MOJPROP_PLAN1_BUYER_TERMS_APPROVED_COPY_SHA256 }}
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_plan1_buyer_terms_release_gate.py \
+            --page templates/moj-prop-plan1-sidecar/index.html \
+            --approved-version "$APPROVED_VERSION" \
+            --approved-sha256 "$APPROVED_SHA256"
       - name: Prepare pinned cPanel connection through authorized factory runner
         shell: bash
         env:
