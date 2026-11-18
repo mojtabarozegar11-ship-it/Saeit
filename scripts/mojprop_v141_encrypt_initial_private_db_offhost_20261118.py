@@ -32,7 +32,7 @@ REQUIRED={
 }
 report={"schema":"mojprop.private.trx.offhost_first_zero_customer.v1",
  "encrypted_copy_stored":False,"key_private_vps_only":False,
- "initial_sqlite_integrity":False,"in_memory_decrypt_restore_verified":False,
+ "initial_sqlite_integrity":False,"decrypted_restore_verified":False,
  "all_paid_tables_zero_rows":False,"original_source_database_modified":False,
  "owner_cpanel_app_modified":False,"customer_data_replicated":False,
  "customer_payment_enabled":False,"vps_backend_restart":False,
@@ -87,7 +87,7 @@ try:
   raise RuntimeError("Off-host decryption did not roundtrip")
  if not verify_empty_sqlite(dec.stdout):
   raise RuntimeError("Decrypted off-host database integrity/records mismatch")
- report["in_memory_decrypt_restore_verified"]=True
+ report["decrypted_restore_verified"]=True
  manifest={
    "schema":"mojprop.offhost.initial_encrypted_empty.v1",
    "cipher_sha256":hashlib.sha256(cipher).hexdigest(),
@@ -112,5 +112,5 @@ except Exception as e:
 finally:
  print("MOJPROP_INITIAL_OFFHOST_ENCRYPTED_DB="+json.dumps(report,sort_keys=True))
 if not (report["encrypted_copy_stored"] and report["key_private_vps_only"]
-        and report["in_memory_decrypt_restore_verified"]):
+        and report["decrypted_restore_verified"]):
  raise SystemExit(1)
