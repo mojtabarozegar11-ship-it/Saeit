@@ -101,3 +101,8 @@ python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive \
 ابزار `scripts/factory_vps_nov5_sqlite_integrity_readonly_20261118.py` و workflow `.github/workflows/factory-off-vps-nov5-integrity-readonly.yml` در همین PR ثبت شد. اتصال فقط‌خواندنی با هویت `githubops` و fingerprint پین‌شده، هش ثابت کد، و SQLite `mode=ro&immutable=1` اجرا می‌شود. این گیت مستقل از سلامت cPanel است و بکاپ در دو Drive را ثابت نمی‌کند.
 
 رسید اجرای جدید: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44222230595 . تا زمانی که job موفق نشده، نتیجهٔ سلامت کامل SQLite روی نسخه‌های VPS را `NOT YET PROVEN` تلقی کنید. حذف cPanel همچنان HOLD است.
+
+
+## رفع ابهام فایل اثبات مقصد — ۱۸ نوامبر ۲۰۲۶
+
+در حساب دوم دو object مستقل با نام `manifest.json` در آرشیو تاریخی وجود دارد. هیچ فایل حذف یا تغییر داده نشده است. برای جلوگیری از ابهام این مسیر، تنظیم OAuth و انتقال تاریخی اکنون هر دو قطعه یکتای `F-01 Factory VPS encrypted recovery 2026-10-30/factory-runtime-001.f01enc.seg-21` را با SHA256 ثابت `06098cc64e9f1ac23670ac8d2f71e4402e668940b9a00c77a3184b1aec0e5b30` و اندازه 712 bytes استفاده می‌کنند. دو قطعه مستقل از خود Drive خوانده شدند؛ SHA و تمام بایت‌ها برابر بودند. این تغییر صرفاً یک نقص preflight را رفع می‌کند؛ OAuth مستقل سرور، ظرفیت واقعی و انتقال داده هنوز اثبات نشده‌اند. شاخه اصلاحی برای جلوگیری از اجرای دوباره گردش‌های پاکسازی به‌صورت مستقل نگهداری می‌شود.
