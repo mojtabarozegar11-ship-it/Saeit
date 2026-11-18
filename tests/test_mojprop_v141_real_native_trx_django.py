@@ -341,6 +341,21 @@ class RealNativePaymentStorageTests(TestCase):
         self.assertEqual(PropV141NativeReceipt.objects.count(), 1)
         self.assertEqual(PropV141VirtualBook.objects.get().owner_id, self.buyer.pk)
 
+    def test_watcher_bad_duplicate_cannot_hide_valid_indexer_candidate(self):
+        """Malformed account-index records never suppress later valid TXID."""
+        i = self.invoice()
+        row = self.indexed_transfer(i)
+        invalid_shape = dict(row, raw_data=[])
+        invalid_amount = self.indexed_transfer(i, amount=29_999_999)
+        with patch("prop_firm.plan1_v141_native_watcher._indexer_configuration",
+                   return_value=("https://api.trongrid.io", "")), \
+             patch("prop_firm.plan1_v141_native_watcher._get_page",
+                   return_value=([invalid_shape, invalid_amount, row], {})):
+            result = reconcile_pending_invoices(dry_run=True)
+        self.assertEqual(result["candidate_txids"], 1)
+        self.assertEqual(result["settled"], 0)
+        self.assertEqual(PropGlobalTRXSettlement.objects.count(), 0)
+
     def test_watcher_dry_run_is_nonpayable(self):
         i = self.invoice()
         body, receipt = self.proof(i)
