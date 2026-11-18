@@ -1,0 +1,70 @@
+name: Factory OFF owner OAuth post-consent Drive quota and identity admission
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/factory-off-owner-drive-post-consent-20261118.yml'
+permissions:
+  contents: read
+concurrency:
+  group: factory-owner-oauth-post-consent-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  post-consent:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify owner-local config and read existing private proof and free quota only
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops || { echo FACTORY_DRIVE_POST_CONSENT_HOLD=OWNER_RUNNER_IDENTITY_UNVERIFIED; exit 78; }
+          test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'f9c6d8445144744920246a128c977bdc850eb80f'
+          test "$(git hash-object scripts/factory_rclone_ephemeral_binary.py)" = 'fa088e6531c302b95044d014ac8e8c568fb9ca7a'
+          PYTHONPATH=scripts PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          import os, pathlib, json, tempfile, sys
+          from factory_rclone_dual_parts import RcloneDualStore, TransferHold, _mode_secure_file
+          from factory_rclone_ephemeral_binary import provision_verified_rclone
+          config=pathlib.Path.home()/".config"/"rclone"/"rclone.conf"
+          if not _mode_secure_file(config):
+              print("FACTORY_DRIVE_POST_CONSENT_HOLD=OWNER_LOCAL_CONFIG_MISSING_OR_UNSAFE")
+              sys.exit(78)
+          try:
+              with tempfile.TemporaryDirectory(prefix="factory-drive-preflight-") as td:
+                  with provision_verified_rclone(pathlib.Path(td)) as exe:
+                      admission=RcloneDualStore(
+                          config, remote_a="factory_a", remote_b="factory_b",
+                          expected_root_a="191sAkv4A01S9o6zhx-vM5xM7WO31qHPn",
+                          expected_root_b="1e6D3Ek4k-4JT_oyEoiY_JejErZFssrC_",
+                          proof_path="F-01 Factory VPS encrypted recovery 2026-10-30/manifest.json",
+                          proof_sha256="753365e1584a228d4a4b60b1f7bc21dabdf9514dfc1fe362b5257326768233da",
+                          max_source_bytes=559319128,chunk_bytes=8388608,
+                          free_reserve_bytes=1073741824,rclone_exe=str(exe)).preflight()
+                      print("FACTORY_DRIVE_POST_CONSENT="+json.dumps({
+                          "distinct_remote_config_and_private_proof_verified": True,
+                          "drive_a_free_bytes":admission.free_a_before,
+                          "drive_b_free_bytes":admission.free_b_before,
+                          "historical_gzip_bytes_admitted":559319128,
+                          "reserve_each_bytes":1073741824,
+                          "backup_created":False,"bytes_uploaded":0,"factory_started":False,
+                          "production_modified":False},sort_keys=True))
+          except TransferHold as e:
+              # Emit only predeclared error codes. Never provider text or tokens.
+              allowed={"OWNER_DRIVE_REMOTE_CONFIG_UNVERIFIED","SAME_OAUTH_CREDENTIALS_REJECTED",
+                       "PRIVATE_OWNER_PROOF_MISMATCH","DRIVE_FREE_QUOTA_NOT_PROVEN",
+                       "INSUFFICIENT_PROVIDER_VERIFIED_FREE_BYTES"}
+              print("FACTORY_DRIVE_POST_CONSENT_HOLD="+(str(e) if str(e) in allowed else "PRIVATE_PROVIDER_OR_CONFIG_CHECK_FAILED"))
+              sys.exit(78)
+          except Exception:
+              print("FACTORY_DRIVE_POST_CONSENT_HOLD=PRIVATE_PROVIDER_OR_BINARY_CHECK_FAILED")
+              sys.exit(78)
+          PY
