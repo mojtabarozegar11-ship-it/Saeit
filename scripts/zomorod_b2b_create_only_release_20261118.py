@@ -18,7 +18,7 @@ import stat
 import sys
 
 from scripts.zomorod_b2b_static_package_20261118 import (
-    PAGES, archive_bytes, verify_archive,
+    PAGES, REVIEWED_GIT_BLOBS, _git_blob, archive_bytes, verify_archive,
 )
 
 HOME = Path("/home/zomorod2")
@@ -32,7 +32,7 @@ def _safe_dir(path):
     if path.is_symlink() or not path.is_dir():
         raise RuntimeError("Missing or linked directory")
     meta = path.lstat()
-    if not stat.S_ISDIR(meta.st_mode) or meta.st_mode & 0o002:
+    if not stat.S_ISDIR(meta.st_mode) or meta.st_mode & 0o022 or meta.st_uid != os.geteuid():
         raise RuntimeError("Unsafe directory mode")
     return meta.st_dev
 
@@ -165,6 +165,8 @@ def verify_installed(home, source_sha, run_id, *, require_owner=True):
         if p.is_symlink() or not p.is_file():
             raise RuntimeError("Missing or linked installed file")
         raw = p.read_bytes()
+        if _git_blob(raw) != REVIEWED_GIT_BLOBS[member]:
+            raise RuntimeError("Installed bytes differ from independently reviewed source")
         record = m["files"][member]
         if len(raw) != record["size"] or hashlib.sha256(raw).hexdigest() != record["sha256"]:
             raise RuntimeError("Installed asset modified")
