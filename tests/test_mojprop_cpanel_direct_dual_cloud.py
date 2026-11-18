@@ -333,5 +333,70 @@ class DirectCPanelDualDriveTests(unittest.TestCase):
                                         "SOURCE_STREAM_EXCEEDS_CPANEL_SAFETY_CAP"):
                 bridge.transfer_approved_scope(**params)
 
+
+    def test_27_reject_early_wildcard_precedence_attack(self):
+        self._modify(
+            "Host *\n"
+            "  HostName malicious.example\n"
+            + self.conf
+        )
+        with self.assertRaisesRegex(bridge.BackupHold, "SSH_IDENTITY_CONTRACT_MISMATCH"):
+            bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
+
+    def test_28_reject_early_wildcard_weak_host_validation(self):
+        self._modify(
+            "Host *\n"
+            "  StrictHostKeyChecking no\n"
+            + self.conf
+        )
+        with self.assertRaisesRegex(bridge.BackupHold, "SSH_IDENTITY_CONTRACT_MISMATCH"):
+            bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
+
+    def test_29_block_nested_relay_to_unexpected_jump_host(self):
+        self._modify(
+            self.conf.replace("  User githubops\n",
+                              "  User githubops\n  ProxyJump untrusted-relay\n")
+        )
+        with self.assertRaisesRegex(bridge.BackupHold, "NESTED_SSH_PROXY_OR_INTERACTIVE_TTY_DENIED"):
+            bridge.admission("files", source_path=SOURCE, ssh_config=self.config)
+
+    def test_30_block_relay_forward_agent_even_if_cpanel_disallows_it(self):
+        self._modify(
+            self.conf.replace("  User githubops\n",
+                              "  User githubops\n  ForwardAgent yes\n")
+        )
+        with self.assertRaisesRegex(bridge.BackupHold, "SSH_RELAY_IDENTITY_CONTRACT_MISMATCH"):
+            bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
+
+    def test_31_block_tty_on_relay_or_cpanel(self):
+        for host in ("Host saeit-vps\n", "Host saeit-cpanel\n"):
+            with self.subTest(host=host):
+                self._modify(self.conf.replace(host, host + "  RequestTTY yes\n"))
+                with self.assertRaisesRegex(bridge.BackupHold, "NESTED_SSH_PROXY_OR_INTERACTIVE_TTY_DENIED"):
+                    bridge.admission("files", source_path=SOURCE, ssh_config=self.config)
+
+    def test_32_block_ssh_control_master_or_path_config(self):
+        for option in ("ControlMaster auto", "ControlPath /tmp/any.sock",
+                       "ControlPersist 10m"):
+            with self.subTest(option=option):
+                self._modify(self.conf.replace(
+                    "Host saeit-cpanel\n",
+                    "Host saeit-cpanel\n  " + option + "\n",
+                ))
+                with self.assertRaisesRegex(bridge.BackupHold, "UNSAFE_SSH_CONFIG_OPTION"):
+                    bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
+
+    def test_33_reject_omitted_relay_block_even_if_wildcard_spoofs_it(self):
+        start = self.conf.index("Host saeit-vps\n")
+        end = self.conf.index("Host saeit-cpanel\n")
+        self._modify(self.conf[:start] + self.conf[end:])
+        with self.assertRaisesRegex(bridge.BackupHold, "MISSING_EXPLICIT_SSH_HOST_BLOCK"):
+            bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
+
+    def test_34_reject_cpanel_proxyjump_to_untrusted_host(self):
+        self._modify(self.conf.replace("  ProxyJump saeit-vps", "  ProxyJump other-relay"))
+        with self.assertRaisesRegex(bridge.BackupHold, "SSH_IDENTITY_CONTRACT_MISMATCH"):
+            bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
+
 if __name__ == "__main__":
     unittest.main()
