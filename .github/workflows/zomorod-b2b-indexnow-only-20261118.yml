@@ -1,0 +1,61 @@
+name: Zomorod two live B2B URLs — free IndexNow submission only
+on:
+  pull_request:
+    types: [opened]
+    branches: [feature/zomorod-b2b-trust-inquiries-20261118]
+    paths: [".github/workflows/zomorod-b2b-indexnow-only-20261118.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-b2b-indexnow-only-20261118
+  cancel-in-progress: false
+jobs:
+  submit:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'seo/zomorod-b2b-indexnow-only-20261118' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify existing public ownership key and exact live pages; submit once
+        run: |
+          python3 -B - <<'PY'
+          import hashlib,http.client,ssl,json
+          host="zomorodmelal.ir"
+          base="https://"+host
+          # Existing publicly published IndexNow key, not an account credential.
+          key="6ffbcd2d1f8d739fca4d0d6790164dba"
+          pins={"/b2b/":"b34b028cc6c4645882b8e194e785eb66e31370c1a7d98b76561f269cad9b96aa","/b2b/privacy/":"f21d270db6bd734744c5e65382f0741d0d2cb8b78a5421441b18dc6129579f0d"}
+          def get(path):
+              conn=http.client.HTTPSConnection(host,timeout=20,context=ssl.create_default_context())
+              try:
+                  conn.request("GET",path,headers={"Accept-Encoding":"identity","User-Agent":"ZomorodMelal-Canonical-Submission/1.0"})
+                  r=conn.getresponse()
+                  raw=r.read(1048577)
+                  if r.status!=200 or len(raw)>1048576: raise RuntimeError("precondition failed "+path+" status "+str(r.status))
+                  return raw
+              finally: conn.close()
+          key_path="/"+key+".txt"
+          if get(key_path).decode("ascii").strip()!=key: raise RuntimeError("existing public key unavailable or mismatch; no submit")
+          print("INDEXNOW_EXISTING_PUBLIC_KEY_VERIFIED",flush=True)
+          for path,sha in pins.items():
+              raw=get(path)
+              if hashlib.sha256(raw).hexdigest()!=sha or ('<link rel="canonical" href="'+base+path+'">').encode() not in raw:
+                  raise RuntimeError("page parity/canonical failed "+path)
+              print("INDEXNOW_PAGE_VERIFIED "+path,flush=True)
+          urls=[base+p for p in pins]
+          payload=json.dumps({"host":host,"key":key,"keyLocation":base+key_path,"urlList":urls}).encode()
+          conn=http.client.HTTPSConnection("api.indexnow.org",timeout=28,context=ssl.create_default_context())
+          try:
+              conn.request("POST","/indexnow",body=payload,headers={"Content-Type":"application/json; charset=utf-8","User-Agent":"ZomorodMelal-Canonical-Submission/1.0"})
+              r=conn.getresponse()
+              status=r.status
+              r.read(4096)
+          finally: conn.close()
+          print("B2B_INDEXNOW_RECEIPT="+json.dumps({"http_status":status,"urls":urls,"accepted":status in (200,202),"ownership_pending":status==202,"indexing_verified":False,"site_modified":False,"paid_service":False}),flush=True)
+          if status not in (200,202): raise SystemExit("submission not accepted; do not repeatedly retry")
+          PY
