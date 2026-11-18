@@ -109,23 +109,33 @@ def archive_bytes(root: Path, source_sha: str) -> bytes:
 
 
 def verify_archive(raw: bytes, source_sha: str) -> dict:
+    # A freely rewritten manifest is not a trust anchor. Verify the same pinned
+    # reviewed Git objects at the receiving boundary, then recompute all metadata.
     with zipfile.ZipFile(io.BytesIO(raw), "r") as bundle:
         if sorted(bundle.namelist()) != sorted([*PAGES, "MANIFEST.json"]):
             raise ValueError("unexpected file added to bundle")
+        for entry in bundle.infolist():
+            if entry.file_size <= 0 or entry.file_size > MAX_BYTES:
+                raise ValueError("unsafe archive member size")
+            if stat.S_ISLNK(entry.external_attr >> 16):
+                raise ValueError("symbolic link forbidden")
         if bundle.testzip() is not None:
             raise ValueError("corrupt ZIP")
         manifest = json.loads(bundle.read("MANIFEST.json"))
-        if manifest["source_commit"] != source_sha or manifest["production_deployed"] is not False:
-            raise ValueError("incorrect release metadata")
-        if sorted(manifest["files"]) != sorted(PAGES):
-            raise ValueError("manifest missing an expected file")
+        pages = {}
         for member in PAGES:
             raw_member = bundle.read(member)
-            proof = manifest["files"][member]
-            if len(raw_member) != proof["size"] or hashlib.sha256(raw_member).hexdigest() != proof["sha256"]:
-                raise ValueError("asset hash mismatch")
-    return manifest
-
+            if _git_blob(raw_member) != REVIEWED_GIT_BLOBS[member]:
+                raise ValueError("Unreviewed HTML bytes in archive")
+            pages[member] = raw_member
+        expected = manifest_for(pages, source_sha)
+        if not isinstance(manifest, dict):
+            raise ValueError("invalid manifest")
+        if manifest.get("production_deployed") is not False or manifest.get("approved_for_payments") is not False:
+            raise ValueError("incorrect release metadata")
+        if manifest != expected:
+            raise ValueError("archive manifest differs from reviewed pages")
+    return expected
 
 def main():
     parser = argparse.ArgumentParser(description="Build source-only B2B pages; NEVER deploy")
