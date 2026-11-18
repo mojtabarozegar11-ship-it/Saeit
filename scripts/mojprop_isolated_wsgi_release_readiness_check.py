@@ -42,6 +42,19 @@ with tempfile.TemporaryDirectory(prefix="mojprop-v141-isolated-wsgi-ci-") as d:
  assert login.status_code==200
  assert b"Private buyer account" in login.content
  assert b"csrfmiddlewaretoken" in login.content
+ # Passenger may mount the isolated application under a sub-URI and strip
+ # '/moj-prop-v141' from PATH_INFO. Simulate SCRIPT_NAME faithfully.
+ mount_login=client.get("/login/",secure=True,
+                        SCRIPT_NAME="/moj-prop-v141",
+                        HTTP_X_FORWARDED_PROTO="https")
+ assert mount_login.status_code==200
+ assert b"csrfmiddlewaretoken" in mount_login.content
+ mount_receipt=client.get("/payment/MOJPROP01-"+("0"*32)+"/",
+                          secure=True,SCRIPT_NAME="/moj-prop-v141",
+                          HTTP_X_FORWARDED_PROTO="https")
+ assert mount_receipt.status_code==302
+ assert "/moj-prop-v141/login/" in mount_receipt["Location"]
+
  ref="MOJPROP01-"+"0"*32
  private_path="/moj-prop-v141/payment/"+ref+"/"
  unauth=client.get(private_path,secure=True)
@@ -61,6 +74,8 @@ with tempfile.TemporaryDirectory(prefix="mojprop-v141-isolated-wsgi-ci-") as d:
    "sqlite_immediate_transactions":True,
    "migrations_successful":True,
    "private_login_get_200":True,
+   "passenger_suburi_login_200":True,
+   "passenger_suburi_private_invoice_requires_auth":True,
    "csrf_token_present":True,"visitor_invoice_requires_login":True,
    "unknown_buyer_invoice_404":True,
    "unknown_trading_account_404":True,
