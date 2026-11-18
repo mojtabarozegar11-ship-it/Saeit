@@ -38,8 +38,15 @@ class CompanyInquiryForm(forms.ModelForm):
 
 
 def company_portal_home(request):
-    # Backwards compatible with the older /company/ form endpoint.
+    # Preserve the public legacy form's redirect contract for invalid input.
+    # The new canonical /company/inquiry/ route shows field-specific HTTP 400.
     if request.method == "POST":
+        from django.contrib import messages
+        from django.shortcuts import redirect
+        form = CompanyInquiryForm(request.POST)
+        if request.POST.get("company_url") or not form.is_valid():
+            messages.error(request, "درخواست ثبت نشد؛ فیلدهای الزامی، نوع همکاری و ایمیل را اصلاح کنید.")
+            return redirect("company")
         from .company_sales_views import submit_company_inquiry
         return submit_company_inquiry(request)
     return None

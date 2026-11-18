@@ -26,7 +26,9 @@ EXPECTED = {
     "core/mojprop_views.py": "12ee5e408f2a50e0571d5e6d91a760644ec210a9",
     "core/mojprop_receipts.py": "9fe6eb1ad13857143440517b14b3f2ebcfef6db3",
     "core/mojprop_accessible_intake.py": "505a1d237e3deb156e7e394e94b1c34ddf1e0071",
-    "config/urls.py": "07c2b6e10a7ec77ed6225f55d30ed655d61a37b3",
+    # Reviewed non-MojProp additions: four public company routes and one import.
+    # This remains a strict source identity check, NOT a claim of live deployment.
+    "config/urls.py": "369d6682e4920d4a89ed2e41fd383e588115846b",
     "core/management/commands/mojprop_sales_action_queue.py":
         "095dcf51e005694f4cb24df1e39ce8a4f6a0cf08",
 }
