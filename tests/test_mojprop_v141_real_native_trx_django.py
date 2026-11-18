@@ -126,6 +126,38 @@ class RealNativePaymentStorageTests(TestCase):
                    return_value=i.issued_at + timedelta(seconds=10)):
             return confirm_native_trx_and_deliver(reference=i.reference, txid=txid)
 
+    @override_settings(ROOT_URLCONF="mojprop_isolated.urls",
+                       MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED=True,
+                       MOJ_PROP_V141_PORTFOLIO_ENABLED=True)
+    def test_buyer_dashboard_scope_and_payment_pause(self):
+        from django.test import Client
+        other = get_user_model().objects.create_user(username="other-buyer")
+        mine = self.invoice()
+        theirs = self.invoice(buyer=other)
+        c = Client(HTTP_HOST="mojplaywin.com")
+        c.force_login(self.buyer)
+        path = "/moj-prop-v141/"
+        response = c.get(path, secure=True)
+        self.assertContains(response, mine.reference)
+        self.assertNotContains(response, theirs.reference)
+        self.assertNotContains(response, mine.recipient)
+        self.assertContains(response, "Invoice available")
+        with override_settings(MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED=False):
+            self.assertContains(c.get(path, secure=True), "Payment paused")
+        body, receipt = self.proof(mine)
+        self.checked_confirm(mine, TX_A, body, receipt)
+        response = c.get(path, secure=True)
+        self.assertContains(response, "Payment confirmed")
+        self.assertContains(response, "/moj-prop-v141/statement/" + mine.reference + "/")
+        self.assertNotContains(response, theirs.reference)
+        self.assertNotContains(response, TX_A)
+        with override_settings(MOJ_PROP_V141_PORTFOLIO_ENABLED=False):
+            self.assertNotContains(c.get(path, secure=True), "/moj-prop-v141/statement/")
+        c.force_login(other)
+        response = c.get(path, secure=True)
+        self.assertNotContains(response, mine.reference)
+        self.assertContains(response, theirs.reference)
+
     def test_invoice_only_in_released_merchant(self):
         with override_settings(MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED=False):
             with self.assertRaises(CheckoutRejected):

@@ -65,6 +65,22 @@ with tempfile.TemporaryDirectory(prefix="mojprop-v141-isolated-wsgi-ci-") as d:
  assert no_order.status_code==404
  no_demo=client.get("/moj-prop-v141/statement/CI-UNKNOWN/",secure=True)
  assert no_demo.status_code==404
+ dash=client.get("/moj-prop-v141/",secure=True)
+ assert dash.status_code==200
+ assert b"My account" in dash.content
+ assert b"No reviewable orders" in dash.content
+ assert b"csrfmiddlewaretoken" in dash.content
+ assert "no-store" in dash["Cache-Control"]
+ assert "noindex" in dash["X-Robots-Tag"]
+ assert client.get("/",secure=True,SCRIPT_NAME="/moj-prop-v141").status_code==200
+ assert client.get("/moj-prop-v141/?page=0",secure=True).status_code==404
+ assert client.get("/moj-prop-v141/?page=2",secure=True).status_code==404
+ assert client.get("/moj-prop-v141/?page=1&page=1",secure=True).status_code==404
+ assert client.post("/moj-prop-v141/",secure=True).status_code==405
+ assert client.head("/moj-prop-v141/",secure=True).content==b""
+ assert client.get("/moj-prop-v141/logout/",secure=True).status_code==405
+ assert client.post("/moj-prop-v141/logout/",secure=True).status_code==302
+ assert client.get("/moj-prop-v141/",secure=True).status_code==302
  from prop_firm.plan1_v141_native_checkout import _release_enabled
  assert _release_enabled() is False
  from prop_firm.plan1_v141_native_checkout import _require_serializable_payment_write
