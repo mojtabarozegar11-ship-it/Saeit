@@ -1,0 +1,224 @@
+name: MOJ PROP v1.4.1 — read-only LIVE recovery and code inventory (NO DEPLOY)
+on:
+  push:
+    branches:
+      - audit/mojprop-v141-readonly-production-restore-gates-20261117
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-v141-readonly-live-20261117
+  cancel-in-progress: false
+jobs:
+  source-contract-and-live-probes:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source without write credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run 24 metadata-only adversarial regression tests
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
+            tests.test_mojprop_v141_real_backup_and_code_preflight
+          python3.11 -B -m py_compile \
+            scripts/mojprop_v141_offhost_pair_metadata_readonly.py \
+            scripts/mojprop_v141_live_code_presence_readonly.py
+          echo "SOURCE_CONTRACT_TESTS_PASSED_WITHOUT_PRODUCTION_ACCESS=true"
+      - name: Inspect public HTTPS response headers with HEAD only
+        shell: bash
+        run: |
+          set +e
+          for url in \
+            https://mojplaywin.com/ \
+            https://mojplaywin.com/moj-prop/ \
+            https://mojplaywin.com/moj-prop-v141-info/ \
+            https://mojplaywin.com/moj-prop-v141/statement/INVALID-CI-NO-CUSTOMER/; do
+            echo "PUBLIC_HEAD_URL=$url"
+            result="$(curl --proto '=https' -I -sS --max-time 12 --connect-timeout 5 \
+              -o /dev/null \
+              -w 'status=%{http_code};tls_verify=%{ssl_verify_result};ip=%{remote_ip}' "$url" 2>/dev/null)"
+            curl_exit=$?
+            echo "PUBLIC_HEAD_RESULT=$result"
+            echo "PUBLIC_HEAD_EXIT=$curl_exit"
+          done
+          echo "HEAD_IS_READ_ONLY_AND_DOES_NOT_PROVE_DEPLOYMENT=true"
+      - name: Distinguish TCP ingress failure from an observed SSH fingerprint mismatch
+        shell: bash
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B - <<'PY'
+          import socket
+          targets = (
+              ("CPANEL_PINNED_IP_SSH", "178.239.147.125", 1396),
+              ("CPANEL_HOSTNAME_SSH", "zohal.pws-dns.net", 1396),
+              ("VPS_PREVIOUS_PINNED_IP_SSH", "178.239.147.150", 22),
+              ("FACTORY_DOMAIN_SSH", "factory.zomorodmelal.ir", 22),
+              ("CPANEL_PUBLIC_HTTPS", "zohal.pws-dns.net", 2083),
+          )
+          for name, host, port in targets:
+              dns_ok = False
+              reachable = False
+              try:
+                  socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+                  dns_ok = True
+                  with socket.create_connection((host, port), timeout=4):
+                      reachable = True
+              except (OSError, TimeoutError):
+                  pass
+              print(f"READONLY_TCP_ENDPOINT={name};dns_resolved={str(dns_ok).lower()};tcp_connected={str(reachable).lower()}",flush=True)
+          print("TCP_CONNECT_IS_NOT_SSH_AUTH_OR_BACKUP_PROOF=true")
+          PY
+      - name: Validate live FA/EN unpaid Plan1 lead form via bounded public GET (no POST)
+        id: lead_form
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
+            tests.test_mojprop_c142_public_form_get_readonly
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B scripts/mojprop_c142_public_form_get_readonly.py
+      - name: Inspect deployed mainline unpaid Moj Prop prospect/receipt GET forms
+        id: mainline_unpaid
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
+            tests.test_mojprop_v141_live_unpaid_prospect_readonly
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B \
+            scripts/mojprop_v141_live_unpaid_prospect_readonly.py
+      - name: Inspect candidate cPanel runtime, quota and DB connection through pinned SSH
+        id: cpanel
+        continue-on-error: true
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "${HOST_KEY:-}" ]]; then
+            echo "CPANEL_AUDIT=BLOCKED_SECRET_NOT_CONFIGURED"
+            exit 1
+          fi
+          d="$RUNNER_TEMP/mojprop-live-cpanel-audit"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d"/host.key "$d"/known; rmdir "$d" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/host.key"
+          if ! ssh-keygen -y -P "" -f "$d/host.key" >/dev/null 2>&1; then
+            echo "CPANEL_AUDIT=BLOCKED_INVALID_KEY"
+            exit 1
+          fi
+          timeout 18s ssh-keyscan -T 9 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null || true
+          fingerprint="$(ssh-keygen -lf "$d/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+          if [[ "$fingerprint" != 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' ]]; then
+            echo "CPANEL_AUDIT=BLOCKED_HOST_KEY_UNREACHABLE_OR_MISMATCH"
+            exit 1
+          fi
+          echo "CPANEL_SSH_KNOWN_HOST_FINGERPRINT_VERIFIED=true"
+          sshcmd=(ssh -T -i "$d/host.key" -p 1396 \
+            -o UserKnownHostsFile="$d/known" \
+            -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes \
+            -o BatchMode=yes -o ForwardAgent=no -o ConnectTimeout=12 \
+            -o ConnectionAttempts=1 -o ServerAliveInterval=5 \
+            -o ServerAliveCountMax=2 zomorod2@178.239.147.125)
+          if ! timeout 25s "${sshcmd[@]}" 'test "$(id -un)" = zomorod2' >/dev/null 2>&1; then
+            echo "CPANEL_AUDIT=BLOCKED_PINNED_SSH_AUTH_OR_CONNECTIVITY"
+            exit 1
+          fi
+          echo "CPANEL_SSH_PINNED_AND_AUTHENTICATED=true"
+          for script in \
+            scripts/mojprop_v141_live_code_presence_readonly.py \
+            scripts/mojplaywin_backup_restore_readiness_readonly.py \
+            scripts/mojplaywin_consistent_db_preflight_readonly.py; do
+            echo "CPANEL_READONLY_PROBE=$script"
+            if ! timeout 50s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < "$script"; then
+              echo "CPANEL_READONLY_PROBE_FAILED_NO_RELEASE=$script"
+              exit 1
+            fi
+          done
+          echo "CPANEL_READONLY_PROBE=UAPI_MYSQL_AGGREGATES"
+          timeout 25s "${sshcmd[@]}" 'uapi --output=json Mysql list_databases' \
+            | python3 -B scripts/mojplaywin_mysql_quota_sanitize_readonly.py mysql
+          echo "CPANEL_READONLY_PROBE=UAPI_QUOTA_AGGREGATES"
+          timeout 25s "${sshcmd[@]}" 'uapi --output=json Quota get_local_quota_info' \
+            | python3 -B scripts/mojplaywin_mysql_quota_sanitize_readonly.py quota
+          echo "CPANEL_AUDIT=READ_ONLY_OBSERVATIONS_COMPLETED_NOT_RELEASE"
+      - name: Inspect VPS private off-host archive pair metadata and recovery prerequisites
+        id: vps
+        continue-on-error: true
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "${VPS_KEY:-}" ]]; then
+            echo "VPS_AUDIT=BLOCKED_SECRET_NOT_CONFIGURED"
+            exit 1
+          fi
+          d="$RUNNER_TEMP/mojprop-live-vps-audit"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d"/vps.key "$d"/known; rmdir "$d" 2>/dev/null || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          chmod 600 "$d/vps.key"
+          if ! ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null 2>&1; then
+            echo "VPS_AUDIT=BLOCKED_INVALID_KEY"
+            exit 1
+          fi
+          timeout 16s ssh-keyscan -T 8 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null || true
+          fingerprint="$(ssh-keygen -lf "$d/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+          if [[ "$fingerprint" != 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' ]]; then
+            echo "VPS_AUDIT=BLOCKED_HOST_KEY_UNREACHABLE_OR_MISMATCH"
+            exit 1
+          fi
+          sshcmd=(ssh -T -i "$d/vps.key" -p 22 \
+            -o UserKnownHostsFile="$d/known" \
+            -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes \
+            -o BatchMode=yes -o ForwardAgent=no -o ConnectTimeout=12 \
+            -o ConnectionAttempts=1 -o ServerAliveInterval=5 \
+            -o ServerAliveCountMax=2 githubops@178.239.147.150)
+          if ! timeout 25s "${sshcmd[@]}" 'test "$(id -un)" = githubops' >/dev/null 2>&1; then
+            echo "VPS_AUDIT=BLOCKED_PINNED_SSH_AUTH_OR_CONNECTIVITY"
+            exit 1
+          fi
+          echo "VPS_SSH_PINNED_AND_AUTHENTICATED=true"
+          for script in \
+            scripts/mojprop_v141_offhost_pair_metadata_readonly.py \
+            scripts/mpw_vps_backup_runtime_gate_readonly_20261101.py \
+            scripts/mojplaywin_isolated_restore_capabilities_readonly.py \
+            scripts/mpw_vps_mount_capacity_readonly_20261105.py; do
+            echo "VPS_READONLY_PROBE=$script"
+            if ! timeout 50s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < "$script"; then
+              echo "VPS_READONLY_PROBE_FAILED_NO_RELEASE=$script"
+              exit 1
+            fi
+          done
+          echo "VPS_AUDIT=READ_ONLY_OBSERVATIONS_COMPLETED_NOT_RESTORE"
+      - name: Assert that this workflow has no mutation or release authority
+        if: always()
+        run: |
+          echo "MOJPROP_CANDIDATE_CODE_AUDIT_ONLY=true"
+          echo "BACKUP_CREATED=false"
+          echo "SQL_DUMP_TRANSFERRED=false"
+          echo "OFFHOST_RESTORE_PERFORMED=false"
+          echo "PRODUCTION_DB_MIGRATED=false"
+          echo "PR_MERGED=false"
+          echo "CUSTOMER_TRX_COLLECTED=false"
+          echo "BROKER_ORDER_SUBMITTED=false"
+          echo "PUBLIC_DEPLOYMENT_PERFORMED=false"
+          echo "RELEASE_AUTHORIZED=false"
+          echo "PUBLIC_GET_FORM_STEP_OUTCOME=${{ steps.lead_form.outcome }}"
+          echo "MAINLINE_UNPAID_GET_OUTCOME=${{ steps.mainline_unpaid.outcome }}"
+          echo "CPANEL_AUDIT_STEP_OUTCOME=${{ steps.cpanel.outcome }}"
+          echo "VPS_AUDIT_STEP_OUTCOME=${{ steps.vps.outcome }}"
+          if [[ "${{ steps.cpanel.outcome }}" != "success" || "${{ steps.vps.outcome }}" != "success" ]]; then
+            echo "LIVE_RECOVERY_EVIDENCE=BLOCKED_PINNED_SSH_OR_READONLY_PREFLIGHT"
+            exit 1
+          fi
+          echo "LIVE_RECOVERY_EVIDENCE=OBSERVED_ONLY_NOT_RESTORED"
