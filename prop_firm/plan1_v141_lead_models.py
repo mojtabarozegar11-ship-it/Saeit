@@ -7,7 +7,7 @@ PropInterest consent stays unchanged. An opted-out address is never revived.
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 
-from core.consent_guard_queryset import ConsentStatusQuerySet
+from .consent_guard_queryset import ConsentStatusQuerySet
 from .moj_prop_page import SUPPORTED_CODES
 
 
