@@ -38,6 +38,8 @@ python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive \
 
 برای انتقال واقعی، ابتدا اتصال مستقل `factory_a` و `factory_b` و quota از طریق `scripts/factory_owner_drive_setup.py --configure` انجام شود (راهنمای PR #2686). Credential، `rclone.conf`، رمز یا private PEM **هرگز** وارد issue عمومی، Actions log، ChatGPT یا فایل عمومی نشود. حساب سیستم‌عامل باید همان مالک و فایل‌های SSH، known-hosts، کلید عمومی و rclone config مالک-تنها `0600` و غیر symlink باشند.
 
+پارامتر `--rclone-exe` اختیاری است و در نبود آن، تنها پس از احراز OAuth، نسخهٔ موقت و بررسی‌شدهٔ rclone استفاده می‌شود. دستور زیر عمداً بدون comment در وسط ادامهٔ خط نوشته شده تا در Shell قابل‌اجرا بماند.
+
 بعد از احراز دو هویت و دو سهمیه، اجرای تک‌فایلی با کلید عمومی رسمیِ دارای fingerprint تأییدشده (فایلِ کلید خصوصی و گذرواژه به Runner نیاید):
 
 ```bash
@@ -46,7 +48,7 @@ python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive \
   --ssh-config /ABSOLUTE/OWNER_ONLY/ssh_config \
   --known-hosts /ABSOLUTE/OWNER_ONLY/cpanel_known_hosts \
   --rclone-config /ABSOLUTE/OWNER_ONLY/rclone.conf \
-  # --rclone-exe is optional: verified temporary client will be downloaded only after secure owner OAuth config exists.\n  --public-pem /ABSOLUTE/OWNER_ONLY/verified-recovery-public.pem \
+  --public-pem /ABSOLUTE/OWNER_ONLY/verified-recovery-public.pem \
   --trusted-public-spki-sha256 64_CHARACTER_OWNER_VERIFIED_SHA256
 # فایل دوم: فقط snapshot را به nov5-b تغییر دهید.
 ```
@@ -93,3 +95,9 @@ python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive \
 اسکریپت جدید `scripts/factory_cpanel_nov5_sqlite_integrity_readonly_20261118.py` (فقط‌خواندنی) صحت کامل هر دو SQLite را روی cPanel بررسی می‌کند. اجرای جدید workflow مستلزم رسید نهایی GitHub Actions است؛ اضافه‌شدن اسکریپت به PR اثبات نتیجه اجرا نیست.
 
 **وضعیت واقعی هنگام ثبت:** هیچ فایل بزرگ جدیدی به Google Drive منتقل نشده؛ فایل cPanel حذف نشده؛ فضای هاست آزاد نشده؛ کارخانه همچنان خاموش است. فقط نتیجهٔ واقعی مقایسهٔ هش دو میزبان ۲/۲ موفق است. 
+
+## اثبات مستقل سلامت نسخه‌های اصلی VPS (۱۸ نوامبر ۲۰۲۶)
+
+ابزار `scripts/factory_vps_nov5_sqlite_integrity_readonly_20261118.py` و workflow `.github/workflows/factory-off-vps-nov5-integrity-readonly.yml` در همین PR ثبت شد. اتصال فقط‌خواندنی با هویت `githubops` و fingerprint پین‌شده، هش ثابت کد، و SQLite `mode=ro&immutable=1` اجرا می‌شود. این گیت مستقل از سلامت cPanel است و بکاپ در دو Drive را ثابت نمی‌کند.
+
+رسید اجرای جدید: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44222230595 . تا زمانی که job موفق نشده، نتیجهٔ سلامت کامل SQLite روی نسخه‌های VPS را `NOT YET PROVEN` تلقی کنید. حذف cPanel همچنان HOLD است.
