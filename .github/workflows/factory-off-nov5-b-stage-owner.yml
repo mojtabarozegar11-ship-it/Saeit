@@ -1,4 +1,4 @@
-name: Factory OFF stage Nov5-B cPanel gzip (NO source delete)
+name: Factory OFF Nov5-B gzip stage, isolated verified restore and exact raw cleanup
 on:
   pull_request:
     paths:
@@ -91,4 +91,147 @@ jobs:
           echo FACTORY_NOV5_B_GZIP_STAGE_AND_FULL_DECOMPRESSED_SHA_PROVEN=true
           echo FACTORY_NOV5_A_GZIP_RETAINED=true
           echo FACTORY_NOV5_B_RAW_DELETED=false
+          echo FACTORY_STARTED=false
+
+  restore-b:
+    needs: stage-b
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate exact pinned read-only quarantined restore code
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/factory_nov5_b_gzip_independent_isolated_restore_20261118.py)" = 'f0b37dc1ceb9a5b8bdc2358e0dcedd0060fb579d'
+          python3 -B -c 'import ast,pathlib; code=pathlib.Path("scripts/factory_nov5_b_gzip_independent_isolated_restore_20261118.py").read_text(); ast.parse(code); print("FACTORY_GZIP_INDEPENDENT_RESTORE_AST=PASS")'
+      - name: Owner-only pinned SSH stream existing cPanel gzip to ephemeral VPS recovery
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$(id -u)" -ne 0 || { echo ROOT_RUNNER_DENIED; exit 78; }
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" || { echo OWNER_SSH_NOT_AVAILABLE; exit 78; }
+          work="$(mktemp -d)"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/cpanel.key"
+          chmod 600 "$work/"*.key
+          ssh-keygen -y -P "" -f "$work/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$work/cpanel.key" >/dev/null
+          ssh-keyscan -T 8 -t rsa 127.0.0.1 > "$work/vps.known" 2>/dev/null
+          test -s "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$work/config" <<EOF
+          Host saeit-vps
+            HostName 127.0.0.1
+            User githubops
+            Port 22
+            IdentityFile $work/vps.key
+            UserKnownHostsFile $work/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $work/cpanel.key
+            UserKnownHostsFile $work/cpanel.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$work/config"
+          scan="$(ssh -T -F "$work/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$work/cpanel.known"
+          chmod 600 "$work/cpanel.known" "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/cpanel.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 1100s python3 -B -m scripts.factory_nov5_b_gzip_independent_isolated_restore_20261118 --ssh-config "$work/config"
+          echo FACTORY_NOV5_B_ISOLATED_VPS_SQLITE_RESTORE_PROVEN=true
+          echo FACTORY_NOV5_B_RAW_CPANEL_DELETED=false
+          echo FACTORY_STARTED=false
+          echo FACTORY_SPENDING_COMMITTED=false
+
+  cleanup-only-b-raw:
+    needs: restore-b
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 21
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Before unlink, independently re-check BOTH original VPS historical SQLite files
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test "$(git hash-object tests/test_factory_cpanel_nov5_b_exact_cleanup_20261118.py)" = 'c78edf55e206bb5ef3c821e3841ab9b3f0c6f676'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_cpanel_nov5_b_exact_cleanup_20261118.py' -q
+          echo FACTORY_EXACT_B_SEVEN_NONDESTRUCTIVE_CASES_PASS=true
+          umask 077
+          test "$(id -u)" -ne 0 || { echo OWNER_NONROOT_REQUIRED; exit 78; }
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" || { echo OWNER_KEYS_MISSING; exit 78; }
+          test "$(git hash-object scripts/factory_vps_nov5_sqlite_integrity_readonly_20261118.py)" = '81e79c7bb29f2c367f665eb16e11b2e7478fb453'
+          test "$(git hash-object scripts/factory_cpanel_nov5_b_exact_cleanup_20261118.py)" = 'cdada8c11dec100f5501e4ea12ccbca4a671dc55'
+          work="$(mktemp -d)"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/cpanel.key"
+          chmod 600 "$work/"*.key
+          ssh-keygen -y -P "" -f "$work/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$work/cpanel.key" >/dev/null
+          ssh-keyscan -T 8 -t rsa 127.0.0.1 > "$work/vps.known" 2>/dev/null
+          test -s "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$work/config" <<EOF
+          Host saeit-vps
+            HostName 127.0.0.1
+            User githubops
+            Port 22
+            IdentityFile $work/vps.key
+            UserKnownHostsFile $work/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $work/cpanel.key
+            UserKnownHostsFile $work/cpanel.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$work/config"
+          scan="$(ssh -T -F "$work/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$work/cpanel.known"
+          chmod 600 "$work/cpanel.known" "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/cpanel.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 780s ssh -T -F "$work/config" saeit-vps 'exec python3 -B -' < scripts/factory_vps_nov5_sqlite_integrity_readonly_20261118.py
+          echo FACTORY_BOTH_VPS_ORIGINALS_FRESH_SHA_AND_SQLITE_INTEGRITY=PASS
+          timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec nice -n 15 python3 -B - --approval OWNER_DELEGATED_2026-11-18_EXACT_NOV5_B_AFTER_ISOLATED_RESTORE' < scripts/factory_cpanel_nov5_b_exact_cleanup_20261118.py
+          echo FACTORY_EXACT_RAW_NOV5_B_CLEANUP_COMPLETED=true
+          echo FACTORY_NOV5_A_GZIP_RETAINED=true
+          echo FACTORY_PRODUCTION_DATABASE_UNTOUCHED=true
           echo FACTORY_STARTED=false
