@@ -1,0 +1,94 @@
+name: MOJ PROP — public static rollback backup artifact for owner Drive transfer (NO DEPLOY)
+on:
+  push:
+    branches: [backup/mojprop-static-drive-bridge-20261118]
+    paths:
+      - .github/workflows/mojprop-static-public-backup-drive-20261118.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-static-only-backup:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Capture exactly pinned live public page and candidate as an integrity-checked backup ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          import hashlib, json, os, zipfile
+          from pathlib import Path
+          from datetime import datetime, timezone
+          from urllib.request import Request, build_opener, HTTPRedirectHandler
+          from scripts.mojprop_public_live_static_exact_guard_20261118 import PUBLIC, classify, MAX_HTML_BYTES
+
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self, *args, **kwargs):
+                  return None
+
+          req = Request(PUBLIC, method="GET", headers={
+              "User-Agent": "MOJPROP-Owner-Public-Static-Backup/20261118",
+              "Accept": "text/html", "Cache-Control": "no-cache",
+          })
+          with build_opener(NoRedirect).open(req, timeout=18) as response:
+              if response.status != 200 or response.headers.get("Content-Type","").split(";")[0].lower() != "text/html":
+                  raise RuntimeError("PUBLIC_PAGE_STATUS_OR_CONTENT_TYPE_CHANGED")
+              raw = response.read(MAX_HTML_BYTES + 1)
+          candidate = Path("templates/moj-prop-v4/index.html").read_bytes()
+          report = classify(raw, candidate)
+          if len(raw) != 23869 or hashlib.sha256(raw).hexdigest() != "76918c5129ff669ef02f82435a68f61a32d70141800712100d4a7fe9e8554895":
+              raise RuntimeError("LIVE_PUBLIC_SOURCE_SHA_CHANGED")
+          if len(candidate) != 46455 or hashlib.sha256(candidate).hexdigest() != "13bd45c1d6b62f03058428b3086e71b17de4f2776238e8ab85a49d648fce49b0":
+              raise RuntimeError("REVIEWED_CANDIDATE_SHA_CHANGED")
+          manifest = {
+              "schema": "mojprop.public-static-owner-drive-backup.v1",
+              "captured_utc": datetime.now(timezone.utc).isoformat(),
+              "source": PUBLIC,
+              "public_original": {"file": "moj-prop-original-live.html", "bytes":len(raw),
+                  "sha256":hashlib.sha256(raw).hexdigest()},
+              "reviewed_candidate": {"file":"moj-prop-reviewed-candidate.html", "bytes":len(candidate),
+                  "sha256":hashlib.sha256(candidate).hexdigest()},
+              "git_sha": os.getenv("GITHUB_SHA","unknown"),
+              "scope": "public_static_html_only",
+              "full_mysql_and_media_backed_up": False,
+              "independent_sql_restore_proven": False,
+              "production_deployed": False,
+              "payments_enabled": False,
+          }
+          Path("mojprop-static-backup.zip").unlink(missing_ok=True)
+          with zipfile.ZipFile("mojprop-static-backup.zip","w",compression=zipfile.ZIP_DEFLATED) as z:
+              z.writestr("moj-prop-original-live.html",raw)
+              z.writestr("moj-prop-reviewed-candidate.html",candidate)
+              z.writestr("manifest.json",json.dumps(manifest,sort_keys=True,indent=2)+"\n")
+              z.writestr("README-NO-SQL-RESTORE.txt",
+                  "MOJ PROP static HTML only: not a current MySQL/media backup. Restore the original only under separate owner approval and exact-byte guard.\n")
+          with zipfile.ZipFile("mojprop-static-backup.zip","r") as z:
+              for item in (manifest["public_original"],manifest["reviewed_candidate"]):
+                  payload=z.read(item["file"])
+                  if len(payload)!=item["bytes"] or hashlib.sha256(payload).hexdigest()!=item["sha256"]:
+                      raise RuntimeError("ZIP_READBACK_MISMATCH")
+          print("REAL_PUBLIC_HTML_BACKUP_READY_BYTES="+str(Path("mojprop-static-backup.zip").stat().st_size))
+          print("BACKUP_ONLY_PUBLIC_STATIC_HTML=true")
+          print("CURRENT_SQL_MEDIA_BACKUP=false")
+          print("TRX_RECEIVED=0")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mojprop-exact-public-static-backup-20261118
+          path: mojprop-static-backup.zip
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Explicit no write to production, no customer-data backup claim
+        if: always()
+        run: |
+          echo "NO_PRODUCTION_CHANGE=true"
+          echo "NO_PAYMENT=true"
+          echo "NO_DATABASE_READ=true"
+          echo "NO_CUSTOMER_DATA=true"
+          echo "NO_RESTORE_EXECUTED=true"
