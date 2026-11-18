@@ -41,7 +41,9 @@ class BuyerTermsReleaseGate(unittest.TestCase):
         result = assess(LIVE_CANDIDATE.read_bytes())
         self.assertFalse(result["copy_parity_passed"])
         self.assertIn("english_persian_revision_mismatch", result["reasons"])
-        self.assertIn("unresolved_buyer_terms", result["reasons"])
+        self.assertNotIn("unresolved_buyer_terms", result["reasons"])
+        self.assertNotIn("nonpayable_disclosure_missing", result["reasons"])
+        self.assertFalse(result["independent_legal_approval_proven_by_this_tool"])
 
     def test_03_old_version_rejected_even_with_matching_hash(self):
         result = assess(candidate().replace(b"v1.4.1", b"v1.3"), "v1.3")
@@ -125,6 +127,16 @@ class BuyerTermsReleaseGate(unittest.TestCase):
 
     def test_23_oversized_source_denied(self):
         self.assertIn("untrusted_source_size", assess(candidate() + b"a" * 131073)["reasons"])
+
+    def test_25_expanded_farsi_no_sale_disclosure_is_recognized(self):
+        a = candidate().replace(
+            "فروش و پرداخت فعال نیست".encode("utf-8"),
+            "فروش، ثبت‌نام، ثبت رضایت و پرداخت فعال نیست".encode("utf-8")
+        )
+        result = assess(a)
+        self.assertTrue(result["copy_parity_passed"])
+        self.assertFalse(result["payment_enabled"])
+        self.assertFalse(result["independent_legal_approval_proven_by_this_tool"])
 
     def test_24_no_external_approval_claims_even_if_copy_matches(self):
         result = assess(candidate())
