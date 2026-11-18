@@ -65,33 +65,62 @@ jobs:
           if repo!="mojtabarozegar11-ship-it/Saeit":raise SystemExit("REPO_MISMATCH")
           token=os.environ.get('GH_TOKEN_READONLY')
           if not token:raise SystemExit("ARTIFACT_AUDIT_NO_READ_TOKEN")
-          url="https://api.github.com/repos/"+repo+"/actions/artifacts?per_page=100&page=1"
-          q=urllib.request.Request(url,headers={
+          headers={
             'Authorization':'Bearer '+token,
             'Accept':'application/vnd.github+json',
             'X-GitHub-Api-Version':'2022-11-28',
-            'User-Agent':'factory-off-owner-quota-readonly'
-          },method="GET")
-          with urllib.request.urlopen(q,timeout=15) as resp:
-              if resp.status!=200:raise SystemExit("ARTIFACT_AUDIT_HTTP_HOLD")
-              doc=json.loads(resp.read(256000))
-          records=doc.get('artifacts',[])
-          if not isinstance(records,list) or len(records)>100:
-              raise SystemExit("ARTIFACT_RESPONSE_UNTRUSTED")
-          total=doc.get('total_count',-1)
-          if type(total) is not int or total<0:raise SystemExit("ARTIFACT_TOTAL_INVALID")
-          result={'schema':'factory.off.actions-artifacts.readonly.v1',
+            'User-Agent':'factory-off-owner-quota-readonly'}
+          seen=set()
+          total=None
+          collected=0
+          active_bytes=0
+          active_count=0
+          expired_count=0
+          pages=0
+          for page in range(1,11):
+              url=("https://api.github.com/repos/"+repo+
+                   "/actions/artifacts?per_page=100&page="+str(page))
+              q=urllib.request.Request(url,headers=headers,method="GET")
+              with urllib.request.urlopen(q,timeout=15) as resp:
+                  if resp.status!=200:raise SystemExit("ARTIFACT_AUDIT_HTTP_HOLD")
+                  doc=json.loads(resp.read(256000))
+              rows=doc.get('artifacts',[])
+              n=doc.get('total_count',-1)
+              if type(n) is not int or n<0 or not isinstance(rows,list) or len(rows)>100:
+                  raise SystemExit("ARTIFACT_RESPONSE_UNTRUSTED")
+              if total is None:total=n
+              if n!=total:raise SystemExit("ARTIFACT_INVENTORY_CHANGED")
+              pages+=1
+              for obj in rows:
+                  if not isinstance(obj,dict) or type(obj.get('id')) is not int:
+                      raise SystemExit("ARTIFACT_ID_INVALID")
+                  if obj['id'] in seen:raise SystemExit("DUPLICATE_ARTIFACT_ID")
+                  seen.add(obj['id'])
+                  if obj.get('expired') is True:expired_count+=1
+                  elif obj.get('expired') is False:
+                      if type(obj.get('size_in_bytes')) is not int:
+                          raise SystemExit("ARTIFACT_SIZE_MISSING")
+                      active_bytes+=obj['size_in_bytes']
+                      active_count+=1
+                  else:raise SystemExit("ARTIFACT_EXPIRY_UNKNOWN")
+              collected+=len(rows)
+              if collected>=total:break
+              if not rows:raise SystemExit("ARTIFACT_PAGE_INCOMPLETE")
+          full=collected==total
+          result={'schema':'factory.off.actions-artifacts.full-readonly.v2',
                   'account_storage_quota_verified':False,
                   'repository_artifact_count':total,
-                  'current_page_items':len(records),
-                  'full_repository_census':total<=len(records),
-                  'first_page_nonexpired_bytes':sum(
-                     a['size_in_bytes'] for a in records if
-                     isinstance(a,dict) and a.get('expired') is False and
-                     type(a.get('size_in_bytes')) is int),
+                  'artifact_counted':collected,
+                  'active_artifact_count':active_count,
+                  'expired_artifact_count':expired_count,
+                  'active_artifact_bytes':active_bytes,
+                  'pages_checked':pages,
+                  'full_repository_census':full,
+                  'account_global_storage_bytes_unknown':True,
                   'backup_uploaded':False,
                   'artifact_created':False,
                   'factory_started':False,
                   'production_mutated':False}
           print('FACTORY_ACTIONS_QUOTA_METADATA='+json.dumps(result,sort_keys=True),flush=True)
+          if not full:raise SystemExit("ARTIFACT_CENSUS_INCOMPLETE")
           PY
