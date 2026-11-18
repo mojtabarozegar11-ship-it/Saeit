@@ -26,7 +26,9 @@ report={"schema":"mojprop.two-mainnet-solidity-node.readonly.v1",
 for base in HOSTS:
  item={"provider_host":base.removeprefix("https://"),"http":None,
        "supports_solidified_block":False,"has_recent_block":False,
-       "block_height_positive":False,"error_kind":None}
+       "block_height_positive":False,"error_kind":None,
+       "content_type":None,"response_length":None,"response_is_json":None,
+       "provider_json_keys":[],"provider_error_field":False}
  try:
   path="/walletsolidity/getnowblock"
   req=Request(base+path,method="GET",
@@ -34,12 +36,17 @@ for base in HOSTS:
                        "Accept":"application/json"})
   with opener.open(req,timeout=12) as response:
    item["http"]=response.status
+   item["content_type"]=response.headers.get("Content-Type", "").split(";",1)[0][:45]
    if response.geturl()!=base+path:
     raise ValueError("Unexpected HTTP redirection")
    raw=response.read(300001)
+  item["response_length"]=len(raw)
   if len(raw)>300000:
    raise ValueError("Oversized provider answer")
   d=json.loads(raw.decode("utf8"))
+  item["response_is_json"]=True
+  item["provider_json_keys"]=sorted(d)[:10] if type(d) is dict else []
+  item["provider_error_field"]=type(d) is dict and "Error" in d
   number=d.get("block_header",{}).get("raw_data",{}).get("number")
   timestamp=d.get("block_header",{}).get("raw_data",{}).get("timestamp")
   now=int(datetime.now(timezone.utc).timestamp()*1000)
