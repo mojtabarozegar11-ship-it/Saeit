@@ -42,7 +42,8 @@ jobs:
           from cryptography.hazmat.primitives.serialization import load_pem_public_key,Encoding,PublicFormat
           if trusted.is_symlink() or not trusted.is_file():
               raise SystemExit("F01_PUBLIC_RECIPIENT_SOURCE_MISSING")
-          key=load_pem_public_key(trusted.read_bytes())
+          from cryptography.hazmat.backends import default_backend
+          key=load_pem_public_key(trusted.read_bytes(),backend=default_backend())
           trusted_sha=hashlib.sha256(key.public_bytes(Encoding.DER,PublicFormat.SubjectPublicKeyInfo)).hexdigest()
           if key.key_size!=3072 or trusted_sha!="a7b3ef1995681d3963d56570ce68b2c4cf9785e99163f66795592cb907632d74":
               raise SystemExit("F01_RSA_RECIPIENT_NOT_OWNER_RECOVERABLE")
