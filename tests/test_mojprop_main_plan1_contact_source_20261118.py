@@ -82,13 +82,13 @@ class MainlinePlanOneContactGuards(unittest.TestCase):
         self.assertIn("independently verified company reserves", self.plan)
 
     def test_11_first_contact_is_live_known_page(self):
-        self.assertGreaterEqual(self.plan.count('href="/moj-prop/contact/"'), 2)
+        self.assertGreaterEqual(self.plan.count('href="/moj-prop/contact/"'), 1)
         self.assertIn("Contact MOJ PROP about Plan 1 (free)", self.plan)
 
-    def test_12_persian_path_is_same_official_contact(self):
-        self.assertIn('lang="fa" dir="rtl"', self.plan)
-        self.assertIn("درخواست رایگان شرایط کتبی", self.plan)
-        self.assertIn('href="/moj-prop/contact/"', self.plan)
+    def test_12_mojplaywin_page_is_english_only(self):
+        self.assertNotIn('lang="fa" dir="rtl"', self.text)
+        self.assertNotIn("درخواست رایگان شرایط کتبی", self.text)
+        self.assertNotRegex(self.text, r"[\\u0600-\\u06FF]")
 
     def test_13_no_dead_new_form_link(self):
         self.assertNotIn("/moj-prop-interest/form/", self.text)
