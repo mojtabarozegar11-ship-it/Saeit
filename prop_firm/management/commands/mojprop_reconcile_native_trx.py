@@ -27,6 +27,8 @@ def exclusive_reconcile_lock():
     single owner-owned private ledger, and nonblocking kernel file lock.
     Closing FD releases flock automatically even after an exception.
     """
+    if connection.vendor == "sqlite":
+        connection.ensure_connection()
     if connection.vendor == "mysql":
         lock_name = "mojprop:native:trx:wallet:owner"
         acquired = False
