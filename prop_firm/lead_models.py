@@ -1,7 +1,7 @@
 """Plan 1 prospective customer contact records, NOT paid challenge enrollments."""
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
-from core.consent_guard_queryset import ConsentStatusQuerySet
+from .consent_guard_queryset import ConsentStatusQuerySet
 
 class PropInterest(models.Model):
     """Consent-only sales inquiry. Never creates invoices, entitlements or trades."""
