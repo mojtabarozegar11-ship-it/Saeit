@@ -108,10 +108,11 @@ MOJPROP_V141_ORDER_SIGNING_KEY=os.environ.get("MOJPROP_V141_ORDER_SIGNING_KEY","
 MOJPROP_V141_NATIVE_TERMS_VERSION=os.environ.get("MOJPROP_V141_NATIVE_TERMS_VERSION","")
 MOJPROP_V141_NATIVE_TERMS_SHA256=os.environ.get("MOJPROP_V141_NATIVE_TERMS_SHA256","")
 MOJPROP_V141_TRON_SOLIDITY_PROVIDERS=tuple(
-    x.strip() for x in os.environ.get("MOJPROP_V141_TRON_SOLIDITY_PROVIDERS","").split(",")
+    x.strip() for x in os.environ.get("MOJPROP_V141_TRON_SOLIDITY_PROVIDERS",
+        "https://api.trongrid.io,https://tron-rpc.publicnode.com").split(",")
     if x.strip()
 )
 MOJPROP_V141_TRON_HISTORY_INDEXER=os.environ.get(
-    "MOJPROP_V141_TRON_HISTORY_INDEXER","")
+    "MOJPROP_V141_TRON_HISTORY_INDEXER","https://api.trongrid.io")
 MOJPROP_V141_TRONGRID_API_KEY=os.environ.get(
     "MOJPROP_V141_TRONGRID_API_KEY","")
