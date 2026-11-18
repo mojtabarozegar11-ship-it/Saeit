@@ -9,6 +9,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - templates/moj-prop-v4/index.html
       - tests/test_mojprop_main_plan1_contact_source_20261118.py
       - .github/workflows/mojprop-main-real-plan1-first-contact-gate-20261118.yml
 permissions:
