@@ -83,6 +83,7 @@ jobs:
           test -n "$scan"
           printf '%s\n' "$scan" > "$work/cpanel.known"
           chmod 600 "$work/cpanel.known" "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/cpanel.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
           test "$(git hash-object scripts/factory_cpanel_nov5_hybrid_readonly_inventory_20261118.py)" = '4b81ca19cc2a4aeece247bff8eec1a135783e4d6'
           test "$(git hash-object scripts/factory_cpanel_nov5_stage_two_gzip_20261118.py)" = '0e2a7452ee95b943916ce3a9ec82692d4769ebe5'
           timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec nice -n 15 python3 -B -' < scripts/factory_cpanel_nov5_hybrid_readonly_inventory_20261118.py
