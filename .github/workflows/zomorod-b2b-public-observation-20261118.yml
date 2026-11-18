@@ -1,0 +1,28 @@
+name: Zomorod B2B public HTTPS observation — NO DEPLOY
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/zomorod-b2b-public-observation-20261118.yml"
+      - "scripts/zomorod_b2b_public_observation_20261118.py"
+      - "tests/test_zomorod_b2b_public_observation_20261118.py"
+      - "public/b2b/**"
+permissions:
+  contents: read
+jobs:
+  observe:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Exercise negative cases
+        run: python3 -B -m unittest tests.test_zomorod_b2b_public_observation_20261118 -v
+      - name: Anonymous fixed-route observations
+        run: |
+          set -euo pipefail
+          python3 -B scripts/zomorod_b2b_public_observation_20261118.py | tee "$RUNNER_TEMP/zomorod-public-observation.json"
+          cat "$RUNNER_TEMP/zomorod-public-observation.json" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Observation only: successful job is not proof of a successful HTTP response or deployment.' >> "$GITHUB_STEP_SUMMARY"
