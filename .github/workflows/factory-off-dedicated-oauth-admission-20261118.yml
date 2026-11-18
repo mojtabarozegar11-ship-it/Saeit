@@ -1,0 +1,27 @@
+name: Factory OFF dedicated OAuth admission (OFFLINE ONLY)
+on:
+  push:
+    branches: [fix/factory-dual-drive-unambiguous-proof-20261118]
+    paths: ['.github/workflows/factory-off-dedicated-oauth-admission-20261118.yml']
+permissions:
+  contents: read
+jobs:
+  owner-config-admission-offline:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify pinned source and exercise fabricated config only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/factory_owner_drive_setup.py)" = 'a48c727654905b93b5ee3b2ca5a967351ff89233'
+          test "$(git hash-object tests/test_factory_owner_drive_oauth_admission_20261118.py)" = 'cfdd81e2bf4eb172a0f90a1e1de9c5bfe15765a3'
+          test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'f9c6d8445144744920246a128c977bdc850eb80f'
+          PYTHONPATH=scripts PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_owner_drive_oauth_admission_20261118.py' -q
+          echo FACTORY_LIVE_OAUTH_NOT_ATTEMPTED=true
+          echo FACTORY_UPLOADS=0
+          echo FACTORY_SOURCE_DELETION=0
