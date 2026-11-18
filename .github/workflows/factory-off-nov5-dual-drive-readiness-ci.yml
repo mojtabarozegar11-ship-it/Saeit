@@ -5,6 +5,8 @@ on:
       - 'scripts/factory_cpanel_existing_nov5_two_drive.py'
       - 'scripts/factory_cpanel_nov5_sqlite_integrity_readonly_20261118.py'
       - 'scripts/factory_cpanel_nov5_compression_readonly_20261118.py'
+      - 'scripts/factory_cpanel_nov5_stage_one_gzip_20261118.py'
+      - 'tests/test_factory_cpanel_nov5_stage_one_gzip_20261118.py'
       - 'tests/test_factory_cpanel_existing_nov5_two_drive.py'
       - 'scripts/factory_rclone_dual_parts.py'
       - '.github/workflows/factory-off-nov5-dual-drive-readiness-ci.yml'
@@ -42,8 +44,12 @@ jobs:
           test "$(git hash-object scripts/factory_rclone_ephemeral_binary.py)" = 'fa088e6531c302b95044d014ac8e8c568fb9ca7a'
           test "$(git hash-object tests/test_factory_rclone_ephemeral_binary.py)" = 'df5924adf2a39dece73e31371795fa7d18dcdf42'
           PYTHONPATH=scripts PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_factory_rclone_ephemeral_binary
+          test "$(git hash-object scripts/factory_cpanel_nov5_stage_one_gzip_20261118.py)" = 'e9d1b1261560fc34dc1f242ecea66d02c511f010'
+          test "$(git hash-object tests/test_factory_cpanel_nov5_stage_one_gzip_20261118.py)" = '6709e3590f6f0986a17d970e8a97fbe21aa7f7f1'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_cpanel_nov5_stage_one_gzip_20261118.py' -q
+          echo FACTORY_ONE_GZIP_STAGING_SEVEN_FAIL_CLOSED_CASES_PASS=true
           echo FACTORY_CPanel_HISTORICAL_SOURCE_ONLY_OFFLINE_PASS=true
-  cpanel-source-metadata:
+  cpanel-historical-gzip-stage:
     needs: offline
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
@@ -112,8 +118,11 @@ jobs:
           test "$(git hash-object scripts/factory_cpanel_nov5_compression_readonly_20261118.py)" = '455b362ebe8fdbb1d4a91fb910223233a7beb8bf'
           timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec nice -n 15 python3 -B -' < scripts/factory_cpanel_nov5_compression_readonly_20261118.py
           echo FACTORY_CPANEL_GZIP1_SIZE_MEASURED_READ_ONLY=true
+          test "$(git hash-object scripts/factory_cpanel_nov5_stage_one_gzip_20261118.py)" = 'e9d1b1261560fc34dc1f242ecea66d02c511f010'
+          timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec nice -n 15 python3 -B -' < scripts/factory_cpanel_nov5_stage_one_gzip_20261118.py
+          echo FACTORY_CPANEL_FIRST_HISTORICAL_GZIP_ARCHIVE_RESTORE_VERIFIED=true
           echo FACTORY_CPANEL_NOV5_2_FILES_SHA_AND_FULL_SQLITE_INTEGRITY=true
-          echo FACTORY_EXISTING_CPANEL_NOV5_SNAPSHOTS_METADATA_ONLY=true
+          echo FACTORY_EXISTING_CPANEL_NOV5_RAW_SOURCE_UNCHANGED=true
           echo FACTORY_RUNNING_PROCESSES_STARTED=0
           echo FACTORY_BACKUPS_UPLOADED=0
           echo FACTORY_SOURCE_FILES_DELETED=0
