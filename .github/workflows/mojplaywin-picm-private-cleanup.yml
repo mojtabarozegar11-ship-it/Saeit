@@ -1,0 +1,197 @@
+name: PICM private runtime cleanup via VPS runner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-picm-private-cleanup.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: picm-private-runtime-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Stop only PICM worker and remove VPS-only PICM state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import json, os, shutil, signal, time
+          from pathlib import Path
+          home=Path.home()
+          run_id=os.environ["GITHUB_RUN_ID"]
+          backup=home/".mojplaywin-backups"/("picm-removal-vps-"+run_id)
+          backup.mkdir(mode=0o700,parents=True,exist_ok=False)
+          targets=[home/".local/share/saeit-picm",home/".picm-queue"]
+          manifest={"operation":"PICM_VPS_PRIVATE_STATE_REMOVAL","run_id":run_id,"targets":{},"stopped_worker_pids":[]}
+          for e in Path("/proc").iterdir():
+              if not e.name.isdigit():
+                  continue
+              try:
+                  pid=int(e.name)
+                  if pid==os.getpid():
+                      continue
+                  status=(e/"status").read_text(errors="replace")
+                  uid_line=next((x for x in status.splitlines() if x.startswith("Uid:")), "")
+                  if not uid_line or int(uid_line.split()[1]) != os.getuid():
+                      continue
+                  cmd=(e/"cmdline").read_bytes().replace(b"\\0",b" ").decode(errors="replace")
+                  if "ops/picm-vps/worker.py" in cmd:
+                      os.kill(pid,signal.SIGTERM)
+                      manifest["stopped_worker_pids"].append(pid)
+              except (FileNotFoundError,PermissionError,ProcessLookupError,ValueError,OSError):
+                  pass
+          for p in targets:
+              if p.is_symlink():
+                  raise SystemExit("PICM_SYMLINK_REFUSED="+str(p))
+              if not p.exists():
+                  manifest["targets"][str(p)]={"exists":False}
+                  continue
+              dest=backup/("target_"+str(p).replace("/","_"))
+              if p.is_dir():
+                  shutil.copytree(p,dest,symlinks=True)
+                  kind="dir"
+              else:
+                  shutil.copy2(p,dest)
+                  kind="file"
+              manifest["targets"][str(p)]={"exists":True,"kind":kind}
+              if p.is_dir():
+                  shutil.rmtree(p)
+              else:
+                  p.unlink()
+          (backup/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding="utf-8")
+          print("PICM_VPS_PRIVATE_STATE_REMOVED="+json.dumps(manifest,ensure_ascii=False))
+          PY
+
+      - name: Remove cPanel PICM files through the verified local-to-cPanel SSH path
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          d="$RUNNER_TEMP/picm-cpanel-cleanup"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/remote.py" <<'PY'
+          import argparse, hashlib, json, os, re, shutil
+          from pathlib import Path
+          ap=argparse.ArgumentParser()
+          ap.add_argument("--run-id",required=True)
+          ap.add_argument("--source-commit",required=True)
+          a=ap.parse_args()
+          if not a.run_id.isdigit() or not re.fullmatch(r"[0-9a-f]{40}",a.source_commit):
+              raise SystemExit("PICM_INVALID_INPUT")
+          home=Path("/home/zomorod2")
+          root=home/"Saeit-staging"
+          docroot=home/"mojplaywin.com"
+          backup=home/".mojplaywin-backups"/("picm-removal-cpanel-"+a.run_id)
+          if os.geteuid() != root.stat().st_uid:
+              raise SystemExit("PICM_WRONG_ACCOUNT")
+          if root.is_symlink() or docroot.is_symlink() or backup.exists():
+              raise SystemExit("PICM_UNSAFE_ROOT_OR_BACKUP_COLLISION")
+          if not root.is_dir() or not docroot.is_dir():
+              raise SystemExit("PICM_ROOT_MISSING")
+          backup.mkdir(mode=0o700,parents=True)
+          manifest={"operation":"PICM_CPANEL_PRIVATE_RUNTIME_REMOVAL","run_id":a.run_id,"source_commit":a.source_commit,"targets":{}}
+          def safe(p):
+              rp=p.resolve(strict=False)
+              for b in (home.resolve(),root.resolve(),docroot.resolve()):
+                  try:
+                      rp.relative_to(b)
+                      return
+                  except ValueError:
+                      pass
+              raise SystemExit("PICM_PATH_OUTSIDE_HOME:"+str(p))
+          def backup_remove(p):
+              safe(p)
+              if p.is_symlink():
+                  raise SystemExit("PICM_SYMLINK_REFUSED:"+str(p))
+              if not p.exists():
+                  manifest["targets"][str(p)]={"exists":False}
+                  return
+              dest=backup/"targets"/("item_"+str(p).replace("/","_"))
+              dest.parent.mkdir(parents=True,exist_ok=True)
+              if p.is_dir():
+                  shutil.copytree(p,dest,symlinks=True)
+                  kind="dir"
+              else:
+                  shutil.copy2(p,dest)
+                  kind="file"
+              manifest["targets"][str(p)]={"exists":True,"kind":kind}
+              if p.is_dir():
+                  shutil.rmtree(p)
+              else:
+                  p.unlink()
+          urls=root/"config/urls.py"
+          if urls.is_file():
+              text=urls.read_text(encoding="utf-8")
+              markers=("SAEIT_PICM_V1_OWNER_SCOPED_ROUTES","SAEIT_PICM_PRIVATE_LOGIN_V1","SAEIT_PICM_WORKSPACE_V1","SAEIT_PICM_REFERENCE_UPLOAD_V1","MOJPLAYWIN_PRIVATE_MEDIA_OWNER_V1")
+              found=[m for m in markers if m in text]
+              if found:
+                  first=min(text.find(m) for m in found)
+                  cut=text.rfind("\n#",0,first)+1 if first>0 else first
+                  tail=text[cut:]
+                  if any(line.strip() and "picm" not in line.casefold() for line in tail.splitlines()):
+                      raise SystemExit("PICM_UNEXPECTED_CONFIG_TAIL")
+                  backup_remove(urls)
+                  urls.parent.mkdir(parents=True,exist_ok=True)
+                  urls.write_text(text[:cut].rstrip()+"\n",encoding="utf-8")
+                  manifest["targets"][str(urls)]["post_action"]="rewritten_without_picm_routes"
+              elif "picm" in text.casefold():
+                  raise SystemExit("PICM_UNMARKED_CONFIG_REFERENCE")
+          explicit=[
+              root/"core/picm_access.py",root/"core/picm_auth.py",root/"core/picm_storyboard.py",root/"core/picm_views.py",
+              root/"core/private_media_library.py",root/"templates/picm",root/"ops/picm-gpu",root/"ops/picm-vps",
+              root/"scripts/deploy_mojplaywin_picm.py",root/"scripts/deploy_picm_login.py",root/"scripts/deploy_private_media.py",
+              root/"runtime/retired_picm_manifest.json",root/"scripts/mpw_retired_subsite_policy.py",
+              root/"tests/test_mpw_retired_picm_policy_c101_20261116.py",
+              home/".picm-queue",home/".private-media-library",home/".local/share/saeit-picm",docroot/"picm"
+          ]
+          for base in (root/"scripts",root/"tests",root/".github/workflows"):
+              if base.is_dir():
+                  explicit.extend(p for p in base.iterdir() if "picm" in p.name.casefold())
+          seen=set()
+          for p in explicit:
+              if str(p) not in seen:
+                  seen.add(str(p)); backup_remove(p)
+          for base in (root,docroot):
+              if not base.is_symlink():
+                  tmp=base/"tmp"
+                  tmp.mkdir(exist_ok=True)
+                  (tmp/"restart.txt").touch()
+          (backup/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding="utf-8")
+          print("PICM_CPANEL_PRIVATE_RUNTIME_REMOVED="+json.dumps({"backup":str(backup),"target_count":len(manifest["targets"])},ensure_ascii=False))
+          PY
+          sshcmd=(ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no -p 1396 zomorod2@zohal.pws-dns.net)
+          cat "$d/remote.py" | timeout 120s "${sshcmd[@]}" "PYTHONDONTWRITEBYTECODE=1 python3 - --run-id $GITHUB_RUN_ID --source-commit $GITHUB_SHA"
+          echo PICM_CPANEL_CLEANUP_COMPLETED=true
+
+      - name: Verify public PICM routes remain removed
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for path in /picm/ /picm/login/ /picm/workspace/ /picm/media/; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "https://mojplaywin.com$path")"
+            echo "$path $code"
+            test "$code" = 404 || test "$code" = 410
+          done
+          echo PICM_PUBLIC_ROUTES_REMOVED=true
