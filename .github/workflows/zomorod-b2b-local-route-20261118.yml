@@ -1,0 +1,135 @@
+name: Zomorod B2B scoped directory routing repair
+on:
+  pull_request:
+    types: [opened]
+    branches: [feature/zomorod-b2b-trust-inquiries-20261118]
+    paths: [".github/workflows/zomorod-b2b-local-route-20261118.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-b2b-local-route-20261118
+  cancel-in-progress: false
+jobs:
+  repair:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'release/zomorod-b2b-local-route-20261118' &&
+      github.run_attempt == 1
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Connect pinned verified cPanel owner
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          umask 077
+          work="$RUNNER_TEMP/zomorod-b2b-local-route"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 35s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2"'
+      - name: Create only B2B local static routing configuration; do not touch root
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/zomorod-b2b-local-route"
+          timeout 90s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' <<'PY'
+          import os,stat,pwd,hashlib,json,ssl,http.client,tempfile
+          from pathlib import Path
+          home=Path("/home/zomorod2")
+          root=home/"public_html"
+          dest=root/"b2b"
+          uid=os.geteuid()
+          if pwd.getpwuid(uid).pw_name!="zomorod2":
+              raise PermissionError("wrong owner")
+          for p in (home,root,dest,dest/"privacy"):
+              m=p.lstat()
+              if p.resolve()!=p or not stat.S_ISDIR(m.st_mode) or m.st_uid!=uid or m.st_mode&0o022:
+                  raise PermissionError("unsafe directory")
+          def digest(p):
+              m=p.lstat()
+              if not stat.S_ISREG(m.st_mode) or m.st_uid!=uid or p.is_symlink() or m.st_size>1048576:
+                  raise RuntimeError("unsafe fixed file")
+              return hashlib.sha256(p.read_bytes()).hexdigest()
+          pins={"index.html":"b34b028cc6c4645882b8e194e785eb66e31370c1a7d98b76561f269cad9b96aa","privacy/index.html":"f21d270db6bd734744c5e65382f0741d0d2cb8b78a5421441b18dc6129579f0d"}
+          for name,expected in pins.items():
+              if digest(dest/name)!=expected:
+                  raise RuntimeError("installed page drift")
+          protected={p:digest(root/p) for p in (".htaccess","index.html","company/index.html")}
+          target=dest/".htaccess"
+          if target.exists() or target.is_symlink() or (dest/"privacy/.htaccess").exists() or (dest/"privacy/.htaccess").is_symlink():
+              raise FileExistsError("local routing configuration already exists")
+          config=b"PassengerEnabled off\nDirectoryIndex index.html\n"
+          # A private staged file and atomic no-overwrite hard link.
+          fd,path=tempfile.mkstemp(prefix=".b2b-route-stage-",dir=home)
+          try:
+              with os.fdopen(fd,"wb") as f:
+                  f.write(config)
+                  f.flush()
+                  os.fchmod(f.fileno(),0o644)
+                  os.fsync(f.fileno())
+              os.link(path,target,follow_symlinks=False)
+          finally:
+              os.unlink(path)
+          dfd=os.open(dest,os.O_DIRECTORY|os.O_NOFOLLOW)
+          try:
+              os.fsync(dfd)
+          finally:
+              os.close(dfd)
+          if any(digest(root/p)!=v for p,v in protected.items()) or any(digest(dest/p)!=v for p,v in pins.items()):
+              raise RuntimeError("unexpected protected file drift")
+          print("B2B_LOCAL_ROUTE_RECEIPT="+json.dumps({"created_only":"b2b/.htaccess","root_unchanged":True,"pages_unchanged":True,"config_sha256":digest(target),"db_accessed":False,"services_changed":False},sort_keys=True),flush=True)
+          # Independent public HTTP job follows. Never overwrite or remove any preexisting file.
+          PY
+      - name: Securely remove ephemeral auth files
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/zomorod-b2b-local-route"
+          if test -d "$work"; then rm -f "$work/host.key" "$work/known" "$work/config"; rmdir "$work"; fi
+
+  verify:
+    needs: repair
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Validate both direct and directory routes and protected public pages
+        run: |
+          python3 -B - <<'PY'
+          import hashlib,http.client,ssl,json,concurrent.futures
+          expected={
+          "/":"11842ef9d31ebf90df3042d300ee99999db043eebc3c1c88252da80cda8f164d",
+          "/company/":"75e9c3cb8387494fc25a67b5561af1853a478fbaca96d73e96a7a48ae0cd5281",
+          "/b2b/":"b34b028cc6c4645882b8e194e785eb66e31370c1a7d98b76561f269cad9b96aa",
+          "/b2b/index.html":"b34b028cc6c4645882b8e194e785eb66e31370c1a7d98b76561f269cad9b96aa",
+          "/b2b/privacy/":"f21d270db6bd734744c5e65382f0741d0d2cb8b78a5421441b18dc6129579f0d",
+          "/b2b/privacy/index.html":"f21d270db6bd734744c5e65382f0741d0d2cb8b78a5421441b18dc6129579f0d"}
+          def check(p):
+              c=http.client.HTTPSConnection("zomorodmelal.ir",timeout=10,context=ssl.create_default_context())
+              out={"path":p}
+              try:
+                  c.request("GET",p,headers={"Accept-Encoding":"identity","Cache-Control":"no-cache"})
+                  r=c.getresponse()
+                  raw=r.read(1048577)
+                  out.update(status=r.status,tls_verified=True,exact=len(raw)<=1048576 and hashlib.sha256(raw).hexdigest()==expected[p])
+              except Exception as e:
+                  out.update(status=None,error_type=type(e).__name__,exact=False)
+              finally: c.close()
+              return out
+          with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+              rows=list(pool.map(check,expected))
+          print("B2B_LOCAL_ROUTE_PUBLIC="+json.dumps(rows,sort_keys=True),flush=True)
+          if not all(r["status"]==200 and r["exact"] for r in rows):
+              raise SystemExit("public verification incomplete; no further writes authorized")
+          PY
