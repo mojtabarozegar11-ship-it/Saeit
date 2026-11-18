@@ -1,36 +1,36 @@
 {
-  "version": 4,
+  "version": 5,
   "name": "PICM",
-  "status": "github_source_removed_public_routes_404_private_cleanup_unverified",
+  "status": "fully_removed_from_active_source_and_private_runtime",
   "decision": "owner_decision_100_percent_deletion",
   "source_removed_commit": "3e3ecf50a61355c2e67e578bdfb7ecf1becada4b",
-  "source_cleanup_verified": "No dedicated PICM source, workflow, test, template, ops or retired-route-policy path remains in main.",
-  "public_route_check": {
-    "method": "anonymous GET",
-    "observed_at": "2026-11-18T12:46:00Z",
-    "routes": {
-      "/picm/": 404,
-      "/picm/login/": 404,
-      "/picm/workspace/": 404,
-      "/picm/media/": 404
-    }
-  },
-  "private_cleanup": {
-    "status": "unverified",
-    "blocker": "Pinned VPS→cPanel SSH relay timed out before upload/delete; no live write occurred in either attempt.",
-    "attempts": [
-      44306483390,
-      44306654825
+  "private_cleanup_run": "44312934255",
+  "private_cleanup_result": {
+    "cpanel": "completed",
+    "cpanel_targets_removed": 18,
+    "vps_runner_picm_state": "not_present",
+    "worker_processes_stopped": 0,
+    "backups": [
+      "/home/zomorod2/.mojplaywin-backups/picm-removal-cpanel-44312934255",
+      "VPS runner scoped PICM backup created by the cleanup run"
     ]
   },
-  "scope_preserved": [
+  "public_route_check": {
+    "/picm/": 404,
+    "/picm/login/": 404,
+    "/picm/workspace/": 404,
+    "/picm/media/": 404
+  },
+  "source_tree_check": "No dedicated PICM source, workflow, test, template, ops or retired-route-policy path remains after temporary cleanup workflow removal.",
+  "preserved": [
     "MojPlayWin shared routes",
     "store",
     "payments",
     "factory",
     "other subsites",
+    "scoped removal backups",
+    "this receipt",
     "historical Git commits"
   ],
-  "next_action": "When the pinned relay is online, run a read-only census and then remove only any remaining private PICM worker/queue artifacts; no public route is active.",
-  "recorded_at": "2026-11-18T12:46:00Z"
+  "completed_at": "2026-11-18T13:22:08Z"
 }
