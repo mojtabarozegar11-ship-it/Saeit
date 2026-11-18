@@ -102,7 +102,10 @@ jobs:
           test -s "$work/rclone"
           test "$(stat -c %s "$work/rclone")" -lt 155000000
           chmod 700 "$work/rclone"
-          "$work/rclone" version | head -1 | grep -Fqx 'rclone v1.76.0'
+          # Consume the whole version output: head -1 can SIGPIPE rclone under pipefail.
+          "$work/rclone" version > "$work/rclone.version"
+          IFS= read -r rclone_version < "$work/rclone.version"
+          test "$rclone_version" = 'rclone v1.76.0'
           echo 'OWNER_RUNNER_EPHEMERAL_RCLONE_SHA256=VERIFIED'
           echo 'OWNER_RUNNER_RCLONE_VERSION=1.76.0'
           echo 'OWNER_RUNNER_RCLONE_INSTALLED_PERSISTENTLY=FALSE'
