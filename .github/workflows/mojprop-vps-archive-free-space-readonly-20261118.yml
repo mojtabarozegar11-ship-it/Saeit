@@ -150,7 +150,7 @@ jobs:
           }
           print('MOJPROP_AUTHENTIC_VPS_STORAGE_ADMISSION='+json.dumps(result,sort_keys=True))
           PRIVATE_RO_PY
-          timeout 100s "\${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'RO_ARCHIVE_STAT'
+          timeout 100s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'RO_ARCHIVE_STAT'
           """Only classify owner-private backup ciphertext by type, age and allocated bytes."""
           import json,os,re,stat,time
           from pathlib import Path
