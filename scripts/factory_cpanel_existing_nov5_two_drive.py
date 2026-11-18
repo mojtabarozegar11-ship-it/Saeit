@@ -58,12 +58,13 @@ MIN_FREE_RESERVE = 1024 * 1024 * 1024
 # pinned owner SSH relay; its only user-supplied value is an allowlisted basename.
 # No remote writable temporary files, SQL database connections or app imports.
 REMOTE_PY = r'''
-import hashlib,json,os,pathlib,pwd,stat,sys
+import hashlib,json,os,pathlib,pwd,stat,sys,zlib
 root=pathlib.Path("/home/zomorod2/restore-staging/factory")
 allowed={
-"master-before-20261105T154953Z.sqlite3": "a9fd2175f9ace1a81d67cf7145e54b8621fd44cc06b0b2739bdc9345e21750e2",
-"master-before-20261105T210434Z.sqlite3": "402c16b67d430132701435eb4b3f79de88cd5c2479bb07c741c6674708a931be"
+"master-before-20261105T154953Z.sqlite3": ("a9fd2175f9ace1a81d67cf7145e54b8621fd44cc06b0b2739bdc9345e21750e2",279659980,"591a0b10b2f782cb7cb8db3fa340f4b3827b8d1db2960ca89a507098ccc35c78"),
+"master-before-20261105T210434Z.sqlite3": ("402c16b67d430132701435eb4b3f79de88cd5c2479bb07c741c6674708a931be",279659148,"4d416f38744023293864d051b511d2ce957004b5c91ebc9882722f5486e31811")
 }
+raw_size=1408634880
 if len(sys.argv)!=3 or sys.argv[1] not in allowed or sys.argv[2] not in ("probe","stream"): sys.exit(91)
 if pwd.getpwuid(os.geteuid()).pw_name!="zomorod2": sys.exit(92)
 name,mode=sys.argv[1:3]
@@ -71,36 +72,69 @@ home=pathlib.Path("/home/zomorod2")
 for d in (home,home/"restore-staging",root):
     st=d.lstat()
     if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.geteuid() or st.st_mode&0o022: sys.exit(93)
-p=root/name
-st=p.lstat()
-if not stat.S_ISREG(st.st_mode) or st.st_uid!=os.geteuid() or st.st_nlink!=1 or st.st_size!=1408634880: sys.exit(94)
+raw=root/name
 for suffix in ("-wal","-shm","-journal"):
-    if (root/(name+suffix)).exists() or (root/(name+suffix)).is_symlink(): sys.exit(95)
+    sidecar=root/(name+suffix)
+    if sidecar.exists() or sidecar.is_symlink(): sys.exit(95)
+raw_sha,zip_size,zip_sha=allowed[name]
+# Never silently fall back from an unsafe or damaged raw source.
+compressed=False
+try: st=raw.lstat();p=raw
+except FileNotFoundError:
+    compressed=True;p=root/(name+".gz");st=p.lstat()
+expected_disk_size=zip_size if compressed else raw_size
+if (not stat.S_ISREG(st.st_mode) or st.st_uid!=os.geteuid() or st.st_nlink!=1
+    or st.st_size!=expected_disk_size or (compressed and st.st_mode&0o077)): sys.exit(94)
 if mode=="probe":
+    # "size" is the logical original SQLite byte count, not gzip disk size.
     sys.stdout.write(json.dumps({"schema":"factory.immutable.cpanel.nov5.probe.v1",
-      "size":st.st_size,"owner_regular":True,"no_sidecars":True},sort_keys=True)+"\n")
+      "size":raw_size,"owner_regular":True,"no_sidecars":True},sort_keys=True)+"\n")
     sys.exit(0)
 fd=os.open(p,os.O_RDONLY|getattr(os,"O_NOFOLLOW",0))
 try:
     pre=os.fstat(fd)
     attrs=("st_dev","st_ino","st_size","st_mtime_ns","st_ctime_ns")
-    if any(getattr(st,a)!=getattr(pre,a) for a in attrs): sys.exit(96)
-    h=hashlib.sha256();count=0
-    if os.read(fd,16)!=b"SQLite format 3\x00":sys.exit(97)
-    os.lseek(fd,0,os.SEEK_SET)
-    while True:
-        block=os.read(fd,1048576)
-        if not block:break
-        h.update(block);count+=len(block)
+    ident=lambda s:tuple(getattr(s,a) for a in attrs)
+    if ident(st)!=ident(pre): sys.exit(96)
+    h=hashlib.sha256();count=0;source_h=hashlib.sha256();source_count=0
+    header=b""
+    def emit(block):
+        global count,header
+        count+=len(block)
+        if count>raw_size:sys.exit(97)
+        if len(header)<16:
+            header=(header+block)[:16]
+            if len(header)==16 and header!=b"SQLite format 3\x00":sys.exit(97)
+        h.update(block)
         view=memoryview(block)
         while view:
             n=os.write(sys.stdout.fileno(),view)
             if n<=0:sys.exit(98)
             view=view[n:]
-    post=os.fstat(fd)
-    if (count!=1408634880 or
-        any(getattr(pre,a)!=getattr(post,a) for a in attrs) or
-        h.hexdigest()!=allowed[name]): sys.exit(99)
+    dec=zlib.decompressobj(wbits=31) if compressed else None
+    while True:
+        packet=os.read(fd,1048576)
+        if not packet:break
+        source_count+=len(packet)
+        if source_count>expected_disk_size:sys.exit(97)
+        source_h.update(packet)
+        if not compressed:
+            emit(packet);continue
+        if dec.eof:sys.exit(97)
+        rem=packet
+        while rem:
+            plain=dec.decompress(rem,1048576)
+            if dec.unused_data:sys.exit(97)
+            if plain:emit(plain)
+            tail=dec.unconsumed_tail
+            if dec.eof and tail:sys.exit(97)
+            if tail==rem and not plain:sys.exit(97)
+            rem=tail
+    if compressed and (not dec.eof or dec.unused_data or dec.unconsumed_tail):sys.exit(97)
+    if (source_count!=expected_disk_size
+        or source_h.hexdigest()!=(zip_sha if compressed else raw_sha)
+        or count!=raw_size or header!=b"SQLite format 3\x00" or h.hexdigest()!=raw_sha
+        or ident(os.fstat(fd))!=ident(pre) or ident(p.lstat())!=ident(pre)):sys.exit(99)
 finally: os.close(fd)
 '''
 
