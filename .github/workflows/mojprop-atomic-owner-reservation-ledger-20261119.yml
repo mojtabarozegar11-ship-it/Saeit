@@ -6,11 +6,17 @@ on:
       - 'prop_firm/plan1_owner_reservations.py'
       - 'tests/test_prop_plan1_owner_reservations.py'
       - '.github/workflows/mojprop-atomic-owner-reservation-ledger-20261119.yml'
+  pull_request:
+    branches: [feature/mojprop-owner-account-risk-admission-20261119]
+    paths:
+      - 'prop_firm/plan1_owner_reservations.py'
+      - 'tests/test_prop_plan1_owner_reservations.py'
+      - '.github/workflows/mojprop-atomic-owner-reservation-ledger-20261119.yml'
 permissions:
   contents: read
 jobs:
   ledger:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mojprop-atomic-reservation-ledger-20261119'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/feature/mojprop-atomic-reservation-ledger-20261119' || github.base_ref == 'feature/mojprop-owner-account-risk-admission-20261119')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
