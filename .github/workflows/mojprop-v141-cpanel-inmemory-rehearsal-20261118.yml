@@ -1,4 +1,4 @@
-name: MOJ PROP — actual cPanel isolated Django :memory: rehearsal (NO PRODUCTION DATA)
+name: "MOJ PROP — actual cPanel isolated Django in-memory rehearsal (NO PRODUCTION DATA)"
 on:
   push:
     branches: [audit/mojprop-isolated-django-host-rehearsal-20261118]
