@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/factory_cpanel_existing_nov5_two_drive.py'
       - 'scripts/factory_cpanel_nov5_sqlite_integrity_readonly_20261118.py'
+      - 'scripts/factory_cpanel_nov5_compression_readonly_20261118.py'
       - 'tests/test_factory_cpanel_existing_nov5_two_drive.py'
       - 'scripts/factory_rclone_dual_parts.py'
       - '.github/workflows/factory-off-nov5-dual-drive-readiness-ci.yml'
@@ -108,6 +109,9 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive --mode probe --snapshot nov5-b --ssh-config "$work/config" --known-hosts "$work/cpanel.known"
           test "$(git hash-object scripts/factory_cpanel_nov5_sqlite_integrity_readonly_20261118.py)" = '3743521a46b65bf572854ba1422c856e1dfb0964'
           timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec python3 -B -' < scripts/factory_cpanel_nov5_sqlite_integrity_readonly_20261118.py
+          test "$(git hash-object scripts/factory_cpanel_nov5_compression_readonly_20261118.py)" = '455b362ebe8fdbb1d4a91fb910223233a7beb8bf'
+          timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec nice -n 15 python3 -B -' < scripts/factory_cpanel_nov5_compression_readonly_20261118.py
+          echo FACTORY_CPANEL_GZIP1_SIZE_MEASURED_READ_ONLY=true
           echo FACTORY_CPANEL_NOV5_2_FILES_SHA_AND_FULL_SQLITE_INTEGRITY=true
           echo FACTORY_EXISTING_CPANEL_NOV5_SNAPSHOTS_METADATA_ONLY=true
           echo FACTORY_RUNNING_PROCESSES_STARTED=0
