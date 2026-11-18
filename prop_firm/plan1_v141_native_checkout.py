@@ -86,6 +86,8 @@ def _require_serializable_payment_write():
     writers before they read a payable invoice. Otherwise fail closed.
     """
     from django.db import connection
+    if connection.vendor == "sqlite":
+        connection.ensure_connection()
     if connection.vendor == "mysql":
         return
     if (connection.vendor == "sqlite"
