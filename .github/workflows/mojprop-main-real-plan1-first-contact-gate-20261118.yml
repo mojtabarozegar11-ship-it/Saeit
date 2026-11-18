@@ -1,7 +1,7 @@
 name: MOJ PROP — safe mainline first-contact source gate (NO DEPLOY)
 on:
   push:
-    branches: [fix/mojprop-main-first-prospect-truthful-contact-20261118]
+    branches: [fix/mojprop-main-first-contact-clean-20261118]
     paths:
       - templates/moj-prop-v4/index.html
       - tests/test_mojprop_main_plan1_contact_source_20261118.py
