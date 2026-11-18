@@ -36,7 +36,7 @@ class StageSafeTests(unittest.TestCase):
         stager.GZIP_BYTES = len(self.gz)
         stager.GZIP_SHA = hashlib.sha256(self.gz).hexdigest()
         stager.RESERVE_MIB = 2
-        stager.admission = lambda: (self.src, self.dst, self.src.lstat())
+        stager.admission = lambda: (self.src, self.dst, self.src.lstat(), False)
         stager.quota_mib = lambda: 20.0
 
     def restore(self):
@@ -50,6 +50,17 @@ class StageSafeTests(unittest.TestCase):
         r = stager.stage()
         self.assertEqual(r['new_compressed_backup_files_created'], 1)
         self.assertEqual(r['source_raw_files_deleted'], 0)
+        self.assertEqual(self.dst.read_bytes(), self.gz)
+        self.assertEqual(self.src.read_bytes(), self.plain)
+        self.assert_no_temp()
+
+    def test_already_staged_verified_idempotent_without_write(self):
+        self.dst.write_bytes(self.gz)
+        self.dst.chmod(0o600)
+        stager.admission = lambda: (self.src, self.dst, self.src.lstat(), True)
+        result = stager.stage()
+        self.assertTrue(result['already_staged_verified'])
+        self.assertEqual(result['new_compressed_backup_files_created'], 0)
         self.assertEqual(self.dst.read_bytes(), self.gz)
         self.assertEqual(self.src.read_bytes(), self.plain)
         self.assert_no_temp()
