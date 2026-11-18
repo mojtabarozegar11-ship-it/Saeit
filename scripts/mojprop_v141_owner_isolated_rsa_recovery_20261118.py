@@ -21,6 +21,7 @@ import zlib
 import zipfile
 
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from scripts.mojprop_v141_first_empty_owner_rsa_offhost_20261118 import (
@@ -79,7 +80,7 @@ def verify(package: Path, key_path: Path, password_path: Path | None) -> tuple[b
         if not pwd:
             raise ValueError("EMPTY_KEY_PASSPHRASE")
     pem=_safe_regular(key_path,16384)
-    key=serialization.load_pem_private_key(pem,password=pwd)
+    key=serialization.load_pem_private_key(pem,password=pwd,backend=default_backend())
     if not isinstance(key,rsa.RSAPrivateKey) or key.key_size!=3072:
         raise ValueError("WRONG_RECOVERY_KEY_TYPE")
     der=key.public_key().public_bytes(serialization.Encoding.DER,serialization.PublicFormat.SubjectPublicKeyInfo)
