@@ -95,3 +95,27 @@ jobs:
             < scripts/mojprop_vps_restore_capacity_readonly_c114.py |
             python3 -c 'import json,sys;lines=sys.stdin.read(6000).splitlines();pre="MOJPROP_C114_VPS_RESTORE_SCREEN=";matches=[x for x in lines if x.startswith(pre)];assert len(matches)==1,"VPS_SCREEN_MISSING";p=json.loads(matches[0][len(pre):]);assert p["schema"]=="mojprop.vps.restore_screen.readonly.v1" and p["read_only"] is True and p["live_services_modified"] is False and p["files_created_or_deleted"] is False and p["restoration_test_performed"] is False and p["production_release_authorized"] is False;print(matches[0])'
           echo 'C114: existing VPS size screen only; no DB transfer, restore, billing or production changes.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Inspect actual deployed native TRX modules on pinned cPanel (no customer records)
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?PINNED_CPANEL_OWNER_KEY_MISSING}"
+          umask 077
+          dir="$RUNNER_TEMP/mojprop-native-live-inventory"
+          install -d -m 700 "$dir"
+          trap 'rm -f -- "$dir/private.key" "$dir/known"; rmdir "$dir" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$dir/private.key"
+          chmod 600 "$dir/private.key"
+          ssh-keygen -y -P '' -f "$dir/private.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$dir/known"
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 60s ssh -T -i "$dir/private.key" -p 1396 \
+            -o UserKnownHostsFile="$dir/known" -o StrictHostKeyChecking=yes \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ForwardAgent=no \
+            -o ConnectTimeout=15 -o ConnectionAttempts=1 -o RequestTTY=no \
+            zomorod2@178.239.147.125 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
+            < scripts/mojprop_live_active_payment_inventory_readonly_20261118.py \
+            | python3 -c 'import json,sys;raw=sys.stdin.read(12000);lines=[x for x in raw.splitlines() if x.startswith("MOJPROP_LIVE_PAYMENT_INVENTORY=")];assert len(lines)==1;d=json.loads(lines[0].split("=",1)[1]);assert d.get("read_only") is True and d.get("customer_records_accessed") is False and d.get("database_connected") is False;print(lines[0]);print("NATIVE_TRX_DEPLOYMENT_NOT_PROVEN_UNLESS_ALL_MODULES_PRESENT=true")'
