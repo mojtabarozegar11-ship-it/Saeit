@@ -27,6 +27,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Block release if dedicated Plan1 opt-in route is absent or miswired
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This source gate does not authorize any deploy. It prevents the
+          # manual job reaching SSH until canonical Plan1 GET+POST integration.
+          python3 -B scripts/mojprop_plan1_form_source_gate_c130.py --require-source-ready
       - name: Validate Moj Prop catalog update payload and installer
         run: |
           python3 -m py_compile scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py scripts/mojprop_schema_preflight_c83.py scripts/fixtures/mojprop_legacy_request_source_c84.py scripts/fixtures/mojprop_legacy_admin_source_c84.py scripts/mojprop_db_release_evidence.py scripts/mojprop_restore_capacity_admission.py scripts/mojprop_live_database_identity_c85.py core/signal_free_views.py core/signal_free_models.py core/guest_recovery_models.py core/migrations/0047_mpw_guest_email_recovery.py
@@ -43,11 +50,15 @@ jobs:
               Check().feed(html)
           home = (root / "index.html").read_text(encoding="utf-8")
           catalog = (root / "catalog/index.html").read_text(encoding="utf-8")
-          home_required = ["<title>Moj Prop", 'href="/moj-prop/catalog/"', '/moj-prop-intake/', "See service prices", "Send request for review"]
+          home_required = ["<title>Moj Prop", 'href="/moj-prop/catalog/"', '/moj-prop-intake/', "MOJ-PROP-01", "PRELAUNCH", "No wallet or payment collection now.", "Send request for review"]
           catalog_required = ["<title>Moj Prop Catalog", "From US$149", "From US$249"]
           missing = [item for item in home_required + catalog_required if item not in home + catalog]
           if missing:
               raise SystemExit(f"Moj Prop catalog content missing: {missing}")
+          if "MOJPROP-STARTER30" in home or 'action="/moj-prop/checkout/' in home or "Send 30 TRX" in home:
+              raise SystemExit("Funded Plan1 must not use historical educational publisher")
+          if '/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01' not in home:
+              raise SystemExit("Real Plan1 no-JS accessible intake destination absent")
           assert 'href="/styles.css"' not in home + catalog and 'src="/app.js"' not in home + catalog
           print("Moj Prop catalog pages parse and contain the expected standalone content.")
           PY
@@ -208,7 +219,7 @@ jobs:
           grep -Fq 'id="free-education-membership"' "$RUNNER_TEMP/signal-free-page.html"
           echo "SIGNAL_FREE_PUBLIC_PAGE=PASS"
           if [[ "$intake_status" != "200" ]]; then
-            echo "MOJ_PROP_INTAKE_BODY=$(head -c 300 "$RUNNER_TEMP/moj-prop-intake.json" | tr '\n' ' ')"
+            echo "MOJ_PROP_INTAKE_UNAVAILABLE_HTTP=$intake_status; PRIVATE_RESPONSE_BODY_WITHHELD=true"
           fi
           [[ "$intake_status" == "200" ]]
           python3 - "$RUNNER_TEMP/moj-prop-intake.json" <<'PY'
@@ -217,6 +228,42 @@ jobs:
           if payload.get("ok") is not True or not payload.get("csrf_token") or payload.get("service") != "moj-prop-intake":
             raise SystemExit("unexpected intake response shape: " + ",".join(sorted(payload.keys())))
           print("Moj Prop intake backend is live and returned a CSRF token without creating a request.")
+          PY
+          # Read-only, post-migration buyer-path checks: never submit customer
+          # identity, receipt tokens, payment instructions or wallet credentials.
+          intake_html_http="$(curl --silent --show-error --max-redirs 0 --connect-timeout 10 --max-time 20 \
+            -H 'Accept: text/html' -H 'Cache-Control: no-store' \
+            -o "$RUNNER_TEMP/moj-prop-intake-html-private.html" -w '%{http_code}' \
+            'https://mojplaywin.com/moj-prop-intake/?format=html&service=blueprint&package=moj-prop-01' || true)"
+          status_html_http="$(curl --silent --show-error --max-redirs 0 --connect-timeout 10 --max-time 20 \
+            -H 'Accept: text/html' -H 'Cache-Control: no-store' \
+            -o "$RUNNER_TEMP/moj-prop-status-html-private.html" -w '%{http_code}' \
+            'https://mojplaywin.com/moj-prop-status/?format=html' || true)"
+          if [[ "$intake_html_http" != "200" || "$status_html_http" != "200" ]]; then
+            echo "MOJ_PROP_NOJS_BACKEND_GATE=FAIL intake_http=$intake_html_http status_http=$status_html_http PRIVATE_BODY_WITHHELD=true"
+            exit 1
+          fi
+          python3 - "$RUNNER_TEMP/moj-prop-intake-html-private.html" "$RUNNER_TEMP/moj-prop-status-html-private.html" <<'PY'
+          from pathlib import Path
+          import sys
+          intake=Path(sys.argv[1]).read_text(encoding="utf-8")
+          status=Path(sys.argv[2]).read_text(encoding="utf-8")
+          required=(
+              ("intake-form", '<form method="post" action="/moj-prop-intake/?format=html"', intake),
+              ("intake-csrf", 'name="csrfmiddlewaretoken"', intake),
+              ("intake-consent", 'name="consent"', intake),
+              ("intake-plan1", "Prelaunch interest only: MOJ-PROP-01", intake),
+              ("status-form", '<form method="post" action="/moj-prop-status/?format=html"', status),
+              ("status-csrf", 'name="csrfmiddlewaretoken"', status),
+              ("status-private-token", 'name="receipt_token"', status),
+          )
+          missing=[key for key,marker,body in required if marker not in body]
+          if missing:
+              raise SystemExit("MOJ_PROP_NOJS_BACKEND_GATE=FAIL markers=" + ",".join(missing))
+          if any('<form method="get"' in body or 'action="/moj-prop/checkout/' in body
+                 for body in (intake,status)):
+              raise SystemExit("MOJ_PROP_NOJS_BACKEND_GATE=FAIL unsafe form")
+          print("MOJ_PROP_NOJS_BACKEND_GATE=PASS; GET_ONLY=true; BUYER_POST=false; PAYMENT=false")
           PY
           [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/)" == "200" ]]
           [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/admin/login/)" == "200" ]]
@@ -227,7 +274,13 @@ jobs:
           catalog = Path(sys.argv[2]).read_text(encoding="utf-8")
           assert "<title>Moj Prop" in home
           assert 'href="/moj-prop/catalog/"' in home
-          assert "See service prices" in home
+          assert "MOJ-PROP-01" in home
+          assert "PRELAUNCH" in home
+          assert "No wallet or payment collection now." in home
+          assert "MOJPROP-STARTER30" not in home
+          assert "Send 30 TRX" not in home
+          assert 'action="/moj-prop/checkout/' not in home
+          assert '/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01' in home
           assert "/moj-prop-intake/" in home
           assert "Send request for review" in home
           assert "<title>Moj Prop Catalog" in catalog

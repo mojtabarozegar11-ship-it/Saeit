@@ -12,6 +12,10 @@ class _Links(HTMLParser):
     def __init__(self):
         super().__init__()
         self.links = []
+        self.visible_words = []
+
+    def handle_data(self, data):
+        self.visible_words.append(data)
 
     def handle_starttag(self, tag, attrs):
         if tag == "a":
@@ -30,7 +34,11 @@ class MojPropManualSupportFallbackTests(unittest.TestCase):
         self.assertIn("/contact/", links.links)
         self.assertNotIn(MAILTO, links.links)
         self.assertNotIn("mailto:", page.lower())
-        self.assertIn("/moj-prop-intake/?format=html", links.links)
+        self.assertIn(
+            "/moj-prop-intake/?format=html&service=blueprint&package=moj-prop-01",
+            links.links,
+        )
+        self.assertNotIn("MOJPROP-STARTER30", page)
         self.assertIn("If the form is unavailable", page)
         self.assertIn("No response time is guaranteed", page)
         self.assertNotIn("mojtaba.rozegar11@gmail.com", page)
@@ -42,9 +50,20 @@ class MojPropManualSupportFallbackTests(unittest.TestCase):
         links.feed(page)
         self.assertIn(MAILTO, links.links)
         self.assertNotIn("mojtaba.rozegar11@gmail.com", page)
-        self.assertIn("/moj-prop/#request", links.links)
+        # The legacy #request anchor now renders an unrelated-service desk,
+        # NOT an accepted Plan 1 lead: keep the official support path, not a
+        # misleading shortcut that could fabricate a prop challenge interest.
+        self.assertNotIn("/moj-prop/#request", links.links)
+        self.assertIn("/moj-prop/", links.links)
+        self.assertIn(
+            "mailto:support@mojplaywin.com?subject=MOJ-PROP-01%20Prelaunch%20Information%20Request",
+            links.links,
+        )
+        self.assertIn("not a verified Plan 1 lead", " ".join(" ".join(links.visible_words).split()))
+        self.assertIn("nothing is sent automatically", page)
+        self.assertIn("MOJ-PROP-01", page)
         self.assertIn("no payment details or private credentials", page)
-        self.assertIn("no response time is promised", page)
+        self.assertIn("No guaranteed response time", page)
 
     def test_main_push_cannot_auto_publish_updated_static_pages(self):
         workflow = (ROOT / ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text()

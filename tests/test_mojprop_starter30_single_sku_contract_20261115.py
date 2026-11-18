@@ -8,7 +8,10 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "templates/moj-prop-v4"
-HOME = SITE / "index.html"
+# The educational purchase proposal is archived as a source-only test
+# fixture. The active homepage is exclusively the real funded Plan1 prelaunch.
+HOME = ROOT / "tests/fixtures/mojprop-starter30-home-before-plan1-20261117.html"
+ACTIVE_HOME = SITE / "index.html"
 CATALOG = SITE / "catalog/index.html"
 DETAIL = SITE / "starter-30-trx/index.html"
 CANONICAL = ROOT / "docs/mojprop/starter30-first-product-release.md"
@@ -24,6 +27,13 @@ class Starter30SingleSkuTests(unittest.TestCase):
         cls.detail = DETAIL.read_text(encoding="utf-8")
         cls.contract = CANONICAL.read_text(encoding="utf-8")
         cls.archived = ARCHIVED.read_text(encoding="utf-8")
+
+    def test_real_funded_home_does_not_reissue_historical_education_sku(self):
+        actual = ACTIVE_HOME.read_text("utf-8")
+        self.assertIn("MOJ-PROP-01", actual)
+        self.assertNotIn("MOJPROP-STARTER30", actual)
+        self.assertNotIn("starter-30-trx", actual)
+        self.assertIn("No wallet or payment collection now.", actual)
 
     def test_one_educational_ten_session_service_not_funded_prop_challenge(self):
         self.assertIn("Ten consecutive self-reported sessions", self.contract)

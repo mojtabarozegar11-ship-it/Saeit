@@ -1,0 +1,51 @@
+name: Moj Prop main Plan 1 prelaunch content integrity
+on:
+  push:
+    branches:
+      - fix/mojprop-main-prelaunch-real-plan1-20261116
+    paths:
+      - templates/moj-prop-v4/index.html
+      - tests/test_mojprop_plan1_static_prelaunch.py
+      - templates/moj-prop/contact/index.html
+      - tests/test_mojprop_plan1_prelaunch_contact_20261117.py
+      - tests/test_mojprop_plan1_canonical_lead_cta_20261117.py
+      - .github/workflows/mojprop-plan1-main-static-20261116.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - templates/moj-prop-v4/index.html
+      - tests/test_mojprop_plan1_static_prelaunch.py
+      - templates/moj-prop/contact/index.html
+      - tests/test_mojprop_plan1_prelaunch_contact_20261117.py
+      - tests/test_mojprop_plan1_canonical_lead_cta_20261117.py
+      - .github/workflows/mojprop-plan1-main-static-20261116.yml
+permissions:
+  contents: read
+jobs:
+  verify-product-without-payment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Assert nonpayable correct canonical Plan 1 content
+        run: python3 -m unittest -v tests.test_mojprop_plan1_static_prelaunch
+      - name: Verify real Plan1 EN/FA first-party support contact and privacy
+        run: python3 -m unittest -v tests.test_mojprop_plan1_prelaunch_contact_20261117
+      - name: Verify canonical consent-only Plan1 interest CTA and honest EN FA fallback
+        run: python3 -m unittest -v tests.test_mojprop_plan1_canonical_lead_cta_20261117
+      - name: Parse inline customer form script and syntax check with Node
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          src = Path("templates/moj-prop-v4/index.html").read_text(encoding="utf-8")
+          inline = re.findall(r"<script>(.*?)</script>", src, re.S | re.I)
+          assert len(inline) == 1, f"Expected one inline non-JSON script, got {len(inline)}"
+          assert "MOJ-PROP-01" in inline[0]
+          assert "MOJPROP-STARTER30" not in inline[0]
+          Path("/tmp/mojprop-main-prelaunch.js").write_text(inline[0], encoding="utf-8")
+          PY
+          node --check /tmp/mojprop-main-prelaunch.js

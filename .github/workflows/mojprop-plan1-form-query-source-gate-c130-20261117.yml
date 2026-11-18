@@ -1,0 +1,51 @@
+name: MOJ PROP C130 dedicated Plan1 bilingual form URL and safe release contract
+on:
+  push:
+    branches: [fix/mojprop-plan1-optin-query-parity-c130-20261117]
+    paths:
+      - "templates/moj-prop/contact/index.html"
+      - "templates/moj-prop-v4/index.html"
+      - "tests/test_mojprop_plan1_prelaunch_contact_20261117.py"
+      - "tests/test_mojprop_plan1_canonical_lead_cta_20261117.py"
+      - "tests/test_mojprop_plan1_form_source_gate_c130_20261117.py"
+      - "scripts/mojprop_plan1_form_source_gate_c130.py"
+      - ".github/workflows/mojprop-backend-controlled-release-20261115.yml"
+      - ".github/workflows/mojprop-plan1-form-query-source-gate-c130-20261117.yml"
+  pull_request:
+    branches: [fix/mojprop-main-prelaunch-real-plan1-20261116]
+permissions:
+  contents: read
+concurrency:
+  group: c130-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  route-query-parity-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify Python syntax, safe Plan1 links and release gate
+        run: |
+          python -B -m py_compile scripts/mojprop_plan1_form_source_gate_c130.py
+          PYTHONDONTWRITEBYTECODE=1 python -B -m unittest -v \
+            tests.test_mojprop_plan1_form_source_gate_c130_20261117 \
+            tests.test_mojprop_plan1_canonical_lead_cta_20261117 \
+            tests.test_mojprop_plan1_prelaunch_contact_20261117
+      - name: Publish accurate source-only readiness, never buyer or payment proof
+        run: |
+          python -B scripts/mojprop_plan1_form_source_gate_c130.py
+          python - <<'PY'
+          from pathlib import Path
+          release = Path(".github/workflows/mojprop-backend-controlled-release-20261115.yml").read_text()
+          assert "mojprop_plan1_form_source_gate_c130.py --require-source-ready" in release
+          code = Path("scripts/mojprop_plan1_form_source_gate_c130.py").read_text()
+          assert "MOJPROP_C130_LIVE_PASSENGER_PARITY_PROVEN=false" in code
+          assert "MOJPROP_C130_CONSENTED_BUYER_POST_VERIFIED=false" in code
+          assert "MOJPROP_C130_PAYMENT_OR_DEPLOYMENT=false" in code
+          print("MOJPROP_C130_NO_POST_NO_PAYMENT_NO_RELEASE=true")
+          PY

@@ -117,5 +117,33 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
                 self.assertEqual(exact_git_blob(source.read_bytes()), expected)
 
 
+    def test_live_status_url_is_present_in_reviewed_source_but_not_live_proof(self):
+        # A local route in source is not proof that public Passenger has
+        # reloaded the code. Observe both separately in the owner C95 job.
+        root = Path(__file__).resolve().parents[1]
+        urls = (root / "config/urls.py").read_text("utf-8")
+        views = (root / "core/mojprop_views.py").read_text("utf-8")
+        self.assertIn('path("moj-prop-intake/", mojprop_intake', urls)
+        self.assertIn('path("moj-prop-status/", mojprop_receipt_status', urls)
+        self.assertIn('def mojprop_receipt_status(request):', views)
+        self.assertIn('if request.method == "GET":', views)
+        self.assertIn('return status_form(request)', views)
+
+    def test_owner_probe_never_claims_live_web_worker_or_accepted_customer(self):
+        root = Path(__file__).resolve().parents[1]
+        code = (root / "scripts/mojprop_live_intake_source_drift_readonly_c95.py").read_text("utf-8")
+        for marker in (
+            '"browser_public_endpoint_post_verified": False',
+            '"public_runtime_equals_cli_runtime_proven": False',
+            '"customer_lead_created": False',
+            '"production_release_permitted": False',
+            '"customer_data_accessed": False',
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, code)
+        self.assertNotIn("requests.post(", code)
+        self.assertNotIn("objects.create(", code)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,49 @@
+name: MOJ PROP live contact drift boolean triage C128 (no release)
+on:
+  push:
+    branches: [fix/mojprop-contact-drift-owner-root-c128-20261117]
+    paths:
+      - 'scripts/mojprop_public_contact_drift_c128.py'
+      - 'scripts/mojprop_public_official_contact_contract_c127.py'
+      - 'tests/test_mojprop_public_contact_drift_c128_20261117.py'
+      - 'tests/test_mojprop_public_official_contact_contract_c127_20261117.py'
+      - '.github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml'
+      - '.github/workflows/mojprop-public-contact-drift-c128-ci-20261117.yml'
+  pull_request:
+    branches: [fix/mojprop-main-prelaunch-real-plan1-20261116]
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  safe-static-contact-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile fixed-key drift classifiers
+        run: |
+          python -m py_compile \
+            scripts/mojprop_public_contact_drift_c128.py \
+            scripts/mojprop_public_official_contact_contract_c127.py
+      - name: Regress safe contacts, external-link aliases and unsupported publication claims
+        run: |
+          python -B -m unittest -v \
+            tests.test_mojprop_public_contact_drift_c128_20261117 \
+            tests.test_mojprop_public_official_contact_contract_c127_20261117 \
+            tests.test_mojprop_live_intake_source_drift_readonly_c95
+      - name: Assert exact scope is only GET evidence and no production POST
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          code=Path('.github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml').read_text()
+          assert 'mojprop_public_contact_drift_c128.py' in code
+          assert 'NO_POST_NO_PAYMENT_NO_RELEASE=true' in code
+          print('C128_PUBLIC_SOURCE_TRIAGE_NO_RELEASE=true')
+          PY

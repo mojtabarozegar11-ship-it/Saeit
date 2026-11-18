@@ -1,0 +1,49 @@
+name: MOJ PROP direct HTTPS buyer-path proof (source only)
+on:
+  push:
+    branches: [fix/mojprop-public-transport-proof-20261117]
+    paths:
+      - '.github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml'
+      - '.github/workflows/mojprop-public-transport-proof-ci-20261117.yml'
+      - 'scripts/mojprop_public_buyer_readiness_summary_20261117.py'
+      - 'tests/test_mojprop_public_buyer_readiness_summary_20261117.py'
+  pull_request:
+    branches: [fix/mojprop-main-prelaunch-real-plan1-20261116]
+    paths:
+      - '.github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml'
+      - '.github/workflows/mojprop-public-transport-proof-ci-20261117.yml'
+      - 'scripts/mojprop_public_buyer_readiness_summary_20261117.py'
+      - 'tests/test_mojprop_public_buyer_readiness_summary_20261117.py'
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  prevent-form-html-false-positive-on-redirect-404-or-network-error:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile strict parser and prove correct fixed-key transport evidence
+        run: |
+          python -m py_compile scripts/mojprop_public_buyer_readiness_summary_20261117.py
+          python -B -m unittest -v \
+            tests.test_mojprop_public_buyer_readiness_summary_20261117 \
+            tests.test_mojprop_public_nojs_get_contract_c123_20261116
+      - name: Source-only no-deploy rule
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          code=Path('.github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml').read_text('utf-8')
+          assert '%{num_redirects}' in code
+          assert 'GET_ONLY_%s_REDIRECTS=%s' in code
+          assert 'transport_proof' in code and '"$GITHUB_STEP_SUMMARY"' in code
+          assert 'NO_POST_NO_PAYMENT_NO_RELEASE=true' in code
+          print('C126_DIRECT_TRANSPORT_PROOF_SOURCE=PASS; NO_DEPLOY=true')
+          PY

@@ -1,0 +1,60 @@
+name: D/E Plan1 static CTA uses existing consented prelaunch root
+on:
+  push:
+    branches:
+      - d/real-plan1-page-link-to-consent-form-20261117
+  pull_request:
+    branches:
+      - fix/mojprop-main-prelaunch-real-plan1-20261116
+    paths:
+      - templates/moj-prop-v4/index.html
+      - tests/test_mojprop_plan1_static_prelaunch.py
+      - .github/workflows/d-mojprop-landing-consent-link-20261117.yml
+permissions:
+  contents: read
+jobs:
+  verify-only-no-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enforce real Plan1 nonpayable prelaunch and correct link contract
+        run: python3 -m unittest -v tests.test_mojprop_plan1_static_prelaunch
+      - name: No educational checkout; clearly disclosed general CRM prelaunch scope
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          html=Path('templates/moj-prop-v4/index.html').read_text(encoding='utf8')
+          assert html.count('/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=moj-prop-01') >= 3
+          # The dedicated candidate form is present, but the canonical
+          # PropInterest backend is still unmerged; do not confuse a link
+          # with a working CRM endpoint.
+          from scripts.mojprop_plan1_form_source_gate_c130 import evaluate
+          truth=evaluate(Path.cwd())
+          assert truth['landing_and_contact_query_contract']
+          assert 'href="/moj-prop-interest/form/"' in html
+          assert 'href="/moj-prop-interest/form/?lang=fa"' in html
+          assert '/moj-prop-interest/form/?service=' not in html
+          assert 'MOJPROP-STARTER30' not in html
+          assert 'MOJ-PROP-01' in html
+          print('PLAN1_DEDICATED_BACKEND_SOURCE_READY=' + str(truth['source_ready']).lower())
+          print('PLAN1_LIVE_CRM_AND_PAYMENT_NOT_PROVEN=true')
+          assert 'if packages == ["moj-prop-01"]:' in Path('core/mojprop_accessible_intake.py').read_text(encoding='utf8')
+          assert '/moj-prop/?service=blueprint&amp;package=moj-prop-01#request' not in html
+          assert 'MOJPROP-STARTER30' not in html
+          assert 'No wallet or payment collection now.' in html
+          print('PRELAUNCH_CONSENT_NO_PAYMENT')
+          PY
+      - name: Validate one inline JavaScript is syntactically safe
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          html=Path('templates/moj-prop-v4/index.html').read_text(encoding='utf8')
+          inline=re.findall(r'<script>(.*?)</script>',html,re.S|re.I)
+          assert len(inline)==1
+          Path('/tmp/mojprop-consent-landing.js').write_text(inline[0])
+          PY
+          node --check /tmp/mojprop-consent-landing.js

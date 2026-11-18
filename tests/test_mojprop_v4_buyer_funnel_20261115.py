@@ -78,7 +78,33 @@ class MojPropV4ConversionTests(SimpleTestCase):
         self.assertIn("Requested educational plan: ", self.html)
         self.assertIn("selected-signal-plan", self.html)
 
+    def test_plan_one_support_contact_cannot_claim_paid_enrolment(self):
+        self.assertIn(
+            '<a class="btn primary" href="/moj-prop/contact/">'
+            'Ask about Plan 1 via official support</a>', self.html
+        )
+        self.assertIn("Support enquiries are not validated CRM opt-ins", self.html)
+        self.assertIn("No wallet or payment collection now.", self.html)
+        self.assertNotIn("MOJPROP-STARTER30", self.html)
+        self.assertNotIn('action="/moj-prop/checkout/', self.html)
+
+    def test_unverified_native_intake_is_labelled_as_unverified(self):
+        self.assertIn("Try the prelaunch form (availability unverified)", self.html)
+        self.assertIn(
+            "/moj-prop-intake/?format=html&amp;service=blueprint"
+            "&amp;package=moj-prop-01", self.html
+        )
+        self.assertIn("NOT been independently verified in production", self.html)
+        self.assertIn("do not assume a submitted request was saved", self.html)
+
     def test_no_wallet_or_guaranteed_profit_path(self):
         self.assertIn("No payment was taken.", self.html)
-        self.assertIn("This form sends a request", self.html)
+        # The public page must not present an unverified hosted backend
+        # as a live consent form or count a support contact as a CRM order.
+        self.assertIn("NOT been independently verified in production", self.html)
+        self.assertIn("do not assume a submitted request was saved", self.html)
+        self.assertIn('href="/moj-prop/contact/"', self.html)
+        self.assertIn("MOJ-PROP-01", self.html)
+        self.assertNotIn("MOJPROP-STARTER30", self.html)
+        self.assertIn("No wallet or payment collection now.", self.html)
         self.assertNotIn("localStorage.setItem('mojprop-last-request'", self.html)
