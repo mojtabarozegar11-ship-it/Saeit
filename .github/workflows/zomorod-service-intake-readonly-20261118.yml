@@ -1,0 +1,60 @@
+name: Zomorod existing service intake — public read-only
+on:
+  pull_request:
+    types: [opened]
+    branches: [feature/zomorod-b2b-trust-inquiries-20261118]
+    paths: [".github/workflows/zomorod-service-intake-readonly-20261118.yml"]
+permissions:
+  contents: read
+jobs:
+  observe:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.head_ref == 'audit/zomorod-b2b-service-intake-20261118' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Inspect existing intake and status form without sending data
+        run: |
+          python3 -B - <<'PY'
+          import http.client,ssl,json
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin,urlparse
+          from concurrent.futures import ThreadPoolExecutor
+          base="https://zomorodmelal.ir"
+          paths=["/research/","/services/","/ask-master/index.php?service=1","/ask-master/status.php","/b2b/","/contact/"]
+          class P(HTMLParser):
+              def __init__(self,path):
+                  super().__init__();self.path=path;self.forms=[];self.form=None;self.links=set();self.scripts=0
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=="form":
+                      dest=urlparse(urljoin(base+self.path,a.get("action") or self.path))
+                      self.form={"method":(a.get("method") or "get").upper(),"same_host":dest.netloc=="zomorodmelal.ir","action_path":dest.path if dest.netloc=="zomorodmelal.ir" else None,"fields":[]}
+                      self.forms.append(self.form)
+                  elif self.form is not None and tag in ("input","textarea","select"):
+                      typ=(a.get("type") or tag).lower()
+                      if typ not in ("hidden","password","file","submit","button","reset"):
+                          self.form["fields"].append({"name":a.get("name"),"type":typ,"required":"required" in a})
+                  elif tag=="a" and a.get("href"):
+                      p=urlparse(urljoin(base+self.path,a["href"]))
+                      if p.netloc=="zomorodmelal.ir" and p.path.startswith(("/ask-master/","/b2b/")):self.links.add(p.path)
+                  elif tag=="script":self.scripts+=1
+              def handle_endtag(self,t):
+                  if t=="form":self.form=None
+          def check(path):
+              result={"path":path}
+              for attempt in range(2):
+                  c=http.client.HTTPSConnection("zomorodmelal.ir",timeout=15,context=ssl.create_default_context())
+                  try:
+                      c.request("GET",path,headers={"Accept-Encoding":"identity","User-Agent":"Zomorod-read-only-intake-audit/1.0"})
+                      r=c.getresponse();raw=r.read(1048577)
+                      result.update(status=r.status,tls_verified=True,content_type=r.getheader("Content-Type"),oversize=len(raw)>1048576)
+                      if r.status==200 and len(raw)<=1048576 and "html" in (result["content_type"] or ""):
+                          p=P(path);p.feed(raw.decode("utf-8","replace"))
+                          result.update(forms=p.forms,links=sorted(p.links),scripts=p.scripts)
+                      break
+                  except (OSError,http.client.HTTPException) as e:result.update(status=None,error_type=type(e).__name__)
+                  finally:c.close()
+              return result
+          with ThreadPoolExecutor(max_workers=2) as pool: rows=list(pool.map(check,paths))
+          print("ZM_SERVICE_INTAKE_READONLY="+json.dumps({"observations":rows,"post_sent":False,"payment_attempted":False,"site_modified":False,"delivery_verified":False},sort_keys=True))
+          PY
