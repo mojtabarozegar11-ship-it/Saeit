@@ -2,6 +2,7 @@
 from django.contrib import admin
 from django.views.generic import TemplateView
 from django.urls import include, path
+from django.conf import settings
 from django.views.generic import RedirectView
 from command_center.views import dashboard as staff_dashboard
 
@@ -137,3 +138,14 @@ urlpatterns += [
     path("moj-prop/<str:lang>/dashboard/", moj_prop_dashboard, name="moj_prop_language_dashboard"),
     path("moj-prop/<str:lang>/", moj_prop_landing, name="moj_prop_language"),
 ]
+
+
+
+# Guarded effective-app route: absent by default and never a payment switch.
+if getattr(settings, "MPW_MOJPROP_PLAN1_ROUTE_ENABLED", False) is True:
+    urlpatterns += [
+        path(
+            "commerce/moj-prop/plan1/",
+            include(("prop_firm.plan1_urls", "mojprop_plan1"), namespace="mojprop_plan1"),
+        ),
+    ]
