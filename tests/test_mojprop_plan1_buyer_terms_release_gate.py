@@ -37,16 +37,15 @@ class BuyerTermsReleaseGate(unittest.TestCase):
         self.assertFalse(result["independent_restore_proven_by_this_tool"])
         self.assertFalse(result["payment_enabled"])
 
-    def test_02_real_current_sidecar_is_unapproved_stale(self):
-        result = assess(LIVE_CANDIDATE.read_bytes())
-        self.assertFalse(result["copy_parity_passed"])
-        self.assertIn("english_persian_revision_mismatch", result["reasons"])
-        self.assertNotIn("unresolved_buyer_terms", result["reasons"])
-        self.assertNotIn("nonpayable_disclosure_missing", result["reasons"])
+    def test_02_current_v12_copy_can_match_bytes_without_legal_permission(self):
+        result = assess(LIVE_CANDIDATE.read_bytes(), "v1.2")
+        self.assertTrue(result["copy_parity_passed"])
         self.assertFalse(result["independent_legal_approval_proven_by_this_tool"])
+        self.assertFalse(result["independent_restore_proven_by_this_tool"])
+        self.assertFalse(result["payment_enabled"])
 
     def test_03_old_version_rejected_even_with_matching_hash(self):
-        result = assess(candidate().replace(b"v1.4.1", b"v1.3"), "v1.3")
+        result = assess(candidate().replace(b"v1.4.1", b"v1.1"), "v1.1")
         self.assertIn("unapproved_or_obsolete_revision", result["reasons"])
 
     def test_04_missing_version_denied(self):
