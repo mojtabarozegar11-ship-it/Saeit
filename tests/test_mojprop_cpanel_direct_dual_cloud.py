@@ -402,6 +402,16 @@ class DirectCPanelDualDriveTests(unittest.TestCase):
         with self.assertRaisesRegex(bridge.BackupHold, "MISSING_EXPLICIT_SSH_HOST_BLOCK"):
             bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
 
+    def test_35_ephemeral_rclone_version_check_consumes_full_output(self):
+        """A truncated pipe under pipefail can cause exit 141 (SIGPIPE)."""
+        workflow = (ROOT / ".github/workflows/mojprop-cpanel-direct-dual-cloud-ci.yml").read_text("utf-8")
+        self.assertNotIn('"$work/rclone" version | head -1', workflow)
+        self.assertIn('"$work/rclone" version > "$work/rclone.version"', workflow)
+        self.assertIn('IFS= read -r rclone_version < "$work/rclone.version"', workflow)
+        self.assertIn("test \"$rclone_version\" = 'rclone v1.76.0'", workflow)
+        self.assertIn("sha256sum -c --status", workflow)
+        self.assertIn("OWNER_RUNNER_RCLONE_INSTALLED_PERSISTENTLY=FALSE", workflow)
+
     def test_34_reject_cpanel_proxyjump_to_untrusted_host(self):
         self._modify(self.conf.replace("  ProxyJump saeit-vps", "  ProxyJump other-relay"))
         with self.assertRaisesRegex(bridge.BackupHold, "SSH_IDENTITY_CONTRACT_MISMATCH"):
