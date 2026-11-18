@@ -31,6 +31,8 @@ def claim_review_once(connection, *, review_ref, acceptance_sha256,
                    for v in (acceptance_sha256, reviewer_attestation_sha256))
             or acceptance_sha256 == reviewer_attestation_sha256):
         raise ReviewReplayClosed("invalid independent review provenance")
+    if connection.in_transaction:
+        raise ReviewReplayClosed("review registry connection already in a transaction")
     try:
         connection.execute("BEGIN IMMEDIATE")
         connection.execute(
