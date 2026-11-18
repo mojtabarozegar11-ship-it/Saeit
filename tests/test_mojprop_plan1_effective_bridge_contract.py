@@ -24,7 +24,7 @@ class EffectivePlan1BridgeContractTests(unittest.TestCase):
     def test_route_is_runtime_guarded(self):
         source = (ROOT / "config" / "urls.py").read_text()
         self.assertIn("MPW_MOJPROP_PLAN1_ROUTE_ENABLED", source)
-        self.assertIn("mojprop_plan1_urls", source)
+        self.assertIn("prop_firm.plan1_urls", source)
 
     def test_persistence_has_global_txid_guard(self):
         source = (ROOT / "prop_firm" / "plan1_persistence.py").read_text()
