@@ -5,6 +5,9 @@ import os
 from pathlib import Path
 import stat
 import tempfile
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 with tempfile.TemporaryDirectory(prefix="mojprop-v141-isolated-wsgi-ci-") as d:
  root=Path(d)
