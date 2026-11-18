@@ -1,0 +1,139 @@
+name: MOJ PROP — inspect live cPanel static rollback safety and quota (READ ONLY)
+on:
+  push:
+    branches: [feature/mojprop-plan1-atomic-static-rollback-owner-gated-20261118]
+    paths: [.github/workflows/mojprop-live-static-rollback-dir-preflight-20261118.yml]
+permissions:
+  contents: read
+jobs:
+  cpanel-owner-raw-metadata:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Verify exact cPanel owner SSH with existing pinned fingerprint
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ "$(id -un)" != "githubrunner" || -z "${HOST_KEY:-}" ]]; then
+            echo "MOJPROP_STATIC_LIVE=BLOCKED_RUNNER_OR_KEY"
+            exit 1
+          fi
+          d="$RUNNER_TEMP/mojprop-static-preview-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/key" "$d/known"; rmdir "$d" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null 2>&1
+          timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null || true
+          observed="$(ssh-keygen -lf "$d/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+          if [[ "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]]; then
+            echo "MOJPROP_STATIC_LIVE=BLOCKED_HOST_FINGERPRINT"
+            exit 1
+          fi
+          echo "MOJPROP_STATIC_CPANEL_PINNED_KEY=verified"
+          sshcmd=(ssh -T -i "$d/key" -p 1396 -o UserKnownHostsFile="$d/known" -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ForwardAgent=no -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 zomorod2@zohal.pws-dns.net)
+          timeout 20s "${sshcmd[@]}" 'test "$(id -un)" = zomorod2' >/dev/null
+          echo "MOJPROP_STATIC_CPANEL_OWNER_AUTH=verified"
+          timeout 80s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'PRIVATE_METADATA_PY'
+          import hashlib,json,os,stat,subprocess
+          from pathlib import Path
+          home=Path('/home/zomorod2')
+          site=home/'mojplaywin.com'/'moj-prop'
+          target=site/'index.html'
+          backups=home/'.backups'
+          old=backups/'mojprop-pre-plan1-76918c5129ff-20261118.html'
+          lock=backups/'.mojprop-prelaunch-static.lock'
+          expected="76918c5129ff669ef02f82435a68f61a32d70141800712100d4a7fe9e8554895"
+          uid=os.geteuid()
+          def dstat(path):
+              r={'exists':False,'owner_euid':False,'not_symlink':False,
+                 'is_directory':False,'owner_private':False,'not_world_writable':False}
+              try:
+                  s=path.lstat()
+                  r.update(exists=True,owner_euid=s.st_uid==uid,
+                    not_symlink=not stat.S_ISLNK(s.st_mode),
+                    is_directory=stat.S_ISDIR(s.st_mode),
+                    owner_private=(stat.S_ISDIR(s.st_mode) and s.st_uid==uid and
+                                   not s.st_mode & 0o077),
+                    not_world_writable=not bool(s.st_mode&0o002))
+              except OSError:pass
+              return r
+          def fstat(path,required_sha,required_bytes):
+              r={'exists':False,'is_owner_regular_not_symlink':False,
+                 'mode_owner_only':False,'expected_size':False,
+                 'expected_sha256':False}
+              try:
+                  s=path.lstat()
+                  r['exists']=True
+                  if not stat.S_ISREG(s.st_mode) or s.st_uid!=uid or s.st_size>262144:
+                      return r
+                  r['is_owner_regular_not_symlink']=True
+                  r['mode_owner_only']=not bool(s.st_mode&0o077)
+                  r['expected_size']=s.st_size==required_bytes
+                  if r['expected_size']:
+                      fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
+                      try:
+                          check=os.fstat(fd)
+                          if check.st_dev!=s.st_dev or check.st_ino!=s.st_ino:
+                              return r
+                          content=os.read(fd,262145)
+                      finally:os.close(fd)
+                      r['expected_sha256']=(len(content)==required_bytes and
+                          hashlib.sha256(content).hexdigest()==required_sha)
+              except (OSError,ValueError):pass
+              return r
+          current=fstat(target,expected,23869)
+          previous=fstat(old,expected,23869)
+          quota={'uapi_parse_success':False,'owner_quota_bytes':None,
+                 'owner_used_bytes':None,'owner_remaining_bytes':None}
+          executable=Path('/usr/bin/uapi')
+          try:
+              x=executable.lstat()
+              if stat.S_ISREG(x.st_mode) and not x.st_mode & 0o002:
+                  p=subprocess.run([str(executable),'--output=json',
+                       'Quota','get_local_quota_info'],
+                       stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+                       timeout=18,check=False)
+                  if p.returncode==0 and 0<len(p.stdout)<20000:
+                      j=json.loads(p.stdout.decode('utf-8'))
+                      response=j.get('result',{})
+                      data=response.get('data')
+                      if response.get('status') in (1,'1') and type(data) is dict:
+                          def whole(v):
+                              if type(v) is int and 0<=v<10**14:return v
+                              if type(v) is str and v.isdigit():return int(v)
+                              return None
+                          # Verified cPanel Quota API fields on previous live run:
+                          # data.bytes_used and data.byte_limit (NOT used_bytes/total_bytes).
+                          quota['owner_quota_bytes']=whole(data.get('byte_limit'))
+                          quota['owner_used_bytes']=whole(data.get('bytes_used'))
+                          limit=quota['owner_quota_bytes']
+                          used=quota['owner_used_bytes']
+                          if limit is not None and used is not None and 0<=used<=limit:
+                              quota['owner_remaining_bytes']=limit-used
+                              quota['uapi_parse_success']=True
+          except (OSError,ValueError,UnicodeError,subprocess.TimeoutExpired):pass
+          report={'schema':'MOJPROP_STATIC_CPANEL_ROLLBACK_READONLY_20261118',
+              'owner_euid_authenticated':uid==os.stat(home).st_uid,
+              'site_folder':dstat(site),'rollback_private_folder':dstat(backups),
+              'public_static_file':current,
+              'existing_specific_private_rollback_file':previous,
+              'existing_lock_present':lock.exists() or lock.is_symlink(),
+              'site_fingerprint_matches_trusted_cpanel_baseline':current['expected_sha256'],
+              'quota':quota,'read_only':True,'customer_data_read':False,
+              'new_backup_written':False,'public_html_changed':False,
+              'deployment_authorized':False,'payment_collected':False}
+          print('MOJPROP_LIVE_CPANEL_ATOMIC_ROLLBACK_PREFLIGHT='+json.dumps(report,sort_keys=True))
+          PRIVATE_METADATA_PY
+          echo "MOJPROP_LIVE_CPANEL_ATOMIC_ROLLBACK_READONLY_COMPLETE=true"
+      - name: Explicitly no production writes or deployment
+        if: always()
+        run: |
+          echo "CPANEL_PUBLIC_HTML_CHANGED=false"
+          echo "CPANEL_SQL_OR_MEDIA_READ=false"
+          echo "BACKUP_ARCHIVES_DELETED=false"
+          echo "MOJPROP_CHECKOUT_ACTIVATED=false"
