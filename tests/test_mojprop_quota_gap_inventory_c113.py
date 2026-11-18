@@ -26,6 +26,14 @@ class MojPropQuotaGapInventoryTests(unittest.TestCase):
         self.assertEqual(probe.bucket_bytes(True), "unknown")
         self.assertEqual(probe.bucket_bytes(-10), "unknown")
 
+    def test_04_coarse_threshold_evidence_is_bounded(self):
+        self.assertEqual(probe.threshold_flags(16 * 1024**3), {
+            "at_least_16gib": True,
+            "at_least_32gib": False,
+            "at_least_40gib": False,
+        })
+        self.assertFalse(any(probe.threshold_flags(None).values()))
+
     def test_04_uapi_permitted_call_is_same_owner_read_only(self):
         with patch.object(probe.subprocess, "run", return_value=SimpleNamespace(
                 stdout='{"result":{"status":1,"data":{"under_quota_overall":"1",'
