@@ -131,3 +131,27 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+# MOJ PROP real Plan1 native TRX only — no payment, advertising or
+# customer enrollment unless a separately validated private server release
+# expressly enables the relevant controls. Nothing here changes production.
+MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED = env.bool(
+    "MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED", default=False)
+MOJPROP_TRX_GLOBAL_LEDGER_RECONCILED = env.bool(
+    "MOJPROP_TRX_GLOBAL_LEDGER_RECONCILED", default=False)
+MOJPROP_TRX_AUTORECONCILE_ENABLED = env.bool(
+    "MOJPROP_TRX_AUTORECONCILE_ENABLED", default=False)
+MOJPROP_V141_TRON_RECEIVER = env("MOJPROP_V141_TRON_RECEIVER", default="")
+MOJPROP_V141_ORDER_SIGNING_KEY = env("MOJPROP_V141_ORDER_SIGNING_KEY", default="")
+MOJPROP_V141_NATIVE_TERMS_VERSION = env(
+    "MOJPROP_V141_NATIVE_TERMS_VERSION", default="")
+MOJPROP_V141_NATIVE_TERMS_SHA256 = env(
+    "MOJPROP_V141_NATIVE_TERMS_SHA256", default="")
+MOJPROP_V141_TRON_SOLIDITY_PROVIDERS = tuple(env.list(
+    "MOJPROP_V141_TRON_SOLIDITY_PROVIDERS", default=[]))
+MOJPROP_V141_TRON_HISTORY_INDEXER = env(
+    "MOJPROP_V141_TRON_HISTORY_INDEXER", default="")
+MOJPROP_V141_TRONGRID_API_KEY = env(
+    "MOJPROP_V141_TRONGRID_API_KEY", default="")
+MOJ_PROP_V141_PORTFOLIO_ENABLED = env.bool(
+    "MOJ_PROP_V141_PORTFOLIO_ENABLED", default=False)

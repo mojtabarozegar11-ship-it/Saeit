@@ -516,3 +516,8 @@ from .plan1_v141_virtual_tenant_models import PropV141VirtualBook, PropV141Virtu
 
 # Isolated v1.4.1 information enquiries; never rewrite v1.2 consent.
 from .plan1_v141_lead_models import PropV141Interest  # noqa: E402,F401
+
+# Separately versioned native TRX merchant orders and atomic DEMO delivery.
+from .plan1_v141_native_payment_models import (  # noqa: E402,F401
+    PropV141NativeOrder, PropGlobalTRXSettlement, PropV141NativeReceipt,
+)
