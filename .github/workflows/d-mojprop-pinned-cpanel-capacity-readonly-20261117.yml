@@ -1,3 +1,6 @@
+# Activation readiness: 2026-11-18 owner-approved read-only cPanel capacity check.
+# Source update triggers this existing self-hosted VPS workflow on owner PR;
+# it does NOT authorize writes, payment acceptance, schema migration, or publication.
 name: D MOJ PROP owner cPanel current recovery capacity (strict read-only)
 
 on:
