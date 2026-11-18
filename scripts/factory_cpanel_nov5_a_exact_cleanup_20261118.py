@@ -130,7 +130,12 @@ def execute(approval):
     finally:os.close(dfd)
     if source.exists() or source.is_symlink():raise RuntimeError("RAW_PATH_REAPPEARED")
     verify_gzip(gzip_path,gzstat)
-    after_quota=quota()
+    try:
+        after_quota=quota()
+    except RuntimeError:
+        # An account quota read can lag or fail after unlink; never erase
+        # a valid successful destructive receipt merely because UAPI is stale.
+        after_quota=None
     return {"schema":"factory.nov5-a.cpanel.raw-one-file-approved-cleanup.v1",
             "raw_snapshot":"nov5-a",
             "source_sha256":RAW_SHA,"source_original_bytes":RAW_SIZE,
@@ -141,7 +146,8 @@ def execute(approval):
             "vps_originals_touched":False,"production_mysql_touched":False,
             "factory_started":False,"paid_service_created":False,
             "quota_mib_before":before_quota,"quota_mib_after":after_quota,
-            "actual_account_quota_delta_mib":round(after_quota-before_quota,2),
+            "actual_account_quota_delta_mib":(round(after_quota-before_quota,2)
+                                              if after_quota is not None else None),
             "quota_delta_may_be_cached":True}
 
 
