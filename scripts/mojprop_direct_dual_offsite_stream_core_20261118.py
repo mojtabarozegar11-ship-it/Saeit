@@ -305,12 +305,13 @@ def stream_verified_cpanel_unknown_size(source: BinaryIO,
             chunk=bytes(tail[:part_size])
             del tail[:part_size]
             flush_part(chunk)
-    if len(tail)<=footer_len or not tail.endswith(CPANEL_SOURCE_END_MARKER):
+    if len(tail)<footer_len or not tail.endswith(CPANEL_SOURCE_END_MARKER):
         raise DualOffsiteDenied("CPANEL_PRODUCER_COMPLETION_MARKER_MISSING")
     final_plain=bytes(tail[:-footer_len])
-    if not final_plain:
+    if final_plain:
+        flush_part(final_plain)
+    if total==0 or count==0:
         raise DualOffsiteDenied("EMPTY_FINAL_SOURCE_OR_NO_PAYLOAD")
-    flush_part(final_plain)
     try:
         exit_verified=source_exit_zero()
     except Exception as exc:
