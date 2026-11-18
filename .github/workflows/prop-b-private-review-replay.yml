@@ -18,7 +18,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install minimal testing dependencies
-        run: python -m pip install 'Django>=5.2,<6.0' 'pytest>=8,<9'
-      - name: Execute B-only replay regressions without buyer data
-        run: python -m pytest -q prop_firm/test_plan1_review_replay_anchor_20261118.py tests/test_plan1_claimed_review_20261118.py
+      - name: Install pinned project testing dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Verify durable replay registry (stdlib)
+        run: python -m unittest -v prop_firm.test_plan1_review_replay_anchor_20261118
+      - name: Verify independent buyer review claim (Django initialized)
+        run: python manage.py test tests.test_plan1_claimed_review_20261118 --noinput -v 2
