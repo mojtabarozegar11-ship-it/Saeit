@@ -27,8 +27,14 @@ class StaticB2BFallbackTests(unittest.TestCase):
         self.assertIn('application/ld+json',t)
     def test_company_identity_clear_but_verifiable(self):
         t=TRADE.read_text(encoding="utf-8")
-        for s in ("1400879024","3110","Mojtaba Roozegar","independently checked"):
+        for s in ("14008746024","3110","not independently verified","independently checked","https://ilenc.ssaa.ir/"):
             self.assertIn(s,t)
+        self.assertNotIn("1400879024",t)
+        self.assertNotIn("managing director Mojtaba Roozegar",t)
+        django=(ROOT / "core" / "templates" / "core" / "b2b_partners.html").read_text(encoding="utf-8")
+        self.assertIn("14008746024",django)
+        self.assertIn("not independently verified",django)
+        self.assertNotIn("1400879024",django)
     def test_home_links_to_static_fallback(self):
         self.assertIn('href="/b2b/"',HOME.read_text(encoding="utf-8"))
     def test_privacy_and_restrict_sensitive_documents(self):
