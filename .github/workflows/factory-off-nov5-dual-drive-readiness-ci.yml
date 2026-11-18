@@ -5,6 +5,7 @@ on:
       - 'scripts/factory_cpanel_existing_nov5_two_drive.py'
       - 'scripts/factory_cpanel_nov5_sqlite_integrity_readonly_20261118.py'
       - 'scripts/factory_cpanel_nov5_compression_readonly_20261118.py'
+      - 'scripts/factory_cpanel_nov5_hybrid_readonly_inventory_20261118.py'
       - 'scripts/factory_cpanel_nov5_stage_one_gzip_20261118.py'
       - 'tests/test_factory_cpanel_nov5_stage_one_gzip_20261118.py'
       - 'tests/test_factory_cpanel_existing_nov5_two_drive.py'
@@ -49,7 +50,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_cpanel_nov5_stage_one_gzip_20261118.py' -q
           echo FACTORY_ONE_GZIP_STAGING_SEVEN_FAIL_CLOSED_CASES_PASS=true
           echo FACTORY_CPanel_HISTORICAL_SOURCE_ONLY_OFFLINE_PASS=true
-  cpanel-historical-gzip-stage:
+  cpanel-hybrid-historical-inventory:
     needs: offline
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
@@ -62,7 +63,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Probe ONLY cPanel existing 2026-11-05 snapshots via owner pinned SSH
+      - name: Verify ONLY cPanel existing historical Nov5 raw-or-gzip snapshots via pinned SSH
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -111,18 +112,10 @@ jobs:
           printf '%s\n' "$scan" > "$work/cpanel.known"
           chmod 600 "$work/cpanel.known" "$work/vps.known"
           test "$(ssh-keygen -lf "$work/cpanel.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          PYTHONDONTWRITEBYTECODE=1 python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive --mode probe --snapshot nov5-a --ssh-config "$work/config" --known-hosts "$work/cpanel.known"
-          PYTHONDONTWRITEBYTECODE=1 python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive --mode probe --snapshot nov5-b --ssh-config "$work/config" --known-hosts "$work/cpanel.known"
-          test "$(git hash-object scripts/factory_cpanel_nov5_sqlite_integrity_readonly_20261118.py)" = '3743521a46b65bf572854ba1422c856e1dfb0964'
-          timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec python3 -B -' < scripts/factory_cpanel_nov5_sqlite_integrity_readonly_20261118.py
-          test "$(git hash-object scripts/factory_cpanel_nov5_compression_readonly_20261118.py)" = '455b362ebe8fdbb1d4a91fb910223233a7beb8bf'
-          timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec nice -n 15 python3 -B -' < scripts/factory_cpanel_nov5_compression_readonly_20261118.py
-          echo FACTORY_CPANEL_GZIP1_SIZE_MEASURED_READ_ONLY=true
-          test "$(git hash-object scripts/factory_cpanel_nov5_stage_one_gzip_20261118.py)" = 'e9d1b1261560fc34dc1f242ecea66d02c511f010'
-          timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec nice -n 15 python3 -B -' < scripts/factory_cpanel_nov5_stage_one_gzip_20261118.py
-          echo FACTORY_CPANEL_FIRST_HISTORICAL_GZIP_ARCHIVE_RESTORE_VERIFIED=true
-          echo FACTORY_CPANEL_NOV5_2_FILES_SHA_AND_FULL_SQLITE_INTEGRITY=true
-          echo FACTORY_EXISTING_CPANEL_NOV5_RAW_SOURCE_UNCHANGED=true
+          test "$(git hash-object scripts/factory_cpanel_nov5_hybrid_readonly_inventory_20261118.py)" = '4b81ca19cc2a4aeece247bff8eec1a135783e4d6'
+          timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec nice -n 15 python3 -B -' < scripts/factory_cpanel_nov5_hybrid_readonly_inventory_20261118.py
+          echo FACTORY_CPANEL_TWO_HISTORICAL_SNAPSHOTS_RAW_OR_GZIP_INTEGRITY_VERIFIED=true
+          echo FACTORY_CPANEL_HISTORICAL_ARCHIVES_ARE_NOT_CURRENT_MYSQL=true
           echo FACTORY_RUNNING_PROCESSES_STARTED=0
           echo FACTORY_BACKUPS_UPLOADED=0
           echo FACTORY_SOURCE_FILES_DELETED=0
