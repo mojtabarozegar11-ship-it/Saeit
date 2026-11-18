@@ -31,6 +31,20 @@ def claim_review_once(connection, *, review_ref, acceptance_sha256,
                    for v in (acceptance_sha256, reviewer_attestation_sha256))
             or acceptance_sha256 == reviewer_attestation_sha256):
         raise ReviewReplayClosed("invalid independent review provenance")
+    # Memory and temporary databases lose claims on restart.
+    # A replay claim must survive connection closure.
+    try:
+        databases = connection.execute("PRAGMA database_list").fetchall()
+        main_paths = [path for _, name, path in databases if name == "main"]
+        if len(main_paths) != 1 or not main_paths[0]:
+            raise ReviewReplayClosed("persistent private review registry required")
+        journal_mode = connection.execute("PRAGMA main.journal_mode").fetchone()
+        sync_mode = connection.execute("PRAGMA main.synchronous").fetchone()
+        if (not journal_mode or journal_mode[0].lower() in ("off", "memory")
+                or not sync_mode or sync_mode[0] < 2):
+            raise ReviewReplayClosed("durable journal configuration required")
+    except sqlite3.Error:
+        raise ReviewReplayClosed("private review registry unavailable") from None
     if connection.in_transaction:
         raise ReviewReplayClosed("review registry connection already in a transaction")
     try:
