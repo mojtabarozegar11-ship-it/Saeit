@@ -1,0 +1,83 @@
+name: Factory OFF fixed gzip source admission (READ ONLY)
+on:
+  push:
+    branches: [fix/factory-dual-drive-unambiguous-proof-20261118]
+    paths: ['.github/workflows/factory-off-gzip-logical-source-probe-20261118.yml']
+permissions:
+  contents: read
+concurrency:
+  group: factory-off-gzip-logical-source-probe-20261118
+  cancel-in-progress: false
+jobs:
+  prove-source-without-upload:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check pinned code and run regression suite (no live source)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/factory_cpanel_existing_nov5_two_drive.py)" = 'b27c73d089a9315cdbf524eea6d7181824ae7194'
+          test "$(git hash-object tests/test_factory_cpanel_existing_nov5_two_drive.py)" = 'f12272efd47158a93c36e95da9b52ec5a1ba96f9'
+          test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'f9c6d8445144744920246a128c977bdc850eb80f'
+          test "$(git hash-object scripts/factory_dual_stream_v2.py)" = '7a1d0ac87d97c30134f4d6955359379b0c88a255'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_cpanel_existing_nov5_two_drive.py' -q
+      - name: Probe both actual cPanel gzip-era sources via verified SSH; NO content read or deletion
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$(id -u)" -ne 0 || { echo OWNER_RUNNER_MUST_BE_NONROOT; exit 78; }
+          work="$(mktemp -d)"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/host.key"
+          chmod 600 "$work/"*.key
+          ssh-keygen -y -P "" -f "$work/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$work/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 127.0.0.1 > "$work/vps.known" 2>/dev/null
+          test -s "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$work/config" <<EOF
+          Host saeit-vps
+            HostName 127.0.0.1
+            User githubops
+            Port 22
+            IdentityFile $work/vps.key
+            UserKnownHostsFile $work/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $work/host.key
+            UserKnownHostsFile $work/cpanel.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$work/config"
+          scan="$(ssh -T -F "$work/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$work/cpanel.known"
+          chmod 600 "$work/cpanel.known" "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/cpanel.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          for item in nov5-a nov5-b; do
+            PYTHONDONTWRITEBYTECODE=1 python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive --mode probe --snapshot "$item" --ssh-config "$work/config" --known-hosts "$work/cpanel.known"
+          done
+          echo FACTORY_OFF_FIXED_PRODUCER_REAL_TWO_SOURCE_METADATA_OK=true
+          echo FACTORY_BACKUP_BYTES_UPLOADED=0
+          echo FACTORY_SOURCE_DELETION=0
