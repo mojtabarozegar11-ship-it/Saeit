@@ -131,3 +131,31 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+
+
+# MOJ-PROP-01 effective-app gates. All remain disabled until independently
+# evidenced capital, jurisdiction, broker, KYC, settlement and owner-canary gates.
+MPW_MOJPROP_PLAN1_ROUTE_ENABLED = env.bool(
+    "MPW_MOJPROP_PLAN1_ROUTE_ENABLED", default=False
+)
+MPW_MOJPROP_PLAN1_LIVE_INVOICE_ENABLED = env.bool(
+    "MPW_MOJPROP_PLAN1_LIVE_INVOICE_ENABLED", default=False
+)
+MPW_MOJPROP_PLAN1_RECIPIENT = env(
+    "MPW_MOJPROP_PLAN1_RECIPIENT", default=""
+)
+MPW_MOJPROP_PLAN1_TRUSTED_CONTRACT_SHA256 = env(
+    "MPW_MOJPROP_PLAN1_TRUSTED_CONTRACT_SHA256", default=""
+)
+for _mojprop_gate in (
+    "INDEPENDENT_CAPITAL_PROOF",
+    "JURISDICTION_APPROVAL",
+    "BROKER_CONTRACT",
+    "MERCHANT_SETTLEMENT_READY",
+    "KYC_ELIGIBILITY_READY",
+    "OWNER_CANARY_COMPLETE",
+):
+    globals()["MPW_MOJPROP_PLAN1_" + _mojprop_gate] = env.bool(
+        "MPW_MOJPROP_PLAN1_" + _mojprop_gate, default=False
+    )

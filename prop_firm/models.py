@@ -505,3 +505,66 @@ class PropSocialEvidence(models.Model):
 
 # Contact-only inquiries never imply TRX settlement or funded challenges.
 from .lead_models import PropInterest
+
+
+
+class TronSettlementLedger(models.Model):
+    """Global native-TRX settlement identity; never a browser-submitted proof."""
+    network = models.CharField(max_length=24)
+    tx_hash = models.CharField(max_length=128)
+    amount_sun = models.PositiveBigIntegerField()
+    evidence_digest = models.CharField(max_length=64)
+    trusted_reconciler_attestation = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["network", "tx_hash"],
+                name="mp_tron_network_tx_unique",
+            ),
+            models.CheckConstraint(
+                condition=Q(amount_sun=30_000_000),
+                name="mp_tron_plan1_amount_exact",
+            ),
+        ]
+
+
+class PropPlan1Invoice(models.Model):
+    """Immutable 30 TRX Plan 1 invoice snapshot."""
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("paid", "Paid"),
+        ("expired", "Expired"),
+    ]
+    order_ref = models.CharField(max_length=96, unique=True)
+    buyer_email = models.EmailField(max_length=254)
+    product_code = models.CharField(max_length=16, default="MOJ-PROP-01")
+    contract_version = models.CharField(max_length=32)
+    network = models.CharField(max_length=24)
+    amount_sun = models.PositiveBigIntegerField(default=30_000_000)
+    recipient = models.CharField(max_length=64)
+    buyer_terms_acceptance = models.BooleanField(default=False)
+    contract_digest = models.CharField(max_length=64)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount_sun=30_000_000),
+                name="mp_plan1_invoice_amount_exact",
+            ),
+        ]
+
+
+class PropPlan1Receipt(models.Model):
+    """Receipt created only after atomic, independently attested settlement."""
+    invoice = models.OneToOneField(
+        PropPlan1Invoice, on_delete=models.PROTECT, related_name="receipt"
+    )
+    ledger = models.OneToOneField(
+        TronSettlementLedger, on_delete=models.PROTECT, related_name="receipt"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)

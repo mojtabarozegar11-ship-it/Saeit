@@ -1,0 +1,58 @@
+name: MOJ PROP Plan 1 effective-app bridge CI
+
+on:
+  push:
+    branches:
+      - cycle-20261118-mojprop-effective-cpanel-bridge
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "prop_firm/**"
+      - "config/urls.py"
+      - "config/settings.py"
+      - "tests/test_mojprop_plan1_effective_bridge_contract.py"
+      - ".github/workflows/mojprop-plan1-effective-bridge.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract-and-django-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "ci-only-mojprop-plan1"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,mojplaywin.com,www.mojplaywin.com"
+      MPW_MOJPROP_PLAN1_ROUTE_ENABLED: "false"
+      MPW_MOJPROP_PLAN1_LIVE_INVOICE_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install project dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile and run bridge contract tests
+        run: |
+          python -m py_compile             prop_firm/plan1_invoice.py             prop_firm/plan1_persistence.py             prop_firm/plan1_views.py             prop_firm/plan1_urls.py             prop_firm/models.py             prop_firm/migrations/0009_plan1_invoice_gateway.py             config/settings.py             config/urls.py
+          python -m unittest -v tests.test_mojprop_plan1_effective_bridge_contract
+      - name: Verify Django schema and guarded route
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run prop_firm
+          python manage.py migrate --noinput
+          python - <<'PY'
+          import os
+          from django.test import Client
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          import django
+          django.setup()
+          response = Client(HTTP_HOST="localhost").get("/commerce/moj-prop/plan1/start/")
+          assert response.status_code == 404, response.status_code
+          print("MOJPROP_ROUTE_DEFAULT_OFF=PASS")
+          PY
