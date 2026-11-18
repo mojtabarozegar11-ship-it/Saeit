@@ -44,6 +44,22 @@ class ReadinessTests(unittest.TestCase):
             self.assertIn(required, copy)
 
 
+    def test_trade_scope_matches_canonical_engine_and_bilingual_copy(self):
+        from prop_firm.rules import POLICY
+        from prop_firm.plans import plan_for_code
+        from prop_firm.plan1_owner_account_buyer_copy import current_owner_account_buyer_copy
+        copy = " ".join(PREPURCHASE_DISCLOSURES)
+        current = current_owner_account_buyer_copy()
+        self.assertEqual(POLICY.min_closed_trades_per_challenge, 50)
+        self.assertEqual(plan_for_code(SKU).minimum_verified_closed_trades, 50)
+        self.assertIn("50 verified distinct closed positions", copy)
+        self.assertIn("in total across both simulated evaluation phases", copy)
+        self.assertNotIn("in EACH of the two simulated evaluation phases", copy)
+        self.assertIn("50 distinct, reconciled CLOSED positions in total across both", current.en)
+        self.assertIn("در مجموع دو مرحله", current.fa)
+        self.assertIn("Each phase requires at least six verified trading days.", copy)
+        self.assertFalse(current.payment_enabled)
+
     def test_existing_litefinance_broker_account_not_customer_account(self):
         copy=" ".join(PREPURCHASE_DISCLOSURES)
         self.assertIn("EXISTING LiteFinance real account", copy)
