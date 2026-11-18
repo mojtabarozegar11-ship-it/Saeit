@@ -18,7 +18,7 @@ import sys
 import tempfile
 
 from factory_rclone_ephemeral_binary import provision_verified_rclone
-from factory_rclone_dual_parts import RcloneDualStore, TransferHold, _mode_secure_file
+from factory_rclone_dual_parts import RcloneDualStore, TransferHold, _mode_secure_file, MAX_MANIFEST_BYTES
 
 ROOT_A = '191sAkv4A01S9o6zhx-vM5xM7WO31qHPn'
 ROOT_B = '1e6D3Ek4k-4JT_oyEoiY_JejErZFssrC_'
@@ -53,6 +53,19 @@ def _secure_config_directory(home: Path) -> Path:
     return config
 
 
+HISTORICAL_SNAPSHOT_BYTES = 1408634880
+HISTORICAL_CHUNK_BYTES = 8 * 1024 * 1024
+HISTORICAL_FREE_RESERVE_BYTES = 1024 ** 3
+
+
+def historical_pair_required_bytes() -> int:
+    # Two separate logical raw archives, each with its own manifest and
+    # worst-case per-part ciphertext overhead; reserve is held once.
+    parts = (HISTORICAL_SNAPSHOT_BYTES + HISTORICAL_CHUNK_BYTES - 1) // HISTORICAL_CHUNK_BYTES
+    return (2 * (HISTORICAL_SNAPSHOT_BYTES + parts * 64 + MAX_MANIFEST_BYTES)
+            + HISTORICAL_FREE_RESERVE_BYTES)
+
+
 def _check(executable: Path, config: Path) -> dict:
     # This is connectivity+quota observation only, NOT current-source admission.
     # No database is accessed and no cloud object is created.
@@ -65,14 +78,23 @@ def _check(executable: Path, config: Path) -> dict:
         free_reserve_bytes=1 << 30,
         rclone_exe=str(executable),
     ).preflight()
+    pair_required = historical_pair_required_bytes()
+    # Do not turn a 1GiB connectivity signal into a claim of pair admission.
+    # The transfer itself still rechecks each actual destination before opening bytes.
+    pair_capacity = (preflight.free_a_before >= pair_required
+                     and preflight.free_b_before >= pair_required)
     return {
-        'schema': 'factory.owner-private-oauth-connectivity.v1',
+        'schema': 'factory.owner-private-oauth-connectivity.v2',
         'owner_interactive_shell_required': True,
         'distinct_private_drives_verified': True,
         'existing_private_proof_readback_verified': preflight.proof_readbacks_verified,
         'free_bytes_drive_a': preflight.free_a_before,
         'free_bytes_drive_b': preflight.free_b_before,
         'provider_quota_minimum_1GiB_verified': True,
+        'historical_pair_required_bytes_each_drive': pair_required,
+        'historical_pair_capacity_screen_passed': pair_capacity,
+        'historical_pair_uploaded': False,
+        'historical_pair_independent_restore_verified': False,
         'current_factory_size_admitted': False,
         'current_mysql_consistency_proven': False,
         'complete_media_scope_proven': False,
@@ -86,7 +108,7 @@ def main(argv=None) -> int:
     parser.add_argument('--configure', action='store_true', help='Interactively configure factory_a and factory_b in a trusted TTY')
     opts = parser.parse_args(argv)
     # Never call OAuth setup through Actions, non-interactive shells, or logs.
-    if not sys.stdin.isatty() or not sys.stdout.isatty() or os.environ.get('GITHUB_ACTIONS'):
+    if os.geteuid() == 0 or not sys.stdin.isatty() or not sys.stdout.isatty() or os.environ.get('GITHUB_ACTIONS'):
         print('HOLD: TRUSTED_OWNER_INTERACTIVE_TERMINAL_REQUIRED', file=sys.stderr)
         return 2
     old_umask = os.umask(0o077)
@@ -105,6 +127,9 @@ def main(argv=None) -> int:
                     raise TransferHold('OWNER_CONFIG_MISSING_OR_UNSAFE_AFTER_SETUP')
                 result = _check(exe, config)
                 print('FACTORY_DRIVE_CONNECTIVITY=' + json.dumps(result, sort_keys=True, separators=(',', ':')))
+            if not result['historical_pair_capacity_screen_passed']:
+                print('HOLD: HISTORICAL_PAIR_FREE_QUOTA_INSUFFICIENT', file=sys.stderr)
+                return 2
         return 0
     except (TransferHold, OSError, ValueError) as exc:
         # Never print raw traceback/provider stderr or config values.
