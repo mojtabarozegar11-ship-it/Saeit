@@ -1,0 +1,98 @@
+name: Zomorod B2B installed routes diagnostic — read only
+on:
+  pull_request:
+    paths: [".github/workflows/zomorod-b2b-installed-route-diagnostic-20261118.yml"]
+permissions:
+  contents: read
+jobs:
+  physical:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - name: Connect pinned verified cPanel owner
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          umask 077
+          work="$RUNNER_TEMP/zomorod-b2b-inventory"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 35s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2"'
+      - name: Fixed-path installed byte and routing indicators (no raw configuration)
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/zomorod-b2b-inventory"
+          timeout 60s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' <<'PY'
+          import os,hashlib,json,stat,re
+          from pathlib import Path
+          root=Path("/home/zomorod2/public_html")
+          result={}
+          for key in ("index.html","company/index.html","b2b/index.html","b2b/privacy/index.html"):
+              p=root/key
+              if p.resolve()!=p or not p.is_file() or p.stat().st_size>1048576:
+                  result[key]={"readable":False}
+                  continue
+              m=p.stat()
+              result[key]={"readable":True,"sha256":hashlib.sha256(p.read_bytes()).hexdigest(),"owner_matches":m.st_uid==os.geteuid(),"mode":oct(stat.S_IMODE(m.st_mode))}
+          rules={}
+          for key in (".htaccess","b2b/.htaccess","b2b/privacy/.htaccess"):
+              p=root/key
+              if p.resolve()!=p or not p.is_file() or p.stat().st_size>65536:
+                  rules[key]={"regular_readable":False}
+                  continue
+              lines=[l.strip().lower() for l in p.read_text(errors="replace").splitlines() if l.strip() and not l.lstrip().startswith("#")]
+              rules[key]={"regular_readable":True,"rewrite_count":sum(l.startswith("rewriterule ") for l in lines),"passenger_directives":any(l.startswith("passenger") for l in lines),"file_exclusion":any(l.startswith("rewritecond ") and re.search(r"\s!-f(?:\s|$)",l) for l in lines),"directory_exclusion":any(l.startswith("rewritecond ") and re.search(r"\s!-d(?:\s|$)",l) for l in lines),"b2b_reference":any("b2b" in l for l in lines),"directory_index_directive":any(l.startswith("directoryindex ") for l in lines)}
+          print("B2B_PHYSICAL_DIAGNOSTIC="+json.dumps({"files":result,"routing_indicators":rules,"site_changed":False},sort_keys=True))
+          PY
+      - name: Securely remove ephemeral auth files
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/zomorod-b2b-inventory"
+          if test -d "$work"; then rm -f "$work/host.key" "$work/known" "$work/config"; rmdir "$work"; fi
+
+  public:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Public hostname and explicit index variants, no form submission
+        shell: bash
+        run: |
+          python3 -B - <<'PY'
+          import hashlib,http.client,json,ssl,concurrent.futures
+          host="zomorodmelal.ir"
+          paths=["/","/company/","/b2b/","/b2b/index.html","/b2b/privacy/","/b2b/privacy/index.html","/b2b/?release_check=20261118","/b2b/privacy/?release_check=20261118"]
+          pins={"b2b":"b34b028cc6c4645882b8e194e785eb66e31370c1a7d98b76561f269cad9b96aa","privacy":"f21d270db6bd734744c5e65382f0741d0d2cb8b78a5421441b18dc6129579f0d"}
+          def check(p):
+              c=http.client.HTTPSConnection(host,timeout=10,context=ssl.create_default_context())
+              out={"path":p}
+              try:
+                  c.request("GET",p,headers={"User-Agent":"Zomorod-public-route-check/1.0","Accept-Encoding":"identity","Cache-Control":"no-cache"})
+                  r=c.getresponse()
+                  raw=r.read(1048577)
+                  out.update(status=r.status,tls_verified=True,sha256=hashlib.sha256(raw).hexdigest(),oversize=len(raw)>1048576)
+                  out["exact_reviewed_page"]=len(raw)<=1048576 and out["sha256"] in pins.values()
+              except Exception as exc:
+                  out.update(status=None,error_type=type(exc).__name__)
+              finally:
+                  c.close()
+              return out
+          with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+              rows=list(pool.map(check,paths))
+          print("B2B_PUBLIC_DIAGNOSTIC="+json.dumps(rows,sort_keys=True))
+          PY
