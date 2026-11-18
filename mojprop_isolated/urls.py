@@ -7,14 +7,14 @@ compatible; named routes use the SCRIPT_NAME-aware short paths.
 """
 from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import path
-from django.views.generic import RedirectView
+from core.mojprop_v141_buyer_dashboard import buyer_dashboard
 
 from core.mojprop_v141_native_receipt_view import moj_prop_v141_native_invoice
 from core.mojprop_v141_private_statement_view import moj_prop_v141_private_statement
 
 _login = LoginView.as_view(template_name="mojprop/v141-isolated-login.html")
-_logout = LogoutView.as_view()
-_home = RedirectView.as_view(url="/moj-prop-v141/login/", permanent=False)
+_logout = LogoutView.as_view(next_page="/moj-prop-v141/login/")
+_home = buyer_dashboard
 
 urlpatterns = [
     path("", _home, name="mojprop_v141_home"),
