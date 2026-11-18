@@ -66,7 +66,7 @@ def main() -> None:
     finally:
         os.close(fd)
     raw = b"".join(chunks)
-    if count != meta.st_size or raw[:16] != b"SQLite format 3\\x00":
+    if count != meta.st_size or raw[:16] != b"SQLite format 3\x00":
         die("SOURCE_BYTES_INVALID")
     # Mode=ro&immutable=1 requires an existing canonical file, no sidecars.
     uri = SRC.as_uri() + "?mode=ro&immutable=1"
