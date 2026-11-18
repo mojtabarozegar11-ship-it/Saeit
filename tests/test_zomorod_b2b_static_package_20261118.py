@@ -1,4 +1,5 @@
 """Deterministic and deployment-free B2B source package contract."""
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -39,6 +40,36 @@ class StaticPackageTests(unittest.TestCase):
         with zipfile.ZipFile(io.BytesIO(a)) as z:
             contents={k:z.read(k) for k in z.namelist()}
         contents["b2b/index.html"]=contents["b2b/index.html"]+b"tampered"
+        out=io.BytesIO()
+        with zipfile.ZipFile(out,"w") as z:
+            for k,v in contents.items():
+                z.writestr(k,v)
+        with self.assertRaises(ValueError):
+            verify_archive(out.getvalue(),SHA)
+
+    def test_rehashed_tampered_archive_denied(self):
+        a=archive_bytes(HERE,SHA)
+        with zipfile.ZipFile(io.BytesIO(a)) as z:
+            contents={k:z.read(k) for k in z.namelist()}
+        contents["b2b/index.html"] += b"<!-- modified -->"
+        manifest=json.loads(contents["MANIFEST.json"])
+        raw=contents["b2b/index.html"]
+        manifest["files"]["b2b/index.html"]={"size":len(raw),"sha256":hashlib.sha256(raw).hexdigest()}
+        contents["MANIFEST.json"]=json.dumps(manifest).encode()
+        out=io.BytesIO()
+        with zipfile.ZipFile(out,"w") as z:
+            for k,v in contents.items():
+                z.writestr(k,v)
+        with self.assertRaises(ValueError):
+            verify_archive(out.getvalue(),SHA)
+
+    def test_forged_payment_approval_denied(self):
+        a=archive_bytes(HERE,SHA)
+        with zipfile.ZipFile(io.BytesIO(a)) as z:
+            contents={k:z.read(k) for k in z.namelist()}
+        manifest=json.loads(contents["MANIFEST.json"])
+        manifest["approved_for_payments"]=True
+        contents["MANIFEST.json"]=json.dumps(manifest).encode()
         out=io.BytesIO()
         with zipfile.ZipFile(out,"w") as z:
             for k,v in contents.items():
