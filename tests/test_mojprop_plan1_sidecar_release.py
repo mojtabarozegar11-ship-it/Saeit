@@ -125,10 +125,12 @@ class SidecarTests(unittest.TestCase):
                       REVIEWED.read_text("utf-8"))
 
     def test_12_revision_is_a_draft_without_broker_promises(self):
-        page=REVIEWED.read_text("utf-8")
+        page = REVIEWED.read_text("utf-8")
         self.assertIn("payment disabled", page)
-        self.assertIn("No actual funding", page)
+        self.assertIn("No wallet address, payment instruction", page)
+        self.assertIn("no returns, funding, brokerage orders or distributions are guaranteed", page)
         self.assertIn("Not financial advice", page)
+
 
     def test_13_refuse_bad_run_ids(self):
         for value in ("../1", "", "1/2", "x", "-1", "1"*30, " 1", "7;rm"):
@@ -260,38 +262,35 @@ class SidecarTests(unittest.TestCase):
         self.assertIn("Moj Prop Plan 1 — draft rules, prelaunch only", s)
         self.assertNotIn("Moj Prop Plan 1 — verified rules", s)
 
-    def test_32_social_post_clause_not_approved(self):
+    def test_32_social_platform_requirements_not_active(self):
         s = REVIEWED.read_text("utf-8")
-        self.assertIn("Social-post conditions are under contract review", s)
-        self.assertIn("no social post is requested while paid enrollment is closed", s)
+        self.assertIn("no Instagram or Facebook posting is requested", s)
 
-    def test_33_no_false_xauusd_three_percent_launch(self):
+    def test_33_no_false_v13_gold_risk_launch(self):
         s = REVIEWED.read_text("utf-8")
-        self.assertIn("prospective v1.3 source-only order preflight now enforces", s)
-        self.assertIn("broker-verified exact XAUUSD symbol", s)
-        self.assertIn("up to 3% per-order / 8% aggregate open stop-risk", s)
-        self.assertIn("NOT live, customer-authorized or enabled for real orders", s)
-        self.assertNotIn("policy is NOT implemented", s)
+        self.assertIn("draft policy v1.2 only", s)
+        self.assertNotIn("up to 3% per-order / 8% aggregate", s)
+        self.assertNotIn("2026-11-17/v1.3", s)
 
-    def test_34_existing_engine_limits_are_stated(self):
+    def test_34_existing_v12_order_risk_limits_are_stated(self):
         s = REVIEWED.read_text("utf-8")
-        self.assertIn("0.8% order risk / 1.6% aggregate open risk", s)
+        self.assertIn("0.8% per order and 1.6% aggregate", s)
+        self.assertIn("۰٫۸٪ در هر سفارش و ۱٫۶٪", s)
 
-    def test_35_proposed_risk_always_discloses_drawdown(self):
+    def test_35_drawdown_stated_in_both_languages(self):
         s = REVIEWED.read_text("utf-8")
         self.assertIn("4% daily and 8% total drawdown limits", s)
-        self.assertIn("افت روزانه ۴٪ و کل ۸٪", s)
+        self.assertIn("افت روزانه حداکثر ۴٪ و افت کل ۸٪", s)
 
-    def test_36_profit_split_conditional_not_paid(self):
+    def test_36_split_only_if_actual_trading(self):
         s = REVIEWED.read_text("utf-8")
         self.assertIn("70% trader / 30% organizer", s)
-        self.assertIn("No actual funding, brokerage execution or profit distribution is enabled", s)
+        self.assertIn("IF lawful funded trading later begins", s)
+        self.assertIn("۷۰٪ معامله‌گر و ۳۰٪ برگزارکننده", s)
 
-    def test_37_persian_risk_status_does_not_claim_deployment(self):
+    def test_37_persian_development_not_live_buyer_contract(self):
         s = REVIEWED.read_text("utf-8")
-        self.assertIn("در کد توسعه پیاده‌سازی و آزمون شده", s)
-        self.assertIn("هنوز روی سایت زنده منتشر نشده", s)
-        self.assertIn("معاملات واقعی فعال نیست", s)
+        self.assertIn("پیشنهادهای توسعه‌ای جدید، قرارداد معتبر یا مجوز معامله واقعی نیستند", s)
 
     def test_38_public_page_still_has_no_registration_or_payment_form(self):
         parsed = HTMLSafety()
@@ -300,19 +299,95 @@ class SidecarTests(unittest.TestCase):
         self.assertEqual(parsed.scripts, ["application/ld+json"])
         self.assertIn("payment disabled", REVIEWED.read_text("utf-8"))
 
-    def test_39_new_gold_contract_is_distinct_and_not_publicly_active(self):
+    def test_39_future_policy_not_in_current_offer(self):
         s = REVIEWED.read_text("utf-8")
-        self.assertIn("2026-11-17/v1.3", s)
-        self.assertIn("Historical v1.2", s)
-        self.assertIn("0.8% order risk / 1.6% aggregate open risk", s)
-        self.assertIn("it is NOT installed on the public site", s)
+        self.assertIn("Later development proposals do not amend the offer", s)
+        self.assertNotIn("prospective v1.3 source-only", s)
 
-    def test_40_customer_pays_nothing_until_real_separate_approval(self):
+    def test_40_customer_pays_nothing_before_release_gates(self):
         s = REVIEWED.read_text("utf-8")
         self.assertIn("Not open for paid enrollment", s)
         self.assertIn("No wallet address, payment instruction", s)
         self.assertIn("No payment, challenge application or consent form is active", s)
-        self.assertIn("سقف سخت‌گیرانه افت روزانه ۴٪ و کل ۸٪", s)
+        self.assertIn("فروش، ثبت‌نام، ثبت رضایت و پرداخت فعال نیست", s)
+
+    def test_41_noindex_nofollow_noarchive_robots(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn('name="robots" content="noindex,nofollow,noarchive"', s)
+        self.assertIn('name="googlebot" content="noindex,nofollow,noarchive"', s)
+        self.assertNotIn('content="index,follow', s)
+
+    def test_42_accessible_keyboard_skip_to_main(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn('class="skip" href="#main"', s)
+        self.assertIn('<main id="main">', s)
+        self.assertIn(".skip:focus", s)
+
+    def test_43_all_disclosure_nav_anchors_exist(self):
+        s = REVIEWED.read_text("utf-8")
+        for name in ("rules", "eligibility", "refunds", "privacy", "contact", "fa"):
+            with self.subTest(name=name):
+                self.assertIn('id="'+name+'"', s)
+
+    def test_44_unique_closed_trades_no_partial_double_count(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("50 unique and independently reconciled CLOSED trades", s)
+        self.assertIn("partial closes must not be counted twice", s)
+
+    def test_45_single_evaluation_window(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("28-calendar-day window covers both phases", s)
+        self.assertIn("six trading days", s)
+
+    def test_46_capital_only_after_real_proof_and_broker(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("Not an evaluation balance", s)
+        self.assertIn("broker consent and verified lawful funding", s)
+
+    def test_47_country_and_eligibility_not_preapproved(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("Eligible countries, customer age and identity requirements", s)
+        self.assertIn("No KYC submission is offered", s)
+
+    def test_48_refunds_are_unapproved_and_payment_disabled(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("no payment route or approved refund policy", s)
+        self.assertIn("استرداد و لغو خرید", s)
+
+    def test_49_mailto_is_not_an_optin_or_confirmed_delivery(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("opening one is neither delivery proof nor marketing permission", s)
+        self.assertIn("A mailto click cannot be counted as an application", s)
+
+    def test_50_zero_tracking_and_no_leaky_personal_data(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("no visitor profiling pixel or conversion analytics", s)
+        self.assertIn("minimal personal data kept out of URLs", s)
+        self.assertNotIn("googletagmanager", s)
+        self.assertNotIn("facebook.com/tr", s)
+
+    def test_51_future_order_not_confused_with_trial_signup(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("A lawful 30 TRX invoice", s)
+        self.assertIn("independent blockchain settlement verification", s)
+        self.assertIn("This page cannot perform any of these steps", s)
+
+    def test_52_no_visitor_pii_or_wallet_submission(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("Do not email passports", s)
+        self.assertIn("wallet keys", s)
+        self.assertIn("مدارک هویتی", s)
+
+    def test_53_og_description_preserves_prelaunch(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("No current checkout, signup, consent form", s)
+        self.assertIn("og:description", s)
+
+    def test_54_english_and_farsi_not_collecting_customers(self):
+        s = REVIEWED.read_text("utf-8")
+        self.assertIn("no web application form, marketing consent checkbox", s)
+        self.assertIn("به معنی ثبت مشتری", s)
+
 
 
 if __name__ == "__main__":
