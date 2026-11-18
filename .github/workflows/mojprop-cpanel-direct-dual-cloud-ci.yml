@@ -1,0 +1,118 @@
+name: MojProp cPanel dual Drive streaming bridge — source-only CI
+on:
+  pull_request:
+    paths:
+      - 'scripts/mojprop_cpanel_direct_dual_cloud.py'
+      - 'scripts/mojplaywin_backup_stream_cpanel.py'
+      - 'scripts/factory_dual_stream_v2.py'
+      - 'scripts/factory_rclone_dual_parts.py'
+      - 'tests/test_mojprop_cpanel_direct_dual_cloud.py'
+      - 'tests/test_factory_rclone_dual_parts.py'
+      - 'scripts/mojprop_owner_two_drive_quota_readonly_20261118.py'
+      - 'tests/test_mojprop_owner_two_drive_quota_readonly_20261118.py'
+      - '.github/workflows/mojprop-cpanel-direct-dual-cloud-ci.yml'
+  push:
+    branches:
+      - feature/mojprop-cpanel-direct-dual-cloud-20261118
+
+permissions:
+  contents: read
+
+jobs:
+  offline-stream-crypto-and-admission:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Check out immutable requested SHA without GitHub write credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install open-source public crypto dependency (no provider authentication)
+        run: python -m pip install --disable-pip-version-check 'cryptography>=41,<50'
+      - name: Verify original reviewed cPanel source Git object
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojplaywin_backup_stream_cpanel.py
+          test "$(git hash-object scripts/mojplaywin_backup_stream_cpanel.py)" = '7b330168b4ca1d597616e8724bc634910e769ea5'
+          echo 'CPANEL_SOURCE_EXACT_BLOB=PASS'
+      - name: Compile stream, source, tests and existing dual crypto transport
+        run: |
+          python -B -m py_compile scripts/mojprop_cpanel_direct_dual_cloud.py scripts/mojplaywin_backup_stream_cpanel.py scripts/factory_dual_stream_v2.py scripts/factory_rclone_dual_parts.py tests/test_mojprop_cpanel_direct_dual_cloud.py scripts/mojprop_owner_two_drive_quota_readonly_20261118.py tests/test_mojprop_owner_two_drive_quota_readonly_20261118.py
+      - name: Run all source, 67 crypto and 9 two-cloud metadata guard checks
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          PYTHONPATH=scripts python -B -m unittest -v tests.test_mojprop_cpanel_direct_dual_cloud tests.test_factory_rclone_dual_parts tests.test_mojprop_owner_two_drive_quota_readonly_20261118
+      - name: Assert offline metadata can never claim storage, restore, payments or release
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python -B scripts/mojprop_cpanel_direct_dual_cloud.py \
+            | python -c 'import json,sys;d=json.load(sys.stdin); assert d["schema"]=="mojprop.cpanel.dual-cloud.readiness.v1"; assert d["reviewed_source_blob_present"] is True; assert all(d[k] is False for k in ("provider_quota_verified","ssh_runtime_authenticated","key_offsite_recovery_proven","current_backup_created","restore_performed","production_modified","payment_created")); print("OFFSITE_BACKUP_BRIDGE_OFFLINE_GUARDS=PASS")'
+          echo 'ZERO_BACKUP_UPLOADED_ZERO_PRODUCTION_READS_NO_OAUTH_NO_SSH_NO_PAYMENT' >> "$GITHUB_STEP_SUMMARY"
+
+  owner-runner-local-readiness-only:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Offline source and runner rclone readiness, no provider access
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/mojplaywin_backup_stream_cpanel.py)" = '7b330168b4ca1d597616e8724bc634910e769ea5'
+          PYTHONPATH=scripts python3 -B scripts/factory_rclone_dual_parts.py |
+            python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["schema"]=="factory.rclone.runner-readiness.readonly.v1"; assert all(d[k] is False for k in ("oauth_tokens_read","provider_queried","provider_free_quota_verified","new_backup_created","production_modified","two_independent_remotes_verified")); print("OWNER_RUNNER_OFFLINE_RCLONE_PRESENT="+str(d["rclone_installed"]).lower()); print("OWNER_RUNNER_PRIVATE_RCLONE_CONFIG_PRESENT="+str(d["owner_local_config_secure_file_present"]).lower())'
+          echo 'NO_REMOTE_OAUTH_READ_NO_PROVIDER_QUERY_NO_PRODUCTION_BACKUP' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify free official rclone 1.76.0 binary in disposable owner-runner temp only
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          command -v curl
+          command -v unzip
+          command -v sha256sum
+          work="$(mktemp -d "$RUNNER_TEMP/mojprop-verified-rclone-XXXXXXXX")"
+          trap 'rm -rf -- "$work"' EXIT
+          curl --proto '=https' --tlsv1.2 --fail --location \
+            --silent --show-error --retry 2 --max-time 120 \
+            'https://downloads.rclone.org/v1.76.0/rclone-v1.76.0-linux-amd64.zip' \
+            -o "$work/rclone.zip"
+          test "$(stat -c %s "$work/rclone.zip")" -lt 44000000
+          (cd "$work"; echo 'b00f00b3266c3764413afe599d3ec316f6f43b3e0ea8a0bc1d186d2133e46df7  rclone.zip' | sha256sum -c --status)
+          unzip -p "$work/rclone.zip" 'rclone-v1.76.0-linux-amd64/rclone' > "$work/rclone"
+          test -s "$work/rclone"
+          test "$(stat -c %s "$work/rclone")" -lt 155000000
+          chmod 700 "$work/rclone"
+          # Consume the whole version output: head -1 can SIGPIPE rclone under pipefail.
+          "$work/rclone" version > "$work/rclone.version"
+          IFS= read -r rclone_version < "$work/rclone.version"
+          test "$rclone_version" = 'rclone v1.76.0'
+          echo 'OWNER_RUNNER_EPHEMERAL_RCLONE_SHA256=VERIFIED'
+          echo 'OWNER_RUNNER_RCLONE_VERSION=1.76.0'
+          echo 'OWNER_RUNNER_RCLONE_INSTALLED_PERSISTENTLY=FALSE'
+          echo 'OWNER_RUNNER_CLOUD_UPLOAD=FALSE'
+          echo 'OWNER_RUNNER_OAUTH_TOKENS_PRINTED=FALSE'
+          MOJPROP_READONLY_RCLONE_EXE="$work/rclone" PYTHONPATH=scripts \
+            python3 -B scripts/mojprop_owner_two_drive_quota_readonly_20261118.py \
+            | python3 -c 'import sys,json; text=sys.stdin.read(4096); tag="MOJPROP_OWNER_TWO_DRIVE_READONLY="; assert text.startswith(tag); x=json.loads(text[len(tag):]); assert x["schema"]=="mojprop.owner-two-drive-metadata-readonly.v1"; assert all(x[k] is False for k in ("full_current_backup_capacity_admitted","current_db_media_backup_created","independent_restore_performed","cloud_objects_written_or_deleted","customer_data_queried","oauth_tokens_printed","real_payment_created")); assert x["status"] in ("MISSING_OWNER_AUTH","NO_PINNED_RCLONE_BINARY","READONLY_PROVIDER_DIAGNOSTIC_OK","READONLY_PROVIDER_PROBE_FAILED","UNEXPECTED_METADATA_PROBE_FAILURE","UNSAFE_OR_MISSING_OWNER_CONFIG","OWNER_CONFIG_CHANGED","OWNER_CONFIG_UNREADABLE","OWNER_DRIVE_REMOTE_CONFIG_UNVERIFIED","SAME_OAUTH_CREDENTIALS_REJECTED","PRIVATE_OWNER_PROOF_MISMATCH","DRIVE_FREE_QUOTA_NOT_PROVEN","INSUFFICIENT_PROVIDER_VERIFIED_FREE_BYTES","RCLONE_NOT_INSTALLED","RCLONE_TIMEOUT","RCLONE_EXECUTABLE_MISSING","RCLONE_PIPELINE_FAILURE","RCLONE_PROVIDER_OPERATION_FAILED","RCLONE_OUTPUT_OVERSIZE","UNTRUSTED_REMOTE_IDENTITY_OR_PROOF"); print("OWNER_TWO_DRIVE_METADATA_STATUS="+x["status"]); print("OWNER_TWO_DRIVE_PRIVATE_PROOF_OK="+str(x["distinct_oauth_and_private_owner_proofs"]).lower()); print("OWNER_TWO_DRIVE_FREE_QUOTA_DIAGNOSTIC="+str(x["provider_quota_observed"]).lower())'
+          echo 'EPHEMERAL_RCLONE_BINARY_CLEANED_ON_STEP_EXIT' >> "$GITHUB_STEP_SUMMARY"
+
