@@ -1,0 +1,639 @@
+name: MOJ PROP — self-hosted factory VPS to pinned cPanel read-only inventory (NO DEPLOY)
+on:
+  push:
+    branches:
+      - audit/mojprop-v141-selfhosted-relay-live-inventory-20261117
+    paths:
+      - .github/workflows/mojprop-v141-selfhosted-local-readonly-20261117.yml
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-selfhosted-readonly-20261117
+  cancel-in-progress: false
+jobs:
+  private-vps-local-observation:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/audit/mojprop-v141-selfhosted-relay-live-inventory-20261117'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Verify authorized local factory runner identity without checkout or remote network
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "FACTORY_RUNNER_ACCOUNT_NAME=$(id -un)"
+          echo "FACTORY_RUNNER_EFFECTIVE_UID=$(id -u)"
+          if [[ -d "$HOME/factory-runtime" && ! -L "$HOME/factory-runtime" ]]; then
+            echo "FACTORY_RUNNER_HOME_HAS_FACTORY_RUNTIME=true"
+          else
+            echo "FACTORY_RUNNER_HOME_HAS_FACTORY_RUNTIME=false"
+          fi
+          if [[ -d "/home/githubops/factory-runtime" && ! -L "/home/githubops/factory-runtime" ]]; then
+            echo "FACTORY_KNOWN_GITHUBOPS_RUNTIME_EXISTS=true"
+          else
+            echo "FACTORY_KNOWN_GITHUBOPS_RUNTIME_EXISTS=false"
+          fi
+          case "$(id -un)" in
+            githubops)
+              echo "FACTORY_RUNNER_PRIVILEGE=ORIGINAL_GITHUBOPS"
+              ;;
+            githubrunner)
+              echo "FACTORY_RUNNER_PRIVILEGE=SEPARATE_UNPRIVILEGED_RUNNER"
+              ;;
+            *)
+              echo "FACTORY_LOCAL_READONLY=BLOCKED_UNEXPECTED_USER"
+              exit 1
+              ;;
+          esac
+          if [[ ! -d /home/githubops/factory-runtime || -L /home/githubops/factory-runtime ]]; then
+            echo "FACTORY_LOCAL_READONLY=BLOCKED_UNVERIFIED_KNOWN_FACTORY_ROOT"
+            exit 1
+          fi
+          echo "FACTORY_SELFHOSTED_RUNNER_ENVIRONMENT=verified_for_readonly_checks"
+          echo "FACTORY_LOCAL_CHECKOUT_CREATED=false"
+          echo "FACTORY_SQL_MODIFIED=false"
+      - name: Examine live legacy prospect API/HTML via public GET only, no real leads submitted
+        shell: bash
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PUBLIC_GET_PY'
+          import json
+          from html.parser import HTMLParser
+          from urllib.request import Request,build_opener,HTTPRedirectHandler
+          from urllib.error import HTTPError,URLError
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,*a,**k):return None
+          class FormProbe(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.forms=0
+                  self.input_names=set()
+                  self.action_root_intake=False
+                  self.script_count=0
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=='form':
+                      self.forms+=1
+                      self.action_root_intake |= a.get('action','').startswith('/moj-prop-intake/')
+                  elif tag in ('input','select','textarea'):
+                      name=a.get('name')
+                      if name in {'name','email','service','horizon','notes',
+                                  'consent','website','idempotency_key','product_id',
+                                  'csrfmiddlewaretoken'}:
+                          self.input_names.add(name)
+                  elif tag=='script':
+                      self.script_count+=1
+          routes=(
+              ('legacy_public_page','/moj-prop/'),
+              ('legacy_intake_api','/moj-prop-intake/'),
+              ('legacy_intake_html','/moj-prop-intake/?format=html'),
+              ('legacy_receipt_status','/moj-prop-status/?format=html'),
+          )
+          opener=build_opener(NoRedirect)
+          result={}
+          for key,path in routes:
+              request=Request('https://mojplaywin.com'+path,method='GET',
+                  headers={'Accept':'application/json,text/html','Cache-Control':'no-cache'})
+              status=0
+              content_type='unavailable'
+              body=b''
+              try:
+                  with opener.open(request,timeout=10) as response:
+                      status=response.status
+                      content_type=response.headers.get('Content-Type','').split(';')[0].lower()
+                      body=response.read(64001)
+              except HTTPError as exc:
+                  status=exc.code
+                  exc.close()
+              except (URLError,OSError,TimeoutError):
+                  pass
+              rec={'status':status,'content_type':content_type,
+                   'bounded_body':len(body)<=64000}
+              if body and len(body)<=64000:
+                  if content_type=='application/json':
+                      try:
+                          obj=json.loads(body)
+                          rec['json_object']=isinstance(obj,dict)
+                          if isinstance(obj,dict):
+                              rec['csrf_token_present']=bool(obj.get('csrf_token'))
+                              rec['public_catalog_present']='service_catalog' in obj
+                              rec['public_ok_true']=obj.get('ok') is True
+                      except (ValueError,TypeError):rec['json_parse_error']=True
+                  elif content_type=='text/html':
+                      p=FormProbe()
+                      try:p.feed(body.decode('utf-8'))
+                      except (ValueError,UnicodeError):pass
+                      rec['form_count']=p.forms
+                      rec['known_form_fields']=sorted(p.input_names)
+                      rec['form_action_root_intake']=p.action_root_intake
+                      rec['script_count']=p.script_count
+              result[key]=rec
+          print('PUBLIC_MOJPROP_LEGACY_GET_API_CLASSIFICATION='+json.dumps(result,sort_keys=True))
+          print('POST_SUBMITTED=false;CRM_LEAD_CREATED=false;PAID_ORDER_CREATED=false')
+          PUBLIC_GET_PY
+      - name: Measure VPS off-host backup and recovery-key metadata in place (no secrets, no write)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          from pathlib import Path
+          import os,stat,re,json
+          h=Path('/home/githubops')
+          d=h/'.private-mojplaywin-offhost-backups'
+          k=h/'.config'/'mojplaywin-backup-recovery'/'recovery-key.bin'
+          def safe_private_file(p):
+              try:
+                  s=p.lstat()
+                  return stat.S_ISREG(s.st_mode) and not s.st_mode & 0o177 and s.st_uid == os.geteuid()
+              except OSError:
+                  return False
+          def owner_private_directory(p):
+              try:
+                  s=p.lstat()
+                  return stat.S_ISDIR(s.st_mode) and not s.st_mode & 0o077 and s.st_uid == os.geteuid()
+              except OSError:
+                  return False
+          rows={}
+          partials=0
+          complete=False
+          count=0
+          if owner_private_directory(d):
+              try:
+                  with os.scandir(d) as stream:
+                      for ent in stream:
+                          count+=1
+                          if count>3000: raise RuntimeError("too many directory entries")
+                          if ent.name.endswith('.partial'): partials+=1
+                          m=re.fullmatch(r'(mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16})_(mysql|files)_gpgv2\.(gpg|manifest\.json)',ent.name)
+                          if m and safe_private_file(Path(ent.path)):
+                              rows.setdefault(m.group(1),set()).add((m.group(2),m.group(3)))
+              except (OSError,RuntimeError):
+                  rows={}
+                  complete=False
+              else:
+                  complete=True
+          expected={('mysql','gpg'),('mysql','manifest.json'),('files','gpg'),('files','manifest.json')}
+          candidates=sum(1 for s in rows.values() if expected.issubset(s))
+          try:
+              key_is_valid=safe_private_file(k) and k.stat().st_size==32 and owner_private_directory(k.parent)
+          except OSError: key_is_valid=False
+          free=os.statvfs(h)
+          print('VPS_LOCAL_PUBLIC_FIELDS='+json.dumps({
+              'private_backup_directory_verified_for_runner_user':owner_private_directory(d),
+              'backup_directory_metadata_observable':d.exists() and not d.is_symlink(),
+              'backup_directory_readable_to_runner':os.access(d,os.R_OK | os.X_OK),
+              'inventory_complete':complete,
+              'regular_pair_with_four_files_count':candidates,
+              'partial_file_names_count':partials,
+              'candidate_set_ids_count':len(rows),
+              'offhost_free_bytes':free.f_bavail*free.f_frsize,
+              'existing_recovery_key_metadata_32_private':key_is_valid,
+              'ciphertext_or_key_bytes_read':False,
+              'isolated_restore_proven':False,
+              'release_permitted':False,
+          },sort_keys=True))
+          PY
+      - name: Authenticate SSH cPanel from VPS using existing pinned host key (read-only, no bypass)
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "${HOST_KEY:-}" ]]; then echo "LOCAL_TO_CPANEL=BLOCKED_SECRET_UNSET"; exit 1; fi
+          tmp="$RUNNER_TEMP/mojprop-cpanel-local-readonly-${GITHUB_RUN_ID}"
+          install -d -m 700 "$tmp"
+          trap 'rm -f "$tmp"/key "$tmp"/known; rmdir "$tmp" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$tmp/key"
+          chmod 600 "$tmp/key"
+          ssh-keygen -y -P '' -f "$tmp/key" >/dev/null 2>&1 || { echo "LOCAL_TO_CPANEL=BLOCKED_INVALID_CLIENT_KEY"; exit 1; }
+          timeout 14s ssh-keyscan -T 9 -p 1396 -t ed25519 zohal.pws-dns.net > "$tmp/known" 2>/dev/null || true
+          fingerprint="$(ssh-keygen -lf "$tmp/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+          if [[ "$fingerprint" != 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' ]]; then
+            echo "LOCAL_TO_CPANEL=BLOCKED_UNREACHABLE_OR_KEY_MISMATCH"
+            exit 1
+          fi
+          echo "LOCAL_TO_CPANEL_HOST_KEY=verified"
+          sshcmd=(ssh -T -p 1396 -i "$tmp/key" -o UserKnownHostsFile="$tmp/known" -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ForwardAgent=no -o ConnectTimeout=8 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 zomorod2@zohal.pws-dns.net)
+          if ! timeout 25s "${sshcmd[@]}" 'test "$(id -un)" = zomorod2' >/dev/null 2>&1; then
+            echo "LOCAL_TO_CPANEL=BLOCKED_AUTH"
+            exit 1
+          fi
+          echo "LOCAL_TO_CPANEL_AUTH=verified"
+          timeout 35s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_PY'
+          from pathlib import Path
+          import os,stat,json
+          home=Path('/home/zomorod2')
+          src=home/'Saeit-staging'
+          public=home/'mojplaywin.com'
+          paths={
+              'passenger_entry':public/'passenger_wsgi.py',
+              'new_private_statement_source':src/'core'/'mojprop_v141_private_statement_view.py',
+              'new_public_info_source':src/'core'/'mojprop_v141_info_view.py',
+              'core_intake_mainline_source':src/'core'/'mojprop_views.py',
+              'new_template_private_statement':src/'templates'/'mojprop'/'v141-private-demo-statement.html',
+              'new_migration_0010':src/'prop_firm'/'migrations'/'0010_v141_virtual_tenant_books.py',
+          }
+          def regular(p):
+              try:
+                  x=p.lstat()
+                  return stat.S_ISREG(x.st_mode) and x.st_uid==os.geteuid() and not x.st_mode & 0o002
+              except OSError:
+                  return False
+          try:
+              s=os.statvfs(home)
+              free=s.f_bavail*s.f_frsize
+          except OSError: free=None
+          print('CPANEL_LOCAL_PATH_METADATA='+json.dumps({
+              'source_tree_exists':src.is_dir() and not src.is_symlink(),
+              'public_docroot_exists':public.is_dir() and not public.is_symlink(),
+              'expected_candidate_regular_files':{name:regular(p) for name,p in paths.items()},
+              'account_free_bytes':free,
+              'effective_wsgi_source_verified':False,
+              'database_config_or_customer_rows_read':False,
+              'production_file_modified':False,
+              'release_authorized':False,
+          },sort_keys=True))
+          REMOTE_PY
+          timeout 55s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_ROUTE_PY'
+          """Constrained source route and cPanel UAPI metadata; NEVER print raw response."""
+          from pathlib import Path
+          import hashlib, json, os, subprocess
+          root=Path('/home/zomorod2/Saeit-staging')
+          web=Path('/home/zomorod2/mojplaywin.com')
+          names={
+              'urlconf':root/'config'/'urls.py',
+              'legacy_intake':root/'core'/'mojprop_views.py',
+              'legacy_form_renderer':root/'core'/'mojprop_accessible_intake.py',
+              'new_form_renderer':root/'core'/'moj_prop_views.py',
+              'v141_public':root/'core'/'mojprop_v141_info_view.py',
+              'v141_statement':root/'core'/'mojprop_v141_private_statement_view.py',
+              'public_static_mojprop_index':web/'moj-prop'/'index.html',
+              'public_htaccess':web/'.htaccess',
+          }
+          sources={}
+          for label,path in names.items():
+              try:
+                  if path.is_symlink() or not path.is_file():
+                      sources[label]={'present':False}
+                      continue
+                  size=path.stat().st_size
+                  if size>128*1024 or size<1:
+                      sources[label]={'present':False,'bounded':False}
+                      continue
+                  raw=path.read_bytes()
+                  sources[label]={
+                      'present':True,
+                      'bytes':len(raw),
+                      'sha256':hashlib.sha256(raw).hexdigest(),
+                  }
+                  if label=='urlconf':
+                      text=raw.decode('utf-8',errors='replace')
+                      sources[label].update({
+                          'root_mojprop_intake_route': 'path("moj-prop-intake/"' in text,
+                          'root_mojprop_status_route': 'path("moj-prop-status/"' in text,
+                          'v141_info_route': 'path("moj-prop-v141-info/"' in text,
+                          'v141_private_statement_route': 'path("moj-prop-v141/statement/' in text,
+                          'new_interest_form_route': 'path("moj-prop-interest/form/"' in text,
+                      })
+              except (OSError,UnicodeError):
+                  sources[label]={'present':False,'read_error':True}
+          print('CPANEL_LIVE_CODE_ROUTE_FINGERPRINT='+json.dumps(sources,sort_keys=True))
+          uapi={}
+          for kind,mod,action in (
+                  ('passenger','PassengerApps','list_applications'),
+                  ('mysql','Mysql','list_databases'),
+                  ('quota','Quota','get_local_quota_info')):
+              row={'uapi_status_ok':False}
+              try:
+                  run=subprocess.run(['uapi','--output=json',mod,action],
+                      stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+                      timeout=15,check=False)
+                  if run.returncode==0 and len(run.stdout)<=250000:
+                      data=json.loads(run.stdout).get('result',{})
+                      row['uapi_status_ok']=data.get('status') in (1,'1')
+                      payload=data.get('data')
+                      if kind=='passenger' and row['uapi_status_ok']:
+                          apps=payload if isinstance(payload,list) else (
+                              payload.get('applications',[]) if isinstance(payload,dict) else [])
+                          row['app_count']=len(apps) if isinstance(apps,list) else None
+                          row['mojplaywin_candidate_count']=sum(
+                              'mojplaywin' in str(item.get('domain','')).lower()
+                              or 'mojplaywin' in str(item.get('app_root','')).lower()
+                              or 'mojplaywin' in str(item.get('base_uri','')).lower()
+                              for item in apps if isinstance(item,dict)) if isinstance(apps,list) else None
+                      if kind=='mysql' and row['uapi_status_ok']:
+                          dbs=payload if isinstance(payload,list) else (
+                              payload.get('databases',[]) if isinstance(payload,dict) else [])
+                          row['database_count']=len(dbs) if isinstance(dbs,list) else None
+                      if kind=='quota' and row['uapi_status_ok'] and isinstance(payload,dict):
+                          for source,target in [('bytes_used','used_bytes'),
+                                  ('byte_limit','limit_bytes'),
+                                  ('disk_used','disk_used_raw'),
+                                  ('disk_limit','disk_limit_raw')]:
+                              value=payload.get(source)
+                              if isinstance(value,int) and value>=0:
+                                  row[target]=value
+                              elif isinstance(value,str) and value.isdigit():
+                                  row[target]=int(value)
+              except (OSError,ValueError,TypeError,subprocess.TimeoutExpired):
+                  pass
+              uapi[kind]=row
+          print('CPANEL_ACCOUNT_UAPI_READONLY='+json.dumps(uapi,sort_keys=True))
+          print('CPANEL_PASSENGER_ROOT_AND_DB_BACKEND_NOT_PROVEN=true')
+          REMOTE_ROUTE_PY
+          timeout 65s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_CAPACITY_PY'
+          """Low-priority bounded aggregate sizes only: never customer file contents."""
+          import json,os,subprocess
+          from pathlib import Path
+          home=Path('/home/zomorod2')
+          parts={
+              'django_candidate':home/'Saeit-staging',
+              'mojplaywin_public_docroot':home/'mojplaywin.com',
+              'public_html_legacy':home/'public_html',
+              'account_tmp':home/'tmp',
+          }
+          out={}
+          for label,path in parts.items():
+              record={'exists_regular_directory':False,'measurement_complete':False}
+              try:
+                  if not path.is_symlink() and path.is_dir():
+                      record['exists_regular_directory']=True
+                      probe=subprocess.run(['nice','-n','19','du','-skx',str(path)],
+                                           stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+                                           timeout=18,check=False)
+                      if probe.returncode==0 and len(probe.stdout)<4096:
+                          val=probe.stdout.decode('ascii').split()[0]
+                          record['apparent_allocated_bytes']=int(val)*1024
+                          record['measurement_complete']=True
+              except (OSError,ValueError,UnicodeError,IndexError,subprocess.TimeoutExpired):
+                  pass
+              out[label]=record
+          try:
+              p=subprocess.run(['uapi','--output=json','Mysql','list_databases'],
+                  stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=15,check=False)
+              payload=json.loads(p.stdout).get('result',{}) if p.returncode==0 and len(p.stdout)<250000 else {}
+              raw=payload.get('data')
+              dbs=raw if isinstance(raw,list) else (
+                  raw.get('databases',[]) if isinstance(raw,dict) else [])
+              sizes=[]
+              for row in dbs:
+                  value=row.get('disk_usage') if isinstance(row,dict) else None
+                  if isinstance(value,int) and value>=0: sizes.append(value)
+                  elif isinstance(value,str) and value.isdigit(): sizes.append(int(value))
+              mysql={
+                  'uapi_status_ok':payload.get('status') in (1,'1'),
+                  'db_count':len(dbs),
+                  'all_databases_have_size':len(sizes)==len(dbs),
+                  'reported_mysql_bytes_total':sum(sizes),
+                  'reported_largest_database_bytes':max(sizes) if sizes else None,
+              }
+          except (OSError,ValueError,TypeError,subprocess.TimeoutExpired):
+              mysql={'uapi_status_ok':False}
+          print('CPANEL_READONLY_CAPACITY_DISTRIBUTION='+json.dumps({
+              'measured_candidate_roots':out,
+              'mysql_account_aggregate':mysql,
+              'du_measurements_only_not_full_backup':True,
+              'no_files_deleted':True,
+              'no_db_rows_read':True,
+              'no_archives_created':True,
+              'release_permitted':False,
+          },sort_keys=True))
+          REMOTE_CAPACITY_PY
+          timeout 95s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_QUOTA_PY'
+          """Bounded read-only shallow cPanel top-level directory usage inventory."""
+          import json,os,subprocess,time
+          from pathlib import Path
+          home=Path('/home/zomorod2')
+          start=time.monotonic()
+          groups={}
+          errors=0
+          truncated=False
+          scanned=0
+          names={
+              'Saeit-staging':'candidate_django_tree',
+              'mojplaywin.com':'public_mojplaywin_docroot',
+              'public_html':'public_html_legacy',
+              'mail':'mail_storage',
+              'etc':'account_configuration',
+              'logs':'account_log_files',
+              'tmp':'account_temp_files',
+              '.trash':'account_trash',
+              '.cpanel':'cpanel_metadata',
+              '.local':'user_local_metadata',
+          }
+          def classify(name):
+              if name in names: return names[name]
+              if 'backup' in name.lower(): return 'unidentified_backup_like_directory'
+              return 'other_unclassified_directory'
+          try:
+              dirs=[]
+              with os.scandir(home) as stream:
+                  for ent in stream:
+                      if ent.is_dir(follow_symlinks=False) and not ent.is_symlink():
+                          dirs.append((ent.name,ent.path))
+                          if len(dirs)>90:
+                              truncated=True
+                              break
+              dirs.sort()
+          except OSError:
+              dirs=[]
+              truncated=True
+          for name,path in dirs:
+              if time.monotonic()-start>76:
+                  truncated=True
+                  break
+              scanned+=1
+              try:
+                  p=subprocess.run(['nice','-n','19','du','-skx',path],
+                      stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+                      timeout=18,check=False)
+                  if p.returncode!=0 or len(p.stdout)>4000:
+                      errors+=1
+                      continue
+                  allocated=int(p.stdout.decode('ascii').split()[0])*1024
+                  kind=classify(name)
+                  x=groups.setdefault(kind,{'count':0,'bytes':0,'max_single_bytes':0})
+                  x['count']+=1
+                  x['bytes']+=allocated
+                  x['max_single_bytes']=max(x['max_single_bytes'],allocated)
+              except (ValueError,UnicodeError,OSError,subprocess.TimeoutExpired,IndexError):
+                  errors+=1
+          print('CPANEL_TOPLEVEL_CLASSIFIED_DISK_USAGE_READONLY='+json.dumps({
+              'classified_usage':groups,
+              'scanned_directory_count':scanned,
+              'incomplete':bool(truncated or errors),
+              'errors_or_unreadable':errors,
+              'partial_data_may_overlap_quota_categories':True,
+              'only_directory_allocation_metadata_read':True,
+              'customer_files_or_email_contents_read':False,
+              'deleted_files':0,
+              'release_permitted':False,
+          },sort_keys=True))
+          REMOTE_QUOTA_PY
+          timeout 45s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_APACHE_PY'
+          """Verify which candidate static/backend pieces can actually handle prospect intake."""
+          from pathlib import Path
+          from html.parser import HTMLParser
+          import json,ast
+          web=Path('/home/zomorod2/mojplaywin.com')
+          app=Path('/home/zomorod2/Saeit-staging')
+          def bounded_text(path,limit=150000):
+              try:
+                  if not path.is_symlink() and path.is_file() and 0<path.stat().st_size<=limit:
+                      return path.read_text(encoding='utf-8',errors='replace')
+              except OSError:pass
+              return None
+          class Forms(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.forms=[]
+                  self.links=0
+                  self.scripts=0
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=='form':
+                      self.forms.append({'method':a.get('method','').lower(),'action':a.get('action','')})
+                  elif tag=='a':
+                      self.links+=1
+                  elif tag=='script':
+                      self.scripts+=1
+          index=bounded_text(web/'moj-prop'/'index.html')
+          parser=Forms()
+          if index is not None:
+              parser.feed(index)
+          expected=['/moj-prop-intake/','/moj-prop-interest/','/moj-prop-interest/form/',
+                    '/moj-prop-status/','moj-prop-01']
+          page={
+              'static_index_exists':index is not None,
+              'html_form_count':len(parser.forms),
+              'root_mojprop_intake_form_action_count':sum(
+                  x['action'].startswith('/moj-prop-intake/') for x in parser.forms),
+              'form_methods_post_count':sum(x['method']=='post' for x in parser.forms),
+              'client_script_tag_count':parser.scripts,
+              'known_route_markers':{name:name.lower() in (index or '').lower() for name in expected},
+              'contains_fetch_method':bool(index and 'fetch(' in index),
+          }
+          htaccess=bounded_text(web/'.htaccess',20000)
+          wsgi=bounded_text(web/'passenger_wsgi.py',16000)
+          apache={
+              'htaccess_present':htaccess is not None,
+              'passenger_app_root_mentioned':bool(htaccess and 'PassengerAppRoot' in htaccess),
+              'passenger_enabled_mentioned':bool(htaccess and 'PassengerEnabled' in htaccess),
+              'rewrite_rule_count':sum(
+                  line.strip().startswith('RewriteRule ') for line in (htaccess or '').splitlines()),
+              'static_mojprop_rule_mentioned':bool(htaccess and 'moj-prop' in htaccess),
+              'wsgi_candidate_present':wsgi is not None,
+              'wsgi_references_candidate_django_tree':bool(wsgi and 'Saeit-staging' in wsgi),
+              'wsgi_environment_configured':bool(wsgi and 'DJANGO_SETTINGS_MODULE' in wsgi),
+              'effective_request_routing_proven':False,
+          }
+          views=bounded_text(app/'core'/'mojprop_views.py')
+          features={}
+          if views is not None:
+              try:
+                  tree=ast.parse(views)
+                  funcs={x.name for x in ast.walk(tree) if isinstance(x,(ast.FunctionDef,ast.AsyncFunctionDef))}
+              except SyntaxError:
+                  funcs=set()
+              features={
+                  'source_ast_parsed':bool(funcs),
+                  'function_count':len(funcs),
+                  'has_intake_entrypoint':('mojprop_intake' in funcs),
+                  'has_receipt_status_entrypoint':('mojprop_receipt_status' in funcs),
+                  'uses_csrf_protect':'csrf_protect' in views,
+                  'has_csrf_exempt_reference':'csrf_exempt' in views,
+                  'can_decode_json':'json.loads' in views,
+                  'can_parse_form':'request.POST' in views,
+                  'has_get_token':'get_token' in views,
+                  'stores_request_model':'MojPropRequest.objects' in views,
+                  'has_prospective_html_format_mode':'format=html' in views,
+                  'source_is_actual_wsgi_app_verified':False,
+              }
+          print('CPANEL_REAL_PUBLIC_MOJPROP_PAGE_CLASSIFICATION='+json.dumps(page,sort_keys=True))
+          print('CPANEL_REAL_APACHE_PASSENGER_CONFIG_CLASSIFICATION='+json.dumps(apache,sort_keys=True))
+          print('CPANEL_REAL_LEGACY_INTAKE_SOURCE_FEATURES='+json.dumps(features,sort_keys=True))
+          print('PRIVATE_CUSTOMER_DATA_READ=false')
+          REMOTE_APACHE_PY
+          timeout 35s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_FORM_SCHEMA_PY'
+          """Inspect only published page field names and server source contract, not values."""
+          from pathlib import Path
+          from html.parser import HTMLParser
+          import json,re
+          home=Path('/home/zomorod2')
+          page=home/'mojplaywin.com'/'moj-prop'/'index.html'
+          server=home/'Saeit-staging'/'core'/'mojprop_views.py'
+          class PublicForm(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.in_form=False
+                  self.fields=[]
+                  self.form_actions=[]
+                  self.buttons=0
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=='form':
+                      self.in_form=True
+                      self.form_actions.append({
+                          'method':a.get('method','').lower(),
+                          'action_is_root_intake':a.get('action','').startswith('/moj-prop-intake/'),
+                          'has_form_id':bool(a.get('id')),
+                      })
+                  if self.in_form and tag in ('input','textarea','select'):
+                      self.fields.append({'tag':tag,'name':a.get('name',''),
+                          'id_present':bool(a.get('id')),
+                          'type':a.get('type','') if tag=='input' else ''})
+                  if self.in_form and tag=='button':
+                      self.buttons+=1
+              def handle_endtag(self,tag):
+                  if tag=='form':self.in_form=False
+          data={}
+          try:
+              raw=page.read_text(encoding='utf-8',errors='replace') if page.is_file() and not page.is_symlink() and page.stat().st_size<40000 else ''
+              p=PublicForm()
+              p.feed(raw)
+              data={
+                  'form_count':len(p.form_actions),
+                  'form_attributes':p.form_actions[:3],
+                  'form_inputs_public_names_and_types':p.fields[:26],
+                  'submit_buttons':p.buttons,
+                  'script_has_explicit_root_intake_url':'/moj-prop-intake/' in raw,
+                  'script_has_fetch_function':'fetch(' in raw,
+                  'script_has_json_stringify':'JSON.stringify(' in raw,
+                  'script_has_csrf_token_lookup':'csrf_token' in raw or 'csrfmiddlewaretoken' in raw,
+              }
+          except (OSError,ValueError,UnicodeError):
+              data={'live_public_dom_inspection_failed':True}
+          try:
+              raw=server.read_text(encoding='utf-8',errors='replace') if server.is_file() and not server.is_symlink() and server.stat().st_size<25000 else ''
+              keys=('name','email','service','horizon','notes','consent',
+                    'website','idempotency_key','product_id','csrfmiddlewaretoken')
+              data['server_source_expectations']={
+                  'source_bytes':len(raw.encode('utf-8')),
+                  'has_json_type_validation':'application/json' in raw,
+                  'has_form_payload_access':'request.POST' in raw,
+                  'has_csrf_token_generator':'get_token' in raw,
+                  'has_django_csrf_protect':'csrf_protect' in raw,
+                  'has_csrf_exempt':'csrf_exempt' in raw,
+                  'has_mojprop_request_db_write':'MojPropRequest.objects.create' in raw,
+                  'public_field_name_markers':{k:(re.search(r'(?<![a-z0-9_])'+re.escape(k)+r'(?![a-z0-9_])',raw) is not None) for k in keys},
+              }
+          except (OSError,ValueError,UnicodeError):
+              data['server_source_expectations']={'unavailable':True}
+          print('CPANEL_LIVE_PUBLIC_FORM_AND_BACKEND_CONTRACT='+json.dumps(data,sort_keys=True))
+          print('PUBLIC_FORM_VALUES_OR_CUSTOMER_RECORDS_READ=false')
+          REMOTE_FORM_SCHEMA_PY
+          echo "LOCAL_TO_CPANEL_READONLY_COMPLETED=true"
+      - name: Verify source remains operational NO-GO
+        if: always()
+        shell: bash
+        run: |
+          echo "FACTORY_SERVICES_RESTARTED=false"
+          echo "CPANEL_PASSENGER_RESTARTED=false"
+          echo "CPANEL_FILES_MODIFIED=false"
+          echo "BROKER_ORDERS_SUBMITTED=false"
+          echo "TRX_PAYMENTS_COLLECTED=false"
+          echo "BACKUP_CREATED=false"
+          echo "PRODUCTION_SQL_MIGRATED=false"
+          echo "RELEASE_APPROVED=false"

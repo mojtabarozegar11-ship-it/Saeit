@@ -1,0 +1,117 @@
+name: MOJ PROP — VPS owner loopback SSH metadata only (NO DEPLOY)
+on:
+  push:
+    branches: [audit/mojprop-v141-selfhosted-relay-live-inventory-20261117]
+    paths: [.github/workflows/mojprop-v141-vps-loopback-owner-readonly.yml]
+permissions: {contents: read}
+jobs:
+  loopback-audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 3
+    steps:
+      - name: Read-only authenticated local SSH to original githubops account
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubrunner
+          test -d /home/githubops/factory-runtime
+          test -n "${VPS_KEY:-}"
+          d="$RUNNER_TEMP/mojprop-loopback-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/key" "$d/known"; rmdir "$d" 2>/dev/null || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null 2>&1
+          timeout 10s ssh-keyscan -T 6 -t rsa 127.0.0.1 > "$d/known" 2>/dev/null || true
+          fp="$(ssh-keygen -lf "$d/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+          if test "$fp" != 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'; then
+            echo 'VPS_OWNER_LOOPBACK=BLOCKED_TCP_OR_HOST_KEY'
+            exit 1
+          fi
+          echo 'VPS_OWNER_LOOPBACK_KEY=verified'
+          timeout 25s ssh -T -i "$d/key" \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o ForwardAgent=no \
+            -o ConnectTimeout=7 githubops@127.0.0.1 \
+            'test "$(id -un)" = githubops && PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'PY'
+          import json,os,re,stat,time
+          from pathlib import Path
+          h=Path.home();root=h/'.private-mojplaywin-offhost-backups'
+          key=h/'.config'/'mojplaywin-backup-recovery'/'recovery-key.bin'
+          def private(p,dir=False):
+              try:
+                  s=p.lstat()
+                  return s.st_uid==os.geteuid() and not s.st_mode & (0o077 if dir else 0o177) and (stat.S_ISDIR(s.st_mode) if dir else stat.S_ISREG(s.st_mode))
+              except OSError:return False
+          sets={};partial=0;count=0;complete=False
+          if private(root,True):
+              try:
+                  for p in root.iterdir():
+                      count+=1
+                      if count>3000:break
+                      if p.name.endswith('.partial'):partial+=1
+                      m=re.fullmatch(r'(mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16})_(mysql|files)_gpgv2\.(gpg|manifest\.json)',p.name)
+                      if m and private(p):
+                          sets.setdefault(m.group(1),set()).add((m.group(2),m.group(3)))
+                  complete=count<=3000
+              except OSError:pass
+          expected={('mysql','gpg'),('files','gpg'),('mysql','manifest.json'),('files','manifest.json')}
+          manifest_pairs=[]
+          expected={('mysql','gpg'),('files','gpg'),('mysql','manifest.json'),('files','manifest.json')}
+          for stem,parts in sets.items():
+              if not expected<=parts:continue
+              verified=True
+              total_cipher=0
+              oldest=time.time()
+              for kind in ('mysql','files'):
+                  archive=root/(stem+'_'+kind+'_gpgv2.gpg')
+                  manifest=root/(stem+'_'+kind+'_gpgv2.manifest.json')
+                  if not private(archive) or not private(manifest):
+                      verified=False;break
+                  try:
+                      if manifest.stat().st_size>32768:
+                          verified=False;break
+                      record=json.loads(manifest.read_text(encoding='utf-8'))
+                      maxbytes=48*1024**3 if kind=='mysql' else 12*1024**3
+                      if not all((
+                          record.get('kind')==kind,
+                          record.get('format')=='OpenPGP-AES256-GPGv2',
+                          record.get('backup_set_stem')==stem,
+                          record.get('explicit_backup_set_id') is True,
+                          record.get('source_completion_footer_verified') is True,
+                          record.get('ciphertext_roundtrip_integrity_verified') is True,
+                          record.get('archive_name')==archive.name,
+                          record.get('encrypted_bytes')==archive.stat().st_size,
+                          type(record.get('plaintext_bytes')) is int,
+                          1024<=record.get('plaintext_bytes',0)<=maxbytes,
+                          isinstance(record.get('plaintext_sha256'),str),
+                          re.fullmatch('[0-9a-f]{64}',record.get('plaintext_sha256','')) is not None,
+                          record.get('release_permitted') is False
+                      )):
+                          verified=False;break
+                      total_cipher+=archive.stat().st_size
+                      oldest=min(oldest,archive.stat().st_mtime,manifest.stat().st_mtime)
+                  except (OSError,ValueError,TypeError):
+                      verified=False;break
+              if verified:
+                  manifest_pairs.append({'age_hours':round(max(0,time.time()-oldest)/3600,2),
+                                         'total_cipher_bytes':total_cipher})
+          fresh=sum(0<=x['age_hours']<=72 for x in manifest_pairs)
+          print('MOJPROP_PRIVATE_VPS_BACKUP_METADATA='+json.dumps({
+            'private_root_accessible':private(root,True),'inventory_complete':complete,
+            'file_sets_with_four_parts':sum(expected<=x for x in sets.values()),
+            'manifest_consistent_sql_and_files_pair_count':len(manifest_pairs),
+            'fresh_manifest_consistent_pair_count_last72h':fresh,
+            'newest_valid_pair_age_hours':min((x['age_hours'] for x in manifest_pairs),default=None),
+            'maximum_valid_pair_total_encrypted_bytes':max((x['total_cipher_bytes'] for x in manifest_pairs),default=None),
+            'candidate_set_count':len(sets),'partial_files_count':partial,
+            'private_32byte_recovery_key_metadata':private(key) and key.stat().st_size==32 if private(key) else False,
+            'backup_content_or_key_bytes_read':False,'isolated_restore_proven':False,
+            'release_permitted':False,
+          },sort_keys=True))
+          PY
+          echo 'VPS_OWNER_LOOPBACK_READONLY_COMPLETED=true'
