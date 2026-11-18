@@ -1,0 +1,31 @@
+name: Factory OFF Nov5-B gzip staging OFFLINE safety 7 tests
+on:
+  pull_request:
+    paths:
+      - 'scripts/factory_cpanel_nov5_stage_two_gzip_20261118.py'
+      - 'tests/test_factory_cpanel_nov5_stage_two_gzip_20261118.py'
+      - '.github/workflows/factory-off-nov5-b-stage-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Seven fail-closed gzip stage cases, no production access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/factory_cpanel_nov5_stage_two_gzip_20261118.py)" = '0e2a7452ee95b943916ce3a9ec82692d4769ebe5'
+          test "$(git hash-object tests/test_factory_cpanel_nov5_stage_two_gzip_20261118.py)" = 'd85cfc7eccd62f07b9f31b3b2cbdafb1be22f531'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_cpanel_nov5_stage_two_gzip_20261118.py' -q
+          echo FACTORY_NOV5_B_STAGE_SEVEN_TESTS_PASS=true
+          echo FACTORY_NEW_BACKUPS_CREATED=0
+          echo FACTORY_RAW_BACKUPS_DELETED=0
