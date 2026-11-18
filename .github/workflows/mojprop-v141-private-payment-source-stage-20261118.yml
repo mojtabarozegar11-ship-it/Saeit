@@ -27,7 +27,7 @@ jobs:
       - name: Checkout independently tested MOJ PROP payment source by exact immutable SHA
         uses: actions/checkout@v4
         with:
-          ref: a07c6a69847732087fefd3116806a2b2a57037b0
+          ref: c18dd88092cebd465f4adc099ccfc3dfdf62b684
           path: native-source
           persist-credentials: false
           fetch-depth: 1
@@ -38,6 +38,8 @@ jobs:
             core/mojprop_v141_private_portfolio_view.py
             core/mojprop_v141_private_statement_view.py
             services/mojprop_commercial_lanes.py
+            core/__init__.py
+            mojprop_isolated
             templates/mojprop
             config/settings.py
             config/urls.py
@@ -56,6 +58,8 @@ jobs:
             core/mojprop_v141_private_portfolio_view.py
             core/mojprop_v141_private_statement_view.py
             services/mojprop_commercial_lanes.py
+            core/__init__.py
+            mojprop_isolated
             templates/mojprop
             config/settings.py
             config/urls.py
@@ -63,8 +67,8 @@ jobs:
           for item in "${items[@]}"; do
             test -e "$src/$item" && test ! -L "$src/$item"
           done
-          test "$(find "$src/prop_firm" "$src/templates/mojprop" -type l | wc -l)" -eq 0
-          python3 -m py_compile             "$src/prop_firm/plan1_v141_native_checkout.py"             "$src/prop_firm/plan1_v141_native_watcher.py"             "$src/prop_firm/management/commands/mojprop_reconcile_native_trx.py"             "$src/core/mojprop_v141_native_receipt_view.py"             "$src/services/mojprop_commercial_lanes.py"
+          test "$(find "$src/prop_firm" "$src/mojprop_isolated" "$src/templates/mojprop" -type l | wc -l)" -eq 0
+          python3 -m py_compile             "$src/prop_firm/plan1_v141_native_checkout.py"             "$src/prop_firm/plan1_v141_native_watcher.py"             "$src/prop_firm/management/commands/mojprop_reconcile_native_trx.py"             "$src/core/mojprop_v141_native_receipt_view.py"             "$src/services/mojprop_commercial_lanes.py"             "$src/mojprop_isolated/settings.py"             "$src/mojprop_isolated/urls.py"             "$src/mojprop_isolated/wsgi.py"
           bundle="$RUNNER_TEMP/mojprop-native-b06144039.tar.gz"
           tar -czf "$bundle" -C "$src" "${items[@]}"
           bytes="$(stat -c '%s' "$bundle")"
@@ -73,7 +77,7 @@ jobs:
           test "${#sum}" -eq 64
           echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
           echo "sha256=$sum" >> "$GITHUB_OUTPUT"
-          echo "STAGE_SOURCE_PIN=a07c6a69847732087fefd3116806a2b2a57037b0"
+          echo "STAGE_SOURCE_PIN=c18dd88092cebd465f4adc099ccfc3dfdf62b684"
           echo "STAGE_BUNDLE_KIB=$(( (bytes+1023)/1024 ))"
       - name: Deliver exact source to a NEW PRIVATE nonweb cPanel staging directory only
         shell: bash
@@ -97,6 +101,6 @@ jobs:
           test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
           run_id="$GITHUB_RUN_ID"
           [[ "$run_id" =~ ^[0-9]{8,20}$ ]]
-          remote="set -eu; umask 077; test \"\$(id -un)\" = 'zomorod2'; target='/home/zomorod2/.mojprop-private-payment-stage-$run_id'; test ! -e \"\$target\" && test ! -L \"\$target\"; mkdir -m 700 \"\$target\"; cat > \"\$target/source.tar.gz\"; test \"\$(sha256sum \"\$target/source.tar.gz\" | awk '{print \$1}')\" = '$DIGEST'; tar -xzf \"\$target/source.tar.gz\" -C \"\$target\" --no-same-owner; test -f \"\$target/prop_firm/plan1_v141_native_checkout.py\"; test -f \"\$target/prop_firm/plan1_v141_native_watcher.py\"; test -f \"\$target/core/mojprop_v141_native_receipt_view.py\"; chmod 700 \"\$target\"; echo PRIVATE_STAGING_INSTALLED=true; echo PRODUCTION_APP_FILES_MODIFIED=false; echo DATABASE_MIGRATION_PERFORMED=false; echo CUSTOMER_PAYMENT_ENABLED=false"
+          remote="set -eu; umask 077; test \"\$(id -un)\" = 'zomorod2'; target='/home/zomorod2/.mojprop-private-payment-stage-$run_id'; test ! -e \"\$target\" && test ! -L \"\$target\"; mkdir -m 700 \"\$target\"; cat > \"\$target/source.tar.gz\"; test \"\$(sha256sum \"\$target/source.tar.gz\" | awk '{print \$1}')\" = '$DIGEST'; tar -xzf \"\$target/source.tar.gz\" -C \"\$target\" --no-same-owner; test -f \"\$target/prop_firm/plan1_v141_native_checkout.py\"; test -f \"\$target/prop_firm/plan1_v141_native_watcher.py\"; test -f \"\$target/core/mojprop_v141_native_receipt_view.py\"; test -f \"\$target/mojprop_isolated/wsgi.py\"; test -f \"\$target/mojprop_isolated/settings.py\"; chmod 700 \"\$target\"; echo PRIVATE_STAGING_INSTALLED=true; echo PRODUCTION_APP_FILES_MODIFIED=false; echo DATABASE_MIGRATION_PERFORMED=false; echo CUSTOMER_PAYMENT_ENABLED=false"
           timeout 100s ssh -T -i "$dir/key" -p 1396             -o UserKnownHostsFile="$dir/known" -o StrictHostKeyChecking=yes             -o IdentitiesOnly=yes -o BatchMode=yes -o ForwardAgent=no             -o RequestTTY=no -o ConnectTimeout=15 -o ConnectionAttempts=1             zomorod2@178.239.147.125 "$remote" < "$BUNDLE"
           echo "STAGED_CODE_PRIVATE_ONLY_NOT_PUBLIC_PAYMENT=true" >> "$GITHUB_STEP_SUMMARY"
