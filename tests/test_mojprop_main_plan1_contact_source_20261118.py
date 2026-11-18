@@ -94,9 +94,18 @@ class MainlinePlanOneContactGuards(unittest.TestCase):
         self.assertNotIn("/moj-prop-interest/form/", self.text)
         self.assertNotIn("/moj-prop/plan1/", self.plan)
 
-    def test_14_no_broken_nojs_get_link(self):
-        self.assertFalse(any(x.startswith("/moj-prop-intake/?format=html")
-                             for x in self.doc.links))
+    def test_14_nojs_request_fallback_survives_mainline_migration(self):
+        # The Django GET route is covered by existing CSRF/no-JS regression
+        # tests; retain discoverability and a separate support fallback.
+        self.assertIn("/moj-prop-intake/?format=html", self.doc.links)
+        self.assertIn(
+            "/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx",
+            self.doc.links,
+        )
+        self.assertIn("/moj-prop/contact/", self.doc.links)
+        # Plan1 free information must still use the published support route,
+        # never silently turn a generic service inquiry into paid enrollment.
+        self.assertNotIn("/moj-prop-intake/?format=html", self.plan)
 
     def test_15_status_form_hidden_until_actual_api_release(self):
         attrs = self.doc.forms["status-form"]
