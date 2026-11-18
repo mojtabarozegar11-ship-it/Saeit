@@ -1,0 +1,69 @@
+name: MOJ PROP — REAL first RSA3072 off-cPanel backup (NO DEPLOY)
+on:
+  push:
+    branches: [backup/mojprop-private-first-rsa-offhost-20261118]
+    paths: [.github/workflows/mojprop-v141-real-owner-rsa-offhost-first-snapshot-20261118.yml]
+permissions: {contents: read}
+concurrency:
+  group: mojprop-owner-first-rsa-offhost-20261118
+  cancel-in-progress: false
+jobs:
+  secure-first-real-backup:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify pinned code and owner RSA recovery key
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -u)" -ne 0
+          test "$(git hash-object scripts/mojprop_v141_stream_existing_empty_snapshot_readonly_20261118.py)" = "e4f766549cc013a5f5789c53d9455c1b2522068d"
+          test "$(git hash-object scripts/mojprop_v141_first_empty_owner_rsa_offhost_20261118.py)" = "a66294ed9118181b85972a7678a26a7985d64323"
+          test "$(git hash-object security/factory_recovery_public_20261030.pem)" = "cd52ee161ea042793600fbd8d7b70f940aced373"
+          python3 -B - <<'PY'
+          import pathlib
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+          for n in ("scripts/mojprop_v141_stream_existing_empty_snapshot_readonly_20261118.py", "scripts/mojprop_v141_first_empty_owner_rsa_offhost_20261118.py"):
+              compile(pathlib.Path(n).read_text("utf8"), n, "exec")
+          print("OWNER_ENCRYPTION_CODE_PINNED=true")
+          PY
+      - name: Stream private EMPTY SQLite cPanel to owner VPS RSA-encrypted archive
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?CPANEL_OWNER_SSH_KEY_NOT_PRESENT}"
+          umask 077
+          dir="$RUNNER_TEMP/mojprop-offhost-rsa-$GITHUB_RUN_ID"
+          install -d -m 700 "$dir"
+          trap 'rm -f -- "$dir/key" "$dir/known"; rmdir "$dir" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$dir/key"
+          chmod 600 "$dir/key"
+          ssh-keygen -y -P '' -f "$dir/key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$dir/known"
+          chmod 600 "$dir/known"
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 120s ssh -T -i "$dir/key" -p 1396 \
+            -o UserKnownHostsFile="$dir/known" -o StrictHostKeyChecking=yes \
+            -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes \
+            -o BatchMode=yes -o ForwardAgent=no -o RequestTTY=no \
+            -o ConnectTimeout=15 -o ConnectionAttempts=1 \
+            zomorod2@178.239.147.125 \
+            'test "$(id -un)" = zomorod2; exec python3 -B -' \
+            < scripts/mojprop_v141_stream_existing_empty_snapshot_readonly_20261118.py \
+            | PYTHONDONTWRITEBYTECODE=1 python3 -B -m scripts.mojprop_v141_first_empty_owner_rsa_offhost_20261118 \
+            | python3 -B -c 'import json,sys;s=sys.stdin.read(10000);rows=[x for x in s.splitlines() if x.startswith("MOJPROP_OWNER_OFFHOST_RSA_BACKUP=")];holds=[x for x in s.splitlines() if x.startswith("MOJPROP_OWNER_OFFHOST_RSA_BACKUP_HOLD=")];print("MOJPROP_TRANSFER_DIAGNOSTIC="+(holds[0][:120] if holds else "NO_SUCCESS_RECEIPT") if len(rows)!=1 else "MOJPROP_TRANSFER_DIAGNOSTIC=SUCCESS");assert len(rows)==1, "NO_SUCCESS_RECEIPT";p=json.loads(rows[0].split("=",1)[1]);print(rows[0]);assert all(p.get(k) is True for k in ("backup_saved_private_vps_owner","local_encrypted_roundtrip_verified","local_sqlite_integrity_and_empty_paid_rows_verified","owner_rsa3072_recovery_public_key_pinned"));assert all(p.get(k) is False for k in ("independent_owner_private_key_restore_proven","two_google_drive_mirrors_uploaded","factory_started","production_mariadb_accessed","public_site_deployed","tron_funds_received","original_source_deleted"))'
+          echo MOJPROP_REAL_EMPTY_MERCHANT_ENCRYPTED_BACKUP_ON_OWNER_VPS=true
+      - name: Explicit no-billing no-production change
+        if: always()
+        run: |
+          echo NO_GITHUB_ARTIFACT_CREATED=true
+          echo NO_GDRIVE_UPLOAD_CLAIM=true
+          echo NO_MYSQL_ACCESS=true
+          echo NO_FACTORY_START=true
+          echo NO_PAYMENT_COLLECTION=true
+          echo NO_DELETION=true
