@@ -1,0 +1,36 @@
+name: MOJ PROP exact amended copy digest review only
+on:
+  push:
+    branches: [audit/mojprop-plan1-contract-digest-20261119]
+    paths: ['.github/workflows/mojprop-plan1-contract-digest-review-20261119.yml']
+permissions:
+  contents: read
+jobs:
+  review:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/audit/mojprop-plan1-contract-digest-20261119'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: d72eb6855dc42ec8524497351981fce520f1b2cb
+          persist-credentials: false
+      - name: Verify exact source and emit information-only digest
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = d72eb6855dc42ec8524497351981fce520f1b2cb
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_owner_account_buyer_copy.py' -v
+          python3 -B - <<'PY'
+          import json
+          from prop_firm.plan1_owner_account_buyer_copy import current_owner_account_buyer_copy
+          from prop_firm.plan1_buyer_no_social_amendment import current_plan1_buyer_copy
+          from prop_firm.plan1_owner_held_litefinance_policy import owner_held_real_account_policy
+          from prop_firm.order_readiness import PREPURCHASE_DISCLOSURES
+          from prop_firm.rules import POLICY
+          c=current_owner_account_buyer_copy()
+          p=owner_held_real_account_policy()
+          assert not c.payment_enabled and not c.invoice_enabled
+          disclosure=" ".join(PREPURCHASE_DISCLOSURES)
+          conflict=("in total across both" in c.en and "in EACH of the two" in disclosure)
+          print("COPY_REVIEW="+json.dumps({"source":"d72eb6855dc42ec8524497351981fce520f1b2cb","copy_digest":c.digest_sha256,"prior_copy_digest":current_plan1_buyer_copy().digest_sha256,"broker_policy_digest":p.digest_sha256,"copy_trade_scope":"combined" if "in total across both" in c.en else "other","prepurchase_trade_scope":"each" if "in EACH of the two" in disclosure else "other","engine_min_closed_trades_per_challenge":POLICY.min_closed_trades_per_challenge,"rule_conflict":conflict,"signed_buyer_contract":False,"production_setting_changed":False,"payable":False},sort_keys=True))
+          PY
