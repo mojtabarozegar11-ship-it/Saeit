@@ -1,0 +1,81 @@
+name: PICM bounded residual census (NO DELETE)
+on:
+  push:
+    branches: [audit/picm-residual-census-20261118]
+    paths: ['.github/workflows/picm-residual-census.yml']
+permissions:
+  contents: read
+jobs:
+  census:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/audit/picm-residual-census-20261118'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - name: Fixed metadata census on VPS and cPanel without target writes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          CPANEL_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubrunner
+          d="$(mktemp -d "$RUNNER_TEMP/picm-census.XXXXXXXX")"
+          trap 'rm -f "$d/vkey" "$d/ckey" "$d/vknown" "$d/cknown" "$d/census.py"; rmdir "$d" 2>/dev/null || true' EXIT
+          for pair in VPS_KEY:vkey CPANEL_KEY:ckey; do
+            var="${pair%:*}"; dest="${pair#*:}"
+            test -n "${!var}"
+            printf '%s' "${!var}" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/$dest"
+            chmod 600 "$d/$dest"
+            ssh-keygen -y -P '' -f "$d/$dest" >/dev/null 2>&1
+          done
+          unset VPS_KEY CPANEL_KEY
+          cat > "$d/census.py" <<'PY'
+          import json, os, stat, pwd
+          from pathlib import Path
+          user=pwd.getpwuid(os.geteuid()).pw_name
+          if user not in ("githubops","zomorod2"):
+              raise SystemExit("unexpected identity")
+          home=Path.home()
+          candidates={
+              "queue":home/".picm-queue",
+              "dedicated_runtime":home/".local/share/saeit-picm",
+              "private_media_unclassified":home/".private-media-library",
+              "old_removal_backups":home/".mojplaywin-backups/picm-removal",
+          }
+          if user=="zomorod2":
+              root=home/"Saeit-staging"
+              candidates.update({
+                  "picm_templates":root/"templates/picm",
+                  "picm_gpu":root/"ops/picm-gpu",
+                  "picm_vps":root/"ops/picm-vps",
+                  "picm_access":root/"core/picm_access.py",
+                  "picm_auth":root/"core/picm_auth.py",
+                  "picm_storyboard":root/"core/picm_storyboard.py",
+                  "picm_views":root/"core/picm_views.py",
+                  "public_picm":home/"mojplaywin.com/picm",
+              })
+          def inspect(p):
+              cur=home
+              try:
+                  for part in p.relative_to(home).parts:
+                      cur=cur/part
+                      s=cur.lstat()
+                      if stat.S_ISLNK(s.st_mode):
+                          return "symlink_refused"
+                  if s.st_uid != os.geteuid():
+                      return "other_owner"
+                  return "directory" if stat.S_ISDIR(s.st_mode) else "file" if stat.S_ISREG(s.st_mode) else "other"
+              except FileNotFoundError:
+                  return "absent"
+              except OSError:
+                  return "unknown"
+          result={k:inspect(p) for k,p in candidates.items()}
+          print("PICM_CENSUS="+json.dumps({"role":"vps" if user=="githubops" else "cpanel","fixed_candidates":result,"exhaustive":False,"content_read":False,"deleted":0},sort_keys=True))
+          PY
+          timeout 12s ssh-keyscan -T 7 -t rsa 127.0.0.1 > "$d/vknown" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vknown" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 30s ssh -T -i "$d/vkey" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vknown" -o GlobalKnownHostsFile=/dev/null -o BatchMode=yes -o IdentitiesOnly=yes -o ClearAllForwardings=yes -o ConnectTimeout=8 githubops@127.0.0.1 'test "$(id -un)" = githubops && PYTHONDONTWRITEBYTECODE=1 python3 -B -' < "$d/census.py"
+          timeout 14s ssh-keyscan -T 9 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/cknown" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/cknown" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 30s ssh -T -p 1396 -i "$d/ckey" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/cknown" -o GlobalKnownHostsFile=/dev/null -o BatchMode=yes -o IdentitiesOnly=yes -o ClearAllForwardings=yes -o ConnectTimeout=8 zomorod2@zohal.pws-dns.net 'test "$(id -un)" = zomorod2 && PYTHONDONTWRITEBYTECODE=1 python3 -B -' < "$d/census.py"
