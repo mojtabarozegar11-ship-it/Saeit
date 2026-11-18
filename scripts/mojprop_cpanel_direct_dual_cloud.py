@@ -175,7 +175,6 @@ def _ssh_guard(config_path: Path) -> None:
         "proxyjump", "stricthostkeychecking", "identitiesonly", "batchmode",
         "connecttimeout", "connectionattempts", "serveraliveinterval",
         "serveralivecountmax", "forwardagent", "requesttty",
-        "controlmaster", "controlpath", "controlpersist",
     }
     sections: dict[str, dict[str, str]] = {}
     current = None
@@ -199,12 +198,22 @@ def _ssh_guard(config_path: Path) -> None:
         if any(x in value for x in ("$", "`", ";", "\n", "\r", "%", "|")):
             raise BackupHold("DYNAMIC_SSH_CONFIG_VALUE")
         sections[current][name] = value
-    host = sections.get(REQUIRED_HOST_ALIAS, {})
-    relay = sections.get("saeit-vps", {})
-    shared = sections.get("*", {})
-    effective = dict(shared)
-    effective.update(host)
-    checks = {
+    if REQUIRED_HOST_ALIAS not in sections or "saeit-vps" not in sections:
+        raise BackupHold("MISSING_EXPLICIT_SSH_HOST_BLOCK")
+
+    # OpenSSH's *first matching value wins*: a leading Host * block may
+    # shadow a more specific alias. Never pretend that a later value wins.
+    def effective_for(alias):
+        resolved = {}
+        for match_name, options in sections.items():
+            if match_name in (alias, "*"):
+                for key, val in options.items():
+                    resolved.setdefault(key, val)
+        return resolved
+
+    effective = effective_for(REQUIRED_HOST_ALIAS)
+    relay = effective_for("saeit-vps")
+    expected_primary = {
         "hostname": "178.239.147.125",
         "user": "zomorod2",
         "port": "1396",
@@ -214,18 +223,29 @@ def _ssh_guard(config_path: Path) -> None:
         "batchmode": "yes",
         "forwardagent": "no",
     }
-    if any(effective.get(k, "").lower() != v.lower()
-           for k, v in checks.items()):
+    expected_relay = {
+        "hostname": "178.239.147.150",
+        "user": "githubops",
+        "port": "22",
+        "stricthostkeychecking": "yes",
+        "identitiesonly": "yes",
+        "batchmode": "yes",
+        "forwardagent": "no",
+    }
+    if any(effective.get(k, "").lower() != v
+           for k, v in expected_primary.items()):
         raise BackupHold("SSH_IDENTITY_CONTRACT_MISMATCH")
-    if (relay.get("hostname") != "178.239.147.150"
-            or relay.get("user") != "githubops"
-            or relay.get("port") != "22"
-            or not effective.get("identityfile", "").startswith("/")
-            or not effective.get("userknownhostsfile", "").startswith("/")):
-        raise BackupHold("SSH_RELAY_OR_PINNED_KEY_MISSING")
-    for key in ("identityfile", "userknownhostsfile"):
-        if not relay.get(key, "").startswith("/"):
-            raise BackupHold("SSH_RELAY_PINNED_KEY_MISSING")
+    if any(relay.get(k, "").lower() != v
+           for k, v in expected_relay.items()):
+        raise BackupHold("SSH_RELAY_IDENTITY_CONTRACT_MISMATCH")
+    if (relay.get("proxyjump") or
+            effective.get("requesttty", "no").lower() != "no" or
+            relay.get("requesttty", "no").lower() != "no"):
+        raise BackupHold("NESTED_SSH_PROXY_OR_INTERACTIVE_TTY_DENIED")
+    for ident in (effective, relay):
+        for key in ("identityfile", "userknownhostsfile"):
+            if not ident.get(key, "").startswith("/"):
+                raise BackupHold("SSH_PINNED_IDENTITY_OR_KNOWN_HOSTS_MISSING")
     _verify_pinned_host_key(
         Path(effective["userknownhostsfile"]),
         "[178.239.147.125]:1396",
