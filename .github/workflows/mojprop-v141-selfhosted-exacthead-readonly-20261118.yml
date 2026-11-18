@@ -1,0 +1,169 @@
+name: MOJ PROP — existing factory VPS relay exact-head read-only audit (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - audit/mojprop-v141-readonly-production-restore-gates-20261117
+    paths:
+      - .github/workflows/mojprop-v141-selfhosted-exacthead-readonly-20261118.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-selfhosted-exacthead-readonly-20261118
+  cancel-in-progress: false
+
+jobs:
+  relay-audit:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/audit/mojprop-v141-readonly-production-restore-gates-20261117'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout exact source without write credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Prove bounded non-root runner identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          user="$(id -un)"
+          uid="$(id -u)"
+          case "$user" in githubrunner|githubops) ;; *) echo "RUNNER_IDENTITY=BLOCKED_UNEXPECTED_USER"; exit 1 ;; esac
+          test "$uid" != "0"
+          test -d /home/githubops/factory-runtime
+          echo "RUNNER_USER=$user"
+          echo "RUNNER_UID=$uid"
+          echo "RUNNER_ROOT=false"
+          echo "FACTORY_RUNTIME_ROOT_PRESENT=true"
+          echo "REMOTE_WRITE=false"
+
+      - name: Run source-only regression checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 --version
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v             tests.test_mojprop_v141_real_backup_and_code_preflight             tests.test_mojprop_v141_live_unpaid_prospect_readonly
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile             scripts/mojprop_v141_offhost_pair_metadata_readonly.py             scripts/mojprop_v141_live_unpaid_prospect_readonly.py
+          echo "SOURCE_CONTRACT_TESTS=PASS"
+
+      - name: Inspect public unpaid routes with GET only
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          PYTHONDONTWRITEBYTECODE=1 python3 -B             scripts/mojprop_v141_live_unpaid_prospect_readonly.py
+          rc=$?
+          echo "PUBLIC_GET_ONLY_EXIT=$rc"
+          echo "PUBLIC_POST_SUBMITTED=false"
+          echo "PUBLIC_CUSTOMER_CREATED=false"
+          echo "PUBLIC_PAYMENT_COLLECTED=false"
+          exit 0
+
+      - name: Authenticate cPanel through existing pinned relay, read metadata only
+        shell: bash
+        continue-on-error: true
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "${HOST_KEY:-}" ]]; then
+            echo "CPANEL_RELAY=BLOCKED_SECRET_UNSET"
+            exit 1
+          fi
+          d="$RUNNER_TEMP/mojprop-exacthead-cpanel"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/key" "$d/known"; rmdir "$d" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null 2>&1
+          timeout 15s ssh-keyscan -T 9 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null || true
+          fp="$(ssh-keygen -lf "$d/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+          if [[ "$fp" != 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' ]]; then
+            echo "CPANEL_RELAY=BLOCKED_UNREACHABLE_OR_HOST_KEY_MISMATCH"
+            exit 1
+          fi
+          echo "CPANEL_HOST_KEY=VERIFIED"
+          sshcmd=(ssh -T -p 1396 -i "$d/key"             -o UserKnownHostsFile="$d/known"             -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes             -o BatchMode=yes -o ForwardAgent=no -o ConnectTimeout=10             -o ServerAliveInterval=5 -o ServerAliveCountMax=2             zomorod2@zohal.pws-dns.net)
+          timeout 25s "${sshcmd[@]}" 'test "$(id -un)" = zomorod2' >/dev/null
+          echo "CPANEL_AUTH=VERIFIED"
+          timeout 50s "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_PY'
+          import hashlib,json,os,stat,subprocess
+          from pathlib import Path
+          home=Path("/home/zomorod2")
+          root=home/"Saeit-staging"
+          public=home/"mojplaywin.com"
+          named={
+            "urlconf":root/"config/urls.py",
+            "legacy_intake":root/"core/mojprop_views.py",
+            "legacy_accessible_intake":root/"core/mojprop_accessible_intake.py",
+            "candidate_mojprop_views":root/"core/moj_prop_views.py",
+            "passenger_wsgi":public/"passenger_wsgi.py",
+          }
+          files={}
+          for name,path in named.items():
+            try:
+              st=path.lstat()
+              ok=stat.S_ISREG(st.st_mode) and not stat.S_ISLNK(st.st_mode) and st.st_size<=131072
+              row={"present":bool(ok)}
+              if ok:
+                row["bytes"]=st.st_size
+                row["sha256"]=hashlib.sha256(path.read_bytes()).hexdigest()
+                if name=="urlconf":
+                  text=path.read_text(encoding="utf-8",errors="replace")
+                  row.update({
+                    "legacy_intake_route":"moj-prop-intake/" in text,
+                    "legacy_status_route":"moj-prop-status/" in text,
+                    "v141_info_route":"moj-prop-v141-info/" in text,
+                    "v141_statement_route":"moj-prop-v141/statement/" in text,
+                    "new_interest_route":"moj-prop-interest/form/" in text,
+                  })
+              files[name]=row
+            except OSError:
+              files[name]={"present":False}
+          uapi={}
+          for kind,module,action in (("quota","Quota","get_local_quota_info"),("mysql","Mysql","list_databases"),("passenger","PassengerApps","list_applications")):
+            row={"status_ok":False}
+            try:
+              p=subprocess.run(["uapi","--output=json",module,action],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=15,check=False)
+              data=json.loads(p.stdout).get("result",{})
+              row["status_ok"]=data.get("status") in (1,"1")
+              payload=data.get("data")
+              if kind=="mysql" and row["status_ok"]:
+                seq=payload if isinstance(payload,list) else payload.get("databases",[]) if isinstance(payload,dict) else []
+                row["database_count"]=len(seq) if isinstance(seq,list) else None
+              if kind=="passenger" and row["status_ok"]:
+                seq=payload if isinstance(payload,list) else payload.get("applications",[]) if isinstance(payload,dict) else []
+                row["application_count"]=len(seq) if isinstance(seq,list) else None
+              if kind=="quota" and row["status_ok"] and isinstance(payload,dict):
+                for source,target in (("bytes_used","used_bytes"),("byte_limit","limit_bytes")):
+                  value=payload.get(source)
+                  if isinstance(value,int) and value>=0: row[target]=value
+                  elif isinstance(value,str) and value.isdigit(): row[target]=int(value)
+            except (OSError,ValueError,TypeError,subprocess.TimeoutExpired):
+              pass
+            uapi[kind]=row
+          print("CPANEL_READONLY_METADATA="+json.dumps({"source_root":str(root),"files":files,"uapi":uapi,"db_rows_read":False,"production_modified":False,"release_authorized":False},sort_keys=True))
+          REMOTE_PY
+          echo "CPANEL_REMOTE_WRITE=false"
+          echo "CPANEL_DB_ROWS_READ=false"
+
+      - name: Final fail-closed release assertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "BACKUP_CREATED=false"
+          echo "RESTORE_PERFORMED=false"
+          echo "PRODUCTION_DB_MIGRATED=false"
+          echo "CUSTOMER_TRX_COLLECTED=false"
+          echo "BROKER_ORDER_SUBMITTED=false"
+          echo "PUBLIC_DEPLOYMENT_PERFORMED=false"
+          echo "RELEASE_AUTHORIZED=false"
+          echo "AUDIT_MODE=READ_ONLY"
