@@ -1,0 +1,83 @@
+name: PR2721 full workflow trigger census (source only)
+on:
+  push:
+    branches: [audit/mojprop2721-merge-impact-20261118]
+    paths: ['.github/workflows/audit-pr2721-merge-impact-20261118.yml']
+permissions:
+  contents: read
+jobs:
+  census:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/audit/mojprop2721-merge-impact-20261118'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 8a2a5817ad5d017ab37254b3c66ccbf2d6e00c8e
+          persist-credentials: false
+      - name: Inspect YAML as data only; no project code or external target execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I -B - <<'PY'
+          import fnmatch,json,pathlib,re,subprocess
+          import yaml
+          base="87b552e6c60e36780d1d0834fa0e2f3d9b47faaf"
+          head="8a2a5817ad5d017ab37254b3c66ccbf2d6e00c8e"
+          assert subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip()==head
+          changed=[".github/workflows/mojprop-main-real-plan1-first-contact-gate-20261118.yml","templates/moj-prop-v4/index.html","tests/test_mojprop_main_plan1_contact_source_20261118.py"]
+          paths=sorted(p for p in pathlib.Path(".github/workflows").iterdir() if p.suffix in (".yml",".yaml"))
+          candidates=[]; errors=[]; counts={}
+          def seq(x):
+              return x if isinstance(x,list) else [x] if isinstance(x,str) else []
+          def possible_filter(include,exclude,values):
+              # Overinclude negatives, unfamiliar GitHub glob operators, and exclusions.
+              patterns=seq(include)
+              if not patterns or any(p.startswith("!") or re.search(r"[+?\[\]\\]",p) for p in patterns):
+                  return True
+              return any(fnmatch.fnmatchcase(v,p) or fnmatch.fnmatchcase(v,p.replace("**/","")) for p in patterns for v in values)
+          for p in paths:
+              try:
+                  if p.is_symlink() or p.stat().st_size>2000000:
+                      raise ValueError("unsupported file")
+                  doc=yaml.load(p.read_text(encoding="utf-8"),Loader=yaml.BaseLoader)
+                  if not isinstance(doc,dict) or "on" not in doc or not isinstance(doc.get("jobs"),dict):
+                      raise ValueError("invalid top level")
+                  on=doc["on"]
+                  if isinstance(on,dict): events=on
+                  elif isinstance(on,list): events=dict.fromkeys(on)
+                  elif isinstance(on,str): events={on:None}
+                  else: raise ValueError("invalid events")
+                  kinds=[]
+                  for ev,cf in events.items():
+                      counts[ev]=counts.get(ev,0)+1
+                      cf=cf if isinstance(cf,dict) else {}
+                      if ev=="push":
+                          if possible_filter(cf.get("branches"),cf.get("branches-ignore"),["main"]) and possible_filter(cf.get("paths"),cf.get("paths-ignore"),changed):
+                              kinds.append(ev)
+                      elif ev in ("pull_request","pull_request_target"):
+                          types=seq(cf.get("types"))
+                          if types and ("closed" in types or "enqueued" in types or "dequeued" in types):
+                              if possible_filter(cf.get("branches"),cf.get("branches-ignore"),["main"]) and possible_filter(cf.get("paths"),cf.get("paths-ignore"),changed):
+                                  kinds.append(ev)
+                      elif ev in ("workflow_run","check_suite","check_run","status","deployment","deployment_status","merge_group","create"):
+                          kinds.append(ev)
+                  if not kinds:continue
+                  jobs=[]
+                  for name,j in doc["jobs"].items():
+                      if not isinstance(j,dict):raise ValueError("invalid job")
+                      cond=str(j.get("if",""))
+                      flat=" ".join(cond.split())
+                      manual_only=bool(re.fullmatch(r"(?:\$\{\{\s*)?github\.event_name\s*==\s*['\"]workflow_dispatch['\"](?:\s*&&[^|]*)?(?:\s*\}\})?",flat)) and "||" not in flat
+                      hard_false=flat in ("false","${{ false }}")
+                      # Heuristic only: full script semantics/actions and transitive calls require review.
+                      text=json.dumps(j).lower()
+                      markers=[x for x in ("secrets.","self-hosted","ssh ","scp ","rsync ","deploy","publish","restart","migrat","payment","curl ","uses","scripts/") if x in text]
+                      jobs.append({"job":name,"manual_only_heuristic":manual_only,"disabled_literal":hard_false,"markers":markers,"condition":cond[:240]})
+                  candidates.append({"file":p.name,"events":kinds,"jobs":jobs})
+              except Exception as e:
+                  errors.append({"file":p.name,"error":type(e).__name__})
+          print("CENSUS="+json.dumps({"head":head,"workflow_count":len(paths),"event_counts":counts,"candidates":len(candidates),"parse_errors":errors,"scope":"conservative direct and downstream event candidates; not release authorization"},sort_keys=True))
+          for row in candidates:
+              print("CANDIDATE="+json.dumps(row,sort_keys=True))
+          PY
