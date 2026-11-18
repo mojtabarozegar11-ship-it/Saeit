@@ -122,3 +122,12 @@ python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive \
 گردش مستقل صرفاً خواندنی [44256935787](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44256935787) با 51/51 آزمون موفق و probe واقعی هر دو منبع روی cPanel موفق شد. source_contents_read=false, backup_uploaded=false, source_deleted=false. این گردش صرفاً دسترسی و فراداده را اثبات می‌کند، نه انتقال کامل.
 
 ابزار `python3 -B scripts/factory_owner_drive_setup.py --configure` فقط در ترمینال تعاملی مورد اعتماد و حساب non-root مالک قابل اجرا است. نباید در CI، لاگ، گفت‌وگو یا از طریق ارسال token اجرا شود. نسخه جدید پس از OAuth، سهمیه هر دو حساب را از provider می‌خواند و مجموع دو آرشیو raw منطقی با سربار محافظه‌کارانه، دو manifest و ذخیره 1GiB را بررسی می‌کند: 3,895,227,392 bytes در هر حساب. حداقل اتصال 1GiB دیگر به معنی ظرفیت کافی دو بکاپ نیست. خروجی `historical_pair_capacity_screen_passed` و مقدار required در رسید v2 جدا هستند؛ در کمبود ظرفیت exit=2. این کنترل جدید هنوز با OAuth واقعی اجرا نشده است. ظرفیت MariaDB جاری جداگانه باید احراز شود.
+
+
+## مجوز پایدار و اختصاصی Google Drive
+
+مستند رسمی https://rclone.org/drive/#making-your-own-client-id اعلام می‌کند شناسه مشترک rclone در سال ۲۰۲۶ بازنشسته می‌شود. از Client ID اختصاصی نوع Desktop app که در پروژه Google Cloud متعلق به مالک ایجاد شده استفاده شود؛ Drive API باید فعال باشد. راهنمای رسمی احراز هویت سرور بدون مرورگر: https://rclone.org/remote_setup/ . برای اتصال SSH تعاملی از روش رسمی loopback tunnel پورت 53682 استفاده شود؛ احراز هویت در مرورگر مالک انجام می‌گیرد. توکن یا گذرواژه در GitHub، Actions log یا پیام عمومی وارد نشود.
+
+طبق https://developers.google.com/identity/protocols/oauth2 ، وضعیت Testing برای برنامه خارجی معمولاً Refresh Token هفت‌روزه می‌دهد؛ مالک باید وضعیت برنامه و الزامات انتشار را در Google Auth Platform بررسی کند و هر مانع تأیید Google را از مسیر رسمی رفع نماید. وضعیت انتشار از شکل config قابل اثبات نیست. ابزار جدید Client ID اختصاصی، client_secret موجود، مجوز drive، Refresh Token مستقل دو remote و root صحیح را بررسی می‌کند و در صورت عدم احراز توقف دارد؛ این کنترل اثبات OAuth واقعی یا دائمی نیست. مالک باید در صفحه رسمی گوگل مجوزها را بررسی و رضایت دهد. هر دو حساب باید در محیط همان کاربر غیردسترسی-root انتقال مجاز شوند؛ اجرای تنظیمات در CI ممنوع است.
+
+پس از اتصال، ابزار setup با config مالک-تنها و هش قطعه خصوصی و quota واقعی هر دو مقصد بررسی می‌شود. نیاز دو بکاپ تاریخی در هر حساب 3895227392 bytes است؛ این عدد ظرفیت لازم برای MariaDB جاری نیست. سازوکار دیگری که هزینه یا انتشار اطلاعات ایجاد کند فعال نشده است.
