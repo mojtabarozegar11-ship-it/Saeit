@@ -22,49 +22,36 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      - name: Verify owner-local config and read existing private proof and free quota only
+      - name: Verify existing owner server Drive grants using pinned SSH; no upload
         shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           umask 077
-          test "$(id -un)" = githubops || { echo FACTORY_DRIVE_POST_CONSENT_HOLD=OWNER_RUNNER_IDENTITY_UNVERIFIED; exit 78; }
-          test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'f9c6d8445144744920246a128c977bdc850eb80f'
-          test "$(git hash-object scripts/factory_rclone_ephemeral_binary.py)" = 'fa088e6531c302b95044d014ac8e8c568fb9ca7a'
-          PYTHONPATH=scripts PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
-          import os, pathlib, json, tempfile, sys
-          from factory_rclone_dual_parts import RcloneDualStore, TransferHold, _mode_secure_file
-          from factory_rclone_ephemeral_binary import provision_verified_rclone
-          config=pathlib.Path.home()/".config"/"rclone"/"rclone.conf"
-          if not _mode_secure_file(config):
-              print("FACTORY_DRIVE_POST_CONSENT_HOLD=OWNER_LOCAL_CONFIG_MISSING_OR_UNSAFE")
-              sys.exit(78)
-          try:
-              with tempfile.TemporaryDirectory(prefix="factory-drive-preflight-") as td:
-                  with provision_verified_rclone(pathlib.Path(td)) as exe:
-                      admission=RcloneDualStore(
-                          config, remote_a="factory_a", remote_b="factory_b",
-                          expected_root_a="191sAkv4A01S9o6zhx-vM5xM7WO31qHPn",
-                          expected_root_b="1e6D3Ek4k-4JT_oyEoiY_JejErZFssrC_",
-                          proof_path="F-01 Factory VPS encrypted recovery 2026-10-30/manifest.json",
-                          proof_sha256="753365e1584a228d4a4b60b1f7bc21dabdf9514dfc1fe362b5257326768233da",
-                          max_source_bytes=559319128,chunk_bytes=8388608,
-                          free_reserve_bytes=1073741824,rclone_exe=str(exe)).preflight()
-                      print("FACTORY_DRIVE_POST_CONSENT="+json.dumps({
-                          "distinct_remote_config_and_private_proof_verified": True,
-                          "drive_a_free_bytes":admission.free_a_before,
-                          "drive_b_free_bytes":admission.free_b_before,
-                          "historical_gzip_bytes_admitted":559319128,
-                          "reserve_each_bytes":1073741824,
-                          "backup_created":False,"bytes_uploaded":0,"factory_started":False,
-                          "production_modified":False},sort_keys=True))
-          except TransferHold as e:
-              # Emit only predeclared error codes. Never provider text or tokens.
-              allowed={"OWNER_DRIVE_REMOTE_CONFIG_UNVERIFIED","SAME_OAUTH_CREDENTIALS_REJECTED",
-                       "PRIVATE_OWNER_PROOF_MISMATCH","DRIVE_FREE_QUOTA_NOT_PROVEN",
-                       "INSUFFICIENT_PROVIDER_VERIFIED_FREE_BYTES"}
-              print("FACTORY_DRIVE_POST_CONSENT_HOLD="+(str(e) if str(e) in allowed else "PRIVATE_PROVIDER_OR_CONFIG_CHECK_FAILED"))
-              sys.exit(78)
-          except Exception:
-              print("FACTORY_DRIVE_POST_CONSENT_HOLD=PRIVATE_PROVIDER_OR_BINARY_CHECK_FAILED")
-              sys.exit(78)
-          PY
+          test -n "$VPS_KEY" || { echo FACTORY_DRIVE_POST_CONSENT_HOLD=VPS_KEY_UNAVAILABLE; exit 78; }
+          d="$(mktemp -d)"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 8 -t rsa 127.0.0.1 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          python3 -B - "$d/probe.py" <<'BUILD'
+          import base64,hashlib,pathlib,sys
+          modules=[]
+          for name,pin in (
+              ('factory_rclone_dual_parts.py','f9c6d8445144744920246a128c977bdc850eb80f'),
+              ('factory_rclone_ephemeral_binary.py','fa088e6531c302b95044d014ac8e8c568fb9ca7a')):
+              data=(pathlib.Path('scripts')/name).read_bytes()
+              assert hashlib.sha1(('blob '+str(len(data))+'\0').encode()+data).hexdigest()==pin
+              modules.append((name,pin,base64.b64encode(data).decode('ascii')))
+          code='MODULES='+repr(modules)+'\nCHECK='+repr("import os, pathlib, json, tempfile, sys, pwd, stat\nif pwd.getpwuid(os.geteuid()).pw_name != 'githubops' or os.geteuid()==0:\n    print('FACTORY_DRIVE_POST_CONSENT_HOLD=VPS_OWNER_IDENTITY_UNVERIFIED'); sys.exit(78)\nfrom factory_rclone_dual_parts import RcloneDualStore, TransferHold, _mode_secure_file\nfrom factory_rclone_ephemeral_binary import provision_verified_rclone\nconfig=pathlib.Path.home()/\".config\"/\"rclone\"/\"rclone.conf\"\nif not _mode_secure_file(config) or any(p.is_symlink() for p in (config.parent,config.parent.parent)):\n    print(\"FACTORY_DRIVE_POST_CONSENT_HOLD=OWNER_LOCAL_CONFIG_MISSING_OR_UNSAFE\")\n    sys.exit(78)\ntry:\n    with tempfile.TemporaryDirectory(prefix=\"factory-drive-preflight-\") as td:\n        with provision_verified_rclone(pathlib.Path(td)) as exe:\n            admission=RcloneDualStore(\n                config, remote_a=\"factory_a\", remote_b=\"factory_b\",\n                expected_root_a=\"191sAkv4A01S9o6zhx-vM5xM7WO31qHPn\",\n                expected_root_b=\"1e6D3Ek4k-4JT_oyEoiY_JejErZFssrC_\",\n                proof_path=\"F-01 Factory VPS encrypted recovery 2026-10-30/manifest.json\",\n                proof_sha256=\"753365e1584a228d4a4b60b1f7bc21dabdf9514dfc1fe362b5257326768233da\",\n                max_source_bytes=559319128,chunk_bytes=8388608,\n                free_reserve_bytes=1073741824,rclone_exe=str(exe)).preflight()\n            print(\"FACTORY_DRIVE_POST_CONSENT=\"+json.dumps({\n                \"distinct_remote_config_and_private_proof_verified\": True,\n                \"drive_a_free_bytes\":admission.free_a_before,\n                \"drive_b_free_bytes\":admission.free_b_before,\n                \"historical_gzip_bytes_admitted\":559319128,\n                \"reserve_each_bytes\":1073741824,\n                \"backup_created\":False,\"bytes_uploaded\":0,\"factory_started\":False,\n                \"production_modified\":False},sort_keys=True))\nexcept TransferHold as e:\n    # Emit only predeclared error codes. Never provider text or tokens.\n    allowed={\"OWNER_DRIVE_REMOTE_CONFIG_UNVERIFIED\",\"SAME_OAUTH_CREDENTIALS_REJECTED\",\n             \"PRIVATE_OWNER_PROOF_MISMATCH\",\"DRIVE_FREE_QUOTA_NOT_PROVEN\",\n             \"INSUFFICIENT_PROVIDER_VERIFIED_FREE_BYTES\"}\n    print(\"FACTORY_DRIVE_POST_CONSENT_HOLD=\"+(str(e) if str(e) in allowed else \"PRIVATE_PROVIDER_OR_CONFIG_CHECK_FAILED\"))\n    sys.exit(78)\nexcept Exception:\n    print(\"FACTORY_DRIVE_POST_CONSENT_HOLD=PRIVATE_PROVIDER_OR_BINARY_CHECK_FAILED\")\n    sys.exit(78)\n")+'\n'+"import base64,hashlib,os,pathlib,pwd,sys,tempfile\nif pwd.getpwuid(os.geteuid()).pw_name != 'githubops' or os.geteuid()==0:\n    print('FACTORY_DRIVE_POST_CONSENT_HOLD=VPS_OWNER_IDENTITY_UNVERIFIED'); sys.exit(78)\nos.umask(0o077)\nwith tempfile.TemporaryDirectory(prefix='factory-owner-preflight-code-') as tmp:\n    root=pathlib.Path(tmp)\n    for name, expected, encoded in MODULES:\n        data=base64.b64decode(encoded,validate=True)\n        digest=hashlib.sha1(('blob '+str(len(data))+'\\0').encode()+data).hexdigest()\n        if digest!=expected: raise SystemExit('FACTORY_DRIVE_POST_CONSENT_HOLD=CODE_PIN_MISMATCH')\n        (root/name).write_bytes(data)\n    sys.path.insert(0,tmp)\n    try:\n        exec(compile(CHECK,'owner-drive-preflight','exec'),{'__name__':'__main__'})\n    except SystemExit:\n        raise\n    except Exception:\n        print('FACTORY_DRIVE_POST_CONSENT_HOLD=VPS_DEPENDENCY_OR_PREFLIGHT_FAILED'); sys.exit(78)\n"
+          compile(code,'remote-probe','exec')
+          pathlib.Path(sys.argv[1]).write_text(code)
+          BUILD
+          timeout 360s ssh -T -i "$d/key" -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/known" -o GlobalKnownHostsFile=/dev/null \
+            -o BatchMode=yes -o ForwardAgent=no -o IdentitiesOnly=yes \
+            -o ConnectTimeout=15 githubops@127.0.0.1 'exec python3 -B -' < "$d/probe.py"
