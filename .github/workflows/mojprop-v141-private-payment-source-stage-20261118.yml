@@ -31,6 +31,7 @@ jobs:
           path: native-source
           persist-credentials: false
           fetch-depth: 1
+          sparse-checkout-cone-mode: false
           sparse-checkout: |
             prop_firm
             core/mojprop_v141_native_receipt_view.py
