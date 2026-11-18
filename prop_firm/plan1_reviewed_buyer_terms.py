@@ -4,12 +4,13 @@ This adapter composes existing buyer terms provenance with a separately signed
 reviewer attestation. Keys and evidence must come from trusted private adapters.
 No customer PII, payment, enrollment, or social account access occurs here.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 import hmac
 import json
 
 from .buyer_order_review import Plan1OrderGateClosed
+from .plan1_private_review_replay import ReviewReplayClosed, claim_review_once
 from .plan1_revised_buyer_terms_link import bind_revised_buyer_terms
 from .plan1_independent_reviewer_attestation import (
     ReviewerAttestationClosed, verify_independent_reviewer,
@@ -90,3 +91,42 @@ def bind_independently_reviewed_terms(
     except (ReviewerAttestationClosed, ValueError, TypeError, KeyError,
             UnicodeError, OverflowError) as exc:
         raise Plan1OrderGateClosed("independent buyer review evidence rejected") from None
+
+# A separate opt-in, review-only integration boundary. Existing callers of
+# bind_independently_reviewed_terms remain unmodified until reviewed migrations.
+_REVIEW_ONLY_FALSE = (
+    "identity_verified", "legal_signature_verified", "jurisdiction_verified",
+    "capital_verified", "invoice_authorized", "payment_authorized",
+    "enrollment_authorized", "real_account_authorized", "marketing_authorized",
+)
+
+
+def bind_and_claim_independently_reviewed_terms(
+    *, private_review_connection, **verified_review_inputs
+):
+    """Verify signed buyer acceptance + reviewer HMAC, then consume replay key.
+
+    The private registry must be a pre-provisioned durable SQLite database.
+    Every caller must bind genuine trusted acceptance/KYC/legal evidence
+    independently. This wrapper is NOT a payable invoice or enrollment gate.
+    A successful claim is irreversible even if a later private action fails:
+    there are deliberately no external side effects inside this function.
+    """
+    reviewed = bind_independently_reviewed_terms(**verified_review_inputs)
+    if (type(reviewed) is not IndependentlyReviewedTerms
+            or reviewed.state != "PRIVATE_INDEPENDENT_REVIEW_ONLY"
+            or any(getattr(reviewed, key) is not False
+                   for key in _REVIEW_ONLY_FALSE)):
+        raise Plan1OrderGateClosed("untrusted independent review state")
+    try:
+        result = claim_review_once(
+            private_review_connection,
+            review_ref=reviewed.review_ref,
+            acceptance_sha256=reviewed.acceptance_sha256,
+            reviewer_attestation_sha256=reviewed.reviewer_attestation_sha256,
+        )
+    except ReviewReplayClosed:
+        raise Plan1OrderGateClosed("private independent review claim rejected") from None
+    if result != "PRIVATE_REVIEW_CLAIMED_ONLY":
+        raise Plan1OrderGateClosed("private independent review receipt invalid")
+    return replace(reviewed, state="PRIVATE_INDEPENDENT_REVIEW_CLAIMED_ONLY")
