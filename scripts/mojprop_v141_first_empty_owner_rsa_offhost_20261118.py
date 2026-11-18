@@ -23,6 +23,7 @@ import zlib
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 LIMIT = 8 * 1024 * 1024
@@ -74,7 +75,7 @@ def _isolate_verify(raw: bytes) -> None:
 def _public_key():
     if PUBLIC_KEY.is_symlink() or not PUBLIC_KEY.is_file() or PUBLIC_KEY.stat().st_size > 16384:
         raise ValueError("PINNED_RECOVERY_PUBLIC_KEY_ABSENT")
-    pub = serialization.load_pem_public_key(PUBLIC_KEY.read_bytes())
+    pub = serialization.load_pem_public_key(PUBLIC_KEY.read_bytes(), backend=default_backend())
     if not isinstance(pub, rsa.RSAPublicKey) or pub.key_size != 3072:
         raise ValueError("PINNED_RECOVERY_KEY_NOT_RSA3072")
     der = pub.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
