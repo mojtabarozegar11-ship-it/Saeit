@@ -1,17 +1,25 @@
 {
-  "version": 2,
+  "version": 3,
   "name": "PICM",
-  "status": "source_removed_live_cleanup_pending",
+  "status": "github_source_removed_live_cleanup_blocked",
   "decision": "owner_decision_100_percent_deletion",
-  "source_commit_before": "679d2fefd349f580e765fee1a5fc823c48e01851",
-  "scope": [
-    "GitHub PICM-only source",
-    "PICM-only workflows/tests",
-    "retired route policy artifacts",
-    "cPanel/VPS runtime via one-shot relay"
+  "source_removed_commit": "3e3ecf50a61355c2e67e578bdfb7ecf1becada4b",
+  "source_cleanup_scope": "PICM-only core, templates, ops, scripts, tests, workflows and retired-route policy artifacts removed from main; shared MojPlayWin files preserved.",
+  "live_cleanup": "not_completed",
+  "live_blocker": "Pinned SSH path to VPS/cPanel timed out before upload or deletion; no live write occurred.",
+  "attempts": [
+    {
+      "run_id": 44306483390,
+      "result": "failed_before_live_write",
+      "reason": "SSH private-key normalization error"
+    },
+    {
+      "run_id": 44306654825,
+      "result": "failed_before_live_write",
+      "reason": "VPS-to-cPanel SSH timeout"
+    }
   ],
-  "live_cleanup_workflow": ".github/workflows/mojplaywin-picm-remove.yml",
-  "backup_policy": "The relay creates an owner-scoped backup before deleting live PICM files and queues.",
-  "live_cleanup_status": "pending_issue_trigger_and_public_404_verification",
-  "created_at": "2026-11-18T12:00:00Z"
+  "preserved": "No live files were deleted; historical Git history remains available. Shared site, store, payments, factory and other subsites were not touched.",
+  "next_authorized_action": "Retry live cleanup only when pinned VPS→cPanel relay is online.",
+  "recorded_at": "2026-11-18T12:44:30Z"
 }
