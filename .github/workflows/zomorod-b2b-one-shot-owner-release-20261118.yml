@@ -1,0 +1,183 @@
+name: Zomorod B2B owner-approved two-page create-only release
+on:
+  pull_request:
+    types: [opened]
+    branches: [feature/zomorod-b2b-trust-inquiries-20261118]
+    paths: [".github/workflows/zomorod-b2b-one-shot-owner-release-20261118.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-b2b-owner-create-only-20261118
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'release/zomorod-b2b-two-pages-owner-approved-20261118' &&
+      github.run_attempt == 1
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 3d93e82eb8b86c0cb7abaef63a682e14d4b1ce52
+          persist-credentials: false
+      - name: Owner-authorized atomic create only; exact reviewed pages; no DB or services
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$(git rev-parse HEAD)" = '3d93e82eb8b86c0cb7abaef63a682e14d4b1ce52'
+          test "$(git hash-object public/b2b/index.html)" = '78259f49aed516e24e20a7b6e479440b68d759bd'
+          test "$(git hash-object public/b2b/privacy/index.html)" = '69c79638d36f2e92758fea2a1bb1a13c3675596d'
+          work="$(mktemp -d "$RUNNER_TEMP/zomorod-b2b-release.XXXXXXXX")"
+          trap 'rm -f "$work/host.key" "$work/known" "$work/config" "$work/payload.py"; rmdir "$work"' EXIT
+          python3 -B - <<'PY' > "$work/payload.py"
+          from pathlib import Path
+          print("PAGES = " + repr({p: Path("public/b2b", p).read_bytes() for p in ("index.html", "privacy/index.html")}))
+          PY
+          cat >> "$work/payload.py" <<'PY'
+          import ctypes, hashlib, json, os, pwd, stat, tempfile
+          from pathlib import Path
+          home=Path("/home/zomorod2")
+          root=home/"public_html"
+          uid=os.geteuid()
+          if pwd.getpwuid(uid).pw_name!="zomorod2":
+              raise PermissionError("wrong cPanel owner")
+          flags=os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW
+          def owned_dir(fd):
+              m=os.fstat(fd)
+              if not stat.S_ISDIR(m.st_mode) or m.st_uid!=uid or m.st_mode&0o022:
+                  raise PermissionError("unsafe directory ownership or mode")
+              return m
+          def no_target(fd):
+              try:
+                  os.stat("b2b",dir_fd=fd,follow_symlinks=False)
+              except FileNotFoundError:
+                  return
+              raise FileExistsError("existing b2b destination; no overwrite or deletion permitted")
+          def git_blob(raw):
+              return hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\0"+raw).hexdigest()
+          pins={"index.html":"78259f49aed516e24e20a7b6e479440b68d759bd","privacy/index.html":"69c79638d36f2e92758fea2a1bb1a13c3675596d"}
+          if set(PAGES)!=set(pins) or any(not 0<len(PAGES[p])<=131072 or git_blob(PAGES[p])!=pins[p] for p in pins):
+              raise ValueError("unreviewed release content")
+          if home.resolve()!=home or root.resolve()!=root:
+              raise PermissionError("linked owner directory")
+          hfd=os.open(home,flags)
+          rfd=os.open("public_html",flags,dir_fd=hfd)
+          hm,rm=owned_dir(hfd),owned_dir(rfd)
+          if hm.st_dev!=rm.st_dev:
+              raise RuntimeError("atomic same-filesystem publication unavailable")
+          no_target(rfd)
+          libc=ctypes.CDLL(None,use_errno=True)
+          rename=getattr(libc,"renameat2",None)
+          if rename is None:
+              raise RuntimeError("atomic no-replace operation unavailable")
+          rename.argtypes=[ctypes.c_int,ctypes.c_char_p,ctypes.c_int,ctypes.c_char_p,ctypes.c_uint]
+          rename.restype=ctypes.c_int
+          stage=Path(tempfile.mkdtemp(prefix=".zomorod-b2b-create-",dir=home))
+          published=False
+          try:
+              sfd=os.open(stage.name,flags,dir_fd=hfd)
+              try:
+                  owned_dir(sfd)
+                  os.mkdir("privacy",0o700,dir_fd=sfd)
+                  pfd=os.open("privacy",flags,dir_fd=sfd)
+                  try:
+                      for fd,name,data in ((sfd,"index.html",PAGES["index.html"]),(pfd,"index.html",PAGES["privacy/index.html"])):
+                          f=os.open(name,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=fd)
+                          with os.fdopen(f,"wb") as out:
+                              out.write(data)
+                              out.flush()
+                              os.fchmod(out.fileno(),0o644)
+                              os.fsync(out.fileno())
+                      os.fchmod(pfd,0o755)
+                      os.fsync(pfd)
+                  finally:
+                      os.close(pfd)
+                  os.fchmod(sfd,0o755)
+                  os.fsync(sfd)
+                  owned_dir(hfd)
+                  owned_dir(rfd)
+                  current=os.stat("public_html",dir_fd=hfd,follow_symlinks=False)
+                  if (current.st_dev,current.st_ino)!=(rm.st_dev,rm.st_ino):
+                      raise RuntimeError("document root changed")
+                  no_target(rfd)
+                  if rename(hfd,os.fsencode(stage.name),rfd,b"b2b",1)!=0:
+                      err=ctypes.get_errno()
+                      raise OSError(err,os.strerror(err))
+                  published=True
+                  print("ZOMOROD_B2B_ATOMIC_CREATE_COMPLETED",flush=True)
+                  os.fsync(rfd)
+                  os.fsync(hfd)
+              finally:
+                  os.close(sfd)
+              bfd=os.open("b2b",flags,dir_fd=rfd)
+              try:
+                  owned_dir(bfd)
+                  if set(os.listdir(bfd))!={"index.html","privacy"}:
+                      raise RuntimeError("unexpected installed directory contents")
+                  pfd=os.open("privacy",flags,dir_fd=bfd)
+                  try:
+                      owned_dir(pfd)
+                      if os.listdir(pfd)!=["index.html"]:
+                          raise RuntimeError("unexpected installed privacy contents")
+                      for fd,p in ((bfd,"index.html"),(pfd,"privacy/index.html")):
+                          f=os.open("index.html",os.O_RDONLY|os.O_NOFOLLOW,dir_fd=fd)
+                          with os.fdopen(f,"rb") as src:
+                              raw=src.read(131073)
+                              if raw!=PAGES[p]:
+                                  raise RuntimeError("installed byte parity failure")
+                  finally:
+                      os.close(pfd)
+              finally:
+                  os.close(bfd)
+              print("ZOMOROD_B2B_CREATE_RECEIPT="+json.dumps({"created_only":True,"owner_verified":True,"target_was_absent":True,"files":{p:hashlib.sha256(raw).hexdigest() for p,raw in PAGES.items()},"other_site_paths_written":False,"database_accessed":False,"services_changed":False},sort_keys=True))
+          finally:
+              if not published:
+                  # Only this invocation's private temporary stage; never public or pre-existing data.
+                  for p in (stage/"privacy/index.html",stage/"index.html"):
+                      if p.is_file() and not p.is_symlink():
+                          p.unlink()
+                  if (stage/"privacy").is_dir() and not (stage/"privacy").is_symlink():
+                      (stage/"privacy").rmdir()
+                  stage.rmdir()
+              os.close(rfd)
+              os.close(hfd)
+          PY
+          python3 -B -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' "$work/payload.py"
+          test -n "$HOST_KEY"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          unset HOST_KEY
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 60s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < "$work/payload.py"
+  public_verify:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 3d93e82eb8b86c0cb7abaef63a682e14d4b1ce52
+          persist-credentials: false
+      - name: Check exact public HTTPS response bytes, no forms
+        run: |
+          set -euo pipefail
+          python3 -B scripts/zomorod_b2b_public_observation_20261118.py | tee "$RUNNER_TEMP/b2b-receipt.json"
+          python3 -B - "$RUNNER_TEMP/b2b-receipt.json" <<'PY'
+          import json,sys
+          rows={r["route"]:r for r in json.load(open(sys.argv[1]))["observations"]}
+          for p in ("/b2b/","/b2b/privacy/"):
+              assert rows[p]["status"]==200 and rows[p]["tls_verified"] and rows[p]["classification"]=="EXACT_REVIEWED_BYTES", "public exact-byte proof missing: "+p
+          print("ZOMOROD_B2B_PUBLIC_RELEASE=VERIFIED_TWO_PAGES")
+          PY
