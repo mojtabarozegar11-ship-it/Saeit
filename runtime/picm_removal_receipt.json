@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "name": "PICM",
+  "status": "source_removed_live_cleanup_pending",
+  "decision": "owner_decision_100_percent_deletion",
+  "source_commit_before": "679d2fefd349f580e765fee1a5fc823c48e01851",
+  "scope": [
+    "GitHub PICM-only source",
+    "PICM-only workflows/tests",
+    "retired route policy artifacts",
+    "cPanel/VPS runtime via one-shot relay"
+  ],
+  "live_cleanup_workflow": ".github/workflows/mojplaywin-picm-remove.yml",
+  "backup_policy": "The relay creates an owner-scoped backup before deleting live PICM files and queues.",
+  "live_cleanup_status": "pending_issue_trigger_and_public_404_verification",
+  "created_at": "2026-11-18T12:00:00Z"
+}

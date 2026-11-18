@@ -6,9 +6,6 @@ on:
     paths:
       - .github/workflows/mpw-subsite-continuity-20261026.yml
       - scripts/mpw_subsite_continuity_guard_20261026.py
-      - scripts/mpw_retired_subsite_policy.py
-      - runtime/retired_picm_manifest.json
-      - tests/test_mpw_retired_picm_policy_c101_20261116.py
   schedule:
     - cron: '23 * * * *'
   push:

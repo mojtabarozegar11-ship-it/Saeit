@@ -19,15 +19,6 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
 
-# This audit is used both as python -m scripts.* and as a direct cron script.
-if __package__:
-    from .mpw_retired_subsite_policy import (
-        assert_no_retired_routes, assert_retired_picm_manifest,
-    )
-else:
-    from mpw_retired_subsite_policy import (
-        assert_no_retired_routes, assert_retired_picm_manifest,
-    )
 from html.parser import HTMLParser
 
 
@@ -369,8 +360,6 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
-    assert_retired_picm_manifest()
-    assert_no_retired_routes(REQUIRED_PATHS + PROTECTED_CHILDREN + tuple(REDIRECT_PATHS))
     if args.selftest:
         assert len(PROTECTED_CHILDREN) == 5
         assert set(PROTECTED_CHILDREN).issubset(REQUIRED_PATHS)
@@ -391,7 +380,7 @@ def main() -> int:
         "sitemap": {**asdict(sitemap), "unique_urls": sitemap_count},
         "anonymous_checkout_gates": [asdict(check) for check in auth_checks],
         "protected_children": list(PROTECTED_CHILDREN),
-        "retired_picm_excluded_from_owner_active_queue": True,
+        "picm_removed_from_owner_active_queue": True,
         "protected_personal_site": list(PERSONAL_PATHS),
         "read_only": True,
     }
