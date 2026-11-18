@@ -46,8 +46,8 @@ jobs:
           set -euo pipefail
           test ! -L templates/moj-prop-plan1-sidecar/index.html
           test ! -L scripts/mojprop_plan1_sidecar_release.py
-          test "$(git hash-object -- templates/moj-prop-plan1-sidecar/index.html)" = "d310d21cff88fad44770c0130260efa5414a1f5e"
-          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_release.py)" = "63f0c4471b02ee0863c8c95608218a1bf3928dc8"
+          test "$(git hash-object -- templates/moj-prop-plan1-sidecar/index.html)" = "40ee581970995370169be57ed53eddf766014bdd"
+          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_release.py)" = "67e982876c46cc5cbd1b9ad20c6178fc536df1aa"
       - name: Run owner-preservation, exact staged source and security regressions
         run: |
           set -euo pipefail
@@ -83,8 +83,8 @@ jobs:
       - name: Verify unchanged reviewed source, source-only and owner-manual scope
         run: |
           set -euo pipefail
-          test "$(git hash-object -- templates/moj-prop-plan1-sidecar/index.html)" = "d310d21cff88fad44770c0130260efa5414a1f5e"
-          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_release.py)" = "63f0c4471b02ee0863c8c95608218a1bf3928dc8"
+          test "$(git hash-object -- templates/moj-prop-plan1-sidecar/index.html)" = "40ee581970995370169be57ed53eddf766014bdd"
+          test "$(git hash-object -- scripts/mojprop_plan1_sidecar_release.py)" = "67e982876c46cc5cbd1b9ad20c6178fc536df1aa"
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_mojprop_plan1_sidecar_release tests.test_mojprop_plan1_buyer_terms_release_gate
       - name: Reject stale or unresolved buyer terms before any owner-side staging
         shell: bash
