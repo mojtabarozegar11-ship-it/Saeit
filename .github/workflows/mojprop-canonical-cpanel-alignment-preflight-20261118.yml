@@ -1,0 +1,156 @@
+name: MOJ PROP — canonical-to-cPanel alignment preflight (READ ONLY)
+
+on:
+  push:
+    branches:
+      - audit/mojprop-v141-readonly-production-restore-gates-20261117
+    paths:
+      - .github/workflows/mojprop-canonical-cpanel-alignment-preflight-20261118.yml
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-cpanel-preflight:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 8
+    env:
+      CPANEL_HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Checkout audit source without write credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Prove non-root runner boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -un)" = githubrunner
+          test "$(id -u)" != 0
+          test -d /home/githubops/factory-runtime
+          echo "RUNNER_USER=$(id -un)"
+          echo "RUNNER_UID=$(id -u)"
+          echo "RUNNER_ROOT=false"
+
+      - name: Fetch canonical PR 2310 head read only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin +refs/pull/2310/head:refs/remotes/origin/pr-2310
+          test "$(git rev-parse refs/remotes/origin/pr-2310)" = "288d5e1c48fc664b5f164b40763d04508cf6720b"
+          echo "CANONICAL_PR=2310"
+          echo "CANONICAL_HEAD=$(git rev-parse refs/remotes/origin/pr-2310)"
+
+      - name: Build bounded canonical manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, subprocess
+          ref = "refs/remotes/origin/pr-2310"
+          paths = [
+              "config/urls.py",
+              "config/settings.py",
+              "core/moj_prop_views.py",
+              "core/templates/mojplaywin/moj_prop.html",
+              "core/templates/mojplaywin/moj_prop_interest_form_d.html",
+              "core/static/site/moj_prop.css",
+              "prop_firm/portal.py",
+              "prop_firm/site.py",
+              "prop_firm/challenge_commerce.py",
+              "services/mpw_trx_guest_commerce.py",
+              "templates/moj-prop-v4/index.html",
+          ]
+          rows = []
+          for path in paths:
+              try:
+                  data = subprocess.check_output(["git", "show", f"{ref}:{path}"])
+              except subprocess.CalledProcessError:
+                  rows.append({"path": path, "present": False})
+                  continue
+              rows.append({"path": path, "present": True, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+          with open("/tmp/mojprop-canonical-manifest.json", "w", encoding="utf-8") as fh:
+              json.dump({"ref": ref, "paths": rows}, fh, sort_keys=True)
+          print("CANONICAL_MANIFEST_PATHS=" + str(len(rows)))
+          print("CANONICAL_MANIFEST_PRESENT=" + str(sum(int(row["present"]) for row in rows)))
+          PY
+
+      - name: Read bounded cPanel counterpart metadata through pinned relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "${CPANEL_HOST_KEY:-}"
+          d="$RUNNER_TEMP/mojprop-alignment"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/key" "$d/known"; rmdir "$d" 2>/dev/null || true' EXIT
+          printf '%s' "$CPANEL_HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null 2>&1
+          timeout 15s ssh-keyscan -T 9 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null || true
+          fp="$(ssh-keygen -lf "$d/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+          test "$fp" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          paths_json="$(python3 -c 'import json;print(json.dumps([r["path"] for r in json.load(open("/tmp/mojprop-canonical-manifest.json"))["paths"]]))')"
+          paths_b64="$(printf '%s' "$paths_json" | base64 -w0)"
+          remote_json="$(timeout 55s ssh -T -p 1396 -i "$d/key"             -o UserKnownHostsFile="$d/known" -o StrictHostKeyChecking=yes             -o IdentitiesOnly=yes -o BatchMode=yes -o ForwardAgent=no             -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2             zomorod2@zohal.pws-dns.net "python3 - $paths_b64" <<'REMOTE_PY'
+          import base64, hashlib, json, stat, sys
+          from pathlib import Path
+          paths = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
+          root = Path("/home/zomorod2/Saeit-staging")
+          rows = []
+          for rel in paths:
+              path = root / rel
+              row = {"path": rel, "present": False}
+              try:
+                  st = path.lstat()
+                  if stat.S_ISREG(st.st_mode) and not stat.S_ISLNK(st.st_mode) and st.st_size <= 131072:
+                      row.update({"present": True, "bytes": st.st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
+              except OSError:
+                  pass
+              rows.append(row)
+          print(json.dumps({"root": str(root), "paths": rows}, sort_keys=True))
+          REMOTE_PY
+          )"
+          printf '%s' "$remote_json" > "$RUNNER_TEMP/mojprop-cpanel-manifest.json"
+          echo "CPANEL_HOST_KEY=VERIFIED"
+          echo "CPANEL_AUTH=VERIFIED"
+          echo "CPANEL_METADATA_READ=true"
+          echo "CPANEL_REMOTE_WRITE=false"
+
+      - name: Compare manifests and fail closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          canonical = {r["path"]: r for r in json.load(open("/tmp/mojprop-canonical-manifest.json"))["paths"]}
+          live = {r["path"]: r for r in json.load(open("${{ runner.temp }}/mojprop-cpanel-manifest.json"))["paths"]}
+          rows = []
+          for path, expected in canonical.items():
+              actual = live.get(path, {"present": False})
+              if not expected.get("present"):
+                  state = "canonical_missing"
+              elif not actual.get("present"):
+                  state = "live_missing"
+              elif expected.get("sha256") != actual.get("sha256"):
+                  state = "hash_mismatch"
+              else:
+                  state = "aligned"
+              rows.append({"path": path, "state": state, "canonical_present": bool(expected.get("present")), "live_present": bool(actual.get("present"))})
+          counts = {}
+          for row in rows:
+              counts[row["state"]] = counts.get(row["state"], 0) + 1
+          print("ALIGNMENT_COUNTS=" + json.dumps(counts, sort_keys=True))
+          print("ALIGNMENT_REPORT=" + json.dumps(rows, sort_keys=True))
+          print("DEPLOYMENT_PERFORMED=false")
+          print("BACKUP_CREATED=false")
+          print("RESTORE_PERFORMED=false")
+          print("CUSTOMER_TRX_COLLECTED=false")
+          print("RELEASE_AUTHORIZED=false")
+          if counts.get("live_missing", 0) or counts.get("hash_mismatch", 0):
+              print("COMMERCIAL_ALIGNMENT=BLOCKED")
+          else:
+              print("COMMERCIAL_ALIGNMENT=READY_FOR_SEPARATE_BACKUP_GATE")
+          PY
