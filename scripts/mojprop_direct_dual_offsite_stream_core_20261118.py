@@ -175,10 +175,14 @@ def stream_to_two_private_sinks(source: BinaryIO, sinks: tuple[PrivateSink, Priv
         # as end-of-file without repeated read; special streams may be short.
         if type(block) is not bytes or not block:
             raise DualOffsiteDenied("SOURCE_ENDED_BEFORE_EXPECTED_LENGTH")
+        if len(block) > want:
+            raise DualOffsiteDenied("SOURCE_READ_RETURNED_TOO_MANY_BYTES")
         while len(block) < want:
             more=source.read(want-len(block))
             if type(more) is not bytes or not more:
                 raise DualOffsiteDenied("SOURCE_ENDED_BEFORE_EXPECTED_LENGTH")
+            if len(more)>want-len(block):
+                raise DualOffsiteDenied("SOURCE_READ_RETURNED_TOO_MANY_BYTES")
             block+=more
         aad=_part_aad(set_id,kind,count,expected_source_bytes,previous)
         nonce=os.urandom(12)
@@ -225,6 +229,127 @@ def stream_to_two_private_sinks(source: BinaryIO, sinks: tuple[PrivateSink, Priv
     }
 
 
+
+# The canonical sender issues this ONLY after source producer exits 0, verifies
+# DB/tar origin and emits its own complete footer. It is NOT a cryptographic
+# signature or a substitute for separate authenticated process-exit checks.
+CPANEL_SOURCE_END_MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
+
+
+def stream_verified_cpanel_unknown_size(source: BinaryIO,
+                                        sinks: tuple[PrivateSink, PrivateSink],
+                                        reviews: tuple[ProviderReview, ProviderReview],
+                                        public_pem: bytes, *, set_id: str, kind: str,
+                                        upper_bound_source_bytes: int,
+                                        source_exit_zero, part_size: int=PART_DEFAULT) -> dict:
+    """No disk-staged bytes, size initially unknown, dual private readback.
+
+    For raw SSH pipes or mariadb-dump stdout, source_exit_zero must be a
+    separately authenticated callable checking actual remote child/SSH exit
+    after EOF. The source must end with the known successful cPanel footer.
+    EOF by itself NEVER authorizes a final manifest. This function does NOT
+    execute the live producer or own Google OAuth.
+    """
+    prefix=_source_name(set_id,kind)
+    _source_size(upper_bound_source_bytes,part_size)
+    if not callable(source_exit_zero):
+        raise DualOffsiteDenied("UNKNOWN_SIZE_REQUIRES_PRODUCER_EXIT_CHECK")
+    _destinations(sinks,reviews,upper_bound_source_bytes,part_size)
+    public=_public_key(public_pem)
+    master=os.urandom(32)
+    wrapped=public.encrypt(master,padding.OAEP(
+        mgf=padding.MGF1(algorithm=hashes.SHA256()),
+        algorithm=hashes.SHA256(),label=None))
+    pubder=public.public_bytes(serialization.Encoding.DER,
+                               serialization.PublicFormat.SubjectPublicKeyInfo)
+    aead=AESGCM(master)
+    plain_hash=hashlib.sha256()
+    chain=hashlib.sha256()
+    prev="0"*64
+    total=0
+    count=0
+    received=0
+    tail=bytearray()
+    footer_len=len(CPANEL_SOURCE_END_MARKER)
+
+    def flush_part(block: bytes) -> None:
+        nonlocal total,count,prev
+        if not block or len(block)>part_size or total+len(block)>upper_bound_source_bytes:
+            raise DualOffsiteDenied("UNKNOWN_SOURCE_PART_EXCEEDS_BOUND")
+        aad=_part_aad(set_id,kind,count,0,prev)
+        nonce=os.urandom(12)
+        encrypted=nonce+aead.encrypt(nonce,block,aad)
+        part_hash=digest(encrypted)
+        _put_and_read_both(sinks,prefix+f"{count:08d}.gcm",encrypted)
+        chain.update(bytes.fromhex(part_hash))
+        plain_hash.update(block)
+        prev=part_hash
+        total+=len(block)
+        count+=1
+        if count>MAX_PARTS:
+            raise DualOffsiteDenied("UNKNOWN_SOURCE_PART_LIMIT_EXCEEDED")
+
+    while True:
+        piece=source.read(part_size)
+        if type(piece) is not bytes or len(piece)>part_size:
+            raise DualOffsiteDenied("SOURCE_READ_TYPE_OR_LENGTH_UNSAFE")
+        if not piece:
+            break
+        received+=len(piece)
+        if received>upper_bound_source_bytes+footer_len:
+            raise DualOffsiteDenied("UNKNOWN_SOURCE_EXCEEDED_SIGNED_BOUND")
+        tail.extend(piece)
+        # Retain enough bytes to recognize the terminal producer marker even
+        # if it spans SSH read boundaries. Never encrypt the marker.
+        while len(tail)>=part_size+footer_len:
+            chunk=bytes(tail[:part_size])
+            del tail[:part_size]
+            flush_part(chunk)
+    if len(tail)<=footer_len or not tail.endswith(CPANEL_SOURCE_END_MARKER):
+        raise DualOffsiteDenied("CPANEL_PRODUCER_COMPLETION_MARKER_MISSING")
+    final_plain=bytes(tail[:-footer_len])
+    if not final_plain:
+        raise DualOffsiteDenied("EMPTY_FINAL_SOURCE_OR_NO_PAYLOAD")
+    flush_part(final_plain)
+    try:
+        exit_verified=source_exit_zero()
+    except Exception as exc:
+        raise DualOffsiteDenied("UPSTREAM_SSH_OR_DUMP_PROCESS_EXIT_UNVERIFIED") from exc
+    if exit_verified is not True:
+        raise DualOffsiteDenied("UPSTREAM_SSH_OR_DUMP_PROCESS_EXIT_UNVERIFIED")
+    manifest={
+        "schema":SCHEMA,"set_id":set_id,"kind":kind,
+        "source_bytes":total,"part_size":part_size,
+        "part_count":count,"plaintext_sha256":plain_hash.hexdigest(),
+        "cipher_hash_chain_sha256":chain.hexdigest(),
+        "last_part_sha256":prev,
+        "wrapped_aes256_key_b64":base64.b64encode(wrapped).decode("ascii"),
+        "recipient_public_key_sha256":digest(pubder),
+        "algorithm":"RSA-OAEP-SHA256+AES-256-GCM",
+        "requires_second_kind_and_isolated_restore":True,
+        "aad_source_bytes":0,
+        "source_footer_sha256":digest(CPANEL_SOURCE_END_MARKER),
+        "producer_exit_zero_observed":True,
+        "source_bytes_known_before_stream":False,
+    }
+    blob=encoded(manifest)
+    if len(blob)>MAX_MANIFEST:
+        raise DualOffsiteDenied("UNKNOWN_STREAM_MANIFEST_TOO_LARGE")
+    _put_and_read_both(sinks,prefix+"manifest.json",blob)
+    return {
+        "classification":"PRODUCER_EXIT_FOOTER_DUAL_READBACK_KIND_NOT_RESTORED",
+        "set_id":set_id,"kind":kind,"part_count":count,"plaintext_bytes":total,
+        "upstream_completion_marker_verified":True,
+        "upstream_exit_verified_by_injected_callback":True,
+        "two_provider_ciphertext_readbacks_completed":True,
+        "full_site_backup_and_isolated_restore_proven":False,
+        "actual_cpanel_pinned_ssh_executed_by_this_code":False,
+        "actual_cloud_oauth_executed_by_this_code":False,
+        "owner_current_sql_schema_proven":False,
+        "production_files_written":False,"trx_received":False,
+    }
+
+
 def isolated_restore_from_two_private_sinks(sinks: tuple[PrivateSink, PrivateSink],
                                              private_pem: bytes, password: bytes | None,
                                              *, set_id: str, kind: str,
@@ -254,6 +379,16 @@ def isolated_restore_from_two_private_sinks(sinks: tuple[PrivateSink, PrivateSin
     size=obj.get("source_bytes")
     part_size=obj.get("part_size")
     _source_size(size,part_size)
+    # The normal known-size source binds the expected source size in every GCM
+    # part's AAD. A live SSH producer with unknown source size uses 0, and
+    # MUST have independently validated its pinned EOF marker + exit status.
+    aad_bytes=obj.get("aad_source_bytes",size)
+    if type(aad_bytes) is not int or aad_bytes not in (0,size):
+        raise DualOffsiteDenied("AAD_SOURCE_BOUND_INVALID")
+    if aad_bytes==0 and (obj.get("source_footer_sha256")!=digest(CPANEL_SOURCE_END_MARKER)
+                         or obj.get("producer_exit_zero_observed") is not True
+                         or obj.get("source_bytes_known_before_stream") is not False):
+        raise DualOffsiteDenied("UNKNOWN_SOURCE_EOF_AND_EXIT_PROOF_MISSING")
     expected_parts=(size+part_size-1)//part_size
     if (type(obj.get("part_count")) is not int or
             obj["part_count"]!=expected_parts or
@@ -297,7 +432,7 @@ def isolated_restore_from_two_private_sinks(sinks: tuple[PrivateSink, PrivateSin
         if values[0]!=values[1]:
             raise DualOffsiteDenied("TWO_CLOUDS_PART_MISMATCH")
         fingerprint=digest(values[0])
-        aad=_part_aad(set_id,kind,i,size,previous)
+        aad=_part_aad(set_id,kind,i,aad_bytes,previous)
         try:
             clear=aead.decrypt(values[0][:12],values[0][12:],aad)
         except Exception as exc:
