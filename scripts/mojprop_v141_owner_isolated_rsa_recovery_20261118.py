@@ -53,6 +53,9 @@ def verify(package: Path, key_path: Path, password_path: Path | None) -> tuple[b
     with zipfile.ZipFile(BytesIO(outer),"r") as z:
         if sorted(z.namelist())!=["encrypted-snapshot.bin","manifest.json"]:
             raise ValueError("UNEXPECTED_BACKUP_MEMBERS")
+        for item in z.infolist():
+            if item.compress_type != zipfile.ZIP_STORED or item.file_size > LIMIT + 16384:
+                raise ValueError("UNSUPPORTED_OR_EXPANDING_PACKAGE")
         mraw=z.read("manifest.json")
         if len(mraw)>16384:
             raise ValueError("OVERSIZED_MANIFEST")
@@ -101,7 +104,11 @@ def verify(package: Path, key_path: Path, password_path: Path | None) -> tuple[b
         raise ValueError("COMPRESSED_SIZE_MISMATCH")
     dec=zlib.decompressobj()
     plain=dec.decompress(compressed,LIMIT+1)
+    if len(plain)>LIMIT or dec.unconsumed_tail:
+        raise ValueError("COMPRESSED_PAYLOAD_EXCEEDS_BOUNDED_OUTPUT")
     plain+=dec.flush()
+    if len(plain)>LIMIT:
+        raise ValueError("DECOMPRESSION_EXCEEDS_LIMIT")
     if len(plain)!=doc["source_bytes"] or _sha(plain)!=doc["source_sha256"] or not dec.eof or dec.unused_data or dec.unconsumed_tail:
         raise ValueError("PLAINTEXT_RECOVERY_MISMATCH")
     _isolate_verify(plain)
