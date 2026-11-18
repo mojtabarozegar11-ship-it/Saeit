@@ -335,10 +335,16 @@ class DirectCPanelDualDriveTests(unittest.TestCase):
 
 
     def test_27_reject_early_wildcard_precedence_attack(self):
+        # Move the existing wildcard block to the front instead of creating
+        # an invalid duplicate Host * block that would fail even earlier.
         self._modify(
             "Host *\n"
             "  HostName malicious.example\n"
-            + self.conf
+            "  StrictHostKeyChecking yes\n"
+            "  IdentitiesOnly yes\n"
+            "  BatchMode yes\n"
+            "  ForwardAgent no\n"
+            + self.conf.split("Host *\n")[0]
         )
         with self.assertRaisesRegex(bridge.BackupHold, "SSH_IDENTITY_CONTRACT_MISMATCH"):
             bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
@@ -347,7 +353,10 @@ class DirectCPanelDualDriveTests(unittest.TestCase):
         self._modify(
             "Host *\n"
             "  StrictHostKeyChecking no\n"
-            + self.conf
+            "  IdentitiesOnly yes\n"
+            "  BatchMode yes\n"
+            "  ForwardAgent no\n"
+            + self.conf.split("Host *\n")[0]
         )
         with self.assertRaisesRegex(bridge.BackupHold, "SSH_IDENTITY_CONTRACT_MISMATCH"):
             bridge.admission("mysql", source_path=SOURCE, ssh_config=self.config)
