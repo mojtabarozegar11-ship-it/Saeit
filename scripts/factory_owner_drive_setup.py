@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import subprocess
@@ -18,7 +19,7 @@ import sys
 import tempfile
 
 from factory_rclone_ephemeral_binary import provision_verified_rclone
-from factory_rclone_dual_parts import RcloneDualStore, TransferHold, _mode_secure_file, MAX_MANIFEST_BYTES
+from factory_rclone_dual_parts import RcloneDualStore, TransferHold, _mode_secure_file, MAX_MANIFEST_BYTES, _safe_read_config
 
 ROOT_A = '191sAkv4A01S9o6zhx-vM5xM7WO31qHPn'
 ROOT_B = '1e6D3Ek4k-4JT_oyEoiY_JejErZFssrC_'
@@ -66,9 +67,46 @@ def historical_pair_required_bytes() -> int:
             + HISTORICAL_FREE_RESERVE_BYTES)
 
 
+def _validate_owner_oauth_config(config: Path) -> None:
+    """Reject default client, non-refreshable tokens and duplicate grants.
+    
+    Configuration validation alone cannot prove Google's publishing state,
+    user identity, provider capacity, or successful live authorization.
+    Never print config fields or credentials.
+    """
+    conf = _safe_read_config(config)
+    refresh_tokens = []
+    for remote, root in (("factory_a", ROOT_A), ("factory_b", ROOT_B)):
+        if (not conf.has_section(remote)
+                or conf.get(remote, "type", fallback="") != "drive"
+                or conf.get(remote, "root_folder_id", fallback="") != root):
+            raise TransferHold("OWNER_DRIVE_REMOTE_CONFIG_UNVERIFIED")
+        client_id = conf.get(remote, "client_id", fallback="")
+        client_secret = conf.get(remote, "client_secret", fallback="")
+        if (not re.fullmatch(r"[A-Za-z0-9_-]{8,180}\.apps\.googleusercontent\.com", client_id)
+                or not client_secret.strip()):
+            raise TransferHold("OWNER_DEDICATED_GOOGLE_OAUTH_CLIENT_REQUIRED")
+        if (conf.get(remote, "scope", fallback="") != "drive"
+                or conf.get(remote, "service_account_file", fallback="")
+                or conf.get(remote, "service_account_credentials", fallback="")
+                or conf.get(remote, "team_drive", fallback="")):
+            raise TransferHold("OWNER_EXISTING_PRIVATE_DRIVE_SCOPE_REQUIRED")
+        try:
+            token = json.loads(conf.get(remote, "token", fallback=""))
+            refresh = token.get("refresh_token") if isinstance(token, dict) else None
+            if not isinstance(refresh, str) or not refresh.strip():
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise TransferHold("OWNER_OFFLINE_REFRESH_GRANT_REQUIRED") from None
+        refresh_tokens.append(refresh)
+    if refresh_tokens[0] == refresh_tokens[1]:
+        raise TransferHold("DUPLICATE_OAUTH_REFRESH_GRANT_DENIED")
+
+
 def _check(executable: Path, config: Path) -> dict:
     # This is connectivity+quota observation only, NOT current-source admission.
     # No database is accessed and no cloud object is created.
+    _validate_owner_oauth_config(config)
     preflight = RcloneDualStore(
         config,
         remote_a='factory_a', remote_b='factory_b',
@@ -87,6 +125,8 @@ def _check(executable: Path, config: Path) -> dict:
         'schema': 'factory.owner-private-oauth-connectivity.v2',
         'owner_interactive_shell_required': True,
         'distinct_private_drives_verified': True,
+        'dedicated_client_and_distinct_refresh_grants_present': True,
+        'google_oauth_publishing_state_verified': False,
         'existing_private_proof_readback_verified': preflight.proof_readbacks_verified,
         'free_bytes_drive_a': preflight.free_a_before,
         'free_bytes_drive_b': preflight.free_b_before,
@@ -118,7 +158,7 @@ def main(argv=None) -> int:
             with provision_verified_rclone(Path(tmp)) as exe:
                 if opts.configure:
                     print('Owner terminal only. Configure TWO separate Google accounts as factory_a / factory_b.')
-                    print('Use your OWN OAuth client ID. Restrict each root_folder_id to the previously owner-verified private root.')
+                    print('Use your OWN OAuth desktop client ID; shared client retirement is in 2026. Select scope drive; restrict each root_folder_id to its verified private root.')
                     print('Do not screen-record or forward any rclone config output; rclone may display sensitive tokens.')
                     rc = subprocess.run([str(exe), '--config', str(config), 'config'], stdin=None, stdout=None, stderr=None, check=False).returncode
                     if rc:
