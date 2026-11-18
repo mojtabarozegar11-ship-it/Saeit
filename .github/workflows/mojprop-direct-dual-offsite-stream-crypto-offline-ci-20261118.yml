@@ -1,0 +1,72 @@
+name: MOJ PROP — actual crypto two-private-cloud stream offline proof (NO CLOUD CONNECTION)
+on:
+  push:
+    branches: [feature/mojprop-direct-dual-offsite-encrypted-stream-core-20261118]
+    paths:
+      - scripts/mojprop_direct_dual_offsite_stream_core_20261118.py
+      - tests/test_mojprop_direct_dual_offsite_stream_core_20261118.py
+      - .github/workflows/mojprop-direct-dual-offsite-stream-crypto-offline-ci-20261118.yml
+  pull_request:
+    branches: [audit/mojprop-private-archive-allocation-and-offsite-route-20261118]
+permissions:
+  contents: read
+jobs:
+  memory-only-crypto-proof:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Clone ONLY source with no persisted GitHub credential
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Use exact existing project crypto dependency
+        run: |
+          set -euo pipefail
+          python3.11 -m pip install --disable-pip-version-check --no-input 'cryptography==50.0.2'
+      - name: Run 48 real AES256GCM and RSA3072 synthetic two-provider tests
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
+            tests.test_mojprop_direct_dual_offsite_stream_core_20261118
+      - name: Re-run all 176 prior archive/storage/Plan1/atomic source controls
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -q \
+            tests.test_mojprop_owner_archive_reclaim_planner_20261118 \
+            tests.test_mojprop_backup_release_admission_readonly_20261118 \
+            tests.test_mojprop_plan1_static_atomic_release_20261118 \
+            tests.test_mojprop_main_plan1_contact_source_20261118 \
+            tests.test_mojprop_public_live_static_exact_guard_20261118
+      - name: Prove bounded default chunk and no production interface
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B - <<'PY'
+          import json
+          from scripts import mojprop_direct_dual_offsite_stream_core_20261118 as p
+          assert p.PART_DEFAULT <= 8*1024**2
+          assert p.MAX_SOURCE >= 32*1024**3
+          print('MOJPROP_DIRECT_STREAM_READINESS='+json.dumps({
+            'memory_bound_max_chunk_bytes':p.PART_MAX,
+            'private_provider_oauth_connected':False,
+            'provider_storage_quota_verified':False,
+            'fresh_live_sql_plus_media_backup_created':False,
+            'complete_two_kind_set_committed':False,
+            'independent_real_restore_completed':False,
+            'vps_disk_space_added':False,
+            'production_deployment_done':False,
+            'real_trx_received':False,
+          },sort_keys=True))
+          PY
+      - name: Always report practical boundary
+        if: always()
+        run: |
+          echo 'NO_CUSTOMER_FILES_USED=true'
+          echo 'NO_REAL_DRIVE_OR_DROPBOX_API_CALLED=true'
+          echo 'NO_PAYMENT_OR_BROKER_ORDER=true'
+          echo 'NO_VPS_FILES_DELETED=true'
+          echo 'NO_PRODUCTION_RELEASE=true'
