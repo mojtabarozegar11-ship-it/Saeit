@@ -38,14 +38,15 @@ class CompanyInquiryForm(forms.ModelForm):
 
 
 def company_portal_home(request):
-    from django.shortcuts import redirect
-    from django.contrib import messages
+    # Preserve the public legacy form's redirect contract for invalid input.
+    # The new canonical /company/inquiry/ route shows field-specific HTTP 400.
     if request.method == "POST":
+        from django.contrib import messages
+        from django.shortcuts import redirect
         form = CompanyInquiryForm(request.POST)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "درخواست شما با موفقیت ثبت شد و برای بررسی کارشناسی ارسال گردید.")
-        else:
-            messages.error(request, "اطلاعات درخواست معتبر نیست؛ فیلدهای الزامی، نوع همکاری و نشانی ایمیل را بررسی کنید.")
-        return redirect("company")
+        if request.POST.get("company_url") or not form.is_valid():
+            messages.error(request, "درخواست ثبت نشد؛ فیلدهای الزامی، نوع همکاری و ایمیل را اصلاح کنید.")
+            return redirect("company")
+        from .company_sales_views import submit_company_inquiry
+        return submit_company_inquiry(request)
     return None

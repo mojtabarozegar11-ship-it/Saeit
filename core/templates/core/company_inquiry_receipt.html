@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Inquiry Receipt | Zomorod Melal{% endblock %}
+{% block content %}
+<article style="max-width:850px;margin:30px auto;padding:32px;border:2px solid #bfa66a;border-radius:16px">
+{% if english %}
+<h1>Inquiry received</h1>
+<p>Your inquiry is recorded for review. This is not an order, contract, payment or approval.</p>
+<p><strong>Tracking reference:</strong> <code>{{ reference }}</code></p>
+<p><strong>Status:</strong> {{ status }} · {{ received_at|date:"Y-m-d H:i" }}</p>
+<p>Keep this private status link. Reply to existing correspondence at <a href="mailto:zomorodmelal@gmail.com">zomorodmelal@gmail.com</a>.</p>
+<p><a href="/en/partners/">Back to B2B partnerships</a></p>
+{% else %}
+<h1>درخواست شما ثبت شد</h1>
+<p>درخواست شما در سامانه شرکت زمرد ملل ثبت شده است؛ ثبت درخواست به معنی قرارداد، سفارش یا پرداخت نیست.</p>
+<p><strong>کد پیگیری:</strong> <code dir="ltr">{{ reference }}</code></p>
+<p><strong>وضعیت:</strong> {{ status }} · {{ received_at|date:"Y-m-d H:i" }}</p>
+<p>نشانی این صفحه خصوصی را برای پیگیری نگهداری کنید.</p>
+<p><a href="/company/">بازگشت به شرکت</a></p>
+{% endif %}
+</article>
+{% endblock %}
