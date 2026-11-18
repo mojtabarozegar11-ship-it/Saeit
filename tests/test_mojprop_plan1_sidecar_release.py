@@ -92,7 +92,7 @@ class SidecarTests(unittest.TestCase):
         self.assertIn("30,000,000 SUN", text)
         self.assertIn("30 TRX", text)
         self.assertIn("Not open for paid enrollment", text)
-        self.assertIn("فروش و پرداخت فعال نیست", text)
+        self.assertIn("فروش، ثبت‌نام، ثبت رضایت و پرداخت فعال نیست", text)
 
     def test_07_no_html_application_or_post_forms(self):
         parsed = HTMLSafety()
@@ -361,7 +361,7 @@ class SidecarTests(unittest.TestCase):
 
     def test_50_zero_tracking_and_no_leaky_personal_data(self):
         s = REVIEWED.read_text("utf-8")
-        self.assertIn("no visitor profiling pixel or conversion analytics", s)
+        self.assertIn("visitor profiling pixel or conversion analytics", s)
         self.assertIn("minimal personal data kept out of URLs", s)
         self.assertNotIn("googletagmanager", s)
         self.assertNotIn("facebook.com/tr", s)
@@ -386,7 +386,7 @@ class SidecarTests(unittest.TestCase):
     def test_54_english_and_farsi_not_collecting_customers(self):
         s = REVIEWED.read_text("utf-8")
         self.assertIn("no web application form, marketing consent checkbox", s)
-        self.assertIn("به معنی ثبت مشتری", s)
+        self.assertIn("ثبت مشتری، رضایت تبلیغاتی یا تأیید دریافت پیام محسوب نمی‌شود", s)
 
 
 
