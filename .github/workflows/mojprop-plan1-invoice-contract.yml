@@ -1,0 +1,32 @@
+name: MOJ PROP Plan 1 invoice contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/mojprop_plan1_invoice.py"
+      - "tests/test_mojprop_plan1_invoice.py"
+      - ".github/workflows/mojprop-plan1-invoice-contract.yml"
+  push:
+    branches: [feature/prop-firm-policy-v11-20261114]
+    paths:
+      - "services/mojprop_plan1_invoice.py"
+      - "tests/test_mojprop_plan1_invoice.py"
+      - ".github/workflows/mojprop-plan1-invoice-contract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m py_compile services/mojprop_plan1_invoice.py tests/test_mojprop_plan1_invoice.py
+      - run: python -m unittest -v tests.test_mojprop_plan1_invoice
