@@ -1,0 +1,99 @@
+name: MOJ PROP v1.4.1 — stage signed payment source privately on cPanel (NO LIVE WRITE)
+
+on:
+  push:
+    branches:
+      - stage/mojprop-pr2700-source-20261118
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-pr2700-private-source-stage-20261118
+  cancel-in-progress: false
+
+jobs:
+  secure-private-stage:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 12
+    steps:
+      - name: Checkout stage workflow without retaining write credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout independently tested MOJ PROP payment source by exact immutable SHA
+        uses: actions/checkout@v4
+        with:
+          ref: b06144039e95d35f4448ad346fbe99c3b9f14685
+          path: native-source
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            prop_firm
+            core/mojprop_v141_native_receipt_view.py
+            core/mojprop_v141_private_portfolio_view.py
+            core/mojprop_v141_private_statement_view.py
+            services/mojprop_commercial_lanes.py
+            templates/mojprop
+            config/settings.py
+            config/urls.py
+      - name: Compile and pack only reviewed independent payment source (never keys)
+        id: packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$GITHUB_WORKSPACE/native-source"
+          test "$(git -C "$src" rev-parse HEAD)" = "b06144039e95d35f4448ad346fbe99c3b9f14685"
+          items=(
+            prop_firm
+            core/mojprop_v141_native_receipt_view.py
+            core/mojprop_v141_private_portfolio_view.py
+            core/mojprop_v141_private_statement_view.py
+            services/mojprop_commercial_lanes.py
+            templates/mojprop
+            config/settings.py
+            config/urls.py
+          )
+          for item in "${items[@]}"; do
+            test -e "$src/$item" && test ! -L "$src/$item"
+          done
+          test "$(find "$src/prop_firm" "$src/templates/mojprop" -type l | wc -l)" -eq 0
+          python3 -m py_compile             "$src/prop_firm/plan1_v141_native_checkout.py"             "$src/prop_firm/plan1_v141_native_watcher.py"             "$src/prop_firm/management/commands/mojprop_reconcile_native_trx.py"             "$src/core/mojprop_v141_native_receipt_view.py"             "$src/services/mojprop_commercial_lanes.py"
+          bundle="$RUNNER_TEMP/mojprop-native-b06144039.tar.gz"
+          tar -czf "$bundle" -C "$src" "${items[@]}"
+          bytes="$(stat -c '%s' "$bundle")"
+          test "$bytes" -gt 1000 && test "$bytes" -lt 25000000
+          sum="$(sha256sum "$bundle" | awk '{print $1}')"
+          test "${#sum}" -eq 64
+          echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sum" >> "$GITHUB_OUTPUT"
+          echo "STAGE_SOURCE_PIN=b06144039e95d35f4448ad346fbe99c3b9f14685"
+          echo "STAGE_BUNDLE_KIB=$(( (bytes+1023)/1024 ))"
+      - name: Deliver exact source to a NEW PRIVATE nonweb cPanel staging directory only
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          BUNDLE: ${{ steps.packet.outputs.bundle }}
+          DIGEST: ${{ steps.packet.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?OWNER_PINNED_KEY_UNAVAILABLE}"
+          test "${#DIGEST}" -eq 64
+          test -s "$BUNDLE"
+          umask 077
+          dir="$RUNNER_TEMP/mojprop-native-staging-ssh"
+          install -d -m 700 "$dir"
+          trap 'rm -f -- "$dir/key" "$dir/known"; rmdir "$dir" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$dir/key"
+          chmod 600 "$dir/key"
+          ssh-keygen -y -P '' -f "$dir/key" > /dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$dir/known"
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          run_id="$GITHUB_RUN_ID"
+          [[ "$run_id" =~ ^[0-9]{8,20}$ ]]
+          remote="set -eu; umask 077; test \"\$(id -un)\" = 'zomorod2'; target='/home/zomorod2/.mojprop-private-payment-stage-$run_id'; test ! -e \"\$target\" && test ! -L \"\$target\"; mkdir -m 700 \"\$target\"; cat > \"\$target/source.tar.gz\"; test \"\$(sha256sum \"\$target/source.tar.gz\" | awk '{print \$1}')\" = '$DIGEST'; tar -xzf \"\$target/source.tar.gz\" -C \"\$target\" --no-same-owner; test -f \"\$target/prop_firm/plan1_v141_native_checkout.py\"; test -f \"\$target/prop_firm/plan1_v141_native_watcher.py\"; test -f \"\$target/core/mojprop_v141_native_receipt_view.py\"; chmod 700 \"\$target\"; echo PRIVATE_STAGING_INSTALLED=true; echo PRODUCTION_APP_FILES_MODIFIED=false; echo DATABASE_MIGRATION_PERFORMED=false; echo CUSTOMER_PAYMENT_ENABLED=false"
+          timeout 100s ssh -T -i "$dir/key" -p 1396             -o UserKnownHostsFile="$dir/known" -o StrictHostKeyChecking=yes             -o IdentitiesOnly=yes -o BatchMode=yes -o ForwardAgent=no             -o RequestTTY=no -o ConnectTimeout=15 -o ConnectionAttempts=1             zomorod2@178.239.147.125 "$remote" < "$BUNDLE"
+          echo "STAGED_CODE_PRIVATE_ONLY_NOT_PUBLIC_PAYMENT=true" >> "$GITHUB_STEP_SUMMARY"
