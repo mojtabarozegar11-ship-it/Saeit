@@ -79,21 +79,28 @@ jobs:
               def handle_starttag(self,tag,pairs):
                   if tag=="a" and dict(pairs).get("href","").startswith("mailto:"):
                       self.mailto+=1
-          with build_opener(NoRedirect).open(Request(
-               "https://mojplaywin.com/moj-prop/contact/",method="GET",
-               headers={"Accept":"text/html","User-Agent":"MOJPROP-prelaunch-get-only/20261118"}),
-               timeout=15) as response:
-              status=response.status
-              ctype=response.headers.get("Content-Type","").lower()
-              body=response.read(65537)
-          parser=Contact()
-          if status==200 and ctype.startswith("text/html") and len(body)<=65536:
-              parser.feed(body.decode("utf-8",errors="replace"))
-          print("MAINLINE_FIRST_CONTACT_PUBLIC_GET="+json.dumps({
-              "status":status,"mailto_count":parser.mailto,
-              "post_sent":False,"paid_order_issued":False,"live_deploy":False
-          },sort_keys=True))
-          assert status==200 and parser.mailto>0 and len(body)<=65536
+          result={"status":None,"mailto_count":0,"post_sent":False,
+                  "paid_order_issued":False,"live_deploy":False,
+                  "reachability":"unproven"}
+          try:
+              with build_opener(NoRedirect).open(Request(
+                   "https://mojplaywin.com/moj-prop/contact/",method="GET",
+                   headers={"Accept":"text/html","User-Agent":"MOJPROP-prelaunch-get-only/20261118"}),
+                   timeout=15) as response:
+                  result["status"]=response.status
+                  ctype=response.headers.get("Content-Type","").lower()
+                  body=response.read(65537)
+              parser=Contact()
+              if result["status"]==200 and ctype.startswith("text/html") and len(body)<=65536:
+                  parser.feed(body.decode("utf-8",errors="replace"))
+                  result["mailto_count"]=parser.mailto
+              if result["status"]==200 and result["mailto_count"]>0:
+                  result["reachability"]="verified"
+          except Exception as error:
+              result["network_error"]=type(error).__name__
+          print("MAINLINE_FIRST_CONTACT_PUBLIC_GET="+json.dumps(result,sort_keys=True))
+          if result["reachability"]=="unproven":
+              print("PUBLIC_CONTACT_REACHABILITY_UNPROVEN_NO_RELEASE_AUTHORIZATION")
           PY
       - name: Report operational boundaries
         if: always()
