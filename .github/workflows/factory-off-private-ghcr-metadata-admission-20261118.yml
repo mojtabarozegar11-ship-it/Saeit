@@ -1,0 +1,71 @@
+name: Factory OFF private GHCR backup candidate admission (metadata only)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/factory-off-private-ghcr-metadata-admission-20261118.yml'
+permissions:
+  contents: read
+  packages: read
+concurrency:
+  group: factory-off-ghcr-metadata-admission-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  admit:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prove only read-only prerequisites and explicitly reject public-repo GITHUB_TOKEN for private backups
+        shell: bash
+        env:
+          GHCR_OWNER_PAT: ${{ secrets.GHCR_OWNER_PAT }}
+        run: |
+          set -euo pipefail
+          umask 077
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          import hashlib,json,os,pathlib,pwd,shutil,stat,subprocess,sys
+          user=pwd.getpwuid(os.geteuid()).pw_name
+          home=pathlib.Path.home()
+          scripts=[("openssl","openssl"),("gzip","gzip"),("tar","tar"),("sha256sum","sha256sum"),
+                   ("docker","docker"),("podman","podman"),("oras","oras"),("crane","crane"),("curl","curl")]
+          bins={k:bool(shutil.which(v)) for k,v in scripts}
+          v=os.statvfs(home)
+          free=v.f_bavail*v.f_frsize
+          trusted=pathlib.Path("security/factory_recovery_public_20261030.pem")
+          import cryptography
+          from cryptography.hazmat.primitives.serialization import load_pem_public_key,Encoding,PublicFormat
+          if trusted.is_symlink() or not trusted.is_file():
+              raise SystemExit("F01_PUBLIC_RECIPIENT_SOURCE_MISSING")
+          key=load_pem_public_key(trusted.read_bytes())
+          trusted_sha=hashlib.sha256(key.public_bytes(Encoding.DER,PublicFormat.SubjectPublicKeyInfo)).hexdigest()
+          if key.key_size!=3072 or trusted_sha!="a7b3ef1995681d3963d56570ce68b2c4cf9785e99163f66795592cb907632d74":
+              raise SystemExit("F01_RSA_RECIPIENT_NOT_OWNER_RECOVERABLE")
+          # A public Saeit repository GITHUB_TOKEN can create a public
+          # package through access inheritance; it must NOT stage backup bytes.
+          # Here we check only presence of a separately supplied owner PAT.
+          # No token content, hashes, lengths, account data or private path
+          # is emitted. A PAT being present alone grants NO upload consent.
+          owner_pat=bool(os.environ.get("GHCR_OWNER_PAT",""))
+          if not bins["gzip"] or not bins["curl"] or free < 900000000:
+              raise SystemExit("GHCR_TRANSPORT_CAPACITY_OR_TOOLS_MISSING")
+          result={"schema":"factory.off.ghcr.private.metadata-admission.v1",
+            "runner_is_nonroot":os.geteuid()!=0,
+            "free_disk_at_least_900MB":free>=900000000,
+            "python_crypto_available":True,
+            "owner_recovery_public_spki_verified":True,
+            "tools":bins,
+            "separate_owner_private_ghcr_pat_present":owner_pat,
+            "public_repo_github_token_allowed_for_private_backup":False,
+            "target_registry_package_created":False,
+            "cloud_upload_attempted":False,
+            "backup_bytes_transferred":0,
+            "factory_started":False,"production_source_accessed":False,
+            "cpanel_deleted":False,"spending_committed":False}
+          print("FACTORY_OFF_GHCR_PRIVATE_ADMISSION="+json.dumps(result,sort_keys=True),flush=True)
+          PY
