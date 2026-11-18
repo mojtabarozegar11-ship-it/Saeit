@@ -131,3 +131,23 @@ python3 -B -m scripts.factory_cpanel_existing_nov5_two_drive \
 طبق https://developers.google.com/identity/protocols/oauth2 ، وضعیت Testing برای برنامه خارجی معمولاً Refresh Token هفت‌روزه می‌دهد؛ مالک باید وضعیت برنامه و الزامات انتشار را در Google Auth Platform بررسی کند و هر مانع تأیید Google را از مسیر رسمی رفع نماید. وضعیت انتشار از شکل config قابل اثبات نیست. ابزار جدید Client ID اختصاصی، client_secret موجود، مجوز drive، Refresh Token مستقل دو remote و root صحیح را بررسی می‌کند و در صورت عدم احراز توقف دارد؛ این کنترل اثبات OAuth واقعی یا دائمی نیست. مالک باید در صفحه رسمی گوگل مجوزها را بررسی و رضایت دهد. هر دو حساب باید در محیط همان کاربر غیردسترسی-root انتقال مجاز شوند؛ اجرای تنظیمات در CI ممنوع است.
 
 پس از اتصال، ابزار setup با config مالک-تنها و هش قطعه خصوصی و quota واقعی هر دو مقصد بررسی می‌شود. نیاز دو بکاپ تاریخی در هر حساب 3895227392 bytes است؛ این عدد ظرفیت لازم برای MariaDB جاری نیست. سازوکار دیگری که هزینه یا انتشار اطلاعات ایجاد کند فعال نشده است.
+
+
+## مسیر اختیاری نگهداری gzip اصلی، بدون بازگردانی به حجم خام در انتقال
+
+مسیر جدید `PYTHONPATH=scripts python3 -B -m scripts.factory_nov5_gzip_direct_dual_drive` به‌صورت مستقل و fail-closed نگهداری می‌شود. هر دو نسخه فشرده تاریخی دقیق از cPanel شناخته‌شده‌اند: 279659980 و 279659148 bytes؛ مجموع 559319128 bytes، در مقابل 2817269760 bytes خام. مسیر مستقیم، قبل از خواندن منبع مجوز اختصاصی OAuth و سهمیه هر مقصد را بررسی می‌کند و سپس gzip دقیق را از SSH پین‌شده، با کنترل SHA فشرده، SHA SQLite بازسازی‌شده، CRC، EOF و عدم تغییر metadata، داخل قالب قدیمی F01V2 رمزنگاری می‌کند. هیچ فایل raw روی cPanel یا VPS ساخته نمی‌شود. سقف ظرفیت محافظه‌کارانه زوج فشرده در هر Drive، با احتساب دو manifest و سربار و reserve یک GiB، 1637259608 bytes است. این عدد فقط نیاز محاسباتی است، نه quota واقعی. مسیر raw قبلی و گیت ظرفیت آن دست‌نخورده‌اند.
+
+در محیط واقعی مالک ابتدا OAuth را با ابزار setup اختصاصی برقرار کنید. اگر اتصال و هویت موفق ولی گیت ظرفیت raw قدیمی ناموفق باشد، این به معنی رد ظرفیت مسیر فشرده نیست. پیش از انتقال هر نسخه، ابزار جدید دوباره quota لازم همان نسخه را از هر دو Drive می‌گیرد. پس از احراز ظرفیت زوج فشرده (حداقل 1637259608 bytes در هر مقصد پیش از اولین انتقال)، run را برای هر شناسه جدا انجام دهید:
+
+```bash
+PYTHONPATH=scripts python3 -B -m scripts.factory_nov5_gzip_direct_dual_drive \
+  --snapshot nov5-a \
+  --ssh-config /ABSOLUTE/OWNER_ONLY/ssh_config \
+  --known-hosts /ABSOLUTE/OWNER_ONLY/cpanel_known_hosts \
+  --rclone-config /ABSOLUTE/OWNER_ONLY/rclone.conf \
+  --public-pem /ABSOLUTE/OWNER_ONLY/verified-recovery-public.pem \
+  --trusted-public-spki-sha256 OWNER_VERIFIED_64_HEX_DIGEST
+# سپس با snapshot nov5-b تکرار شود.
+```
+
+رسید موفق هر انتقال شامل namespace، ID زمان تاریخی، gzip_sha256 و original_sqlite_sha256 و manifest_sha256 است و باید در دفتر خصوصی نگهداری شود. برای restore: مانیفست و قطعه‌های رمز شده همان namespace را در محیط مستقل دریافت و با decrypt_to_isolated_file در فایل جدید .sqlite3.gz رمزگشایی کنید؛ SHA و اندازه gzip را با catalog پین‌شده تطبیق دهید، سپس به فایل SQLite جدید و ایزوله باز کنید و SHA خام، CRC و PRAGMA integrity_check را کنترل کنید. هرگز gzip را مستقیماً به SQLite یا دیتابیس جاری معرفی نکنید. بازیابی عملی این مسیر هنوز انجام نشده و انتقال واقعی نیز انجام نشده است؛ نه اجازه حذف، نه بکاپ MariaDB جاری.
