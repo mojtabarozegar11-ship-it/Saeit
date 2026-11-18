@@ -1,0 +1,19 @@
+name: "MOJ PROP — compare two public TRON solidified node providers (READ ONLY)"
+on:
+  push:
+    branches: [audit/mojprop-two-public-solidity-providers-20261118]
+permissions:
+  contents: read
+jobs:
+  audit-two-hosts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Query only solidified current block from two TRON mainnet providers
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_v141_public_solidity_provider_readonly_probe.py
+          echo "NO_TRON_TRANSFER_OR_BROADCAST_AND_NO_SERVICE_CHARGES=true"
