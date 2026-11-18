@@ -489,3 +489,27 @@ class RealNativePaymentStorageTests(TestCase):
                          stdout=output)
         self.assertIn('"checked_invoices": 1', output.getvalue())
         self.assertIn('"dry_run": true', output.getvalue())
+
+    def test_sqlite_nonimmediate_cannot_issue_payment(self):
+        from prop_firm.plan1_v141_native_checkout import _require_serializable_payment_write
+        with patch("prop_firm.plan1_v141_native_checkout.connection") as conn:
+            conn.vendor = "sqlite"
+            conn.transaction_mode = "DEFERRED"
+            with self.assertRaises(CheckoutRejected):
+                _require_serializable_payment_write()
+            conn.transaction_mode = None
+            with self.assertRaises(CheckoutRejected):
+                _require_serializable_payment_write()
+
+    def test_sqlite_immediate_or_mariadb_allows_serialized_write(self):
+        from prop_firm.plan1_v141_native_checkout import _require_serializable_payment_write
+        with patch("prop_firm.plan1_v141_native_checkout.connection") as conn:
+            conn.vendor = "sqlite"
+            conn.transaction_mode = "IMMEDIATE"
+            self.assertIsNone(_require_serializable_payment_write())
+            conn.vendor = "mysql"
+            conn.transaction_mode = None
+            self.assertIsNone(_require_serializable_payment_write())
+            conn.vendor = "postgresql"
+            with self.assertRaises(CheckoutRejected):
+                _require_serializable_payment_write()
