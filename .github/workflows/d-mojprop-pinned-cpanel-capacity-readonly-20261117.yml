@@ -1,6 +1,7 @@
 name: D MOJ PROP owner cPanel current recovery capacity (strict read-only)
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - ".github/workflows/d-mojprop-pinned-cpanel-capacity-readonly-20261117.yml"
