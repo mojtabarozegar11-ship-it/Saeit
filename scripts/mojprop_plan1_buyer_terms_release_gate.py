@@ -22,6 +22,7 @@ UNRESOLVED_TEXT = (
 )
 REQUIRED_NONPAYABLE_EN = "Not open for paid enrollment"
 REQUIRED_NONPAYABLE_FA = "فروش و پرداخت فعال نیست"
+REQUIRED_NONPAYABLE_FA_EXPANDED = "فروش، ثبت‌نام، ثبت رضایت و پرداخت فعال نیست"
 FA_SECTION = re.compile(r'<section\b[^>]*\bid=["\x27]fa["\x27]', re.I)
 DANGEROUS_HTML = (
     re.compile(r"<form\b", re.I),
@@ -65,7 +66,9 @@ def evaluate(page: bytes, approved_version: str, approved_sha256: str) -> dict:
         or approved_version not in text[marker.start():]
     ):
         failures.append("english_persian_revision_mismatch")
-    if REQUIRED_NONPAYABLE_EN not in text or REQUIRED_NONPAYABLE_FA not in text:
+    if (REQUIRED_NONPAYABLE_EN not in text or not any(
+        phrase in text for phrase in (REQUIRED_NONPAYABLE_FA, REQUIRED_NONPAYABLE_FA_EXPANDED)
+    )):
         failures.append("nonpayable_disclosure_missing")
     low = text.lower()
     if any(fragment in low for fragment in UNRESOLVED_TEXT):
