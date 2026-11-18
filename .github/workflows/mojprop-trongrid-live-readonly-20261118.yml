@@ -1,0 +1,19 @@
+name: MOJ PROP official TronGrid mainnet reader compatibility (NO TRANSFERS)
+on:
+  push:
+    branches: [audit/mojprop-trongrid-readonly-20261118]
+permissions:
+  contents: read
+jobs:
+  public-chain-api-inspection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect account-history API once without keys, wallet secrets or ledger output
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojprop_trongrid_merchant_readonly_probe_20261118.py
+          echo 'NO_PAYMENT_OR_BROADCAST_AND_NO_PRODUCTION_CHANGE=true'
