@@ -88,7 +88,7 @@ class MainlinePlanOneContactGuards(unittest.TestCase):
     def test_12_mojplaywin_page_is_english_only(self):
         self.assertNotIn('lang="fa" dir="rtl"', self.text)
         self.assertNotIn("درخواست رایگان شرایط کتبی", self.text)
-        self.assertNotRegex(self.text, r"[\\u0600-\\u06FF]")
+        self.assertFalse(any(0x0600 <= ord(char) <= 0x06FF for char in self.text))
 
     def test_13_no_dead_new_form_link(self):
         self.assertNotIn("/moj-prop-interest/form/", self.text)
