@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git hash-object scripts/factory_cpanel_existing_nov5_two_drive.py)" = 'da48a4a7d98de6a1100298ab784f21471472fa5c'
+          test "$(git hash-object scripts/factory_cpanel_existing_nov5_two_drive.py)" = 'ebbc69c3f4bf87242d65d4b9ec8dcffaa8f3f347'
           test "$(git hash-object tests/test_factory_cpanel_existing_nov5_two_drive.py)" = 'e105046f9d88c130bc114ce98a61b16d61309bae'
           test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'f9c6d8445144744920246a128c977bdc850eb80f'
           test "$(git hash-object scripts/factory_dual_stream_v2.py)" = '7a1d0ac87d97c30134f4d6955359379b0c88a255'
