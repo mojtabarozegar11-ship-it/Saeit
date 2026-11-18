@@ -21,9 +21,9 @@ ASSET = "TRX"
 AMOUNT_SUN = 30_000_000
 MERCHANT_DOMAIN = "mojplaywin.com"
 MERCHANT_ID = "mojplaywin-store"
-EMAIL = re.compile(r"^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
-ORDER_REF = re.compile(r"MOJPROP01-[A-Z0-9]{12,32}\\Z")
-DIGEST = re.compile(r"[0-9a-f]{64}\\Z")
+EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+ORDER_REF = re.compile(r"MOJPROP01-[A-Z0-9]{12,32}\Z")
+DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 RELEASE_GATES = (
@@ -144,7 +144,7 @@ def issue_plan1_invoice(*, decision: ReleaseDecision, email: str,
     if type(contract_sha256) is not str or DIGEST.fullmatch(contract_sha256) is None:
         raise InvoiceReleaseDenied("trusted bilingual contract digest required")
     if payer_hex41 is not None and (
-        type(payer_hex41) is not str or not re.fullmatch(r"41[0-9a-f]{40}\\Z", payer_hex41)
+        type(payer_hex41) is not str or not re.fullmatch(r"41[0-9a-f]{40}\Z", payer_hex41)
     ):
         raise InvoiceReleaseDenied("invalid pre-bound payer")
     return Plan1InvoiceSnapshot(
