@@ -370,5 +370,71 @@ class SafeStaticReleaseTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(private.stat().st_mode),0o700)
 
 
+    def test_53_crash_during_backup_dir_fsync_refuses_live_swap(self):
+        """Durable file contents without a durable directory entry is unsafe."""
+        actual_fsync=os.fsync
+        backup_dir_ino=self.backup.parent.stat().st_ino
+
+        def fail_backup_directory(fd):
+            info=os.fstat(fd)
+            if stat.S_ISDIR(info.st_mode) and info.st_ino==backup_dir_ino:
+                raise OSError("simulated interrupted rollback directory sync")
+            return actual_fsync(fd)
+
+        with patch.object(m.os,"fsync",side_effect=fail_backup_directory):
+            with self.assertRaisesRegex(OSError,"interrupted rollback"):
+                self.call("install",reviews=self.approve(),owner_ack=m.OWNER_ACK)
+        self.assertEqual(self.live.read_bytes(),ORIGINAL)
+        self.assertEqual(self.backup.read_bytes(),ORIGINAL)
+        # Retry must re-fsync the already-existing backup entry before swapping.
+        result=self.call("install",reviews=self.approve(),owner_ack=m.OWNER_ACK)
+        self.assertEqual(result["status"],"PINNED_STATIC_INSTALLED")
+        self.assertEqual(self.live.read_bytes(),NEW)
+
+    def test_54_durable_backup_directory_fsync_precedes_live_replace(self):
+        """Proof of operation ordering, independent of a green happy-path test."""
+        actual_fsync=os.fsync
+        actual_replace=os.replace
+        backup_dir_ino=self.backup.parent.stat().st_ino
+        events=[]
+
+        def record_fsync(fd):
+            info=os.fstat(fd)
+            if stat.S_ISDIR(info.st_mode) and info.st_ino==backup_dir_ino:
+                events.append("backup_directory_durable")
+            return actual_fsync(fd)
+
+        def record_replace(src,dst):
+            events.append("live_replace")
+            return actual_replace(src,dst)
+
+        with patch.object(m.os,"fsync",side_effect=record_fsync), \
+             patch.object(m.os,"replace",side_effect=record_replace):
+            self.call("install",reviews=self.approve(),owner_ack=m.OWNER_ACK)
+        self.assertIn("backup_directory_durable",events)
+        self.assertIn("live_replace",events)
+        self.assertLess(events.index("backup_directory_durable"),
+                        events.index("live_replace"))
+
+    def test_55_existing_identical_backup_dir_sync_failure_is_fail_closed(self):
+        """Even a preexisting backup requires a persisted directory entry."""
+        self.backup.write_bytes(ORIGINAL)
+        self.backup.chmod(0o600)
+        actual_fsync=os.fsync
+        backup_dir_ino=self.backup.parent.stat().st_ino
+
+        def fail_backup_directory(fd):
+            info=os.fstat(fd)
+            if stat.S_ISDIR(info.st_mode) and info.st_ino==backup_dir_ino:
+                raise OSError("simulated existing directory EIO")
+            return actual_fsync(fd)
+
+        with patch.object(m.os,"fsync",side_effect=fail_backup_directory):
+            with self.assertRaisesRegex(OSError,"existing directory EIO"):
+                self.call("install",reviews=self.approve(),owner_ack=m.OWNER_ACK)
+        self.assertEqual(self.live.read_bytes(),ORIGINAL)
+        self.assertEqual(self.backup.read_bytes(),ORIGINAL)
+
+
 if __name__=="__main__":
     unittest.main()
