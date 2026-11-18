@@ -481,3 +481,74 @@ class FactoryCpanelOldBackupTransportTests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+
+
+class FactoryHistoricalGzipTransitionTests(unittest.TestCase):
+    """Exercise the actual remote producer on private local fixtures, never cPanel."""
+    def run_fixture(self, kind, mode="stream"):
+        import gzip
+        import pwd
+        import subprocess
+        import sqlite3
+        from pathlib import Path
+        import tempfile
+        import hashlib
+        with tempfile.TemporaryDirectory() as tmp:
+            home=Path(tmp)
+            root=home/"restore-staging"/"factory"
+            root.mkdir(parents=True, mode=0o700)
+            name=m.SOURCES["nov5-a"][0]
+            raw_path=root/name
+            with sqlite3.connect(raw_path) as c:
+                c.execute("CREATE TABLE fixture (value BLOB)")
+                c.execute("INSERT INTO fixture VALUES (?)",(b"X"*3000000,))
+            raw=raw_path.read_bytes()
+            packed=gzip.compress(raw,mtime=0)
+            zipped=raw_path.with_name(name+".gz")
+            if kind!="raw":
+                raw_path.unlink()
+                disk=packed
+                if kind=="corrupt": disk=packed[:-8]+bytes([packed[-8]^1])+packed[-7:]
+                elif kind=="trailing": disk=packed+b"junk"
+                elif kind=="truncated": disk=packed[:-8]
+                elif kind=="other_gzip": disk=gzip.compress(raw[:-1]+bytes([raw[-1]^1]),mtime=0)
+                zipped.write_bytes(disk)
+                zipped.chmod(0o600)
+            if kind=="unsafe_raw":
+                raw_path.symlink_to(zipped)
+            if kind=="world_readable":zipped.chmod(0o644)
+            if kind=="sidecar":(root/(name+"-wal")).touch()
+            if kind=="linked":
+                os.link(zipped,root/"duplicate")
+            src=m.REMOTE_PY.replace("/home/zomorod2",str(home)).replace(
+                '!="zomorod2"', "!=" + repr(pwd.getpwuid(os.geteuid()).pw_name))
+            src=src.replace("1408634880",str(len(raw))).replace(
+                m.SOURCES["nov5-a"][1],hashlib.sha256(raw).hexdigest())
+            src=src.replace("279659980",str(len(packed))).replace(
+                "591a0b10b2f782cb7cb8db3fa340f4b3827b8d1db2960ca89a507098ccc35c78",
+                hashlib.sha256(packed).hexdigest())
+            proc=subprocess.run([sys.executable,"-B","-c",src,name,mode],
+                                capture_output=True,timeout=15)
+            return proc,raw
+
+    def test_gzip_only_stream_exact_original(self):
+        p,raw=self.run_fixture("gzip")
+        self.assertEqual(p.returncode,0,p.stderr.decode(errors="replace"))
+        self.assertEqual(p.stdout,raw)
+
+    def test_gzip_only_probe_logical_size(self):
+        p,raw=self.run_fixture("gzip","probe")
+        self.assertEqual(p.returncode,0)
+        self.assertEqual(json.loads(p.stdout)["size"],len(raw))
+
+    def test_raw_legacy_stream_unchanged(self):
+        p,raw=self.run_fixture("raw")
+        self.assertEqual(p.returncode,0)
+        self.assertEqual(p.stdout,raw)
+
+    def test_invalid_gzip_or_unsafe_metadata_never_success(self):
+        for kind in ("corrupt","trailing","truncated","other_gzip","unsafe_raw",
+                     "world_readable","sidecar","linked"):
+            with self.subTest(kind=kind):
+                p,_=self.run_fixture(kind)
+                self.assertNotEqual(p.returncode,0)
