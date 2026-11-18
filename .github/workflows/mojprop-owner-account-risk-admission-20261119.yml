@@ -1,0 +1,22 @@
+name: MOJ PROP shared owner-account risk admission
+on:
+  push:
+    branches: [feature/mojprop-owner-account-risk-admission-20261119]
+    paths: ['.github/workflows/mojprop-owner-account-risk-admission-20261119.yml','prop_firm/plan1_shared_owner_risk.py','tests/test_prop_plan1_shared_owner_risk.py']
+permissions:
+  contents: read
+jobs:
+  risk-review:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mojprop-owner-account-risk-admission-20261119'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Owner risk review and regression tests only
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_shared_owner_risk.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_moj_prop_broker_fit.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_owner_account_buyer_copy.py' -v
