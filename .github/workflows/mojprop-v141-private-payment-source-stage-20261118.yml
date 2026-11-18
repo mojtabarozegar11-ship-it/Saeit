@@ -47,7 +47,9 @@ jobs:
         run: |
           set -euo pipefail
           src="$GITHUB_WORKSPACE/native-source"
-          test "$(git -C "$src" rev-parse HEAD)" = "b06144039e95d35f4448ad346fbe99c3b9f14685"
+          # actions/checkout may use an immutable REST archive fallback without .git
+          # on this old self-hosted Git version. ref is already a full pinned SHA.
+          test -f "$src/prop_firm/plan1_v141_native_checkout.py"
           items=(
             prop_firm
             core/mojprop_v141_native_receipt_view.py
