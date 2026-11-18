@@ -1,0 +1,52 @@
+name: "MOJ PROP — first install independent empty payment ledger with recovery proof (NO COLLECTION)"
+on:
+  push:
+    branches: [audit/mojprop-isolated-django-host-rehearsal-20261118]
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-v141-private-ledger-first-install-20261118
+  cancel-in-progress: false
+jobs:
+  private-ledger-first-install:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source without invoking host scripts
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          from pathlib import Path
+          p=Path("scripts/mojprop_v141_create_private_ledger_and_recovery_20261118.py")
+          compile(p.read_text("utf8"),str(p),"exec")
+          print("ISOLATED_PRIVATE_DB_SCRIPT_SYNTAX=OK")
+          PY
+      - name: Create a NEW private-only empty ledger and verify SQLite snapshot restore on cPanel
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?OWNER_CPANEL_SSH_CREDENTIAL_UNAVAILABLE}"
+          umask 077
+          dir="$RUNNER_TEMP/mojprop-ledger-init"
+          install -d -m 700 "$dir"
+          trap 'rm -f -- "$dir/key" "$dir/known"; rmdir "$dir" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$dir/key"
+          chmod 600 "$dir/key"
+          ssh-keygen -y -P '' -f "$dir/key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$dir/known"
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 150s ssh -T -i "$dir/key" -p 1396 \
+            -o UserKnownHostsFile="$dir/known" -o StrictHostKeyChecking=yes \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ForwardAgent=no \
+            -o RequestTTY=no -o ConnectTimeout=15 -o ConnectionAttempts=1 \
+            zomorod2@178.239.147.125 \
+            'test "$(id -un)" = zomorod2; PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_v141_create_private_ledger_and_recovery_20261118.py \
+            | python3 -B -c 'import json,sys;raw=sys.stdin.read(10000);rows=[s for s in raw.splitlines() if s.startswith("MOJPROP_PRIVATE_DB_FIRST_INSTALL=")];assert len(rows)==1,raw[-2000:];p=json.loads(rows[0].split("=",1)[1]);print(rows[0]);required=("isolated_restore_test_passed","db_integrity_check_passed","private_permissions","settlement_unique_index_present","sqlite_migrations_through_0012");assert all(p.get(k) is True for k in required),p;assert p.get("production_mariadb_accessed") is False and p.get("production_payments_enabled") is False'
+          echo "EMPTY_PRIVATE_LEDGER_BACKUP_AND_RESTORE_ONLY_NO_CUSTOMER_FUNDS=true"
