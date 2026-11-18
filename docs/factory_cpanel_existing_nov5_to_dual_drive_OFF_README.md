@@ -151,3 +151,20 @@ PYTHONPATH=scripts python3 -B -m scripts.factory_nov5_gzip_direct_dual_drive \
 ```
 
 رسید موفق هر انتقال شامل namespace، ID زمان تاریخی، gzip_sha256 و original_sqlite_sha256 و manifest_sha256 است و باید در دفتر خصوصی نگهداری شود. برای restore: مانیفست و قطعه‌های رمز شده همان namespace را در محیط مستقل دریافت و با decrypt_to_isolated_file در فایل جدید .sqlite3.gz رمزگشایی کنید؛ SHA و اندازه gzip را با catalog پین‌شده تطبیق دهید، سپس به فایل SQLite جدید و ایزوله باز کنید و SHA خام، CRC و PRAGMA integrity_check را کنترل کنید. هرگز gzip را مستقیماً به SQLite یا دیتابیس جاری معرفی نکنید. بازیابی عملی این مسیر هنوز انجام نشده و انتقال واقعی نیز انجام نشده است؛ نه اجازه حذف، نه بکاپ MariaDB جاری.
+
+
+## بازیابی مستقل نسخه فشرده تاریخی (نه MariaDB جاری)
+
+ابزار `scripts/factory_nov5_gzip_isolated_restore.py` برای کامپیوتر مستقل و مورد اعتماد مالک ساخته شده است. پس از انتقال موفق و ثبت هش واقعی manifest در دفتر خصوصی، تمام قطعه‌های همان namespace را از یک Drive به پوشه خصوصی مستقل دانلود کنید. پوشه ورودی و پوشه خروجی باید مطلق، جدا، تحت مالکیت همان کاربر و 0700 باشند؛ فایل‌های رمز شده و کلید 0600. حداقل فضای لازم برای هر بازیابی شامل gzip، SQLite اصلی و ذخیره یک GiB است. کلید خصوصی و گذرواژه فقط روی کامپیوتر مالک باقی بماند؛ هیچ‌گاه CI، VPS انتقال یا گوگل درایو نیست.
+
+```bash
+PYTHONPATH=scripts python3 -B -m scripts.factory_nov5_gzip_isolated_restore \
+  --snapshot nov5-a \
+  --manifest /OWNER_PRIVATE_INPUT/f01v2-ACTUAL_RUN_ID-manifest.json \
+  --manifest-sha256 ACTUAL_PIN_FROM_PRIVATE_RECEIPT \
+  --input-dir /OWNER_PRIVATE_INPUT \
+  --output-parent /OWNER_PRIVATE_ISOLATED_OUTPUT \
+  --private-pem /OWNER_ONLY/RECOVERY_PRIVATE_KEY.pem --encrypted-key
+```
+
+این دستور مثال است؛ مقادیر واقعی باید از رسید انتقال موفق گرفته شوند. ابزار به کلید عمومی تثبیت‌شده مالک، هش manifest، AES-GCM تک‌تک قطعه‌ها، SHA و CRC gzip، اندازه و SHA فایل raw، SQLite quick_check/integrity_check در حالت immutable/read-only، و هش نهایی فایل روی دیسک مقید است. خروجی موفق در یک فایل جدید بدون overwrite منتشر می‌شود. فضای موقت ساخته‌شده همین فرایند پاک می‌شود؛ هیچ بکاپ قبلی حذف نمی‌شود. آزمون گردش مستقل از کلید مصنوعی استفاده می‌کند، نه کلید یا داده واقعی مالک. تا انتقال واقعی و رسید بازیابی واقعی در محیط مستقل، وضعیت cloud restore=not proven و safe_to_delete=false است. بازیابی هر دو حساب جداگانه لازم است.
