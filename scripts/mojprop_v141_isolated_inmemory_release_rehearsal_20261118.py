@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 import sys
 
-STAGE = Path("/home/zomorod2/.mojprop-private-payment-stage-44220183128")
+STAGE = Path("/home/zomorod2/.mojprop-private-payment-stage-44223002898")
 REQUIRED = (
     "prop_firm/models.py",
     "prop_firm/migrations/0012_v141_native_trx_receipt.py",
