@@ -23,6 +23,17 @@ PAGES = {
 }
 MAX_BYTES = 128 * 1024
 FIXED_DATE = (2026, 11, 18, 0, 0, 0)
+# Exact reviewed Git blobs. File-byte identity is pinned independently of the
+# manifest generated during this run; merely recomputing hashes is insufficient.
+# Git object SHA-1 is an identity guard, not an owner signature/approval.
+REVIEWED_GIT_BLOBS = {
+    "b2b/index.html": "018fb4bfa25612520b000611d50df81b91de7202",
+    "b2b/privacy/index.html": "69c79638d36f2e92758fea2a1bb1a13c3675596d",
+}
+
+def _git_blob(raw: bytes) -> str:
+    frame = b"blob " + str(len(raw)).encode("ascii") + bytes([0]) + raw
+    return hashlib.sha1(frame).hexdigest()
 
 
 def _load_exact(root: Path) -> dict[str, bytes]:
@@ -43,6 +54,8 @@ def _load_exact(root: Path) -> dict[str, bytes]:
         raw = source.read_bytes()
         if len(raw) != meta.st_size:
             raise ValueError("HTML source changed during read")
+        if _git_blob(raw) != REVIEWED_GIT_BLOBS[member]:
+            raise ValueError("Unreviewed HTML bytes, refuse artifact")
         txt = raw.decode("utf-8")
         if "<!doctype html>" not in txt.lower() or 'lang="en"' not in txt:
             raise ValueError("invalid English HTML")

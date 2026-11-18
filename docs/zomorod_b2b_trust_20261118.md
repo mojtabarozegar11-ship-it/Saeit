@@ -19,3 +19,6 @@ A separate /b2b/ English static trade page and /b2b/privacy/ have been added und
 
 ## Reproducible exact static artifact (no deployment)
 The two independent /b2b/ and /b2b/privacy/ HTML assets are now built into a deterministic ZIP with exact SHA-256 hashes and an explicit not-deployed manifest; no user data, server credentials or checkout logic is included. The package workflow runs in GitHub-hosted CI, not on the cPanel factory runner; it cannot install pages. The artifact includes only b2b/index.html, b2b/privacy/index.html and MANIFEST.json. Never run generic cPanel deployment to publish it; before a separately authorized create-only site publish, prove absence of both live targets and review host route ownership. Full-site backup/restore remains the gate for the separate Django+CRM app release.
+
+### Exact reviewed Git file identity enforcement
+The two public static B2B HTML files are now pinned to verified Git blob objects in the package builder, not merely hashed after loading. Even well-formed changed HTML fails before ZIP assembly. Git object hash provides exact source byte identity but is **not** a digital owner authorization. Source-only regression tests cover this denial.

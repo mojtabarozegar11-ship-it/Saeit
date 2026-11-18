@@ -56,6 +56,19 @@ class StaticPackageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify_archive(out.getvalue(),SHA)
 
+    def test_modified_but_well_formed_source_denied(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/"public"/"b2b"/"privacy").mkdir(parents=True)
+            for member,relative in PAGES.items():
+                target=root/relative
+                target.write_bytes((HERE/relative).read_bytes())
+            target=root/"public"/"b2b"/"index.html"
+            text=target.read_text(encoding="utf-8")
+            target.write_text(text.replace("Official company contact channel","Other company contact channel"),encoding="utf-8")
+            with self.assertRaises(ValueError):
+                _load_exact(root)
+
     def test_symlinked_source_denied(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
