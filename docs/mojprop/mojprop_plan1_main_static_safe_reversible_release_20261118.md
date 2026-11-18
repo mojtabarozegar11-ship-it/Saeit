@@ -51,3 +51,18 @@ D. Obtain separate owner explicit approval for **a static-only production releas
 E. Only after a genuine voluntary prospect request, verify delivery to the connected owner Gmail and any CRM persistence before recording a sale. **No customer POST should be fabricated**. Do NOT enable proposed 30 native TRX settlement, live broker trades, funded account promises or paid advertising without their own approved legal/technical gates.
 
 **Evidence boundary:** Source/isolated QA complete, live target and backend preflight observed; **no production modifications or new revenue**. This document is neither a release approval nor authorization to spend, delete, email, deploy or trade.
+
+
+## 18 Nov 2026 — post-review durability correction (source only)
+
+A new adversarial review identified that `fsync()` on the rollback **file** alone does not durably commit the backup **directory entry**. A sudden crash between creation and live HTML replacement could leave the operator with the published candidate but without a reliably persisted rollback filename.
+
+- `_sync_private_backup_directory()` verifies the owner-private rollback directory, opens it without following symlinks, checks the opened inode's owner and access mode, and `fsync()`s the directory **before** the live `os.replace()`.
+- Applies to both a newly written rollback file and an already-existing byte-exact rollback file (important when retrying after a simulated sync failure).
+- A refused directory fsync aborts and preserves original live page. No rollback file is deleted, and no source bytes are replaced.
+- Added three synthetic checks #53–55: injected directory fsync failure blocks publish; durable backup-dir sync strictly precedes live replace; existing backup-dir sync failure also blocks publish.
+- **Verified exact-source CI:** [Actions #44221621640](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44221621640) completed SUCCESS at source SHA `b252ad1fa9980b17db650dd3bd40b9002a993953`, **55/55** dedicated isolated tests plus **88/88** companion tests = **143/143 PASS**. Workflow-label housekeeping on subsequent SHA requires its own CI status; do not attribute this previous result to a newer commit.
+- Two previously created private historical Google Drive folders were independently listed from both connected owner accounts in this cycle: **0 objects in A and 0 objects in B** at read time. This corroborates the **unresolved** transfer—not an offsite backup.
+- These changes have **not** created a new current MariaDB/media backup, independently restored a production snapshot, uploaded archive bytes, freed VPS space, modified cPanel, launched live sales, or earned TRX.
+
+**Remaining hard gate:** verified full encrypted current SQL+app+media offsite backup with owner-controlled recovery key and isolated restore remains missing. VPS staging still lacks 6,225,965,056 bytes for the existing 10 GiB-admission producer. Direct bounded encryption/streaming to two authenticated private providers could remove *local staging* dependency, but owner-controlled OAuth, free provider quotas, and full restore proof remain necessary. Historical Nov 5 SQLite does **not** substitute for the current live MariaDB backup. Never transfer secret OAuth/private keys into source control or chat.
