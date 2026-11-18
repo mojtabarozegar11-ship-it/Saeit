@@ -45,9 +45,9 @@ def admission():
         if aux.exists() or aux.is_symlink():
             raise RuntimeError('SIDE_CAR_PRESENT')
     target = ROOT / (SOURCE + '.gz')
-    if target.exists() or target.is_symlink():
-        raise RuntimeError('DESTINATION_ALREADY_PRESENT')
-    return path, target, st
+    if target.is_symlink():
+        raise RuntimeError('DESTINATION_SYMLINK_DENIED')
+    return path, target, st, target.exists()
 
 
 def quota_mib():
@@ -115,7 +115,21 @@ def verify_compressed(path):
 
 
 def stage():
-    source, destination, before = admission()
+    source, destination, before, already = admission()
+    if already:
+        verify_compressed(destination)
+        if identity(source.lstat()) != identity(before):
+            raise RuntimeError('ORIGINAL_SOURCE_CHANGED')
+        return {'schema': 'factory.cpanel.nov5.single-gzip-stage.v1',
+                'snapshot': 'nov5-a', 'gzip_bytes_stored': GZIP_BYTES,
+                'gzip_sha256': GZIP_SHA, 'decompressed_sha256_matches_source': True,
+                'gzip_crc_verified': True, 'snapshot_unchanged': True,
+                'already_staged_verified': True,
+                'new_compressed_backup_files_created': 0,
+                'source_raw_files_deleted': 0, 'source_raw_files_modified': 0,
+                'factory_started': False, 'production_mysql_accessed': False,
+                'space_reclaimed': 0, 'safe_to_delete_raw': False,
+                'owner_raw_delete_authorization_given': False}
     quota_before = quota_mib()
     required_mib = GZIP_BYTES / (1024 * 1024) + RESERVE_MIB
     if quota_before < required_mib:
@@ -184,6 +198,7 @@ def stage():
                 'quota_remaining_mib_before': quota_before,
                 'quota_remaining_mib_staging_check': quota_during,
                 'quota_reserve_mib': RESERVE_MIB,
+                'already_staged_verified': False,
                 'new_compressed_backup_files_created': 1,
                 'source_raw_files_deleted': 0,
                 'source_raw_files_modified': 0,
