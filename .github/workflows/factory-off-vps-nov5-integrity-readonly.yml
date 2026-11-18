@@ -30,7 +30,7 @@ jobs:
           umask 077
           test "$(id -u)" -ne 0 || { echo OWNER_RUNNER_MUST_BE_NONROOT; exit 78; }
           test -n "$VPS_KEY" || { echo VPS_AUTH_NOT_PRESENT; exit 78; }
-          test "$(git hash-object scripts/factory_vps_nov5_sqlite_integrity_readonly_20261118.py)" = '141227923255a3735dc8e20f109cdd195b8f5c15'
+          test "$(git hash-object scripts/factory_vps_nov5_sqlite_integrity_readonly_20261118.py)" = '81e79c7bb29f2c367f665eb16e11b2e7478fb453'
           work="$(mktemp -d)"
           trap 'rm -rf -- "$work"' EXIT
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/key"
