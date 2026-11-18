@@ -1,0 +1,30 @@
+name: Factory OFF exact gzip transfer regression (OFFLINE ONLY)
+on:
+  push:
+    branches: [fix/factory-dual-drive-unambiguous-proof-20261118]
+    paths: ['.github/workflows/factory-off-nov5-direct-gzip-regression.yml']
+permissions:
+  contents: read
+jobs:
+  offline:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Exact source pins and local fixtures only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/factory_nov5_gzip_direct_dual_drive.py)" = '211f207af73be96a38d2b0ac9d5b2b776cb6f1c4'
+          test "$(git hash-object tests/test_factory_nov5_gzip_direct_dual_drive.py)" = 'c5d145e93ec4069fcb482830387a95ed3b835483'
+          test "$(git hash-object scripts/factory_owner_drive_setup.py)" = 'a48c727654905b93b5ee3b2ca5a967351ff89233'
+          test "$(git hash-object scripts/factory_cpanel_existing_nov5_two_drive.py)" = 'b27c73d089a9315cdbf524eea6d7181824ae7194'
+          test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'f9c6d8445144744920246a128c977bdc850eb80f'
+          test "$(git hash-object scripts/factory_dual_stream_v2.py)" = '7a1d0ac87d97c30134f4d6955359379b0c88a255'
+          PYTHONPATH=scripts PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_nov5_gzip_direct_dual_drive.py' -q
+          echo FACTORY_LIVE_TRANSFER_NOT_ATTEMPTED=true
+          echo FACTORY_UPLOAD_BYTES=0
+          echo FACTORY_SOURCE_DELETION=0
