@@ -65,6 +65,17 @@ class ReviewReplayAnchorTests(unittest.TestCase):
         with self.assertRaises(ReviewReplayClosed):
             self.claim(reviewer_attestation_sha256=self.acceptance)
 
+    def test_nested_transaction_rejected_without_rolling_back_caller(self):
+        self.db.execute("BEGIN")
+        self.db.execute("CREATE TABLE caller_data (value TEXT)")
+        self.db.execute("INSERT INTO caller_data VALUES ('preserve')")
+        with self.assertRaises(ReviewReplayClosed):
+            self.claim()
+        self.assertTrue(self.db.in_transaction)
+        self.assertEqual(self.db.execute("SELECT value FROM caller_data").fetchone()[0],
+                         "preserve")
+        self.db.rollback()
+
     def test_missing_schema_rejected(self):
         other = sqlite3.connect(":memory:")
         try:
