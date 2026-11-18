@@ -18,6 +18,7 @@ import sqlite3
 import stat
 import subprocess
 import sys
+import tempfile
 
 BASE=Path.home()/".mojprop-native-v141-offhost-20261118"
 CIPHER=BASE/"initial-empty-merchant.sqlite3.aes256"
@@ -44,14 +45,20 @@ try:
  raw=sys.stdin.buffer.read(LIMIT+1)
  if not raw or len(raw)>LIMIT or not raw.startswith(b"SQLite format 3\x00"):
   raise RuntimeError("No permitted bounded private SQLite snapshot")
- conn=sqlite3.connect(":memory:")
- conn.deserialize(raw)
- tables={x[0] for x in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
- if not REQUIRED<=tables or conn.execute("PRAGMA integrity_check").fetchone()!=("ok",):
-  raise RuntimeError("First SQLite snapshot invalid/incomplete")
- counts=[conn.execute('SELECT count(*) FROM "'+t+'"').fetchone()[0] for t in REQUIRED]
- if any(counts):
-  raise RuntimeError("Expected EMPTY first merchant ledger, never export real buyer records")
+ def verify_empty_sqlite(data):
+  """Inspect an owner-created temporary copy without SQLite.deserialize."""
+  with tempfile.TemporaryDirectory(prefix=".mojprop-sqlite-verify-",dir=str(Path.home())) as d:
+   p=Path(d)/"empty.sqlite3"
+   p.write_bytes(data)
+   p.chmod(0o600)
+   with sqlite3.connect(str(p)) as conn:
+    rows={x[0] for x in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if not REQUIRED<=rows or conn.execute("PRAGMA integrity_check").fetchone()!=("ok",):
+     return False
+    return all(conn.execute('SELECT count(*) FROM "'+t+'"').fetchone()[0]==0
+               for t in REQUIRED)
+ if not verify_empty_sqlite(raw):
+  raise RuntimeError("Initial SQLite snapshot invalid or contains customer payment rows")
  report["initial_sqlite_integrity"]=True
  report["all_paid_tables_zero_rows"]=True
  BASE.mkdir(mode=0o700)
@@ -78,14 +85,8 @@ try:
            timeout=25,check=False)
  if dec.returncode or not hmac.compare_digest(dec.stdout,raw):
   raise RuntimeError("Off-host decryption did not roundtrip")
- recovered=sqlite3.connect(":memory:")
- recovered.deserialize(dec.stdout)
- if (recovered.execute("PRAGMA integrity_check").fetchone()!=("ok",)
-    or not REQUIRED<={x[0] for x in recovered.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'")}
-    or any(recovered.execute('SELECT count(*) FROM "'+t+'"').fetchone()[0]
-           for t in REQUIRED)):
-  raise RuntimeError("Recovered off-host database integrity/records mismatch")
+ if not verify_empty_sqlite(dec.stdout):
+  raise RuntimeError("Decrypted off-host database integrity/records mismatch")
  report["in_memory_decrypt_restore_verified"]=True
  manifest={
    "schema":"mojprop.offhost.initial_encrypted_empty.v1",
