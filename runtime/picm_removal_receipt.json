@@ -21,7 +21,7 @@
     "/picm/workspace/": 404,
     "/picm/media/": 404
   },
-  "source_tree_check": "No dedicated PICM source, workflow, test, template, ops or retired-route-policy path remains after temporary cleanup workflow removal.",
+  "source_tree_check": "Verified recursively on main: zero dedicated PICM core, scripts, templates, ops, tests, workflows and retired-route-policy paths remain.",
   "preserved": [
     "MojPlayWin shared routes",
     "store",
@@ -32,5 +32,7 @@
     "this receipt",
     "historical Git commits"
   ],
-  "completed_at": "2026-11-18T13:22:08Z"
+  "completed_at": "2026-11-18T13:22:08Z",
+  "final_source_cleanup_commit": "48c53ea7e8c4246f77587dd6844bf132a16df6c5",
+  "recorded_at": "2026-11-18T13:24:00Z"
 }
