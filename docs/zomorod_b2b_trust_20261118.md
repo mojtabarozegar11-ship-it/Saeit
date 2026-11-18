@@ -13,3 +13,6 @@ Delivered paths:
 Saved leads are readable in the existing authorized company CRM. Optional SMTP staff notice defaults off; enable only when company SMTP verified by owner and env COMPANY_INQUIRY_NOTIFICATION_ENABLED=true. Needs COMPANY_TRADE_EMAIL and DEFAULT_FROM_EMAIL.
 
 Before production: check official registration documents, inspect actual live site availability, run Django checks and full regression suite, verify WAF / server rate limit and HTTPS, verify valid anonymous form flow on controlled staging, confirm mail and back-ups, then obtain deployment approval. No claim of live activation, sales or independent trust metric is made by this source change.
+
+## Static mail-only fallback (source only, not live)
+A separate /b2b/ English static trade page and /b2b/privacy/ have been added under public/b2b/. This path uses only an official mailto and does not claim CRM registration or a tracking reference. A link is added to public/index.html. Before releasing, verify whether a live public_html/b2b page already exists, preserve its immutable original and use a narrowly scoped static release; never run the generic destructive cPanel deployment script. Confirm public HTTP GET after publication and do not advertise as live earlier.

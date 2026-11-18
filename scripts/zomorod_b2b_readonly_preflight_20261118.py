@@ -6,7 +6,8 @@ from pathlib import Path
 ROOT = Path("/home/zomorod2")
 STATIC = ("public_html/index.html","public_html/company/index.html",
           "public_html/services/index.html","public_html/en/partners/index.html",
-          "public_html/privacy/index.html")
+          "public_html/privacy/index.html","public_html/b2b/index.html",
+    "public_html/b2b/privacy/index.html")
 SOURCES = ("Saeit-staging/config/urls.py","Saeit-staging/core/company_sales_views.py",
            "Saeit-staging/passenger_wsgi.py","Saeit/config/urls.py",
            "Saeit/core/company_sales_views.py","Saeit/passenger_wsgi.py")
