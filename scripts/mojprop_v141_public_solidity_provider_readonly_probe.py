@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Live public TRON SolidityNode API connectivity probe; zero wallet data.
 
-One GET to each source for getnowblock (never broadcasts any TRX). Return only
+One POST to each source for getblock (header-only) (never broadcasts any TRX). Return only
 HTTP status, whether the node supports chain-confirmed block and chain height
 range. Does not claim providers are free for merchant production without
 published terms, rate limits, and audit.
@@ -30,8 +30,8 @@ for base in HOSTS:
        "content_type":None,"response_length":None,"response_is_json":None,
        "provider_json_keys":[],"provider_error_field":False}
  try:
-  path="/walletsolidity/getnowblock"
-  req=Request(base+path,method="GET",
+  path="/walletsolidity/getblock"
+  req=Request(base+path,data=b'{"detail":false}',method="POST",
               headers={"Content-Type":"application/json",
                        "Accept":"application/json"})
   with opener.open(req,timeout=12) as response:
