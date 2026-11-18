@@ -27,7 +27,7 @@ FIXED_DATE = (2026, 11, 18, 0, 0, 0)
 # manifest generated during this run; merely recomputing hashes is insufficient.
 # Git object SHA-1 is an identity guard, not an owner signature/approval.
 REVIEWED_GIT_BLOBS = {
-    "b2b/index.html": "018fb4bfa25612520b000611d50df81b91de7202",
+    "b2b/index.html": "78259f49aed516e24e20a7b6e479440b68d759bd",
     "b2b/privacy/index.html": "69c79638d36f2e92758fea2a1bb1a13c3675596d",
 }
 
