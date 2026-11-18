@@ -1,0 +1,104 @@
+name: MOJ PROP — safe mainline first-contact source gate (NO DEPLOY)
+on:
+  push:
+    branches: [fix/mojprop-main-first-prospect-truthful-contact-20261118]
+    paths:
+      - templates/moj-prop-v4/index.html
+      - tests/test_mojprop_main_plan1_contact_source_20261118.py
+      - .github/workflows/mojprop-main-real-plan1-first-contact-gate-20261118.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - tests/test_mojprop_main_plan1_contact_source_20261118.py
+      - .github/workflows/mojprop-main-real-plan1-first-contact-gate-20261118.yml
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-main-plan1-first-contact-source-only-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  source-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Fetch source with no persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify nonpayable MOJ-PROP-01 first-customer entry and preserve legacy services
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
+             tests.test_mojprop_main_plan1_contact_source_20261118
+          echo "MAINLINE_FUNDED_PLAN1_FREE_CONTACT_REGRESSIONS=PASS"
+      - name: Validate HTML syntax and embedded JS safely
+        run: |
+          set -euo pipefail
+          python3.11 -B - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import subprocess
+          class Scripts(HTMLParser):
+              def __init__(self):super().__init__();self.capture=False;self.cache=[];self.parts=[]
+              def handle_starttag(self,tag,pairs):
+                  if tag=="script":
+                      attrs=dict(pairs);self.capture=not attrs.get("src") and attrs.get("type","")!="application/ld+json"
+                      self.cache=[]
+              def handle_data(self,data):
+                  if self.capture:self.cache.append(data)
+              def handle_endtag(self,tag):
+                  if tag=="script":
+                      if self.capture:self.parts.append("".join(self.cache))
+                      self.capture=False
+          page=Scripts()
+          page.feed(Path("templates/moj-prop-v4/index.html").read_text("utf-8"))
+          page.close()
+          assert page.parts
+          for script in page.parts:
+              result=subprocess.run(["node","--check","-"],input=script.encode(),
+                                    stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=10)
+              if result.returncode:raise SystemExit("PLAN1_STATIC_JS_INVALID")
+          print("MAINLINE_PRELAUNCH_SCRIPT_PARSE=PASS")
+          PY
+      - name: Confirm public official contact remains available with no POST
+        run: |
+          set -euo pipefail
+          python3.11 -B - <<'PY'
+          from urllib.request import Request,build_opener,HTTPRedirectHandler
+          from html.parser import HTMLParser
+          import json
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          class Contact(HTMLParser):
+              def __init__(self):super().__init__();self.mailto=0
+              def handle_starttag(self,tag,pairs):
+                  if tag=="a" and dict(pairs).get("href","").startswith("mailto:"):
+                      self.mailto+=1
+          with build_opener(NoRedirect).open(Request(
+               "https://mojplaywin.com/moj-prop/contact/",method="GET",
+               headers={"Accept":"text/html","User-Agent":"MOJPROP-prelaunch-get-only/20261118"}),
+               timeout=15) as response:
+              status=response.status
+              ctype=response.headers.get("Content-Type","").lower()
+              body=response.read(65537)
+          parser=Contact()
+          if status==200 and ctype.startswith("text/html") and len(body)<=65536:
+              parser.feed(body.decode("utf-8",errors="replace"))
+          print("MAINLINE_FIRST_CONTACT_PUBLIC_GET="+json.dumps({
+              "status":status,"mailto_count":parser.mailto,
+              "post_sent":False,"paid_order_issued":False,"live_deploy":False
+          },sort_keys=True))
+          assert status==200 and parser.mailto>0 and len(body)<=65536
+          PY
+      - name: Report operational boundaries
+        if: always()
+        run: |
+          echo "LIVE_PRODUCTION_DEPLOYMENT=false"
+          echo "NEW_PROSPECT_REGISTERED=false"
+          echo "TRX_REVENUE_COLLECTED=false"
+          echo "REAL_BROKER_ORDER_SENT=false"
