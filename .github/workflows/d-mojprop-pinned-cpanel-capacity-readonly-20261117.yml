@@ -14,15 +14,16 @@ jobs:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
       github.actor == 'mojtabarozegar11-ship-it' &&
-      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+        github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 12
     steps:
       - name: Checkout exact owner-only PR HEAD without GitHub token retention
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
 
