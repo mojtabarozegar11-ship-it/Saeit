@@ -376,5 +376,153 @@ class TwoCloudSyntheticSecurityTests(unittest.TestCase):
         self.assertEqual(self.stores[0].parts,{})
 
 
+    def send_unknown(self, raw=SOURCE, marker=p.CPANEL_SOURCE_END_MARKER,
+                     exit_cb=lambda: True, source=None, max_bytes=None):
+        stream=source or io.BytesIO(raw+marker)
+        return p.stream_verified_cpanel_unknown_size(
+            stream,self.stores,self.reviews,self.public_pem,
+            set_id=SET_ID,kind=KIND,
+            upper_bound_source_bytes=max_bytes if max_bytes is not None else len(raw)+PART,
+            source_exit_zero=exit_cb,part_size=PART)
+
+    def test_49_existing_cpanel_sender_footer_is_byte_exact(self):
+        from scripts.mojplaywin_backup_stream_cpanel import MARKER
+        self.assertEqual(MARKER,p.CPANEL_SOURCE_END_MARKER)
+
+    def test_50_unknown_size_source_aead_exact_roundtrip(self):
+        result=self.send_unknown()
+        restored,raw=self.restore()
+        self.assertEqual(raw,SOURCE)
+        self.assertEqual(result["plaintext_bytes"],len(SOURCE))
+        self.assertTrue(result["upstream_completion_marker_verified"])
+
+    def test_51_unknown_size_manifest_aad_source_zero(self):
+        self.send_unknown()
+        key=next(x for x in self.stores[0].parts if x.endswith("manifest.json"))
+        m=json.loads(self.stores[0].parts[key])
+        self.assertEqual(m["aad_source_bytes"],0)
+        self.assertFalse(m["source_bytes_known_before_stream"])
+        self.assertTrue(m["producer_exit_zero_observed"])
+
+    def test_52_unknown_size_exact_chunk_multiple_accepts_terminal_footer(self):
+        exact=b"Y"*(PART*2)
+        self.send_unknown(raw=exact)
+        _,out=self.restore()
+        self.assertEqual(out,exact)
+
+    def test_53_unknown_size_short_ssh_read_splits_footer(self):
+        data=SOURCE+p.CPANEL_SOURCE_END_MARKER
+        self.send_unknown(source=ShortSource(data,7))
+        _,result=self.restore()
+        self.assertEqual(result,SOURCE)
+
+    def test_54_missing_footer_cannot_commit_manifest(self):
+        with self.assertRaisesRegex(p.DualOffsiteDenied,"MARKER"):
+            self.send_unknown(source=io.BytesIO(SOURCE))
+        self.assertFalse(any(x.endswith("manifest.json") for x in self.stores[0].parts))
+
+    def test_55_truncated_footer_cannot_commit_manifest(self):
+        with self.assertRaisesRegex(p.DualOffsiteDenied,"MARKER"):
+            self.send_unknown(source=io.BytesIO(SOURCE+p.CPANEL_SOURCE_END_MARKER[:-3]))
+        self.assertFalse(any(x.endswith("manifest.json") for x in self.stores[0].parts))
+
+    def test_56_trailing_garbage_after_valid_footer_is_denied(self):
+        with self.assertRaisesRegex(p.DualOffsiteDenied,"MARKER"):
+            self.send_unknown(source=io.BytesIO(SOURCE+p.CPANEL_SOURCE_END_MARKER+b"x"))
+        self.assertFalse(any(x.endswith("manifest.json") for x in self.stores[0].parts))
+
+    def test_57_source_exit_nonzero_refuses_finalization(self):
+        with self.assertRaisesRegex(p.DualOffsiteDenied,"PROCESS_EXIT"):
+            self.send_unknown(exit_cb=lambda: False)
+        self.assertFalse(any(x.endswith("manifest.json") for x in self.stores[0].parts))
+
+    def test_58_exit_int_one_is_not_literal_boolean_true(self):
+        with self.assertRaisesRegex(p.DualOffsiteDenied,"PROCESS_EXIT"):
+            self.send_unknown(exit_cb=lambda: 1)
+
+    def test_59_exit_check_exception_refuses_finalization(self):
+        def bad_exit():
+            raise OSError("simulated SSH exit check unavailable")
+        with self.assertRaisesRegex(p.DualOffsiteDenied,"PROCESS_EXIT"):
+            self.send_unknown(exit_cb=bad_exit)
+        self.assertFalse(any(x.endswith("manifest.json") for x in self.stores[0].parts))
+
+    def test_60_missing_producer_exit_checker_blocks_before_upload(self):
+        with self.assertRaisesRegex(p.DualOffsiteDenied,"REQUIRES_PRODUCER"):
+            self.send_unknown(exit_cb=None)
+        self.assertEqual(self.stores[0].parts,{})
+
+    def test_61_unknown_source_exceeding_hard_max_refused_before_complete(self):
+        with self.assertRaisesRegex(p.DualOffsiteDenied,"EXCEEDED"):
+            self.send_unknown(max_bytes=PART)
+        self.assertFalse(any(x.endswith("manifest.json") for x in self.stores[0].parts))
+
+    def test_62_unknown_empty_stream_with_marker_alone_denied(self):
+        with self.assertRaises(p.DualOffsiteDenied):
+            self.send_unknown(raw=b"")
+        self.assertFalse(any(x.endswith("manifest.json") for x in self.stores[0].parts))
+
+    def test_63_unknown_source_overread_refused(self):
+        class Overread:
+            def read(self,n):
+                return b"q"*(n+1)
+        with self.assertRaisesRegex(p.DualOffsiteDenied,"TYPE_OR_LENGTH"):
+            self.send_unknown(source=Overread())
+        self.assertFalse(any(x.endswith("manifest.json") for x in self.stores[0].parts))
+
+    def test_64_known_size_source_overread_refused(self):
+        class Overread:
+            def read(self,n):
+                return b"x"*(n+1)
+        with self.assertRaisesRegex(p.DualOffsiteDenied,"TOO_MANY_BYTES"):
+            self.send(source=Overread())
+        self.assertFalse(any(x.endswith("manifest.json") for x in self.stores[0].parts))
+
+    def test_65_unknown_footer_proof_tampering_refused_on_restore(self):
+        self.send_unknown()
+        for cloud in self.stores:
+            key=next(x for x in cloud.parts if x.endswith("manifest.json"))
+            m=json.loads(cloud.parts[key])
+            m["producer_exit_zero_observed"]=False
+            cloud.parts[key]=p.encoded(m)
+        with self.assertRaisesRegex(p.DualOffsiteDenied,"EOF_AND_EXIT"):
+            self.restore()
+
+    def test_66_unknown_footer_sha_tamper_refused_on_restore(self):
+        self.send_unknown()
+        for cloud in self.stores:
+            key=next(x for x in cloud.parts if x.endswith("manifest.json"))
+            m=json.loads(cloud.parts[key])
+            m["source_footer_sha256"]="f"*64
+            cloud.parts[key]=p.encoded(m)
+        with self.assertRaisesRegex(p.DualOffsiteDenied,"EOF_AND_EXIT"):
+            self.restore()
+
+    def test_67_unknown_source_is_not_an_authenticated_live_backup(self):
+        r=self.send_unknown()
+        self.assertFalse(r["actual_cpanel_pinned_ssh_executed_by_this_code"])
+        self.assertFalse(r["actual_cloud_oauth_executed_by_this_code"])
+        self.assertFalse(r["full_site_backup_and_isolated_restore_proven"])
+
+    def test_68_unknown_source_missing_second_cloud_readback_does_not_commit(self):
+        self.stores[1].fail_read_at=0
+        with self.assertRaises(OSError):
+            self.send_unknown()
+        self.assertFalse(any(x.endswith("manifest.json") for x in self.stores[0].parts))
+
+    def test_69_unknown_source_footer_exactly_once_at_end(self):
+        self.send_unknown(raw=SOURCE+p.CPANEL_SOURCE_END_MARKER+b"middle")
+        _,result=self.restore()
+        self.assertEqual(result,SOURCE+p.CPANEL_SOURCE_END_MARKER+b"middle")
+
+    def test_70_unknown_footer_provenance_size_matches_restored_source(self):
+        data=b"READ-ONLY DEMO DATA\n"*7000
+        report=self.send_unknown(raw=data)
+        proof,got=self.restore()
+        self.assertEqual(report["plaintext_bytes"],len(data))
+        self.assertEqual(proof["decrypted_bytes"],len(data))
+        self.assertEqual(got,data)
+
+
 if __name__=="__main__":
     unittest.main()
