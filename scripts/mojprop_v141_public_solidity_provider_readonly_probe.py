@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Live public TRON SolidityNode API connectivity probe; zero wallet data.
 
-One POST to each source for getnowblock (never broadcasts any TRX). Return only
+One GET to each source for getnowblock (never broadcasts any TRX). Return only
 HTTP status, whether the node supports chain-confirmed block and chain height
 range. Does not claim providers are free for merchant production without
 published terms, rate limits, and audit.
@@ -13,7 +13,7 @@ import json
 
 HOSTS=(
  "https://api.trongrid.io",
- "https://tron-mainnet.nodit.io",
+ "https://tron-rpc.publicnode.com",
 )
 class NoRedirect(HTTPRedirectHandler):
  def redirect_request(self,*args,**kwargs):
@@ -29,7 +29,7 @@ for base in HOSTS:
        "block_height_positive":False,"error_kind":None}
  try:
   path="/walletsolidity/getnowblock"
-  req=Request(base+path,data=b"{}",method="POST",
+  req=Request(base+path,method="GET",
               headers={"Content-Type":"application/json",
                        "Accept":"application/json"})
   with opener.open(req,timeout=12) as response:
