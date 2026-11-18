@@ -38,14 +38,8 @@ class CompanyInquiryForm(forms.ModelForm):
 
 
 def company_portal_home(request):
-    from django.shortcuts import redirect
-    from django.contrib import messages
+    # Backwards compatible with the older /company/ form endpoint.
     if request.method == "POST":
-        form = CompanyInquiryForm(request.POST)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "درخواست شما با موفقیت ثبت شد و برای بررسی کارشناسی ارسال گردید.")
-        else:
-            messages.error(request, "اطلاعات درخواست معتبر نیست؛ فیلدهای الزامی، نوع همکاری و نشانی ایمیل را بررسی کنید.")
-        return redirect("company")
+        from .company_sales_views import submit_company_inquiry
+        return submit_company_inquiry(request)
     return None

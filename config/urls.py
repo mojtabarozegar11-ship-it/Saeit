@@ -21,6 +21,7 @@ from core.academy_views import (
 from core.services_views import services
 from core.zomorod_public_views import agriculture_index, agriculture_guide, zomorod_hero_image
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
+from core.company_sales_views import submit_company_inquiry, company_inquiry_receipt, b2b_partners, company_privacy
 from core.faremah_views import faremah_home
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
 
@@ -68,6 +69,10 @@ urlpatterns = [
     # go through the staff login instead of being silently sent to a public page.
     path("company/office/", RedirectView.as_view(url="/company/office/login/", permanent=False), name="company_office_fallback"),
     path("company/", lambda request: company_portal_home(request) if request.method == "POST" else platform_page(request, "company"), name="company"),
+    path("company/inquiry/", submit_company_inquiry, name="company_inquiry_submit"),
+    path("company/inquiry/receipt/<str:token>/", company_inquiry_receipt, name="company_inquiry_receipt"),
+    path("en/partners/", b2b_partners, name="b2b_partners"),
+    path("privacy/", company_privacy, name="company_privacy"),
     path("company/<slug:slug>/", lambda request, slug: platform_page(request, "company"), name="company_detail"),
     path("about/", RedirectView.as_view(pattern_name="company", permanent=True), name="about"),
     path("contact/", RedirectView.as_view(url="/ask-master/index.php?service=1", permanent=False), name="contact"),

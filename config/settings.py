@@ -123,6 +123,8 @@ MPW_TRX_MERCHANT_BINDINGS = owner_merchant_registry(
 # Company international trade mailbox. Credentials remain in environment/.env only.
 COMPANY_TRADE_EMAIL = env("COMPANY_TRADE_EMAIL", default="")
 TRADE_EMAIL_ENABLED = env.bool("TRADE_EMAIL_ENABLED", default=False)
+# Fail closed until company-owned SMTP/recipient verified; never send by default.
+COMPANY_INQUIRY_NOTIFICATION_ENABLED = env.bool("COMPANY_INQUIRY_NOTIFICATION_ENABLED", default=False)
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
 EMAIL_HOST = env("EMAIL_HOST", default="")
 EMAIL_PORT = env.int("EMAIL_PORT", default=587)

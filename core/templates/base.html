@@ -1,6 +1,6 @@
 
 {% load static %}<!doctype html>
-<html lang="{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}en{% else %}fa{% endif %}" dir="{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}ltr{% else %}rtl{% endif %}">
+<html lang="{% if request.path == "/en/partners/" or request.GET.lang == "en" %}en{% elif request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}en{% else %}fa{% endif %}" dir="{% if request.path == "/en/partners/" or request.GET.lang == "en" %}ltr{% elif request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}ltr{% else %}rtl{% endif %}">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}#090909{% else %}#252b19{% endif %}">
@@ -64,7 +64,8 @@ body.zomorod-olive-site main [class*="hero"],body.zomorod-olive-site main [class
 </a>
 <button class="menu-toggle" type="button" aria-label="باز کردن منو" aria-expanded="false">☰</button>
 <nav class="nav" aria-label="{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}Primary navigation{% else %}ناوبری اصلی{% endif %}">
-{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}<a href="/">Home</a><a href="/research/">Research</a><a href="/studio/">Games & Studio</a><a href="/amozeshgah/">Learning</a><a href="/store/">Store</a><a href="/company/">About</a>
+{% if request.path == "/en/partners/" %}<a href="/">Home</a><a href="/company/">Company</a><a href="/en/partners/#rfq">Request a Quote</a><a href="/privacy/">Privacy</a>
+{% elif request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}<a href="/">Home</a><a href="/research/">Research</a><a href="/studio/">Games & Studio</a><a href="/amozeshgah/">Learning</a><a href="/store/">Store</a><a href="/company/">About</a>
 {% else %}
 <a class="{% if request.path == "/" or request.path|slice:":9" == "/services/" %}active{% endif %}" href="/">خدمات</a><a class="{% if request.path|slice:":12" == "/amozeshgah/" %}active{% endif %}" href="/amozeshgah/">آموزش</a><a class="{% if request.path|slice:":8" == "/agents/" %}active{% endif %}" href="/agents/">هوش مصنوعی</a><a class="{% if request.path|slice:":9" == "/weather/" %}active{% endif %}" href="/weather/">آب‌وهوا</a><a class="{% if request.path|slice:":9" == "/economy/" %}active{% endif %}" href="/economy/">اقتصاد</a><a class="{% if request.path|slice:":8" == "/studio/" %}active{% endif %}" href="/studio/">استودیو</a><a class="{% if request.path|slice:":10" == "/knowledge/" %}active{% endif %}" href="/knowledge/">دانشنامه</a><a class="{% if request.path|slice:":9" == "/company/" or request.path|slice:":7" == "/about/" or request.path|slice:":9" == "/contact/" %}active{% endif %}" href="/company/">شرکت</a>{% endif %}</nav>
 <div class="header-actions"><a class="icon-btn" href="/search/" title="{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}Search{% else %}جستجوی سایت{% endif %}" aria-label="{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}Search{% else %}جستجوی سایت{% endif %}">⌕</a>{% if user.is_authenticated %}<a class="header-cta" href="/amozeshgah/dashboard/">{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}My learning{% else %}یادگیری من{% endif %}</a>{% endif %}<a class="header-cta" href="/company/">{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}About{% else %}شرکت{% endif %}</a></div>
@@ -75,7 +76,7 @@ body.zomorod-olive-site main [class*="hero"],body.zomorod-olive-site main [class
 <div><div class="footer-brand"><img class="footer-logo" src="{% static 'site/company/company-logo.png' %}" alt=""> <span>Zomorodmelal</span></div><p>پلتفرم خدماتی یکپارچه؛ خدمات، آموزش، هوش مصنوعی، آب‌وهوا، اقتصاد، استودیو، دانشنامه و شرکت.</p></div>
 <div><strong>پلتفرم</strong><a href="/">خدمات</a><a href="/amozeshgah/">آموزش</a><a href="/agents/">هوش مصنوعی</a><a href="/weather/">آب‌وهوا</a><a href="/economy/">اقتصاد</a><a href="/studio/">استودیو</a><a href="/knowledge/">دانشنامه</a><a href="/company/">شرکت</a></div>
 <div><strong>درون خدمات</strong><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/market/">بازار</a><a href="/services/">همه خدمات</a></div>
-<div><strong>دسترسی</strong><a href="/company/#company-content-ecosystem">رسانه و وبلاگ شرکت</a><a href="/company/">شرکت</a><a href="/contact/">تماس و همکاری</a></div>
+<div><strong>دسترسی</strong><a href="/company/#company-content-ecosystem">رسانه و وبلاگ شرکت</a><a href="/company/">شرکت</a><a href="/contact/">تماس و همکاری</a><a href="/privacy/">حریم خصوصی</a><a lang="en" href="/en/partners/">International B2B</a></div>
 </div>{% endif %}
 <div class="footer-legal"><strong>تمامی حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل و مجتبی روزگار محفوظ است.</strong><span>آبان ۱۳۹۸</span></div><div class="footer-bottom"><span>© شرکت کشت و صنعت زمرد ملل</span><span>تمامی حقوق محفوظ است.</span></div>
 </footer>

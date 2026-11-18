@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Inquiry Validation | Zomorod Melal{% endblock %}
+{% block content %}
+<section style="max-width:850px;margin:30px auto;padding:32px;border:2px solid #bfa66a">
+{% if english %}<h1>Correct the inquiry</h1><p>Your form was not saved. Please fix the fields below.</p>{% else %}<h1>درخواست ثبت نشد</h1><p>اطلاعات را اصلاح و دوباره ثبت کنید.</p>{% endif %}
+<form method="post" action="{% url 'company_inquiry_submit' %}">
+{% csrf_token %}{% if english %}<input type="hidden" name="language" value="en">{% endif %}
+{{ form.non_field_errors }}
+{% for field in form %}<p><label for="{{ field.id_for_label }}">{{ field.label }}</label> {{ field }} {% if field.errors %}<span role="alert">{{ field.errors }}</span>{% endif %}</p>{% endfor %}
+<div style="position:absolute;left:-10000px" aria-hidden="true"><label>Website <input tabindex="-1" name="company_url" autocomplete="off"></label></div>
+<button type="submit">{% if english %}Submit inquiry{% else %}ثبت درخواست{% endif %}</button>
+</form></section>
+{% endblock %}

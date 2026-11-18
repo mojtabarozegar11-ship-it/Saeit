@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}International B2B Cooperation | Zomorod Melal{% endblock %}
+{% block meta_description %}Zomorod Melal Company official international B2B, supplier, OEM/ODM and trade inquiries. Request a quotation and receive a tracking reference.{% endblock %}
+{% block page_head %}{{ block.super }}
+<meta property="og:title" content="Zomorod Melal — International Business & Suppliers">
+<meta property="og:description" content="Official supplier and B2B contact, Iran.">
+<link rel="alternate" hreflang="en" href="https://zomorodmelal.ir/en/partners/">
+<link rel="alternate" hreflang="fa-IR" href="https://zomorodmelal.ir/company/">
+{% endblock %}
+{% block content %}
+<div lang="en" dir="ltr" style="max-width:1100px;margin:25px auto;padding:24px;line-height:1.8">
+<section style="padding:26px;border:2px solid #bfa66a;border-radius:15px">
+<p>OFFICIAL BUSINESS CONTACT · IRAN</p><h1>International B2B and Supplier Partnerships</h1>
+<p>Zomorod Melal Company reviews business offers and supplier introductions. An inquiry does not mean an approved purchase order, import authorization, payment or contract.</p>
+<p><strong>Registered company details published on this website:</strong> Zomorod Melal Agricultural & Industrial Company; national ID 1400879024; registration number 3110; managing director Mojtaba Roozegar. Counterparties should independently verify registration before contracting.</p>
+<p><strong>Official email:</strong> <a href="mailto:zomorodmelal@gmail.com">zomorodmelal@gmail.com</a>. For ongoing discussions, reply in the same email thread for departmental routing.</p>
+</section>
+<h2>Areas for commercial review</h2>
+<ul><li>Agriculture, seeds, inputs, greenhouse systems and machinery</li><li>Industrial products, packaging, processing and OEM/ODM private-label proposals</li><li>Applied research, technical and feasibility collaborations</li><li>Wholesale quotations and product documentation</li></ul>
+<p>Suppliers should include product/SKU description, MOQs, EXW/FOB prices, lead times, certificates available and export/shipping feasibility. Every offer is subject to verification and compliance review.</p>
+<section id="rfq" style="margin-top:28px;padding:26px;border:2px solid #bfa66a;border-radius:15px"><h2>Register an RFQ or supplier proposal</h2>
+<p>Receive a signed tracking link after your request is stored. This form does not process payments.</p>
+<form method="post" action="{% url 'company_inquiry_submit' %}">
+{% csrf_token %}<input type="hidden" name="kind" value="commercial"><input type="hidden" name="language" value="en">
+<div style="position:absolute;left:-10000px" aria-hidden="true"><label>Website <input name="company_url" tabindex="-1" autocomplete="off"></label></div>
+<p><label>Name * <input name="name" maxlength="200" autocomplete="name" required style="display:block;width:100%;max-width:680px;padding:12px"></label></p>
+<p><label>Company <input name="organization" maxlength="250" autocomplete="organization" style="display:block;width:100%;max-width:680px;padding:12px"></label></p>
+<p><label>Business email * <input type="email" name="email" maxlength="254" autocomplete="email" required style="display:block;width:100%;max-width:680px;padding:12px"></label></p>
+<p><label>Phone (optional) <input name="phone" maxlength="50" autocomplete="tel" style="display:block;width:100%;max-width:680px;padding:12px"></label></p>
+<p><label>Subject * <input name="subject" maxlength="300" required style="display:block;width:100%;max-width:680px;padding:12px"></label></p>
+<p><label>Proposal / RFQ * <textarea name="message" maxlength="5000" rows="6" required style="display:block;width:100%;max-width:680px;padding:12px"></textarea></label></p>
+<p>By submitting, you agree to be contacted about this inquiry. <a href="/privacy/">Privacy details</a>.</p>
+<button type="submit" style="padding:14px 22px">Submit to the relevant department</button>
+</form></section>
+<p><a href="/company/">Persian corporate profile</a> · <a href="/">Homepage</a></p>
+</div>
+{% endblock %}
