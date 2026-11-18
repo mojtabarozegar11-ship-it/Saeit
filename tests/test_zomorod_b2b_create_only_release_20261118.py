@@ -1,4 +1,5 @@
 """No-overwrite atomic B2B scope: synthetic local filesystem only."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -84,6 +85,30 @@ class CreateOnlyB2BReleaseTests(unittest.TestCase):
             rollback_verified(self.home,SOURCE,RUN,
                 owner_authorization=f"owner-rollback-b2b:{SOURCE}:{RUN}",
                 require_owner=False)
+
+    @unittest.skipUnless(os.name=="posix","atomic renameat2 requires Linux")
+    def test_forged_marker_cannot_admit_rewritten_public_page(self):
+        self.publish()
+        dest=self.home/"public_html"/"b2b"
+        raw=b"FOREIGN CONTENT"
+        (dest/"index.html").write_bytes(raw)
+        marker=dest/".zomorod-b2b-release.json"
+        metadata=json.loads(marker.read_text())
+        metadata["files"]["b2b/index.html"]={"size":len(raw),"sha256":hashlib.sha256(raw).hexdigest()}
+        marker.write_text(json.dumps(metadata))
+        with self.assertRaisesRegex(RuntimeError,"independently reviewed source"):
+            rollback_verified(self.home,SOURCE,RUN,
+                owner_authorization=f"owner-rollback-b2b:{SOURCE}:{RUN}",
+                require_owner=False)
+        self.assertEqual((dest/"index.html").read_bytes(),raw)
+
+    @unittest.skipUnless(os.name=="posix","Unix directory mode required")
+    def test_group_writable_document_root_refuses_release(self):
+        docroot=self.home/"public_html"
+        docroot.chmod(0o775)
+        with self.assertRaises(RuntimeError):
+            preflight(self.home,False)
+        self.assertFalse((docroot/"b2b").exists())
 
     @unittest.skipUnless(os.name=="posix","atomic renameat2 requires Linux")
     def test_no_cross_release_replay(self):
