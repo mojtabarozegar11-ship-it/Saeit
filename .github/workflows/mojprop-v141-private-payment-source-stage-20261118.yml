@@ -27,7 +27,7 @@ jobs:
       - name: Checkout independently tested MOJ PROP payment source by exact immutable SHA
         uses: actions/checkout@v4
         with:
-          ref: 9a9b366e8b6ebc262bea1e3d171bfa3ab377f734
+          ref: 86e91628b70e3bab49d57f975019b84d916a2399
           path: native-source
           persist-credentials: false
           fetch-depth: 1
@@ -77,7 +77,7 @@ jobs:
           test "${#sum}" -eq 64
           echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
           echo "sha256=$sum" >> "$GITHUB_OUTPUT"
-          echo "STAGE_SOURCE_PIN=9a9b366e8b6ebc262bea1e3d171bfa3ab377f734"
+          echo "STAGE_SOURCE_PIN=86e91628b70e3bab49d57f975019b84d916a2399"
           echo "STAGE_BUNDLE_KIB=$(( (bytes+1023)/1024 ))"
       - name: Deliver exact source to a NEW PRIVATE nonweb cPanel staging directory only
         shell: bash
