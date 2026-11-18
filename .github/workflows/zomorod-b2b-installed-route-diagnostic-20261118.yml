@@ -57,6 +57,38 @@ jobs:
                   continue
               lines=[l.strip().lower() for l in p.read_text(errors="replace").splitlines() if l.strip() and not l.lstrip().startswith("#")]
               rules[key]={"regular_readable":True,"rewrite_count":sum(l.startswith("rewriterule ") for l in lines),"passenger_directives":any(l.startswith("passenger") for l in lines),"file_exclusion":any(l.startswith("rewritecond ") and re.search(r"\s!-f(?:\s|$)",l) for l in lines),"directory_exclusion":any(l.startswith("rewritecond ") and re.search(r"\s!-d(?:\s|$)",l) for l in lines),"b2b_reference":any("b2b" in l for l in lines),"directory_index_directive":any(l.startswith("directoryindex ") for l in lines)}
+          # Compare only fixed public paths with rewrite patterns; never output raw configuration.
+          root_rules=root/".htaccess"
+          evidence=[]
+          if root_rules.resolve()==root_rules and root_rules.is_file() and root_rules.stat().st_size<=65536:
+              pending=[]
+              for number,line in enumerate(root_rules.read_text(errors="replace").splitlines(),1):
+                  line=line.strip()
+                  if not line or line.startswith("#"):
+                      continue
+                  parts=line.split()
+                  kind=parts[0].lower()
+                  if kind=="rewritecond":
+                      pending.append(line)
+                  elif kind=="rewriterule" and len(parts)>=3:
+                      pattern=parts[1]
+                      matches={}
+                      for route in ("b2b/","b2b/privacy/","b2b/index.html","b2b/privacy/index.html","company/"):
+                          try:
+                              neg=pattern.startswith("!")
+                              matches[route]=bool(re.search(pattern[1:] if neg else pattern,route,re.I if "[NC" in line.upper() or ",NC" in line.upper() else 0))!=neg
+                          except re.error:
+                              matches[route]=None
+                      if any(v is True for v in matches.values()):
+                          dest=parts[2]
+                          flags=" ".join(parts[3:]).upper()
+                          evidence.append({"line":number,"pattern_matches":matches,"conditions_count":len(pending),"condition_types":[{"request_filename":"%{REQUEST_FILENAME}" in p.upper(),"request_uri":"%{REQUEST_URI}" in p.upper(),"file_check":bool(re.search(r"\s!?-f(?:\s|$)",p)),"directory_check":bool(re.search(r"\s!?-d(?:\s|$)",p))} for p in pending],"destination_kind":"pass_through" if dest=="-" else "index_html" if dest.endswith("index.html") else "external" if "://" in dest else "other","stops_rewrite":"L" in flags.strip("[]").split(",") or "END" in flags.strip("[]").split(",")})
+                      pending=[]
+                  elif kind=="directoryindex":
+                      evidence.append({"line":number,"directory_index_includes_index_html":"index.html" in parts[1:]})
+                  elif kind=="passengerenabled":
+                      evidence.append({"line":number,"passenger_enabled":parts[1].lower()=="on" if len(parts)>1 else None})
+          print("B2B_RULE_MATCH_INDICATORS="+json.dumps(evidence,sort_keys=True))
           print("B2B_PHYSICAL_DIAGNOSTIC="+json.dumps({"files":result,"routing_indicators":rules,"site_changed":False},sort_keys=True))
           PY
       - name: Securely remove ephemeral auth files
