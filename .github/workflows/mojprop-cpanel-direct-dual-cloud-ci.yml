@@ -8,6 +8,8 @@ on:
       - 'scripts/factory_rclone_dual_parts.py'
       - 'tests/test_mojprop_cpanel_direct_dual_cloud.py'
       - 'tests/test_factory_rclone_dual_parts.py'
+      - 'scripts/mojprop_owner_two_drive_quota_readonly_20261118.py'
+      - 'tests/test_mojprop_owner_two_drive_quota_readonly_20261118.py'
       - '.github/workflows/mojprop-cpanel-direct-dual-cloud-ci.yml'
   push:
     branches:
@@ -40,12 +42,12 @@ jobs:
           echo 'CPANEL_SOURCE_EXACT_BLOB=PASS'
       - name: Compile stream, source, tests and existing dual crypto transport
         run: |
-          python -B -m py_compile scripts/mojprop_cpanel_direct_dual_cloud.py scripts/mojplaywin_backup_stream_cpanel.py scripts/factory_dual_stream_v2.py scripts/factory_rclone_dual_parts.py tests/test_mojprop_cpanel_direct_dual_cloud.py
-      - name: Run all new source and previous 67 adversarial cloud adapter checks
+          python -B -m py_compile scripts/mojprop_cpanel_direct_dual_cloud.py scripts/mojplaywin_backup_stream_cpanel.py scripts/factory_dual_stream_v2.py scripts/factory_rclone_dual_parts.py tests/test_mojprop_cpanel_direct_dual_cloud.py scripts/mojprop_owner_two_drive_quota_readonly_20261118.py tests/test_mojprop_owner_two_drive_quota_readonly_20261118.py
+      - name: Run all source, 67 crypto and 9 two-cloud metadata guard checks
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
-          PYTHONPATH=scripts python -B -m unittest -v tests.test_mojprop_cpanel_direct_dual_cloud tests.test_factory_rclone_dual_parts
+          PYTHONPATH=scripts python -B -m unittest -v tests.test_mojprop_cpanel_direct_dual_cloud tests.test_factory_rclone_dual_parts tests.test_mojprop_owner_two_drive_quota_readonly_20261118
       - name: Assert offline metadata can never claim storage, restore, payments or release
         shell: bash
         run: |
@@ -104,7 +106,10 @@ jobs:
           echo 'OWNER_RUNNER_EPHEMERAL_RCLONE_SHA256=VERIFIED'
           echo 'OWNER_RUNNER_RCLONE_VERSION=1.76.0'
           echo 'OWNER_RUNNER_RCLONE_INSTALLED_PERSISTENTLY=FALSE'
-          echo 'OWNER_RUNNER_PROVIDER_OAUTH_READ=FALSE'
           echo 'OWNER_RUNNER_CLOUD_UPLOAD=FALSE'
+          echo 'OWNER_RUNNER_OAUTH_TOKENS_PRINTED=FALSE'
+          MOJPROP_READONLY_RCLONE_EXE="$work/rclone" PYTHONPATH=scripts \
+            python3 -B scripts/mojprop_owner_two_drive_quota_readonly_20261118.py \
+            | python3 -c 'import sys,json; text=sys.stdin.read(4096); tag="MOJPROP_OWNER_TWO_DRIVE_READONLY="; assert text.startswith(tag); x=json.loads(text[len(tag):]); assert x["schema"]=="mojprop.owner-two-drive-metadata-readonly.v1"; assert all(x[k] is False for k in ("full_current_backup_capacity_admitted","current_db_media_backup_created","independent_restore_performed","cloud_objects_written_or_deleted","customer_data_queried","oauth_tokens_printed","real_payment_created")); assert x["status"] in ("MISSING_OWNER_AUTH","NO_PINNED_RCLONE_BINARY","READONLY_PROVIDER_DIAGNOSTIC_OK","READONLY_PROVIDER_PROBE_FAILED","UNEXPECTED_METADATA_PROBE_FAILURE","UNSAFE_OR_MISSING_OWNER_CONFIG","OWNER_CONFIG_CHANGED","OWNER_CONFIG_UNREADABLE","OWNER_DRIVE_REMOTE_CONFIG_UNVERIFIED","SAME_OAUTH_CREDENTIALS_REJECTED","PRIVATE_OWNER_PROOF_MISMATCH","DRIVE_FREE_QUOTA_NOT_PROVEN","INSUFFICIENT_PROVIDER_VERIFIED_FREE_BYTES","RCLONE_NOT_INSTALLED","RCLONE_TIMEOUT","RCLONE_EXECUTABLE_MISSING","RCLONE_PIPELINE_FAILURE","RCLONE_PROVIDER_OPERATION_FAILED","RCLONE_OUTPUT_OVERSIZE","UNTRUSTED_REMOTE_IDENTITY_OR_PROOF"); print("OWNER_TWO_DRIVE_METADATA_STATUS="+x["status"]); print("OWNER_TWO_DRIVE_PRIVATE_PROOF_OK="+str(x["distinct_oauth_and_private_owner_proofs"]).lower()); print("OWNER_TWO_DRIVE_FREE_QUOTA_DIAGNOSTIC="+str(x["provider_quota_observed"]).lower())'
           echo 'EPHEMERAL_RCLONE_BINARY_CLEANED_ON_STEP_EXIT' >> "$GITHUB_STEP_SUMMARY"
 
