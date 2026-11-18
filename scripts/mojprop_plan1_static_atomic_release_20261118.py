@@ -168,11 +168,31 @@ def _backup_valid(path: Path, uid: int) -> bool:
     return True
 
 
+def _sync_private_backup_directory(path: Path, uid: int) -> None:
+    """Durably commit the rollback *name* before replacing any live bytes.
+
+    fsync(backup file) alone does not guarantee the containing directory entry
+    survives a sudden crash. Fail closed if this directory fsync is refused.
+    """
+    if not _private_rollback_dir(path.parent, uid):
+        raise ExactStaticReleaseDenied("ROLLBACK_FOLDER_MISSING_AT_SYNC")
+    fd = os.open(str(path.parent), os.O_RDONLY | os.O_DIRECTORY | NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != uid
+                or info.st_mode & 0o077):
+            raise ExactStaticReleaseDenied("ROLLBACK_FOLDER_CHANGED_AT_SYNC")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def _save_original_if_absent(raw: bytes, path: Path, uid: int) -> None:
     exact(raw, ORIGINAL_SHA, ORIGINAL_SIZE, "ORIGINAL")
     if path.exists() or path.is_symlink():
         if not _backup_valid(path, uid):
             raise ExactStaticReleaseDenied("ROLLBACK_IDENTICAL_BACKUP_NOT_PRESENT")
+        _sync_private_backup_directory(path, uid)
         return
     fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL | NOFOLLOW, 0o600)
     try:
@@ -185,6 +205,8 @@ def _save_original_if_absent(raw: bytes, path: Path, uid: int) -> None:
         raise
     if not _backup_valid(path, uid):
         raise ExactStaticReleaseDenied("ROLLBACK_BACKUP_CREATION_UNVERIFIED")
+    # Persist the directory entry before os.replace can publish new live bytes.
+    _sync_private_backup_directory(path, uid)
 
 
 def _atomic_swap(live: Path, replacement: bytes, current_hash: str, uid: int) -> None:
