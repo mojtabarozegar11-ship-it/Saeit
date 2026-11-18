@@ -53,6 +53,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq default-libmysqlclient-dev pkg-config
           python -m pip install --disable-pip-version-check 'Django>=5.2,<6.0' 'mysqlclient>=2.2,<3.0'
+      - name: Prove isolated MOJ PROP can import and migrate WITHOUT live core app
+        run: |
+          env -u DJANGO_SETTINGS_MODULE python3.11 -B scripts/mojprop_v141_no_core_runtime_check.py
       - name: Re-run 837 contract and source regression cases on this exact source
         run: |
           python3.11 -B scripts/mojprop_xauusd_v13_full_review_suite.py
