@@ -1,0 +1,94 @@
+name: Factory OFF stage Nov5-B cPanel gzip (NO source delete)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/factory-off-nov5-b-stage-owner.yml'
+permissions:
+  contents: read
+concurrency:
+  group: factory-nov5-b-gzip-stage-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  offline-b:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Owner pinned script and seven fail closed tests
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/factory_cpanel_nov5_stage_two_gzip_20261118.py)" = '0e2a7452ee95b943916ce3a9ec82692d4769ebe5'
+          test "$(git hash-object tests/test_factory_cpanel_nov5_stage_two_gzip_20261118.py)" = 'd85cfc7eccd62f07b9f31b3b2cbdafb1be22f531'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_cpanel_nov5_stage_two_gzip_20261118.py' -q
+          echo FACTORY_OFF_B_STAGE_SEVEN_TESTS_PASS=true
+  stage-b:
+    needs: offline-b
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check both existing historical copies and stage exact B gzip with fresh quota
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$(id -u)" -ne 0 || { echo OWNER_RUNNER_MUST_BE_NONROOT; exit 78; }
+          work="$(mktemp -d)"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/host.key"
+          chmod 600 "$work/"*.key
+          ssh-keygen -y -P "" -f "$work/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$work/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 127.0.0.1 > "$work/vps.known" 2>/dev/null
+          test -s "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$work/config" <<EOF
+          Host saeit-vps
+            HostName 127.0.0.1
+            User githubops
+            Port 22
+            IdentityFile $work/vps.key
+            UserKnownHostsFile $work/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $work/host.key
+            UserKnownHostsFile $work/cpanel.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$work/config"
+          scan="$(ssh -T -F "$work/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$work/cpanel.known"
+          chmod 600 "$work/cpanel.known" "$work/vps.known"
+          test "$(git hash-object scripts/factory_cpanel_nov5_hybrid_readonly_inventory_20261118.py)" = '4b81ca19cc2a4aeece247bff8eec1a135783e4d6'
+          test "$(git hash-object scripts/factory_cpanel_nov5_stage_two_gzip_20261118.py)" = '0e2a7452ee95b943916ce3a9ec82692d4769ebe5'
+          timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec nice -n 15 python3 -B -' < scripts/factory_cpanel_nov5_hybrid_readonly_inventory_20261118.py
+          timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec nice -n 15 python3 -B -' < scripts/factory_cpanel_nov5_stage_two_gzip_20261118.py
+          timeout 780s ssh -T -F "$work/config" saeit-cpanel 'exec nice -n 15 python3 -B -' < scripts/factory_cpanel_nov5_hybrid_readonly_inventory_20261118.py
+          echo FACTORY_NOV5_B_GZIP_STAGE_AND_FULL_DECOMPRESSED_SHA_PROVEN=true
+          echo FACTORY_NOV5_A_GZIP_RETAINED=true
+          echo FACTORY_NOV5_B_RAW_DELETED=false
+          echo FACTORY_STARTED=false
