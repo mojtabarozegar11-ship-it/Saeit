@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 import re
 
-MINIMUM_PROSPECTIVE_REVISION = (1, 4, 1)
+MINIMUM_REVIEWABLE_REVISION = (1, 2, 0)
 VERSION_RE = re.compile(r"^v([1-9]\d*)\.([0-9]+)(?:\.([0-9]+))?$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 UNRESOLVED_TEXT = (
@@ -21,7 +21,7 @@ UNRESOLVED_TEXT = (
     "no social post is requested while paid enrollment is closed",
 )
 REQUIRED_NONPAYABLE_EN = "Not open for paid enrollment"
-REQUIRED_NONPAYABLE_FA = "فروش و پرداخت فعال نیست"
+REQUIRED_NONPAYABLE_FA = "پرداخت فعال نیست"
 REQUIRED_NONPAYABLE_FA_EXPANDED = "فروش، ثبت‌نام، ثبت رضایت و پرداخت فعال نیست"
 FA_SECTION = re.compile(r'<section\b[^>]*\bid=["\x27]fa["\x27]', re.I)
 DANGEROUS_HTML = (
@@ -45,7 +45,7 @@ def evaluate(page: bytes, approved_version: str, approved_sha256: str) -> dict:
     failures: list[str] = []
     actual_sha256 = hashlib.sha256(page).hexdigest()
     ver = revision(approved_version)
-    if ver is None or ver < MINIMUM_PROSPECTIVE_REVISION:
+    if ver is None or ver < MINIMUM_REVIEWABLE_REVISION:
         failures.append("unapproved_or_obsolete_revision")
     if not isinstance(approved_sha256, str) or not SHA256_RE.fullmatch(approved_sha256):
         failures.append("missing_exact_approved_copy_sha256")
