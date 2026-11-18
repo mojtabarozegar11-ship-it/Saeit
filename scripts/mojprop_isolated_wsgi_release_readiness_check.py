@@ -28,6 +28,7 @@ with tempfile.TemporaryDirectory(prefix="mojprop-v141-isolated-wsgi-ci-") as d:
  from django.core.management import call_command
  from django.db import connection
  assert connection.vendor=="sqlite"
+ connection.ensure_connection()
  assert getattr(connection,"transaction_mode",None)=="IMMEDIATE"
  assert not apps.is_installed("core")
  assert not any(e.is_serious() for e in run_checks())
