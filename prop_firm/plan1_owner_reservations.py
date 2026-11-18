@@ -229,15 +229,16 @@ class ReservationLedger:
         if trader is not None:
             where.append("trader_ref = ?")
             args.append(trader)
-        row = self._db.execute(
-            "SELECT COALESCE(SUM(capital_usd), '0') AS capital, "
-            "COALESCE(SUM(risk_usd), '0') AS risk, "
-            "COALESCE(SUM(margin_usd), '0') AS margin, COUNT(*) AS count "
+        rows = self._db.execute(
+            "SELECT capital_usd, risk_usd, margin_usd "
             f"FROM owner_reservations WHERE {' AND '.join(where)}",
             args,
-        ).fetchone()
-        return Exposure(account, trader, _dec(row["capital"]), _dec(row["risk"]),
-                        _dec(row["margin"]), row["count"])
+        ).fetchall()
+        # Never let SQLite coerce decimal text through binary floating point.
+        capital = sum((_dec(row["capital_usd"]) for row in rows), Decimal("0"))
+        risk = sum((_dec(row["risk_usd"]) for row in rows), Decimal("0"))
+        margin = sum((_dec(row["margin_usd"]) for row in rows), Decimal("0"))
+        return Exposure(account, trader, capital, risk, margin, len(rows))
 
     def reserve(
         self, *, reservation_id: str, idempotency_key: str, account_ref: str,
