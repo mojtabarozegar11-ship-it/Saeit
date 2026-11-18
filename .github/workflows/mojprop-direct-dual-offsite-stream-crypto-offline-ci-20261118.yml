@@ -5,6 +5,8 @@ on:
     paths:
       - scripts/mojprop_direct_dual_offsite_stream_core_20261118.py
       - tests/test_mojprop_direct_dual_offsite_stream_core_20261118.py
+      - scripts/mojprop_direct_dual_offsite_pair_manifest_20261118.py
+      - tests/test_mojprop_direct_dual_offsite_pair_manifest_20261118.py
       - .github/workflows/mojprop-direct-dual-offsite-stream-crypto-offline-ci-20261118.yml
   pull_request:
     branches: [audit/mojprop-private-archive-allocation-and-offsite-route-20261118]
@@ -28,11 +30,12 @@ jobs:
         run: |
           set -euo pipefail
           python3.11 -m pip install --disable-pip-version-check --no-input 'cryptography==50.0.2'
-      - name: Run 48 real AES256GCM and RSA3072 synthetic two-provider tests
+      - name: Run 90 real crypto, unknown-size producer and both-kinds receipt tests
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
-            tests.test_mojprop_direct_dual_offsite_stream_core_20261118
+            tests.test_mojprop_direct_dual_offsite_stream_core_20261118 \
+            tests.test_mojprop_direct_dual_offsite_pair_manifest_20261118
       - name: Re-run all 176 prior archive/storage/Plan1/atomic source controls
         run: |
           set -euo pipefail
