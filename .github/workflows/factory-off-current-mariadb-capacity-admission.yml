@@ -1,0 +1,120 @@
+name: Factory OFF current MariaDB backup capacity admission READ ONLY
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/factory-off-current-mariadb-capacity-admission.yml'
+permissions:
+  contents: read
+concurrency:
+  group: factory-current-mariadb-capacity-readonly-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  admission:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - name: Read account capacity and available backup programs via pinned owner SSH only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$(id -u)" -ne 0 || { echo OWNER_RUNNER_MUST_BE_NONROOT; exit 78; }
+          work="$(mktemp -d)"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/host.key"
+          chmod 600 "$work/"*.key
+          ssh-keygen -y -P "" -f "$work/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$work/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 127.0.0.1 > "$work/vps.known" 2>/dev/null
+          test -s "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$work/config" <<EOF
+          Host saeit-vps
+            HostName 127.0.0.1
+            User githubops
+            Port 22
+            IdentityFile $work/vps.key
+            UserKnownHostsFile $work/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $work/host.key
+            UserKnownHostsFile $work/cpanel.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$work/config"
+          scan="$(ssh -T -F "$work/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$work/cpanel.known"
+          chmod 600 "$work/cpanel.known" "$work/vps.known"
+          test "$(ssh-keygen -lf "$work/cpanel.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          timeout 60s ssh -T -F "$work/config" saeit-vps 'exec python3 -B -' <<'PY'
+          import json,os,pwd,shutil,pathlib,stat
+          assert pwd.getpwuid(os.geteuid()).pw_name=="githubops"
+          home=pathlib.Path("/home/githubops")
+          st=home.lstat()
+          assert stat.S_ISDIR(st.st_mode) and st.st_uid==os.geteuid()
+          v=os.statvfs(home)
+          print("FACTORY_CURRENT_VPS_CAPACITY="+json.dumps({
+              "available_bytes":v.f_bavail*v.f_frsize,"filesystem_total_bytes":v.f_blocks*v.f_frsize,
+              "available_inodes":v.f_favail,
+              "tools":{name:bool(shutil.which(name)) for name in ("mariadb","mariadb-dump","mysql","mysqldump","gzip","zstd","openssl","rsync","ssh")},
+              "no_new_files":True,"production_db_accessed":False},sort_keys=True))
+          PY
+          timeout 90s ssh -T -F "$work/config" saeit-cpanel 'exec python3 -B -' <<'PY'
+          import json,math,os,pwd,shutil,subprocess
+          assert pwd.getpwuid(os.geteuid()).pw_name=="zomorod2"
+          def call(module,func):
+              p=subprocess.run(["uapi","--output=json",module,func],capture_output=True,timeout=35)
+              if p.returncode or len(p.stdout)>2097152:raise RuntimeError("UAPI_READ_FAILED")
+              result=json.loads(p.stdout)["result"]
+              if result["status"]!=1:raise RuntimeError("UAPI_STATUS_FAILED")
+              return result["data"]
+          q=call("Quota","get_quota_info")
+          free=float(q["megabytes_remain"])
+          assert math.isfinite(free) and free>=0
+          d=call("Mysql","list_databases")
+          if not isinstance(d,list):raise RuntimeError("DATABASE_INVENTORY_SHAPE_UNKNOWN")
+          sizes=[]
+          unknown=0
+          for row in d:
+              # Report sizes only; never print names, users, credentials or row data.
+              value=row.get("disk_usage") if isinstance(row,dict) else None
+              if isinstance(value,(str,int,float)) and not isinstance(value,bool):
+                  try:
+                      size=int(value)
+                      if size<0:raise ValueError()
+                      sizes.append(size)
+                  except (ValueError,OverflowError):unknown+=1
+              else:unknown+=1
+          v=os.statvfs("/home/zomorod2")
+          print("FACTORY_CURRENT_CPANEL_CAPACITY="+json.dumps({
+              "quota_free_mib":free,"physical_filesystem_available_bytes":v.f_bavail*v.f_frsize,
+              "database_count":len(d),"database_disk_usage_known_count":len(sizes),
+              "database_disk_usage_unknown_count":unknown,
+              "largest_reported_database_disk_bytes":max(sizes) if sizes else None,
+              "sum_reported_database_disk_bytes":sum(sizes),
+              "tools":{name:bool(shutil.which(name)) for name in ("mariadb-dump","mysqldump","mysql","mariadb","gzip","zstd","openssl","rsync","ssh")},
+              "application_rows_read":0,"database_names_logged":False,"credentials_logged":False,
+              "backup_created":False,"factory_started":False},sort_keys=True))
+          PY
+          echo FACTORY_CURRENT_BACKUP_ADMISSION_METADATA_ONLY=true
+          echo FACTORY_CURRENT_BACKUP_NOT_CREATED=true

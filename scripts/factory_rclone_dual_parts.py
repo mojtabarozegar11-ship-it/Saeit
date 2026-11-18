@@ -382,25 +382,33 @@ class RcloneDualStore:
             raise TransferHold('REMOTE_NAMESPACE_LIST_AMBIGUOUS')
         return {x.rstrip('/').casefold() for x in children}
 
-    def callbacks(self, run_subdirectory: str):
-        """Return four independent core callbacks (A upload/read, B upload/read).
+    def callbacks(self, run_subdirectory: str, *, destination_kind: str = 'current'):
+        """Four independent A/B callbacks, strictly segregated by recovery age.
 
-        Caller MUST invoke preflight before any source stream opens. A new random
-        run_subdirectory prevents accidental reuse; no remote cleanup ever runs.
+        Caller MUST invoke preflight before any source stream opens.
+        `historical-nov5` uses two existing owner-only private folders; it
+        must NEVER create a misleading entry in `current-backups`.
+        No remote cleanup or overwrite is authorized.
         """
         if self._admission is None:
             raise TransferHold('MISSING_PROVIDER_PREFLIGHT')
-        if not re.fullmatch(r'factory-current-[0-9a-f]{32}', run_subdirectory):
+        if destination_kind == 'current':
+            dirname, expected = 'current-backups', r'factory-current-[0-9a-f]{32}'
+        elif destination_kind == 'historical-nov5':
+            dirname, expected = 'historical-nov5-snapshots', r'factory-historical-[0-9a-f]{32}'
+        else:
+            raise TransferHold('UNAPPROVED_BACKUP_AGE_OR_DESTINATION')
+        if not re.fullmatch(expected, run_subdirectory):
             raise TransferHold('UNSAFE_RUN_PREFIX')
         if self._callbacks_claimed:
             raise TransferHold('MULTIPLE_RUNS_ON_SAME_TRANSPORT_DENIED')
         # A failed, partially created namespace must never be silently reused.
         self._callbacks_claimed = True
-        prefix = 'current-backups/' + run_subdirectory
+        prefix = dirname + '/' + run_subdirectory
         # Fail closed if either private Drive already has this run (even with
         # differently cased names). Listing failures are not 'empty' proofs.
         for remote in (self.remote_a, self.remote_b):
-            if run_subdirectory.casefold() in self._direct_child_names(remote, 'current-backups'):
+            if run_subdirectory.casefold() in self._direct_child_names(remote, dirname):
                 raise TransferHold('BACKUP_RUN_NAMESPACE_ALREADY_EXISTS')
         # mkdir is additive, but NOT a Google-Drive-atomic create-if-absent.
         # A 128-bit owner-generated run ID plus list/check mitigates collisions.

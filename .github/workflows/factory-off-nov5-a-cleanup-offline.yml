@@ -1,0 +1,32 @@
+name: Factory OFF one-source exact-cleanup safety OFFLINE only
+on:
+  pull_request:
+    paths:
+      - 'scripts/factory_cpanel_nov5_a_exact_cleanup_20261118.py'
+      - 'tests/test_factory_cpanel_nov5_a_exact_cleanup_20261118.py'
+      - '.github/workflows/factory-off-nov5-a-cleanup-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify code pins and test surgical safe subset (NEVER call cleanup CLI)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/factory_cpanel_nov5_a_exact_cleanup_20261118.py)" = '67cba308918ee15326368bd8cc23f2a88a9b0718'
+          test "$(git hash-object tests/test_factory_cpanel_nov5_a_exact_cleanup_20261118.py)" = '904ee3846882ce8070cd9968aa4665a944f21a05'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_factory_cpanel_nov5_a_exact_cleanup_20261118.py' -q
+          echo EXACT_CLEANUP_OFFLINE_TESTS_PASS=true
+          echo CPANEL_FILES_DELETED=0
+          echo FACTORY_STARTED=false
+          echo PAYMENT_COMMITTED=false

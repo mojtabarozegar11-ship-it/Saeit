@@ -1,0 +1,90 @@
+name: Factory OFF stage owner interactive Drive setup kit only
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/factory-off-stage-owner-interactive-drive-kit-20261118.yml'
+permissions:
+  contents: read
+concurrency:
+  group: factory-stage-owner-interactive-kit-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  stage-private-kit:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Stage exact public-only source kit under owner home; no OAuth execution
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d)"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 8 -t rsa 127.0.0.1 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          python3 -B - "$d/stage.py" <<'BUILD'
+          import base64,hashlib,pathlib,sys
+          records=[]
+          for name, pin in (
+              ('factory_owner_drive_setup.py','03f20faf0cb763017e97dfbf32a5faf9081f21ec'),
+              ('factory_rclone_dual_parts.py','f9c6d8445144744920246a128c977bdc850eb80f'),
+              ('factory_rclone_ephemeral_binary.py','fa088e6531c302b95044d014ac8e8c568fb9ca7a')):
+              raw=(pathlib.Path('scripts')/name).read_bytes()
+              assert hashlib.sha1(('blob '+str(len(raw))+'\0').encode()+raw).hexdigest()==pin
+              compile(raw,name,'exec')
+              records.append((name,pin,base64.b64encode(raw).decode('ascii')))
+          src='RECORDS='+repr(records)+'\n'+'''import base64,hashlib,json,os,pathlib,pwd,stat
+          assert pwd.getpwuid(os.geteuid()).pw_name=='githubops' and os.geteuid()!=0
+          os.umask(0o077)
+          home=pathlib.Path.home()
+          assert home.is_absolute() and not home.is_symlink() and home.stat().st_uid==os.geteuid()
+          dest=home/'factory-owner-drive-setup-20261118'
+          dest.mkdir(mode=0o700,exist_ok=True)
+          st=dest.lstat()
+          assert stat.S_ISDIR(st.st_mode) and st.st_uid==os.geteuid() and st.st_mode & 0o077==0
+          fd=os.open(dest,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+          created=0
+          try:
+              for name,pin,encoded in RECORDS:
+                  data=base64.b64decode(encoded,validate=True)
+                  assert hashlib.sha1(('blob '+str(len(data))+chr(0)).encode()+data).hexdigest()==pin
+                  try:
+                      out=os.open(name,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=fd)
+                  except FileExistsError:
+                      out=None
+                  if out is not None:
+                      with os.fdopen(out,'wb') as h:
+                          h.write(data); h.flush(); os.fsync(h.fileno())
+                      created+=1
+                  inp=os.open(name,os.O_RDONLY|os.O_NONBLOCK|os.O_NOFOLLOW,dir_fd=fd)
+                  with os.fdopen(inp,'rb') as h:
+                      s=os.fstat(h.fileno())
+                      assert stat.S_ISREG(s.st_mode) and s.st_uid==os.geteuid() and s.st_nlink==1 and s.st_mode&0o077==0
+                      assert s.st_size==len(data) and h.read(len(data)+1)==data
+              print("FACTORY_OWNER_KIT_STAGED="+json.dumps({"files_verified":len(RECORDS),"new_files":created,"owner_private":True,"oauth_executed":False,"backup_uploaded":False,"factory_started":False,"production_modified":False},sort_keys=True))
+          finally:
+              os.close(fd)
+          '''
+          compile(src,'stage-owner-kit','exec')
+          pathlib.Path(sys.argv[1]).write_text(src)
+          BUILD
+          timeout 90s ssh -T -i "$d/key" -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/known" -o GlobalKnownHostsFile=/dev/null \
+            -o BatchMode=yes -o ForwardAgent=no -o IdentitiesOnly=yes \
+            -o ConnectTimeout=15 githubops@127.0.0.1 'exec python3 -B -' < "$d/stage.py"

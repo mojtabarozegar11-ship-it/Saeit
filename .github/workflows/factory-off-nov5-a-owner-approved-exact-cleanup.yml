@@ -1,0 +1,23 @@
+name: Factory OFF Nov5-A one-time cleanup RETIRED
+# Historical owner-delegated unlink completed in run 44229251658.
+# Preserve code and prior receipts in Git history; do not rerun mutation.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/factory-off-nov5-a-owner-approved-exact-cleanup.yml'
+permissions:
+  contents: read
+jobs:
+  retired:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 3
+    steps:
+      - name: One-time cleanup permanently retired on this branch
+        run: |
+          echo FACTORY_A_HISTORICAL_CLEANUP_RECEIPT_RUN=44229251658
+          echo FACTORY_A_MUTATION_RETIRED=true
+          echo FACTORY_NO_NEW_DESTRUCTIVE_ACTION=true

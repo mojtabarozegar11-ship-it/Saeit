@@ -32,7 +32,7 @@ jobs:
           test "$(git hash-object scripts/factory_dual_stream_v2.py)" = '7a1d0ac87d97c30134f4d6955359379b0c88a255'
           test ! -L scripts/factory_rclone_dual_parts.py
           test ! -L tests/test_factory_rclone_dual_parts.py
-          test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'bdc22911a67ba8b8c79efb9f75796b88571d8d3c'
+          test "$(git hash-object scripts/factory_rclone_dual_parts.py)" = 'f9c6d8445144744920246a128c977bdc850eb80f'
           test "$(git hash-object tests/test_factory_rclone_dual_parts.py)" = '4194efaaab093dd9e152ffaf2a558da80185b9ce'
       - name: Run 79 offline bounded-IO transport, crypto core and restore checks
         shell: bash
