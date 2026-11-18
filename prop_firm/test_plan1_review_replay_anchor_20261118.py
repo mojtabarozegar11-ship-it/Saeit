@@ -2,7 +2,9 @@
 
 No buyer data, live payment, network, or production database is used.
 """
+import os
 import sqlite3
+import tempfile
 import unittest
 
 from prop_firm.plan1_private_review_replay import (
@@ -12,7 +14,9 @@ from prop_firm.plan1_private_review_replay import (
 
 class ReviewReplayAnchorTests(unittest.TestCase):
     def setUp(self):
-        self.db = sqlite3.connect(":memory:")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db_path = os.path.join(self.tmp.name, "review-ledger.sqlite3")
+        self.db = sqlite3.connect(self.db_path)
         self.db.executescript(SCHEMA_SQL)
         self.acceptance = "a" * 64
         self.attestation = "b" * 64
@@ -20,6 +24,7 @@ class ReviewReplayAnchorTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
+        self.tmp.cleanup()
 
     def claim(self, **overrides):
         kwargs = dict(review_ref=self.ref, acceptance_sha256=self.acceptance,
@@ -76,8 +81,72 @@ class ReviewReplayAnchorTests(unittest.TestCase):
                          "preserve")
         self.db.rollback()
 
-    def test_missing_schema_rejected(self):
+    def test_claim_survives_close_and_reopen(self):
+        self.claim()
+        self.db.close()
+        self.db = sqlite3.connect(self.db_path)
+        with self.assertRaises(ReviewReplayClosed):
+            self.claim()
+        self.assertEqual(self.db.execute(
+            "SELECT count(*) FROM prop1_review_claims").fetchone()[0], 1)
+
+    def test_two_connections_share_unique_claims(self):
+        self.claim()
+        other = sqlite3.connect(self.db_path)
+        try:
+            with self.assertRaises(ReviewReplayClosed):
+                claim_review_once(other, review_ref=self.ref,
+                                  acceptance_sha256="c" * 64,
+                                  reviewer_attestation_sha256="d" * 64)
+            self.assertEqual(other.execute(
+                "SELECT count(*) FROM prop1_review_claims").fetchone()[0], 1)
+        finally:
+            other.close()
+
+    def test_in_memory_registry_rejected_even_with_schema(self):
         other = sqlite3.connect(":memory:")
+        try:
+            other.executescript(SCHEMA_SQL)
+            with self.assertRaises(ReviewReplayClosed):
+                claim_review_once(other, review_ref=self.ref,
+                                  acceptance_sha256=self.acceptance,
+                                  reviewer_attestation_sha256=self.attestation)
+        finally:
+            other.close()
+
+    def test_temporary_sqlite_database_rejected(self):
+        other = sqlite3.connect("")
+        try:
+            other.executescript(SCHEMA_SQL)
+            with self.assertRaises(ReviewReplayClosed):
+                claim_review_once(other, review_ref=self.ref,
+                                  acceptance_sha256=self.acceptance,
+                                  reviewer_attestation_sha256=self.attestation)
+        finally:
+            other.close()
+
+    def test_unsafe_sync_mode_rejected_without_claim(self):
+        self.db.execute("PRAGMA synchronous = OFF")
+        with self.assertRaises(ReviewReplayClosed):
+            self.claim()
+        self.assertEqual(self.db.execute(
+            "SELECT count(*) FROM prop1_review_claims").fetchone()[0], 0)
+
+    def test_unsafe_journal_mode_rejected_without_claim(self):
+        self.db.execute("PRAGMA journal_mode = OFF")
+        with self.assertRaises(ReviewReplayClosed):
+            self.claim()
+        self.assertEqual(self.db.execute(
+            "SELECT count(*) FROM prop1_review_claims").fetchone()[0], 0)
+
+    def test_no_commerce_permission_in_replay_receipt(self):
+        receipt = self.claim()
+        self.assertEqual(receipt, "PRIVATE_REVIEW_CLAIMED_ONLY")
+        self.assertNotIn("INVOICE", receipt)
+        self.assertNotIn("ENROLLMENT", receipt)
+
+    def test_missing_schema_rejected(self):
+        other = sqlite3.connect(os.path.join(self.tmp.name, "no-schema.sqlite3"))
         try:
             with self.assertRaises(ReviewReplayClosed):
                 claim_review_once(other, review_ref=self.ref,
