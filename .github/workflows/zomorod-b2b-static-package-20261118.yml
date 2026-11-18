@@ -1,0 +1,47 @@
+name: Zomorod B2B exact static site package — NO DEPLOY
+
+on:
+  pull_request:
+    paths:
+      - "public/b2b/**"
+      - "scripts/zomorod_b2b_static_package_20261118.py"
+      - "tests/test_zomorod_b2b_static_package_20261118.py"
+      - ".github/workflows/zomorod-b2b-static-package-20261118.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Test source package before building artifact
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_zomorod_b2b_static_package_20261118 -q
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_zomorod_b2b_static_fallback_20261118 -q
+      - name: Build verified immutable B2B-only ZIP
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/zomorod_b2b_static_package_20261118.py \
+            --source-sha ${{ github.event.pull_request.head.sha }} \
+            --output "$RUNNER_TEMP/zomorod-b2b-static-only.zip"
+          test -s "$RUNNER_TEMP/zomorod-b2b-static-only.zip"
+          echo 'SOURCE_ONLY_B2B_ZIP_VERIFIED=PASS; NO_SITE_OR_DB_WRITES' >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain exact source-only ZIP for controlled release review
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-b2b-static-source-only
+          path: ${{ runner.temp }}/zomorod-b2b-static-only.zip
+          if-no-files-found: error
+          retention-days: 3
