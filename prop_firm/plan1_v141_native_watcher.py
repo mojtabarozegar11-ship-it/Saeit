@@ -106,8 +106,8 @@ def _candidates(open_orders):
             if (type(txid) is not str or not _TXID.fullmatch(txid)
                     or txid in seen_txids):
                 continue
-            seen_txids.add(txid)
-            contract_list = (tx.get("raw_data") or {}).get("contract")
+            raw_data = tx.get("raw_data")
+            contract_list = raw_data.get("contract") if type(raw_data) is dict else None
             if type(contract_list) is not list or len(contract_list) != 1:
                 continue
             c = contract_list[0]
@@ -129,7 +129,11 @@ def _candidates(open_orders):
                 block_ms = int(tx["block_timestamp"])
             except (KeyError, ValueError, TypeError):
                 continue
+            # Only reserve a transaction ID after the candidate passed all
+            # shape, native-amount, receiver and timestamp checks. A malformed
+            # indexer row must not hide a valid later occurrence of that TXID.
             candidates.append((txid, sender.lower(), block_ms))
+            seen_txids.add(txid)
         # For a FULL page without cursor we cannot prove coverage. Fail closed.
         next_cursor = meta.get("fingerprint")
         if len(records) < PAGE_LIMIT:
