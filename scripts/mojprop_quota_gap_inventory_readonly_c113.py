@@ -20,6 +20,7 @@ HOME = Path("/home/zomorod2")
 APP = HOME / "Saeit-staging"
 OWNER = "zomorod2"
 HEADROOM = 256 * 1024 * 1024
+GIB = 1024 ** 3
 UAPI = "/usr/bin/uapi"
 DU = "/usr/bin/du"
 ENV = {"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin",
@@ -50,6 +51,21 @@ def bucket_bytes(value):
                     1024 if bound == 2048 else 2048 if bound == 4096 else 4096)
             return f"{lower + (0 if lower == 1 else 1)}-{bound}"
     return ">8192"
+
+
+def threshold_flags(value):
+    """Expose only coarse capacity thresholds; never exact quota values."""
+    if type(value) is not int or value < 0:
+        return {
+            "at_least_16gib": False,
+            "at_least_32gib": False,
+            "at_least_40gib": False,
+        }
+    return {
+        "at_least_16gib": value >= 16 * GIB,
+        "at_least_32gib": value >= 32 * GIB,
+        "at_least_40gib": value >= 40 * GIB,
+    }
 
 
 def _safe_root(path):
@@ -410,6 +426,8 @@ def main():
         "quota_free_bucket_mib": "unknown",
         "required_two_db_plus_headroom_bucket_mib": "unknown",
         "quota_shortfall_bucket_mib": "unknown",
+        "quota_free_thresholds": threshold_flags(None),
+        "required_thresholds": threshold_flags(None),
         "combined_quota_capacity_sufficient": False,
         "category_usage": {},
         "database_table_profile": {"status": "unavailable"},
@@ -448,6 +466,8 @@ def main():
         result["quota_free_bucket_mib"] = bucket_bytes(free)
         result["required_two_db_plus_headroom_bucket_mib"] = bucket_bytes(needed)
         result["quota_shortfall_bucket_mib"] = bucket_bytes(max(0, needed - free))
+        result["quota_free_thresholds"] = threshold_flags(free)
+        result["required_thresholds"] = threshold_flags(needed)
         result["combined_quota_capacity_sufficient"] = free >= needed
     except Exception as err:
         # Only the exception CLASS, never its text: it can include SQL/paths.
