@@ -77,6 +77,23 @@ def _release_enabled():
     return (getattr(settings, "MOJPROP_V141_NATIVE_TRX_RELEASE_ENABLED", False) is True
             and getattr(settings, "MOJPROP_TRX_GLOBAL_LEDGER_RECONCILED", False) is True)
 
+def _require_serializable_payment_write():
+    """Only support backend lock semantics actually enforced for merchant writes.
+
+    MariaDB uses select_for_update(). Django SQLite does NOT support row locks;
+    a separately isolated low-volume SQLite ledger must explicitly use
+    OPTIONS.transaction_mode='IMMEDIATE' to serialize all top-level atomic
+    writers before they read a payable invoice. Otherwise fail closed.
+    """
+    from django.db import connection
+    if connection.vendor == "mysql":
+        return
+    if (connection.vendor == "sqlite"
+            and getattr(connection, "transaction_mode", None) == "IMMEDIATE"):
+        return
+    raise CheckoutRejected("Merchant ledger needs MariaDB row locks or SQLite IMMEDIATE transaction mode")
+
+
 def _order_hmac(order):
     """Signed immutable invoice envelope; excludes mutable delivery status."""
     key = getattr(settings, "MOJPROP_V141_ORDER_SIGNING_KEY", None)
@@ -153,6 +170,7 @@ def issue_private_foreign_invoice(*, operator, buyer, foreign_country,
     _addr_hex(RECEIVER)
     if not getattr(buyer, "email", "").strip():
         raise CheckoutRejected("Identifiable buyer with valid email required")
+    _require_serializable_payment_write()
     with transaction.atomic():
         now = timezone.now()
         invoice = PropV141NativeOrder.objects.create(
@@ -289,6 +307,7 @@ def confirm_native_trx_and_deliver(*, reference, txid):
         order.legal_clearance_digest, order.clearance_document_ref,
         order.issued_at, order.expires_at,
     )
+    _require_serializable_payment_write()
     bases = _solidity_base_urls()
     observations = []
     for base in bases:
