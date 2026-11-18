@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive"><title>MOJ PROP | My account</title>
+<style>body{font:16px/1.5 system-ui;background:#101923;color:#e8edf3;max-width:850px;margin:2rem auto;padding:1rem}main{border:1px solid #526477;background:#192532;padding:1.2rem;border-radius:12px}a{color:#f0d69d}article{border-top:1px solid #526477;padding:1rem 0}button{font:inherit;background:#e6ca8c;color:#172238;border:0;padding:.6rem 1rem;border-radius:5px}nav{display:flex;gap:1rem;flex-wrap:wrap}.ref{overflow-wrap:anywhere}small{color:#b9c7d5}</style></head>
+<body><main><h1>MOJ PROP — My account</h1>
+<p>Your private invoices and recorded simulated assessments. This page does not execute orders or authorize funded trading.</p>
+<form action="{{ base }}logout/" method="post">{% csrf_token %}<button type="submit">Sign out</button></form>
+<h2>Your orders</h2>
+{% for row in rows %}<article><h3 class="ref">{{ row.reference }}</h3>
+<p>{{ row.status }} · {{ row.issued_at|date:"Y-m-d H:i" }} UTC</p>
+<nav>{% if row.invoice_url %}<a href="{{ row.invoice_url }}">View invoice or receipt</a>{% endif %}
+{% if row.statement_url %}<a href="{{ row.statement_url }}">View recorded simulated statement</a>{% endif %}</nav>
+</article>{% empty %}<p>No reviewable orders on this page. No payment is requested here.</p>{% endfor %}
+<nav aria-label="Order pages">{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">Previous</a>{% endif %}
+<span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+{% if page.has_next %}<a href="?page={{ page.next_page_number }}">Next</a>{% endif %}</nav>
+<p><small>Never submit a wallet seed phrase or private key. A simulated record is not a promise of funding or withdrawal.</small></p>
+</main></body></html>
