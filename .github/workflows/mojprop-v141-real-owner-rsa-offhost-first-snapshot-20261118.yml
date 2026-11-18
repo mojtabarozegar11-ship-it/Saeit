@@ -21,7 +21,7 @@ jobs:
           set -euo pipefail
           test "$(id -u)" -ne 0
           test "$(git hash-object scripts/mojprop_v141_stream_existing_empty_snapshot_readonly_20261118.py)" = "e4f766549cc013a5f5789c53d9455c1b2522068d"
-          test "$(git hash-object scripts/mojprop_v141_first_empty_owner_rsa_offhost_20261118.py)" = "3c9ae0cbf65dc3f4690bca8ead7b49bf850415ab"
+          test "$(git hash-object scripts/mojprop_v141_first_empty_owner_rsa_offhost_20261118.py)" = "a66294ed9118181b85972a7678a26a7985d64323"
           test "$(git hash-object security/factory_recovery_public_20261030.pem)" = "cd52ee161ea042793600fbd8d7b70f940aced373"
           python3 -B - <<'PY'
           import pathlib
