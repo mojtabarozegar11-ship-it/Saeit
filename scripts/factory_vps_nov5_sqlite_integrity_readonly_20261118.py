@@ -106,7 +106,7 @@ def main():
     records=[_inspect(*values) for values in EXPECTED]
     if len(records)!=2 or not all(x["page_count_positive"] and x["page_size_positive"] for x in records):
         raise RuntimeError("EXPECTED_TWO_HEALTHY_DATABASES")
-    out={"schema":"factory.cpanel.historical-nov5-sqlite-integrity.v1",
+    out={"schema":"factory.vps.historical-nov5-sqlite-integrity.v1",
          "checked_snapshots":records,"number_of_snapshots":2,
          "factory_started":False,"source_deleted":False,
          "files_written":0,"mysql_connection":False,
