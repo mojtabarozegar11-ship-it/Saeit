@@ -66,6 +66,7 @@ jobs:
           tests.test_moj_prop_plan_qualification
           tests.test_moj_prop_cohort_buyer_binding_a148
           tests.test_moj_prop_fifty_trades
+          tests.test_moj_prop_a_20261118_window_replay
           tests.test_moj_prop_order_headroom_a153
           tests.test_prop_firm_policy
           tests.test_tron_manual_reconciliation

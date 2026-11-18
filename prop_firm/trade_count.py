@@ -34,6 +34,10 @@ def count_challenge_trades(executions, *, paid_at, required=50):
     if executions is None:
         raise ValueError("Trusted trade ledger required")
     positions = {}
+    # A verified provider position with conflicting close times straddling
+    # the purchase boundary cannot be treated as independently CLOSED within
+    # the 28-day cohort merely because one of its rows is in-window.
+    out_of_window_positions = set()
     uncountable = 0
     for event in executions:
         close = getattr(event, "closed_at", None)
@@ -44,12 +48,15 @@ def count_challenge_trades(executions, *, paid_at, required=50):
         closed = aware_utc(close, "closed_at")
         position = getattr(event, "external_position_id", "")
         source = getattr(event, "data_source", "")
-        if (not start <= closed < end
-                or type(position) is not str or not position.strip()
+        if (type(position) is not str or not position.strip()
                 or type(source) is not str or not source.strip()):
             uncountable += 1
             continue
         key = (source.strip(), position.strip())
+        if not start <= closed < end:
+            uncountable += 1
+            out_of_window_positions.add(key)
+            continue
         # Any duplicated close/fill shares the same position key, even when
         # the duplicate is booked in a separate phase account.
         origin = getattr(event, "execution_origin", "unknown")
@@ -62,6 +69,12 @@ def count_challenge_trades(executions, *, paid_at, required=50):
             # be classified by whichever row happens to arrive first.
             # Exclude the whole position from qualification until the
             # provider resolves its identity; never trust iterator order.
+            positions[key] = "conflicting"
+    # This pass is order-independent: an outside-window verified close must
+    # invalidate the same position whether it arrived before or after its
+    # in-window record. Pending/rejected rows never gain this authority.
+    for key in out_of_window_positions:
+        if key in positions:
             positions[key] = "conflicting"
     conflicted = sum(origin == "conflicting" for origin in positions.values())
     uncountable += conflicted
