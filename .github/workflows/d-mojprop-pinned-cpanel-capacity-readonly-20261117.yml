@@ -34,7 +34,7 @@ jobs:
           test ! -L scripts/mojprop_full_restore_capacity_readonly_c94.py
           test "$(git hash-object -- scripts/mojprop_full_restore_capacity_readonly_c94.py)" = "0e8dd0a9ef09d9826c3ec5e3588ec1779a878bd2"
           test ! -L scripts/mojprop_quota_gap_inventory_readonly_c113.py
-          test "$(git hash-object -- scripts/mojprop_quota_gap_inventory_readonly_c113.py)" = "8abaddda8272b2f8a4b0c40cdb358d71ef65fa73"
+          test "$(git hash-object -- scripts/mojprop_quota_gap_inventory_readonly_c113.py)" = "97bd04e84eac59c857b4ad00d33260f8e15bda79"
           test ! -L scripts/mojprop_vps_restore_capacity_readonly_c114.py
           test "$(git hash-object -- scripts/mojprop_vps_restore_capacity_readonly_c114.py)" = "e1a1581320840396c582d2529beb3ce3169b9418"
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_full_restore_capacity_readonly_c94 tests.test_mojprop_quota_gap_inventory_c113 tests.test_mojprop_db_table_profile_c115 tests.test_mojprop_vps_restore_capacity_readonly_c114 -q
