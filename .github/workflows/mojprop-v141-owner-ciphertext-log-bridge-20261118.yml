@@ -1,0 +1,42 @@
+name: "MOJ PROP owner ZERO-CUSTOMER RSA ciphertext bridge to dual private Drives"
+on:
+  push:
+    branches: [backup/mojprop-private-first-rsa-offhost-20261118]
+    paths:
+      - '.github/workflows/mojprop-v141-owner-ciphertext-log-bridge-20261118.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojprop-owner-encrypted-zero-customer-bridge-once-20261118
+  cancel-in-progress: false
+jobs:
+  publish-only-pinned-initial-ciphertext:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify pinned source before reading owner-private archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -u)" -ne 0
+          test "$(git hash-object scripts/mojprop_v141_owner_encrypted_log_bridge_20261118.py)" = '710c19a2e05029388a30844222752701fbd4b573'
+          python3 -B - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/mojprop_v141_owner_encrypted_log_bridge_20261118.py')
+          compile(p.read_text('utf8'), str(p), 'exec')
+          print('MOJPROP_ENCRYPTED_TRANSFER_ALLOWLIST_SOURCE_SHA_OK=true')
+          PY
+      - name: Emit only previously AES256GCM-encrypted zero-customer RSA-owner ciphertext
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m scripts.mojprop_v141_owner_encrypted_log_bridge_20261118
+          echo 'NO_RAW_DB_IN_LOG=true'
+          echo 'NO_PRIVATE_KEY_IN_LOG=true'
+          echo 'NO_ACTIONS_ARTIFACT=true'
+          echo 'NO_PAYMENT_OR_PRODUCTION_CHANGE=true'
