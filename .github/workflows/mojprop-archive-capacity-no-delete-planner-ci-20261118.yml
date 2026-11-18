@@ -1,0 +1,59 @@
+name: MOJ PROP — private archive no-deletion capacity admission (SOURCE ONLY)
+on:
+  push:
+    branches: [audit/mojprop-private-archive-allocation-and-offsite-route-20261118]
+    paths:
+      - scripts/mojprop_owner_archive_reclaim_planner_readonly_20261118.py
+      - tests/test_mojprop_owner_archive_reclaim_planner_20261118.py
+      - .github/workflows/mojprop-archive-capacity-no-delete-planner-ci-20261118.yml
+  pull_request:
+    branches: [feature/mojprop-plan1-atomic-static-rollback-owner-gated-20261118]
+permissions: {contents: read}
+jobs:
+  no-backup-deletion-assertions:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run 36 synthetic archive safety tests and 36 existing fresh-backup guards
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -v \
+            tests.test_mojprop_owner_archive_reclaim_planner_20261118 \
+            tests.test_mojprop_backup_release_admission_readonly_20261118
+      - name: Recheck 52 exact atomic landing rollback and 52 mainline contract/hash guards
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B -m unittest -q \
+            tests.test_mojprop_plan1_static_atomic_release_20261118 \
+            tests.test_mojprop_main_plan1_contact_source_20261118 \
+            tests.test_mojprop_public_live_static_exact_guard_20261118
+      - name: Show fail-closed example on synthetic allocation data
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3.11 -B - <<'PY'
+          import json
+          from tests.test_mojprop_owner_archive_reclaim_planner_20261118 import sample
+          from scripts.mojprop_owner_archive_reclaim_planner_readonly_20261118 import inspect
+          report=inspect(sample())
+          print('MOJPROP_SYNTHETIC_ARCHIVE_NO_DELETE_EXAMPLE='+json.dumps({
+            'metadata_is_live':False,
+            'inspected_synthetic_gap_bytes':report['bytes_still_missing_without_any_changes'],
+            'bytes_safe_to_delete_now':report['bytes_safe_to_delete_now'],
+            'release_or_payment_permitted':report['release_or_payment_permitted'],
+            'owner_approved_cleanup':report['archive_cleanup_case_specific_owner_authorization']
+          },sort_keys=True))
+          PY
+      - name: Never run real storage mutation
+        if: always()
+        run: |
+          echo "REAL_VPS_ARCHIVE_DELETED=false"
+          echo "REAL_DRIVE_BACKUP_UPLOADED=false"
+          echo "REAL_CUSTOMER_PII_READ=false"
+          echo "REAL_DEPLOYMENT_OR_CHECKOUT_ENABLED=false"
