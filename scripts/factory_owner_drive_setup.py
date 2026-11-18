@@ -22,8 +22,8 @@ from factory_rclone_dual_parts import RcloneDualStore, TransferHold, _mode_secur
 
 ROOT_A = '191sAkv4A01S9o6zhx-vM5xM7WO31qHPn'
 ROOT_B = '1e6D3Ek4k-4JT_oyEoiY_JejErZFssrC_'
-PRIVATE_PROOF = 'F-01 Factory VPS encrypted recovery 2026-10-30/manifest.json'
-PROOF_SHA = '753365e1584a228d4a4b60b1f7bc21dabdf9514dfc1fe362b5257326768233da'
+PRIVATE_PROOF = 'F-01 Factory VPS encrypted recovery 2026-10-30/factory-runtime-001.f01enc.seg-21'
+PROOF_SHA = '06098cc64e9f1ac23670ac8d2f71e4402e668940b9a00c77a3184b1aec0e5b30'
 
 
 def _secure_config_directory(home: Path) -> Path:
