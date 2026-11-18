@@ -1,0 +1,24 @@
+name: Prop B private reviewer replay targeted regressions
+on:
+  pull_request:
+    paths:
+      - 'prop_firm/plan1_private_review_replay.py'
+      - 'prop_firm/plan1_reviewed_buyer_terms.py'
+      - 'prop_firm/test_plan1_review_replay_anchor_20261118.py'
+      - 'tests/test_plan1_claimed_review_20261118.py'
+      - '.github/workflows/prop-b-private-review-replay.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reviewer-replay-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install minimal testing dependencies
+        run: python -m pip install 'Django>=5.2,<6.0' 'pytest>=8,<9'
+      - name: Execute B-only replay regressions without buyer data
+        run: python -m pytest -q prop_firm/test_plan1_review_replay_anchor_20261118.py tests/test_plan1_claimed_review_20261118.py
