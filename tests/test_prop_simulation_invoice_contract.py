@@ -3,7 +3,7 @@ from prop_firm.simulation_invoice_contract import SimulationInvoiceContract, REQ
 
 class SimulationInvoiceContractTests(unittest.TestCase):
     def offer(self, kind="first"):
-        return SimulationInvoiceContract("T" + "A"*33, "a"*64, kind)
+        return SimulationInvoiceContract("T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb", "a"*64, kind)
 
     def test_first_price(self):
         self.assertEqual(self.offer().snapshot()["amount_sun"], 30_000_000)
@@ -30,3 +30,7 @@ class SimulationInvoiceContractTests(unittest.TestCase):
 
     def test_digest_binds_purchase_kind(self):
         self.assertNotEqual(self.offer().digest(), self.offer("retry").digest())
+
+    def test_invalid_address_checksum(self):
+        with self.assertRaises(ValueError):
+            SimulationInvoiceContract("T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwc", "a"*64).snapshot()
