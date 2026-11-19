@@ -18,7 +18,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def probe(entry):
     name, origin = entry
-    result = {"endpoint": name, "reachable": False, "fresh": False}
+    result = {"endpoint": name, "reachable": False, "fresh": False, "reason": "unknown"}
     try:
         req = urllib.request.Request(
             origin + "/walletsolidity/getnowblock", data=b"{}", method="POST",
@@ -26,21 +26,31 @@ def probe(entry):
         )
         with urllib.request.build_opener(NoRedirect()).open(req, timeout=8) as response:
             result["reachable"] = response.status == 200
-            if not result["reachable"] or response.headers.get_content_type() != "application/json":
+            if not result["reachable"]:
+                result["reason"] = "http_status"
                 return result
-            data = response.read(150001)
-        if len(data) > 150000:
+            if response.headers.get_content_type() != "application/json":
+                result["reason"] = "content_type"
+                return result
+            data = response.read(2000001)
+        result["response_exceeds_current_runtime_limit"] = len(data) > 150000
+        if len(data) > 2000000:
+            result["reason"] = "diagnostic_size_limit"
             return result
         head = json.loads(data)["block_header"]["raw_data"]
         height, stamp = head["number"], head["timestamp"]
         if type(height) is not int or height <= 0 or type(stamp) is not int:
+            result["reason"] = "invalid_metadata"
             return result
         age = datetime.now(timezone.utc).timestamp() - stamp / 1000
         result["fresh"] = -30 <= age <= 180
+        result["age_seconds"] = round(age)
+        result["reason"] = "fresh" if result["fresh"] else "head_age"
         if result["fresh"]:
             result["height"] = height
     except (OSError, ValueError, KeyError, TypeError) as exc:
         result["error_type"] = type(exc).__name__
+        result["reason"] = "transport_or_parse_error"
     return result
 
 
