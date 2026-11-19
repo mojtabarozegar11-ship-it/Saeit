@@ -671,3 +671,22 @@ class PropSimulationLoginChallenge(models.Model):
     sent_at = models.DateTimeField()
     attempts = models.PositiveSmallIntegerField(default=0)
     consumed = models.BooleanField(default=False)
+
+
+class PropSimulationEvent(models.Model):
+    """Append-only command evidence for deterministic reconstruction of one simulation."""
+    account = models.ForeignKey(PropSimulationAccount, on_delete=models.PROTECT,
+                                related_name="execution_events")
+    sequence = models.PositiveBigIntegerField()
+    command_id = models.UUIDField()
+    payload = models.JSONField()
+    prior_digest = models.CharField(max_length=64)
+    digest = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("sequence",)
+        constraints = [
+            models.UniqueConstraint(fields=["account", "sequence"], name="mp_sim_event_sequence_unique"),
+            models.UniqueConstraint(fields=["account", "command_id"], name="mp_sim_command_unique"),
+        ]
