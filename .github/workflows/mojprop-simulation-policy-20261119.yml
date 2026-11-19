@@ -23,12 +23,17 @@ jobs:
         run: |
           python -m py_compile \
             prop_firm/simulation_policy.py \
+            prop_firm/simulation_engine.py \
             prop_firm/rules.py \
             prop_firm/plans.py \
             prop_firm/challenge_commerce.py \
             prop_firm/economics.py \
             prop_firm/trade_count.py \
             prop_firm/social_policy.py \
-            tests/test_prop_simulation_policy.py
-      - name: Run simulation policy tests
-        run: python -m unittest tests/test_prop_simulation_policy.py -v
+            tests/test_prop_simulation_policy.py \
+            tests/test_prop_simulation_engine.py
+      - name: Run simulation policy and engine tests
+        run: |
+          python -m unittest \
+            tests/test_prop_simulation_policy.py \
+            tests/test_prop_simulation_engine.py -v
