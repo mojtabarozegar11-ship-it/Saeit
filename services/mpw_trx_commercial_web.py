@@ -133,7 +133,7 @@ def _show_invoice(request, invoice_id):
     from django.http import Http404,HttpResponse
     from django.utils import timezone
     from django.middleware.csrf import get_token
-    _ensure_live(request)
+    _ensure_live(request,for_paid_read=True)
     intent=_get_owner_invoice(request,invoice_id)
     try:
         invoice=_decode(intent)
@@ -152,6 +152,7 @@ def _show_invoice(request, invoice_id):
             'or contact support with your order number.</p>'
             '<p>For a fresh quote, open the product again from the '
             '<a href="/store/">store</a>.</p>')
+    _ensure_live(request)  # Never display a payable quote while new issuance is paused.
     html,csp=render_one_tap_invoice(invoice,
         status_path=f"/commerce/trx-easy/status/{invoice_id}/")
     # Include a same-origin, CSRF-protected POST path. The GET status endpoint
