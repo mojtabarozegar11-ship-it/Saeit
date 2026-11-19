@@ -10,9 +10,9 @@ def q(seq, bid="100", ask="101"):
     return MarketQuote("EURUSD", D(bid), D(ask), f"2026-11-19T00:00:{seq:02d}Z", seq)
 
 
-def order(oid, side="buy", stop="99", kind="market", limit=None, stop_price=None):
+def order(oid, side="buy", stop="99", kind="market", limit=None, stop_price=None, quantity="1"):
     return OrderRequest(
-        order_id=oid, symbol="EURUSD", side=side, quantity=D("1"),
+        order_id=oid, symbol="EURUSD", side=side, quantity=D(quantity),
         order_type=kind, limit_price=None if limit is None else D(limit),
         stop_price=None if stop_price is None else D(stop_price),
         stop_loss=D(stop),
@@ -29,18 +29,18 @@ class SimulationEngineTests(unittest.TestCase):
 
     def test_per_trade_cap(self):
         e = SimulationEngine()
-        self.assertEqual(e.submit(order("a", stop="96"), q(1)).reason,
+        self.assertEqual(e.submit(order("a", stop="70"), q(1)).reason,
                          "per_trade_risk_limit")
 
     def test_aggregate_cap(self):
         e = SimulationEngine()
         self.assertEqual(e.submit(order("a", stop="99"), q(1)).status, "filled")
-        self.assertEqual(e.submit(order("b", stop="99"), q(2)).reason,
+        self.assertEqual(e.submit(order("b", stop="99", quantity="20"), q(2)).reason,
                          "aggregate_open_risk_limit")
 
     def test_pending_limit_fills(self):
         e = SimulationEngine()
-        result = e.submit(order("a", kind="limit", limit="99"), q(1))
+        result = e.submit(order("a", kind="limit", limit="99", stop="98"), q(1))
         self.assertEqual(result.status, "pending")
         filled = e.process_quote(q(2, bid="98", ask="99"))
         self.assertEqual(filled[0].status, "filled")
