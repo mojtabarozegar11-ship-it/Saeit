@@ -1,7 +1,7 @@
 """Read-only fulfillment eligibility; never issue a broker account."""
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from .models import PropPlan1Invoice, PropPlan1Receipt, PropRewardReserveAllocation
+from .models import PropPlan1Invoice, PropPlan1Receipt, PropRewardReserveAllocation, PropSimulationInvoiceOwner
 from .simulation_invoice_contract import PRODUCT_CODE, CONTRACT_VERSION, NETWORK, FEES_SUN
 
 @transaction.atomic
@@ -33,6 +33,8 @@ def provision_simulation_account(*, invoice_id, owner):
     if not owner.is_authenticated or not owner.is_active or not owner.email:
         raise ValidationError("Active authenticated owner required")
     verified_simulation_purchase(invoice_id=invoice_id, buyer_email=owner.email)
+    if not PropSimulationInvoiceOwner.objects.filter(invoice_id=invoice_id, owner=owner).exists():
+        raise ValidationError("Invoice ownership mismatch")
     account, _ = PropSimulationAccount.objects.get_or_create(
         invoice_id=invoice_id, defaults={"owner": owner})
     if account.owner_id != owner.pk:
