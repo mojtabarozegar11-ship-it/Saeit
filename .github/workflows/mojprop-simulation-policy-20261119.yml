@@ -28,6 +28,9 @@ jobs:
             prop_firm/simulation_readiness.py \
             prop_firm/synthetic_sale.py \
             prop_firm/reward_reserve.py \
+            prop_firm/reward_reserve_persistence.py \
+            prop_firm/models.py \
+            prop_firm/migrations/0010_reward_reserve_ledger.py \
             prop_firm/rules.py \
             prop_firm/plans.py \
             prop_firm/challenge_commerce.py \
@@ -48,4 +51,5 @@ jobs:
             tests/test_prop_simulation_feed.py \
             tests/test_prop_simulation_readiness.py \
             tests/test_prop_synthetic_sale.py \
-            tests/test_prop_reward_reserve.py -v
+            tests/test_prop_reward_reserve.py \
+            tests/test_prop_reward_reserve_persistence_contract.py -v
