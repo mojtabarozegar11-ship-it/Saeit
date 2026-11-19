@@ -76,3 +76,21 @@ class SimulationOwnerBindingTests(TestCase):
         second.refresh_from_db()
         self.assertEqual(second.status, "pending")
         self.assertEqual(PropSimulationAccount.objects.count(), 1)
+
+
+    def test_commercial_v3_settlement_preserves_version_and_reserve(self):
+        from prop_firm.simulation_invoice_contract import COMMERCIAL_CONTRACT_VERSION
+        from prop_firm.simulation_fulfillment import verified_simulation_purchase
+        self.contract = SimulationInvoiceContract(
+            "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb", "a"*64,
+            version=COMMERCIAL_CONTRACT_VERSION)
+        invoice = self.issue()
+        receipt, account = self.settle(invoice)
+        self.assertEqual(invoice.contract_version, COMMERCIAL_CONTRACT_VERSION)
+        self.assertEqual(account.owner_id, self.owner.pk)
+        result = verified_simulation_purchase(invoice_id=invoice.pk, buyer_email=self.owner.email)
+        self.assertEqual(result["data_mode"], "licensed_market_data")
+        allocation = PropRewardReserveAllocation.objects.get(invoice=invoice)
+        self.assertEqual(allocation.reward_reserve_sun, 24_000_000)
+        self.assertEqual(allocation.refund_reserve_sun, 3_000_000)
+        self.assertEqual(allocation.operating_buffer_sun, 3_000_000)
