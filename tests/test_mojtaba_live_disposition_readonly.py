@@ -304,3 +304,28 @@ def test_non_boolean_site_enabled_value_is_not_accepted_as_valid_record():
         snap("cpanel", private_php_site_registry=php)
     )
     assert identities[0]["registration_state"] == "not_in_observed_private_registry"
+
+
+@pytest.mark.parametrize("surface,untrusted", [
+    ("cron", {"entries": [
+        {"known_route_flags": ["knowledge_agent_cycle"], "command_digest": "f"*16},
+    ]}),
+    ("processes", {"route_match_counts": {"knowledge_agent_cycle": 999}}),
+    ("user_services", {"candidate_units": [
+        {"known_route_flags": ["knowledge_agent_cycle"]},
+    ]}),
+    ("system_services", {"candidate_units": [
+        {"known_route_flags": ["knowledge_agent_cycle"]},
+    ]}),
+])
+def test_truncated_surfaces_cannot_inject_false_worker_indicators(surface, untrusted):
+    cpanel = snap("cpanel")
+    cpanel[surface] = {"state": "observed_truncated", **untrusted}
+    report = module.preview(snap("vps"), cpanel, MANIFEST, repository_root=ROOT)
+    knowledge = next(g for g in report["groups"]
+                     if g["source_group"] == "knowledge_content_director")
+    obs = knowledge["host_observations"][0]
+    assert obs["route_indicators_total_not_unique_workers"] == 0
+    assert "partial_host_topology_observation" in knowledge["blocking_evidence"]
+    assert knowledge["retirement_authorized"] is False
+    assert report["production_cutover_authorized"] is False

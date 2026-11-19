@@ -2,7 +2,8 @@
 """Read-only, disclosure-minimized live host topology evidence for Mojtaba.bot.ai.
 
 Run locally as githubops (VPS) or zomorod2 (cPanel) via a verified trusted
-session. No service changes, database reads, file writes or external requests.
+session. No service changes, file writes or external requests.
+On cPanel only, a bounded private SQLite aggregate may be queried read-only.
 A matching process/cron string is an *indicator*, never proof of successful
 task execution, retirement, customer delivery or live single-bot operation.
 """
@@ -74,12 +75,52 @@ ROUTES = (
     "autonomous_master_loop",
     "SAEIT_MOJTRADE_OBSERVER_V1",
 )
-CRON_TOKENS = re.compile(r"^[0-9*/?,LW#-]{1,40}$", re.IGNORECASE)
+# Standard crontab may use named months/weekdays (JAN, MON-FRI). Their
+# omission would silently hide scheduled legacy workers in the host census.
+# Keep an explicit allowlist rather than accepting arbitrary alphabetic tokens.
+CRON_TOKENS = re.compile(
+    r"^(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|"
+    r"mon|tue|wed|thu|fri|sat|sun)|[0-9*/?,lw#-]){1,40}$",
+    re.IGNORECASE,
+)
+# These are standard crontab shortcut schedules, not comments. Omitting them
+# silently hides possible legacy workers from a retirement readiness review.
+CRON_MACROS = frozenset({
+    "@reboot", "@yearly", "@annually", "@monthly",
+    "@weekly", "@daily", "@midnight", "@hourly",
+})
+# A bounded read is not a complete census. Explicitly label truncation so a
+# missing legacy worker is never inferred from an incomplete OS observation.
+MAX_STDOUT_CHARS = 512000
+MAX_CRON_LINES = 500
+MAX_PROCESS_LINES = 20000
+MAX_SERVICE_LINES = 1000
+
+
+def bounded_observation_state(state: str, output: str, limit: int) -> str:
+    """An otherwise successful but incomplete enumeration is not observed."""
+    return (
+        "observed_truncated"
+        if state == "observed" and len(output.splitlines()) > limit
+        else state
+    )
 
 
 def route_flags(command: str) -> list[str]:
-    lower = command.casefold()
-    return [tag for tag in ROUTES if tag.casefold() in lower]
+    """Match allowlisted route identifiers, not substrings of other names.
+
+    These are still *indicators*, never verified live worker identities.
+    A suffix like '_backup' or '-old' must not create a false candidate.
+    The boundary permits '.py' source suffixes and path separators.
+    """
+    return [
+        tag for tag in ROUTES
+        if re.search(
+            r"(?<![0-9a-z_.-])" + re.escape(tag) + r"(?![0-9a-z_-])",
+            command,
+            flags=re.IGNORECASE,
+        )
+    ]
 
 
 def call_readonly(args: list[str], *, timeout: int = 10) -> tuple[str, str]:
@@ -90,7 +131,9 @@ def call_readonly(args: list[str], *, timeout: int = 10) -> tuple[str, str]:
     except (OSError, subprocess.TimeoutExpired):
         return "unavailable", ""
     if proc.returncode == 0:
-        return "observed", proc.stdout[:512000]
+        if len(proc.stdout) > MAX_STDOUT_CHARS:
+            return "observed_truncated", ""
+        return "observed", proc.stdout
     if args[:2] == ["crontab", "-l"] and proc.returncode == 1:
         # rc=1 is commonly 'no crontab', but can be an access failure.
         # Do not claim zero scheduled jobs from this ambiguous signal.
@@ -100,17 +143,28 @@ def call_readonly(args: list[str], *, timeout: int = 10) -> tuple[str, str]:
 
 def safe_cron(stdout: str) -> list[dict]:
     out = []
-    for line in stdout.splitlines()[:500]:
+    for line in stdout.splitlines()[:MAX_CRON_LINES]:
         line = line.strip()
-        if not line or line.startswith("#") or line.startswith("@"):
+        if not line or line.startswith("#"):
             continue
-        parts = line.split(maxsplit=5)
-        if len(parts) != 6 or not all(CRON_TOKENS.fullmatch(x) for x in parts[:5]):
-            continue
-        flags = route_flags(parts[5])
+        if line.startswith("@"):
+            macro_fields = line.split(maxsplit=1)
+            if len(macro_fields) != 2:
+                continue
+            schedule, command = macro_fields
+            schedule = schedule.casefold()
+            if schedule not in CRON_MACROS or not command.strip():
+                continue
+        else:
+            parts = line.split(maxsplit=5)
+            if len(parts) != 6 or not all(CRON_TOKENS.fullmatch(x) for x in parts[:5]):
+                continue
+            schedule = " ".join(parts[:5])
+            command = parts[5]
+        flags = route_flags(command)
         out.append({
-            "schedule": " ".join(parts[:5]),
-            "command_digest": hashlib.sha256(parts[5].encode()).hexdigest()[:16],
+            "schedule": schedule,
+            "command_digest": hashlib.sha256(command.encode()).hexdigest()[:16],
             "known_route_flags": flags,
         })
     return out
@@ -119,7 +173,7 @@ def safe_cron(stdout: str) -> list[dict]:
 def safe_processes(stdout: str) -> dict:
     count = Counter()
     seen = 0
-    for line in stdout.splitlines()[:20000]:
+    for line in stdout.splitlines()[:MAX_PROCESS_LINES]:
         if not line.strip():
             continue
         seen += 1
@@ -132,11 +186,25 @@ def safe_processes(stdout: str) -> dict:
 
 def safe_service_units(stdout: str) -> list[dict]:
     entries = []
-    for line in stdout.splitlines()[:1000]:
+    for line in stdout.splitlines()[:MAX_SERVICE_LINES]:
         parts = line.split()
         if len(parts) < 4 or not parts[0].endswith(".service"):
             continue
         flags = route_flags(parts[0])
+        if not flags:
+            # systemd allows named service variants (e.g.
+            # newsletter_process_queue-private.service). Match only a
+            # bounded unit-name suffix, not arbitrary process argv or a
+            # name embedded inside an unrelated service identifier.
+            flags = [
+                tag for tag in ROUTES
+                if re.search(
+                    r"(?<![0-9a-z_.-])" + re.escape(tag)
+                    + r"-[0-9a-z_.@-]+\.service$",
+                    parts[0],
+                    flags=re.IGNORECASE,
+                )
+            ]
         if flags:
             entries.append({
                 "unit_name_digest": hashlib.sha256(parts[0].encode()).hexdigest()[:16],
@@ -300,17 +368,34 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
         "systemctl", "list-units", "--type=service",
         "--all", "--plain", "--no-legend", "--no-pager",
     ])
+    cron_state = bounded_observation_state(cron_state, cron_raw, MAX_CRON_LINES)
+    process_state = bounded_observation_state(
+        process_state, ps_raw, MAX_PROCESS_LINES
+    )
+    service_state = bounded_observation_state(
+        service_state, services_raw, MAX_SERVICE_LINES
+    )
+    system_service_state = bounded_observation_state(
+        system_service_state, system_services_raw, MAX_SERVICE_LINES
+    )
     cron_rows = safe_cron(cron_raw) if cron_state == "observed" else []
     processes = safe_processes(ps_raw) if process_state == "observed" else {
         "inspected": None, "route_match_counts": {}, "process_identity_proven": False
     }
+    php_registry = (
+        cpanel_php_registry_snapshot(root) if role == "cpanel"
+        else {"state": "not_applicable", "database_state_proves_live_workers": False}
+    )
+    # A registered source or a missing DB does not prove a SQL query happened.
+    # Only a successfully read aggregate snapshot warrants database_queried=True.
+    database_queried = php_registry.get("state") == "source_registry_snapshot_only"
     return {
         "schema": SCHEMA,
         "captured_at_utc": datetime.now(timezone.utc).isoformat(),
         "host_role": role,
         "expected_user_verified": True,
         "read_only": True,
-        "database_queried": False,
+        "database_queried": database_queried,
         "external_network_used": False,
         "cron": {
             "state": cron_state, "enumerated_entries": len(cron_rows)
@@ -331,10 +416,7 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
             "service_name_indicators_only": True,
         },
         "installed_source_digests": safe_source_digests(root, role),
-        "private_php_site_registry": (
-            cpanel_php_registry_snapshot(root) if role == "cpanel"
-            else {"state": "not_applicable", "database_state_proves_live_workers": False}
-        ),
+        "private_php_site_registry": php_registry,
         "attestation": {
             "source_code_deployment_matches_pr": False,
             "canonical_worker_executed": False,
