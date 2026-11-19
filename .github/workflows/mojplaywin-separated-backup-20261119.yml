@@ -1,0 +1,95 @@
+name: MojPlayWin separated store and email backup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mojplaywin-separated-backup-20261119.yml
+  workflow_dispatch:
+
+jobs:
+  backup:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'chore(backup): separate MojPlayWin store and email backup 20261119'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+      FACTORY_VPS_RUNNER: '1'
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          work="$RUNNER_TEMP/mpw-separated-backup"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read().replace("\\r\\n","\\n").replace("\\r","\\n").rstrip()+"\\n"; sys.stdout.write(s)' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$work/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$work/config" <<EOF
+Host saeit-cpanel
+  HostName 178.239.147.125
+  User zomorod2
+  Port 1396
+  IdentityFile $work/host.key
+  UserKnownHostsFile $work/host.known
+  StrictHostKeyChecking yes
+  IdentitiesOnly yes
+  BatchMode yes
+  ConnectTimeout 15
+  ServerAliveInterval 20
+  ServerAliveCountMax 3
+  ForwardAgent no
+  RequestTTY no
+EOF
+          chmod 600 "$work/config"
+          printf '%s\n' "$work" > "$RUNNER_TEMP/mpw-separated-backup-path"
+      - name: Create separate store and email archives on cPanel
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(cat "$RUNNER_TEMP/mpw-separated-backup-path")"
+          timeout 900s ssh -T -F "$work/config" saeit-cpanel 'bash -s' <<'REMOTE_SCRIPT'
+set -euo pipefail
+umask 077
+dest=/home/zomorod2/separated-backups/20261119
+mkdir -p "$dest"
+chmod 700 "$dest"
+store="$dest/mojplaywin-store-code-20261119.tar.gz"
+email="$dest/mojplaywin-email-mailboxes-20261119.tar.gz"
+if [ ! -s "$store" ]; then
+  tmp="$store.part.$$"
+  tar --exclude='*.env' --exclude='.env' --exclude='*.sqlite3' --exclude='db.sqlite3' --exclude='*.log' --exclude='backups' -czf "$tmp" -C /home/zomorod2/Saeit-staging config core services templates mpw_commerce mpw_native_checkout passenger_wsgi.py requirements.txt -C /home/zomorod2 mojplaywin.com/store
+  chmod 600 "$tmp"
+  mv -n "$tmp" "$store"
+  test ! -e "$tmp" || rm -f "$tmp"
+fi
+if [ ! -s "$email" ]; then
+  tmp="$email.part.$$"
+  tar --ignore-failed-read -czf "$tmp" -C /home/zomorod2 mail
+  chmod 600 "$tmp"
+  mv -n "$tmp" "$email"
+  test ! -e "$tmp" || rm -f "$tmp"
+fi
+tar -tzf "$store" >/dev/null
+tar -tzf "$email" >/dev/null
+test -n "$(tar -tzf "$email" | grep -E '^mail/(mojplaywin\.com|zomorodmelal\.ir)/' | head -1)"
+printf '%s\n' 'BACKUP_COMPLETE' > "$dest/BACKUP_STATUS.txt"
+printf '%s\n' 'STORE_ARCHIVE='"$store" >> "$dest/BACKUP_STATUS.txt"
+printf '%s\n' 'EMAIL_ARCHIVE='"$email" >> "$dest/BACKUP_STATUS.txt"
+printf '%s\n' 'STORE_SIZE_BYTES='"$(stat -c '%s' "$store")" >> "$dest/BACKUP_STATUS.txt"
+printf '%s\n' 'EMAIL_SIZE_BYTES='"$(stat -c '%s' "$email")" >> "$dest/BACKUP_STATUS.txt"
+sha256sum "$store" "$email" > "$dest/SHA256SUMS.txt"
+chmod 600 "$dest"/BACKUP_STATUS.txt "$dest"/SHA256SUMS.txt
+cat "$dest/BACKUP_STATUS.txt"
+cat "$dest/SHA256SUMS.txt"
+REMOTE_SCRIPT
+      - name: Confirm no deployment or deletion
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' 'BACKUP_ONLY=1' 'DEPLOYMENT=0' 'DELETION=0' 'DATABASE_DUMP_NOT_TOUCHED=1'
