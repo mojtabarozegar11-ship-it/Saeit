@@ -53,3 +53,41 @@ class SimulationRetryTests(TestCase):
         other=get_user_model().objects.create_user(username="retry-other",email="other@example.org")
         PropSimulationIdentity.objects.create(owner=other,email=other.email,verified_at=timezone.now())
         with self.assertRaises(ValidationError):self.issue(owner=other,buyer_email=other.email)
+
+    def test_retry_page_and_post_bind_same_account_and_reuse_invoice(self):
+        from unittest.mock import patch
+        from django.urls import reverse
+        from prop_firm.simulation_checkout_views import SALT
+        from django.core import signing
+        self.fail_challenge()
+        self.client.force_login(self.owner)
+        ctx={"simulation_checkout_ready":True,"simulation_terms":"Reviewed simulation terms",
+             "simulation_terms_digest":self.first.terms_digest,
+             "simulation_contract":self.first,"simulation_gates":self.gates}
+        with override_settings(ALLOWED_HOSTS=["mojplaywin.com"],MPW_SIMULATION_IDENTITY_ENABLED=True), \
+                patch("prop_firm.simulation_checkout_views.checkout_context",return_value=ctx), \
+                patch("prop_firm.simulation_dashboard_views.checkout_context",return_value=ctx):
+            page=self.client.get(reverse("moj_prop_dashboard"),{"retry":self.account.pk},secure=True,HTTP_HOST="mojplaywin.com")
+            self.assertContains(page,"18 TRX retry invoice")
+            token=page.context["retry_checkout"]["checkout_token"]
+            parsed=signing.loads(token,salt=SALT)
+            self.assertEqual(parsed["retry_account_id"],self.account.pk)
+            self.assertEqual(parsed["contract"],self.retry.digest())
+            self.assertEqual(PropPlan1Invoice.objects.count(),1)
+            data={"accept_terms":"yes","terms_digest":self.first.terms_digest,"checkout_token":token}
+            url=reverse("moj_prop_simulation_checkout")
+            self.assertEqual(self.client.post(url,data,secure=True,HTTP_HOST="mojplaywin.com").status_code,302)
+            self.assertEqual(self.client.post(url,data,secure=True,HTTP_HOST="mojplaywin.com").status_code,302)
+            self.assertEqual(PropPlan1Invoice.objects.count(),2)
+            self.assertEqual(PropPlan1Invoice.objects.get(order_ref=parsed["order_ref"]).amount_sun,18_000_000)
+            parsed["retry_account_id"]+=100000
+            data["checkout_token"]=signing.dumps(parsed,salt=SALT)
+            self.assertEqual(self.client.post(url,data,secure=True,HTTP_HOST="mojplaywin.com").status_code,400)
+
+    def test_retry_page_gate_closed(self):
+        from django.urls import reverse
+        self.client.force_login(self.owner)
+        with override_settings(ALLOWED_HOSTS=["mojplaywin.com"],MPW_SIMULATION_IDENTITY_ENABLED=True,MPW_SIMULATION_CHECKOUT_ENABLED=False):
+            page=self.client.get(reverse("moj_prop_dashboard"),{"retry":self.account.pk},secure=True,HTTP_HOST="mojplaywin.com")
+            self.assertNotContains(page,"Create or reopen my 18 TRX retry invoice")
+            self.assertEqual(PropPlan1Invoice.objects.count(),1)
