@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - feature/mojprop-demo-reconciliation-20261119
+      - feature/mojprop-simulation-policy-v2-20261119
   workflow_dispatch:
 
 permissions:
