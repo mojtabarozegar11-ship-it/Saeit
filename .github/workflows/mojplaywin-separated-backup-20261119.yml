@@ -101,9 +101,10 @@ jobs:
           work="$(cat "$RUNNER_TEMP/mpw-separated-backup-path")"
           stage="/home/zomorod2/.local/share/mpw-live-preflight-$GITHUB_RUN_ID"
           timeout 30s ssh -T -F "$work/config" saeit-cpanel "umask 077; rm -rf -- '$stage'; mkdir -p -- '$stage'"
-          tar -C "$GITHUB_WORKSPACE" -czf - scripts/mpw_live_email_recovery_capability_readonly_20261105.py scripts/mpw_live_guest_email_linkage_readonly_20261105.py | timeout 45s ssh -T -F "$work/config" saeit-cpanel "tar -xzf - -C '$stage'"
+          tar -C "$GITHUB_WORKSPACE" -czf - scripts/mpw_live_email_recovery_capability_readonly_20261105.py scripts/mpw_live_guest_email_linkage_readonly_20261105.py scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py | timeout 45s ssh -T -F "$work/config" saeit-cpanel "tar -xzf - -C '$stage'"
           timeout 180s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_live_email_recovery_capability_readonly_20261105.py'"
           timeout 180s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_live_guest_email_linkage_readonly_20261105.py'"
+          timeout 180s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py'"
           timeout 60s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - <<'PY'
           import json, os
           os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
