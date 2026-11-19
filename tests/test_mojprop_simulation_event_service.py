@@ -1,4 +1,5 @@
 import uuid
+from urllib.parse import urlencode
 from decimal import Decimal as D
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -96,10 +97,10 @@ class SimulationEventTests(TestCase):
         self.assertEqual(self.client.get(path, secure=False, HTTP_HOST="mojplaywin.com").status_code, 404)
         body = {"operation":"submit", "command_id":str(uuid.uuid4()), "symbol":"EURUSD",
                 "side":"buy", "quantity":"1", "stop_loss":"99", "take_profit":""}
-        invalid = self.client.post(path, {**body, "price":"1"}, secure=True, HTTP_HOST="mojplaywin.com")
+        invalid = self.client.post(path, urlencode({**body, "price":"1"}), content_type="application/x-www-form-urlencoded", secure=True, HTTP_HOST="mojplaywin.com")
         self.assertContains(invalid, "Order could not be processed")
         self.assertFalse(PropSimulationEvent.objects.exists())
-        self.assertEqual(self.client.post(path, body, secure=True, HTTP_HOST="mojplaywin.com").status_code, 302)
+        self.assertEqual(self.client.post(path, urlencode(body), content_type="application/x-www-form-urlencoded", secure=True, HTTP_HOST="mojplaywin.com").status_code, 302)
         self.assertEqual(PropSimulationEvent.objects.get().payload["quote"]["ask"], "101")
         outsider = get_user_model().objects.create_user(username="other-terminal", email="other@farmco.org")
         PropSimulationIdentity.objects.create(owner=outsider, email=outsider.email, verified_at=timezone.now())
