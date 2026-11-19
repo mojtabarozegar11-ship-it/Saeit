@@ -15,6 +15,7 @@ from .simulation_identity import is_verified_simulation_user
 from .simulation_fulfillment import verified_simulation_purchase
 from .simulation_invoice_contract import COMMERCIAL_CONTRACT_VERSION
 from .simulation_feed import verified_commercial_quote
+from .simulation_completion import completion_evidence
 
 VERSION = "simulation-engine-v2"
 LEGACY_VERSION = "simulation-engine-v1"
@@ -247,7 +248,14 @@ def mark_expired_for_review(*, account_id):
         return account.status
     if account.status != "active":
         return account.status
-    _replay(account)
-    account.status = "expired_review"
+    engine, _, _ = _replay(account)
+    # Establish only unequivocal failure. A finished account that meets the
+    # necessary conditions still requires the full reviewed pass assessment.
+    account.status = (
+        "failed" if account.invoice.contract_version == COMMERCIAL_CONTRACT_VERSION
+        and engine.execution_version == VERSION
+        and completion_evidence(engine, expired=True)
+        else "expired_review"
+    )
     account.save(update_fields=["status"])
     return account.status
