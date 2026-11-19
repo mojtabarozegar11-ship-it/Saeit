@@ -13,6 +13,7 @@ from django.views.decorators.cache import never_cache
 from .simulation_invoice_contract import SimulationInvoiceContract, REQUIRED_GATES
 from .simulation_invoice_persistence import persist_simulation_invoice
 from .simulation_runtime import trading_runtime_ready
+from .simulation_tron_reconcile import configured_providers
 
 SALT = "mojprop.sim.checkout.v2"
 
@@ -31,6 +32,10 @@ def checkout_context(request):
             or getattr(settings, "MPW_SIMULATION_RECONCILIATION_ENABLED", False) is not True
             or not trading_runtime_ready()
             or not request.user.is_authenticated or not request.user.is_active):
+        return {}
+    try:
+        configured_providers()
+    except ValidationError:
         return {}
     verifier = getattr(settings, "MPW_SIMULATION_EMAIL_VERIFIER", None)
     if not callable(verifier) or verifier(request.user) is not True:
