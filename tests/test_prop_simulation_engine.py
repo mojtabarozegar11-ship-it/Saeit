@@ -34,8 +34,8 @@ class SimulationEngineTests(unittest.TestCase):
 
     def test_aggregate_cap(self):
         e = SimulationEngine()
-        self.assertEqual(e.submit(order("a", stop="99"), q(1)).status, "filled")
-        self.assertEqual(e.submit(order("b", stop="99", quantity="20"), q(2)).reason,
+        self.assertEqual(e.submit(order("a", stop="99", quantity="10"), q(1)).status, "filled")
+        self.assertEqual(e.submit(order("b", stop="99", quantity="12.5"), q(2)).reason,
                          "aggregate_open_risk_limit")
 
     def test_pending_limit_fills(self):
