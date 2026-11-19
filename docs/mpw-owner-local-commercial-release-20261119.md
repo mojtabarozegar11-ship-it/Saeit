@@ -12,3 +12,8 @@
 6. Verify public HTTPS GETs, concrete products, valid email form, disabled-wallet guest path, exact native TRX invoice; no test financial transaction without authorization.
 7. Configure bounded host scheduler for existing invoices, retaining and cycling cursor; no Actions dependency in operational checkout. Verify local scheduler and recovery email delivery before marking commercial ready.
 8. Measure actual new paid orders and receipts; no readiness percentage inferred from CI.
+
+## Owner-local scheduler package
+After approval and installation of the exact reviewed source, run the script from the cPanel account every five minutes using the existing Python interpreter: 
+`*/5 * * * * /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B /home/zomorod2/Saeit-staging/scripts/mpw_reconcile_scheduler.py`
+The wrapper locks its private state, advances in batches of three, wraps at the end, and leaves the cursor unchanged after a failed run. The existing management command still requires the settlement and provider gates. Do not install this schedule before approval. The current command looks back seven days; older unresolved payments need owner review and must not be marked expired/paid by this runner.
