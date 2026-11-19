@@ -63,3 +63,21 @@ class SpecialistOwnershipTests(TestCase):
         cap=AgentCapability.objects.create(code="research-write-review",name="Knowledge",risk_level="high",active=True)
         self.bot.capabilities.add(cap)
         self.assertEqual(specialist_owner(old.code).pk,self.bot.pk)
+
+    def test_blocked_company_handoff_does_not_create_plan(self):
+        from django.core.management import call_command
+        from core.company_activity_models import CompanyActivityAgentPlan
+        self.retire()
+        with self.assertRaises(RuntimeError):
+            call_command("company_activity_agent_cycle")
+        self.assertFalse(CompanyActivityAgentPlan.objects.exists())
+
+    def test_weather_inconsistent_handoff_blocks_before_network(self):
+        from unittest.mock import patch
+        from core.weather_agent import run_daily_cycle
+        old=Agent.objects.create(code="content-research",name="Weather",mission="Forecast",active=False)
+        self.receipt(old,rollback_ready=False)
+        with patch("core.weather_agent.province_forecast") as network:
+            with self.assertRaisesRegex(RuntimeError,"RECEIPT_INVALID"):
+                run_daily_cycle()
+            network.assert_not_called()

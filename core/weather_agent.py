@@ -9,7 +9,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from .met_weather_adapter import SOURCE_MODEL, normalize_locationforecast
-from .canonical_agent_handoff import specialist_owner
+from .canonical_agent_handoff import specialist_owner, BOT_CODE
 
 PROVINCES = [
  ('آذربایجان شرقی','تبریز',38.0962,46.2738),('آذربایجان غربی','ارومیه',37.5527,45.0761),('اردبیل','اردبیل',38.2498,48.2933),('اصفهان','اصفهان',32.6546,51.6680),('البرز','کرج',35.8400,50.9391),('ایلام','ایلام',33.6374,46.4227),('بوشهر','بوشهر',28.9234,50.8203),('تهران','تهران',35.6892,51.3890),('چهارمحال و بختیاری','شهرکرد',32.3256,50.8644),('خراسان جنوبی','بیرجند',32.8663,59.2211),('خراسان رضوی','مشهد',36.2605,59.6168),('خراسان شمالی','بجنورد',37.4750,57.3333),('خوزستان','اهواز',31.3183,48.6706),('زنجان','زنجان',36.6736,48.4787),('سمنان','سمنان',35.5729,53.3971),('سیستان و بلوچستان','زاهدان',29.4963,60.8629),('فارس','شیراز',29.5918,52.5837),('قزوین','قزوین',36.2688,50.0041),('قم','قم',34.6416,50.8746),('کردستان','سنندج',35.3219,46.9862),('کرمان','کرمان',30.2839,57.0834),('کرمانشاه','کرمانشاه',34.3142,47.0650),('کهگیلویه و بویراحمد','یاسوج',30.6682,51.5880),('گلستان','گرگان',36.8456,54.4393),('گیلان','رشت',37.2808,49.5832),('لرستان','خرم‌آباد',33.4878,48.3558),('مازندران','ساری',36.5633,53.0601),('مرکزی','اراک',34.0917,49.6892),('هرمزگان','بندرعباس',27.1832,56.2666),('همدان','همدان',34.7980,48.5146),('یزد','یزد',31.8974,54.3569),
@@ -111,10 +111,13 @@ def run_daily_cycle():
     from .models import Agent, NewsletterSource, NewsletterStory
     # Resolve the designated owner before any forecast request. A failed
     # handoff must not fall through to a different active role.
-    try:
-        agent = specialist_owner('content-research')
-    except Agent.DoesNotExist:
+    research = Agent.objects.filter(code='content-research').first()
+    # A missing optional research record uses the designated director lane;
+    # an inconsistent recorded handoff is never bypassed by fallback.
+    if research is None or (not research.active and not Agent.objects.filter(code=BOT_CODE).exists()):
         agent = specialist_owner('content-director')
+    else:
+        agent = specialist_owner('content-research')
     if not agent.active:
         raise RuntimeError('No active content agent')
     data = province_forecast(7)
