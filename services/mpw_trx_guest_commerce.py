@@ -152,6 +152,9 @@ def _install_cookie(response, token):
 
 
 def _dispatch(request, view, args, kwargs, *, create=False):
+    if create:
+        from services.mpw_trx_email_recovery import bound_checkout
+        return bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
     user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)
@@ -299,13 +302,7 @@ def patch_commercial(namespace):
                     from django.conf import settings
                     if not _new_trx_merchant_canary_is_true(settings):
                         raise Http404("New TRX invoices unavailable")
-                if view_name == "start_order":
-                    from services.mpw_trx_email_recovery import bound_checkout
-                    response = bound_checkout(
-                        request, view, _identity, _install_cookie, args, kwargs,
-                    )
-                else:
-                    response = _dispatch(request, view, args, kwargs, create=make_claim)
+                response = _dispatch(request, view, args, kwargs, create=make_claim)
                 if view_name == "start_order":
                     # Django responses expose status_code; the fallback keeps the
                     # isolated adapter contract testable without faking a response.
@@ -341,5 +338,16 @@ def patch_commercial(namespace):
             route_name = next((name for token, name in route_names if token in route), None)
             replacement = namespace.get(route_name, view)
             rebuilt.append((route, replacement))
-        namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
+        from services.mpw_trx_email_recovery import (
+            recovery_request, recovery_verify, recovery_orders, recovery_download,
+        )
+        extra = (
+            ("commerce/trx-easy/recover/", recovery_request),
+            ("commerce/trx-easy/recover/verify/", recovery_verify),
+            ("commerce/trx-easy/recover/orders/", recovery_orders),
+            ("commerce/trx-easy/recover/download/<int:invoice_id>/", recovery_download),
+        )
+        if {route for route, _ in rebuilt}.intersection(route for route, _ in extra):
+            raise RuntimeError("Recovery URL collision")
+        namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt) + extra
     namespace["_mpw_guest_checkout_installed"] = True

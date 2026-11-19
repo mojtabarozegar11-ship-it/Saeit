@@ -26,7 +26,12 @@ from services import mpw_trx_email_recovery as module
 from services import mpw_trx_guest_commerce as guest_adapter
 
 
-@override_settings(ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "testserver"])
+@override_settings(
+    ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "testserver"],
+    MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED=True,
+    MPW_GUEST_EMAIL_SEND_APPROVED=True,
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+)
 class RecoveryIsolationTests(TransactionTestCase):
 
     def setUp(self):

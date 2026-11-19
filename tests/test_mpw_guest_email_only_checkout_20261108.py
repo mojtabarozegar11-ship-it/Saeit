@@ -20,6 +20,8 @@ from services.mpw_trx_email_recovery import _digest
 
 @override_settings(
     ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "testserver"],
+    MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED=True,
+    MPW_GUEST_EMAIL_SEND_APPROVED=False,
     MPW_GUEST_RECOVERY_ENABLED=False,
     MPW_GUEST_RECOVERY_EMAIL_APPROVED=False,
 )
