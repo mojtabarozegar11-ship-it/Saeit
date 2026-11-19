@@ -1,0 +1,80 @@
+name: MojPlayWin live recovery and checkout preflight
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mojplaywin-live-recovery-preflight-20261119.yml
+  workflow_dispatch:
+
+jobs:
+  preflight:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    env:
+      HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          work="$RUNNER_TEMP/mpw-live-preflight"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$work/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$work/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $work/host.key
+            UserKnownHostsFile $work/host.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 20
+            ServerAliveCountMax 3
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$work/config"
+          printf '%s\n' "$work" > "$RUNNER_TEMP/mpw-live-preflight-path"
+      - name: Run read-only live inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(cat "$RUNNER_TEMP/mpw-live-preflight-path")"
+          stage="/home/zomorod2/.local/share/mpw-live-preflight-$GITHUB_RUN_ID"
+          timeout 30s ssh -T -F "$work/config" saeit-cpanel "umask 077; rm -rf -- '$stage'; mkdir -p -- '$stage'"
+          tar -C "$GITHUB_WORKSPACE" -czf -             scripts/mpw_live_email_recovery_capability_readonly_20261105.py             scripts/mpw_live_guest_email_linkage_readonly_20261105.py           | timeout 45s ssh -T -F "$work/config" saeit-cpanel "tar -xzf - -C '$stage'"
+          timeout 180s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_live_email_recovery_capability_readonly_20261105.py'"
+          timeout 180s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_live_guest_email_linkage_readonly_20261105.py'"
+          timeout 60s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - <<'PY'
+          import json, os
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from django.conf import settings
+          print('MPW_LIVE_FLAGS=' + json.dumps({
+              'recovery_enabled': getattr(settings,'MPW_GUEST_RECOVERY_ENABLED',False) is True,
+              'recovery_email_approved': getattr(settings,'MPW_GUEST_RECOVERY_EMAIL_APPROVED',False) is True,
+              'email_send_approved': getattr(settings,'MPW_GUEST_EMAIL_SEND_APPROVED',False) is True,
+              'merchant_canary': getattr(settings,'MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED',False) is True,
+              'email_backend': str(getattr(settings,'EMAIL_BACKEND',''))[:120],
+              'default_from_configured': bool(str(getattr(settings,'DEFAULT_FROM_EMAIL','')).strip()),
+          }, sort_keys=True)) 
+          PY"
+        if: always()
+        run: |
+          set -euo pipefail
+          work="$(cat "$RUNNER_TEMP/mpw-live-preflight-path")"
+          stage="/home/zomorod2/.local/share/mpw-live-preflight-$GITHUB_RUN_ID"
+          timeout 30s ssh -T -F "$work/config" saeit-cpanel "rm -rf -- '$stage'" || true
+          rm -rf -- "$work"
