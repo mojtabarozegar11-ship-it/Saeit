@@ -1,0 +1,34 @@
+name: MOJ PROP risk reservation boundary
+on:
+  push:
+    branches: [feature/mojprop-risk-reservation-boundary-20261119]
+    paths:
+      - 'prop_firm/plan1_execution_boundary.py'
+      - 'tests/test_prop_plan1_execution_boundary.py'
+      - '.github/workflows/mojprop-risk-reservation-boundary-20261119.yml'
+  pull_request:
+    branches: [feature/mojprop-atomic-reservation-ledger-20261119]
+    paths:
+      - 'prop_firm/plan1_execution_boundary.py'
+      - 'tests/test_prop_plan1_execution_boundary.py'
+      - '.github/workflows/mojprop-risk-reservation-boundary-20261119.yml'
+permissions:
+  contents: read
+jobs:
+  boundary:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/feature/mojprop-risk-reservation-boundary-20261119' || github.base_ref == 'feature/mojprop-atomic-reservation-ledger-20261119')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Run boundary and ledger tests
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_execution_boundary.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_owner_reservations.py' -v
+      - name: Compile boundary modules
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile prop_firm/plan1_execution_boundary.py prop_firm/plan1_owner_reservations.py tests/test_prop_plan1_execution_boundary.py
