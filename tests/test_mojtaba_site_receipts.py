@@ -114,5 +114,42 @@ class ReceiptTests(TestCase):
         self.assertFalse(AuditLog.objects.filter(action=ACTION).exists())
 
 
+    def test_per_role_receipts_complete_and_master_aggregates_other_failures(self):
+        payload = report()
+        commerce = next(x for x in payload["observations"]
+                        if x["tenant"] == "zomorodmelal" and x["role"] == "commerce")
+        commerce.update(state="unverified", http_status=503, response_sha256=None)
+        record_public_cycle(payload, cycle_id="6" * 32)
+        row = AuditLog.objects.get(action=ACTION, target_id="zomorodmelal").after_state
+        self.assertEqual({x["role"] for x in row["role_health_results"]}, set(ROUTES["zomorodmelal"]))
+        self.assertEqual(len(row["role_health_results"]), 11)
+        self.assertEqual(row["unhealthy_public_roles"], ["commerce"])
+        self.assertEqual(row["site_master_health"], "degraded")
+        self.assertFalse(row["all_public_routes_ok"])
+        self.assertFalse(row["legacy_agent_retirement_authorized"])
+        mpw = AuditLog.objects.get(action=ACTION, target_id="mojplaywin").after_state
+        self.assertEqual(len(mpw["role_health_results"]), 3)
+        self.assertEqual(mpw["unhealthy_public_roles"], [])
+        self.assertIsNone(mpw["site_master_health"])
+
+    def test_master_home_failure_is_unverified_not_healthy(self):
+        payload = report()
+        master = next(x for x in payload["observations"]
+                      if x["tenant"] == "zomorodmelal" and x["role"] == "master")
+        master.update(state="unverified", http_status=500, response_sha256=None)
+        row = summarize_public_cycle(payload)["zomorodmelal"]
+        self.assertEqual(row["site_master_health"], "unverified")
+        self.assertEqual(row["unhealthy_public_roles"], ["master"])
+
+    def test_all_routes_healthy_is_public_only_not_private_replacement(self):
+        row = summarize_public_cycle(report())["zomorodmelal"]
+        self.assertEqual(row["site_master_health"], "healthy_public_routes")
+        self.assertEqual(row["master_health_scope"], "public_route_observations_only")
+        self.assertEqual(row["unhealthy_public_roles"], [])
+        self.assertFalse(row["private_worker_execution_verified"])
+        self.assertFalse(row["legacy_sqlite_history_migrated"])
+        self.assertFalse(row["payment_verified"])
+
+
 if __name__ == "__main__":
     unittest.main()

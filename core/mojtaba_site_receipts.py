@@ -83,7 +83,21 @@ def summarize_public_cycle(report):
     for tenant, lines in details.items():
         lines.sort(key=lambda x: x["role"])
         canonical = json.dumps(lines, sort_keys=True, separators=(",", ":")).encode()
+        # A master homepage 200 cannot conceal unhealthy subordinate roles.
+        role_health = [{"role": line["role"], "state": line["state"],
+                        "response_sha256": line["html_digest"]} for line in lines]
+        unhealthy = [line["role"] for line in lines
+                     if line["state"] != "http_probe_ok"]
+        master_health = None
+        if tenant == "zomorodmelal":
+            master = next(line for line in lines if line["role"] == "master")
+            master_health = ("unverified" if master["state"] != "http_probe_ok"
+                             else "degraded" if unhealthy else "healthy_public_routes")
         result[tenant] = {
+            "role_health_results": role_health,
+            "unhealthy_public_roles": unhealthy,
+            "site_master_health": master_health,
+            "master_health_scope": "public_route_observations_only",
             "observed_roles": len(lines),
             "http_ok_count": sum(line["state"] == "http_probe_ok" for line in lines),
             "all_public_routes_ok": all(line["state"] == "http_probe_ok" for line in lines),
