@@ -24,6 +24,17 @@ on:
       - deploy/install_factory_f41_master_bridge.sh
       - deploy/f41_master_queue_runner.sh
       - .github/workflows/factory-f41-master-queue.yml
+  workflow_dispatch:
+    inputs:
+      owner_approved_private_install:
+        description: Explicit approval for private VPS F41 installation (not a bot consolidation)
+        type: boolean
+        required: true
+        default: false
+      expected_main_sha:
+        description: Exact reviewed main commit SHA
+        type: string
+        required: true
 permissions: {contents: read}
 concurrency:
   group: f41-master-queue-${{ github.ref }}
@@ -50,7 +61,14 @@ jobs:
           pip install -r requirements.txt
           pytest -q core/tests/test_factory_f41_master_bridge.py core/tests/test_factory_native_master_bridge.py
   private-vps-install:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # A source-only consolidation merge must never install or start F41.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      inputs.owner_approved_private_install == true &&
+      inputs.expected_main_sha == github.sha
     needs: [private-quality]
     runs-on: ubuntu-24.04
     timeout-minutes: 12
