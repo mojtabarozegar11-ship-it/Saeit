@@ -1,0 +1,23 @@
+{% extends "mojplaywin/site_base.html" %}
+{% block title %}MOJ PROP | Customer sign-in{% endblock %}
+{% block page_head %}<meta name="robots" content="noindex,nofollow">{% endblock %}
+{% block content %}
+<main lang="en">
+<h1>Sign in to MOJ PROP</h1>
+<p>Use your email address to create or recover access to your simulated challenge account. We never request your wallet recovery phrase or private key.</p>
+{% if message %}<p role="status">{{ message }}</p>{% endif %}
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="request">
+<label for="email">Email</label><input id="email" type="email" name="email" maxlength="254" autocomplete="email" required>
+<button type="submit">Send sign-in code</button>
+</form>
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="confirm">
+<label for="code">Email sign-in code</label><input id="code" name="code" minlength="12" maxlength="12" pattern="[0-9a-fA-F]{12}" autocomplete="one-time-code" required>
+<button type="submit">Verify and sign in</button>
+</form>
+<a href="/moj-prop/">Return to MOJ PROP</a>
+</main>
+{% endblock %}
