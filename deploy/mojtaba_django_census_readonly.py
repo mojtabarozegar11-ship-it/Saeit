@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import re
 import sqlite3
 import sys
 
@@ -19,11 +20,102 @@ TERMINAL = frozenset(("completed", "failed", "cancelled"))
 STATUS = TERMINAL | {"queued", "running", "blocked"}
 ROLES = {"vps": ("githubops", "factory-runtime/django-app"),
          "cpanel": ("zomorod2", "Saeit")}
-SCHEMA = "mojtaba.bot.ai.django-census.v1"
+SCHEMA = "mojtaba.bot.ai.django-census.v2"
+SAFE_CODES = frozenset(("product_research", "product_validation", "knowledge_content_generation",
+    "research-write-review", "factory_native_review", "factory_f41_private_build"))
+RISKS = frozenset(("low", "medium", "high", "critical"))
 QUERIES = (
     "SELECT id, code, active FROM core_agent ORDER BY id LIMIT 10001",
     "SELECT agent_id, status, COUNT(*) FROM core_agenttask GROUP BY agent_id, status LIMIT 100001",
+    "SELECT id, agent_id, status, action_type, capability_code, risk_snapshot, CASE WHEN execution_id <> '' THEN 1 ELSE 0 END, attempt_count, max_attempts FROM core_agenttask WHERE status NOT IN ('completed', 'failed', 'cancelled') LIMIT 100001",
+    "SELECT target_id, status FROM core_approvalrequest WHERE target_type = 'AgentTask' LIMIT 100001",
 )
+
+
+def safe_code(value):
+    if value in SAFE_CODES:
+        return value
+    if value == "":
+        return "empty"
+    return "unknown:" + hashlib.sha256(str(value).encode()).hexdigest()[:16]
+
+
+def valid_code(value):
+    return isinstance(value, str) and (value in SAFE_CODES or value == "empty"
+        or re.fullmatch(r"unknown:[0-9a-f]{16}", value) is not None)
+
+
+def pending_details(cursor, rows):
+    cursor.execute(QUERIES[2])
+    pending = cursor.fetchall()
+    if len(pending) > 100000:
+        raise ValueError("pending_bound")
+    cursor.execute(QUERIES[3])
+    approvals = cursor.fetchall()
+    if len(approvals) > 100000:
+        raise ValueError("approval_bound")
+    by_task = {}
+    for target_id, status in approvals:
+        by_task.setdefault(str(target_id), set()).add(
+            status if status in ("pending", "approved") else "other")
+    groups = {}
+    for pk, agent_id, status, action, capability, risk, execution, attempts, maximum in pending:
+        if agent_id not in rows:
+            continue
+        if type(attempts) is not int or type(maximum) is not int or min(attempts, maximum) < 0:
+            raise ValueError("invalid_attempt_counts")
+        k = (agent_id, status if status in STATUS else "unknown_nonterminal",
+             safe_code(action), safe_code(capability), risk if risk in RISKS else "unknown")
+        g = groups.setdefault(k, Counter())
+        g["total"] += 1
+        g["with_execution_id"] += bool(execution)
+        g["previously_attempted"] += attempts > 0
+        g["attempt_limit_reached"] += attempts >= maximum
+        approval_states = by_task.get(str(pk), set())
+        g["has_pending_approval"] += "pending" in approval_states
+        g["has_approved_record"] += "approved" in approval_states
+        g["has_other_approval"] += "other" in approval_states
+        g["without_approval_record"] += not approval_states
+    for row in rows.values():
+        row["pending_groups"] = []
+    for (agent_id, status, action, capability, risk), counts in sorted(groups.items()):
+        rows[agent_id]["pending_groups"].append({
+            "status": status, "action": action, "capability": capability,
+            "risk": risk, **dict(counts)})
+    for row in rows.values():
+        validate_pending_groups(row)
+
+
+GROUP_COUNTS = ("total", "with_execution_id", "previously_attempted",
+    "attempt_limit_reached", "has_pending_approval", "has_approved_record",
+    "has_other_approval", "without_approval_record")
+
+
+def validate_pending_groups(row):
+    """Validate exact per-status reconciliation and output vocabulary."""
+    counts = Counter()
+    seen = set()
+    for g in row["pending_groups"]:
+        if set(g) != {"status", "action", "capability", "risk", *GROUP_COUNTS}:
+            raise ValueError("group_shape")
+        if (g["status"] not in (STATUS - TERMINAL) | {"unknown_nonterminal"}
+                or not valid_code(g["action"]) or not valid_code(g["capability"])
+                or g["risk"] not in RISKS | {"unknown"}):
+            raise ValueError("group_label")
+        key = tuple(g[k] for k in ("status", "action", "capability", "risk"))
+        if key in seen:
+            raise ValueError("duplicate_group")
+        seen.add(key)
+        if (any(type(g[k]) is not int or g[k] < 0 for k in GROUP_COUNTS)
+                or g["total"] <= 0 or any(g[k] > g["total"] for k in GROUP_COUNTS)):
+            raise ValueError("group_count")
+        if any(g[k] + g["without_approval_record"] > g["total"]
+               for k in ("has_pending_approval", "has_approved_record", "has_other_approval")):
+            raise ValueError("approval_counts")
+        counts[g["status"]] += g["total"]
+    if dict(counts) != {k: v for k, v in row["tasks"].items() if k not in TERMINAL and v}:
+        raise ValueError("group_status_reconciliation")
+    return row["pending_groups"]
 
 
 def collect(cursor):
@@ -53,6 +145,7 @@ def collect(cursor):
         counts[name] = counts.get(name, 0) + count
     for row in rows.values():
         row["nonterminal_tasks"] = sum(n for k, n in row["tasks"].items() if k not in TERMINAL)
+    pending_details(cursor, rows)
     values = list(rows.values())
     return {"registry_records": len(values),
             "enabled_registry_records": sum(r["enabled_registry_record"] for r in values),

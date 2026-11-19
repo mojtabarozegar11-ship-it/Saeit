@@ -29,6 +29,7 @@ _ALPHABET="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 _HEX_ADDR=re.compile(r"^41[0-9a-fA-F]{40}$")
 _VALID_HOST=re.compile(r"^[a-z0-9][a-z0-9.-]{2,250}$")
 _MAX_RESPONSE=150_000
+_MAX_HEAD_RESPONSE=2_000_000  # Full finalized block; transaction proof limit unchanged.
 
 
 def hex_to_tron_address(value: str) -> str:
@@ -119,7 +120,8 @@ class RpcProvider:
             pass
         else:
             raise PaymentHold("IP-literal RPC hosts forbidden")
-        if type(self.api_key) is not str or len(self.api_key)>512:
+        if (type(self.api_key) is not str or len(self.api_key)>512
+            or any(not 33 <= ord(ch) <= 126 for ch in self.api_key)):
             raise PaymentHold("Untrusted RPC authentication material")
 
 
@@ -142,24 +144,32 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 def _post(provider: RpcProvider, path: str, txid: str,
           transport:Callable|None=None) -> dict:
     if path not in ("/walletsolidity/gettransactionbyid",
-                    "/walletsolidity/gettransactioninfobyid"):
+                    "/walletsolidity/gettransactioninfobyid",
+                    "/walletsolidity/getnowblock"):
         raise PaymentHold("Only read-only solidity methods allowed")
     if transport is not None:
         response=transport(provider,path,txid)
     else:
         url=provider.endpoint.rstrip("/")+path
-        payload=json.dumps({"value":txid,"visible":False},separators=(",",":")).encode("utf8")
+        payload=json.dumps({} if path.endswith("/getnowblock") else {"value":txid,"visible":False},separators=(",",":")).encode("utf8")
         headers={"Content-Type":"application/json","Accept":"application/json"}
         if provider.api_key:headers["TRON-PRO-API-KEY"]=provider.api_key
         request=urllib.request.Request(url,data=payload,headers=headers,method="POST")
         opener=urllib.request.build_opener(_NoRedirect())
         try:
             with opener.open(request,timeout=8) as resp:
-                if resp.status!=200 or resp.headers.get("Content-Type","").split(";")[0]!="application/json":
+                if resp.status!=200 or resp.headers.get("Content-Type","").split(";")[0].strip().lower()!="application/json":
                     raise PaymentHold("RPC returned an invalid HTTP response")
-                raw=resp.read(_MAX_RESPONSE+1)
-                if len(raw)>_MAX_RESPONSE:
+                limit = _MAX_HEAD_RESPONSE if path == '/walletsolidity/getnowblock' else _MAX_RESPONSE
+                raw=resp.read(limit+1)
+                if len(raw)>limit:
                     raise PaymentHold("Oversized TRON RPC response")
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                raise PaymentHold("TRON RPC access denied") from exc
+            if exc.code == 429:
+                raise PaymentHold("TRON RPC rate limited") from exc
+            raise PaymentHold("TRON RPC HTTP error") from exc
         except (TimeoutError,urllib.error.URLError,socket.timeout,OSError) as exc:
             raise PaymentHold("TRON RPC unavailable") from exc
         try:response=json.loads(raw)
@@ -192,3 +202,20 @@ def verified_live_pair(first:RpcProvider,second:RpcProvider,*,trusted_operator_a
         prove_b=lambda tx:query_solidified_transfer(second,tx,transport=transport),
         audited_as_independent=True,
     )
+
+
+def solidified_head_height(provider: RpcProvider, now: datetime, *, transport=None) -> int:
+    """Read a fresh finalized head using the same restricted RPC transport."""
+    provider.validate()
+    data = _post(provider, "/walletsolidity/getnowblock", "", transport)
+    header = data.get("block_header")
+    raw = header.get("raw_data") if isinstance(header, dict) else None
+    if not isinstance(raw, dict):
+        raise PaymentHold("Missing finalized head")
+    height, stamp = raw.get("number"), raw.get("timestamp")
+    if type(height) is not int or height <= 0 or type(stamp) is not int or stamp <= 0:
+        raise PaymentHold("Invalid finalized head metadata")
+    age = now.timestamp() - stamp / 1000
+    if not -30 <= age <= 180:
+        raise PaymentHold("Stale or future finalized head")
+    return height

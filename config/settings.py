@@ -142,6 +142,22 @@ MPW_GUEST_RECOVERY_ENABLED = env.bool("MPW_GUEST_RECOVERY_ENABLED", default=Fals
 MPW_GUEST_RECOVERY_EMAIL_APPROVED = env.bool("MPW_GUEST_RECOVERY_EMAIL_APPROVED", default=False)
 MPW_GUEST_EMAIL_SEND_APPROVED = env.bool("MPW_GUEST_EMAIL_SEND_APPROVED", default=False)
 
+# Merchant runtime inputs. Defaults never authorize invoices, delivery or mail.
+MPW_COMMERCE_RELEASE_READY = env.bool("MPW_COMMERCE_RELEASE_READY", default=False)
+MPW_TRX_BACKGROUND_RECONCILE_ENABLED = env.bool("MPW_TRX_BACKGROUND_RECONCILE_ENABLED", default=False)
+# Optional private TronGrid access credential; never expose in templates or logs.
+MPW_TRONGRID_API_KEY = env("MPW_TRONGRID_API_KEY", default="")
+MPW_COMMERCE_DOWNLOADS_ENABLED = env.bool("MPW_COMMERCE_DOWNLOADS_ENABLED", default=False)
+MPW_WALLETLESS_TRX_PUBLIC_ENABLED = env.bool("MPW_WALLETLESS_TRX_PUBLIC_ENABLED", default=False)
+MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED = env.bool("MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED", default=False)
+MPW_WALLETLESS_TRX_PUBLIC_RELEASE_AUTHORIZED = env.bool("MPW_WALLETLESS_TRX_PUBLIC_RELEASE_AUTHORIZED", default=False)
+MPW_COMMERCE_PRIVATE_ASSET_ROOT = env("MPW_COMMERCE_PRIVATE_ASSET_ROOT", default="")
+MPW_TRX_PUBLIC_PRODUCT_IDS = tuple(dict.fromkeys(
+    int(value) for value in env.list("MPW_TRX_PUBLIC_PRODUCT_IDS", default=[])
+    if str(value).isascii() and str(value).isdigit() and int(value) > 0
+))
+
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.BasicAuthentication",

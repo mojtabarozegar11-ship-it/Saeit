@@ -365,6 +365,10 @@ def commercial_buyer_status(intent_id: int, buyer_id: int, *, db=None,
     if (intent.status != "paid" or intent.order.status != "paid"
             or Decimal(intent.order.total) != invoice.usd_total):
         return {"status": "awaiting", "can_download": False}
+    from core.crown_tron_receipts import verified_walletless_credit
+    from mpw_commerce.models import CommerceInvoice
+    if CommerceInvoice.objects.filter(order=intent.order).exists() or not verified_walletless_credit(intent.order, intent):
+        return {"status": "review", "can_download": False}
     receipt = PaymentWebhookEvent.objects.filter(
         provider=PROVIDER, payment_intent=intent,
         event_type="tron_finalized", status="processed",
@@ -384,7 +388,7 @@ def commercial_buyer_status(intent_id: int, buyer_id: int, *, db=None,
         return {"status": "review", "can_download": False}
     items = list(OrderItem.objects.filter(order=intent.order)[:2])
     if len(items) != 1 or not CommerceFulfillment.objects.filter(
-        item=items[0], kind="digital", status=CommerceFulfillment.Status.READY,
+        item=items[0], kind="digital", status__in=(CommerceFulfillment.Status.READY, CommerceFulfillment.Status.COMPLETE),
     ).exists():
         return {"status": "review", "can_download": False}
     try:
