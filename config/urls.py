@@ -145,6 +145,9 @@ urlpatterns += [
     path("moj-signal-free-unsubscribe/<str:token>/", signal_free_unsubscribe, name="moj_signal_free_unsubscribe"),
 ]
 
+# Explicit merchant URLs; handlers retain host, ownership and release checks.
+urlpatterns += [path("", include("config.mpw_commerce_urls"))]
+
 from django.conf import settings
 # Moj Prop is a MojPlayWin-only informational division. Checkout and broker execution are disabled.
 from core.moj_prop_views import moj_prop_landing, moj_prop_dashboard, moj_prop_interest, moj_prop_interest_form

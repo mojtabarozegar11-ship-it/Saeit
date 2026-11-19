@@ -80,7 +80,7 @@ jobs:
           tar -tzf "$store" >/dev/null
           tar -tzf "$email" >/dev/null
           test -n "$(tar -tzf "$email" | grep -E '^mail/(mojplaywin\.com|zomorodmelal\.ir)/' | head -1)"
-          printf '%s\n' 'BACKUP_COMPLETE' > "$dest/BACKUP_STATUS.txt"
+          printf '%s\n' 'BACKUP_COMPLETE' 'SCOPE=STORE_CODE_AND_MAIL_ONLY' 'DATABASE_INCLUDED=0' 'OFFSITE_VERIFIED=0' > "$dest/BACKUP_STATUS.txt"
           printf '%s\n' 'STORE_ARCHIVE='"$store" >> "$dest/BACKUP_STATUS.txt"
           printf '%s\n' 'EMAIL_ARCHIVE='"$email" >> "$dest/BACKUP_STATUS.txt"
           printf '%s\n' 'STORE_SIZE_BYTES='"$(stat -c '%s' "$store")" >> "$dest/BACKUP_STATUS.txt"
@@ -97,6 +97,21 @@ jobs:
           printf '%s\n' 'BACKUP_ONLY=1' 'DEPLOYMENT=0' 'DELETION=0' 'DATABASE_DUMP_NOT_TOUCHED=1'
 
 
+      - name: Validate complete inventory payload locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          for required in \
+            scripts/mpw_live_email_recovery_capability_readonly_20261105.py \
+            scripts/mpw_live_guest_email_linkage_readonly_20261105.py \
+            scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py \
+            scripts/mpw_live_source_lineage_readonly_20261119.py; do
+            test -f "$required" && test ! -L "$required" || {
+              printf 'INVENTORY_SOURCE_MISSING=%s\n' "$required" >&2
+              exit 1
+            }
+          done
+          printf '%s\n' 'INVENTORY_SOURCE_COMPLETE=1'
       - name: Run read-only recovery inventory on the same pinned relay
         shell: bash
         run: |

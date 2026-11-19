@@ -152,6 +152,9 @@ def _install_cookie(response, token):
 
 
 def _dispatch(request, view, args, kwargs, *, create=False):
+    if create:
+        from services.mpw_trx_email_recovery import bound_checkout
+        return bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
     user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)
@@ -255,6 +258,7 @@ def patch_public(namespace):
                 '<p>If you already paid, do not pay again. Contact purchase support '
                 'with your invoice reference and transaction hash. '
                 'Never share a wallet recovery phrase or private key.</p>'
+                '<p><a href="/commerce/trx-easy/recover/">Recover with purchase email</a></p>'
                 '<p><a href="/store/">Return to store</a> | '
                 '<a href="mailto:support@mojplaywin.com">Purchase support</a></p>'
                 '</main></body></html>',
@@ -334,5 +338,16 @@ def patch_commercial(namespace):
             route_name = next((name for token, name in route_names if token in route), None)
             replacement = namespace.get(route_name, view)
             rebuilt.append((route, replacement))
-        namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
+        from services.mpw_trx_email_recovery import (
+            recovery_request, recovery_verify, recovery_orders, recovery_download,
+        )
+        extra = (
+            ("commerce/trx-easy/recover/", recovery_request),
+            ("commerce/trx-easy/recover/verify/", recovery_verify),
+            ("commerce/trx-easy/recover/orders/", recovery_orders),
+            ("commerce/trx-easy/recover/download/<int:invoice_id>/", recovery_download),
+        )
+        if {route for route, _ in rebuilt}.intersection(route for route, _ in extra):
+            raise RuntimeError("Recovery URL collision")
+        namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt) + extra
     namespace["_mpw_guest_checkout_installed"] = True

@@ -23,10 +23,14 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def fetch_page(url):
     if not url.startswith(ORIGIN+"/v1/accounts/") or len(url)>2048:
         raise PaymentHold("Invalid read-only indexer origin")
-    request=urllib.request.Request(url,method="GET",headers={
-        "Accept":"application/json",
-        "User-Agent":"MojPlayWin-TRX-Readonly/1.0",
-    })
+    from django.conf import settings
+    key = getattr(settings, "MPW_TRONGRID_API_KEY", "")
+    if type(key) is not str or len(key)>512 or any(not 33 <= ord(ch) <= 126 for ch in key):
+        raise PaymentHold("Invalid private indexer credential")
+    headers = {"Accept":"application/json", "User-Agent":"MojPlayWin-TRX-Readonly/1.0"}
+    if key:
+        headers["TRON-PRO-API-KEY"] = key
+    request=urllib.request.Request(url,method="GET",headers=headers)
     try:
         with urllib.request.build_opener(NoRedirect()).open(request,timeout=10) as response:
             if response.status!=200 or response.headers.get_content_type()!="application/json":

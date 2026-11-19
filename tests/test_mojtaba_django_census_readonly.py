@@ -13,9 +13,12 @@ def fixture_db(path):
     with sqlite3.connect(path) as db:
         db.executescript("""
           CREATE TABLE core_agent (id INTEGER PRIMARY KEY, code TEXT, active INTEGER);
-          CREATE TABLE core_agenttask (id INTEGER PRIMARY KEY, agent_id INTEGER, status TEXT);
+          CREATE TABLE core_agenttask (id INTEGER PRIMARY KEY, agent_id INTEGER, status TEXT,
+            action_type TEXT DEFAULT '', capability_code TEXT DEFAULT '', risk_snapshot TEXT DEFAULT 'low',
+            execution_id TEXT DEFAULT '', attempt_count INTEGER DEFAULT 0, max_attempts INTEGER DEFAULT 3);
+          CREATE TABLE core_approvalrequest (target_id TEXT, target_type TEXT, status TEXT);
           INSERT INTO core_agent VALUES (1,'mojtaba-bot-ai',1),(2,'private-identity',0);
-          INSERT INTO core_agenttask VALUES (1,1,'completed'),(2,2,'queued'),(3,2,'private-status'),(4,7,'running');
+          INSERT INTO core_agenttask (id,agent_id,status) VALUES (1,1,'completed'),(2,2,'queued'),(3,2,'private-status'),(4,7,'running');
         """)
 
 
@@ -67,7 +70,9 @@ def run_summary(tmp_path, roles, inconsistent=False):
                   "registry_records": 1, "enabled_registry_records": 1,
                   "nonterminal_tasks": 1, "orphan_task_records": 0,
                   "agents": [{"code": "mojtaba-bot-ai", "enabled_registry_record": True,
-                              "tasks": {"queued": 1}, "nonterminal_tasks": 0 if inconsistent else 1}]}
+                              "tasks": {"queued": 1}, "nonterminal_tasks": 0 if inconsistent else 1,
+                              "pending_groups": [{"status":"queued", "action":"empty", "capability":"empty", "risk":"low",
+                                **{k: int(k in ("total","without_approval_record")) for k in C.GROUP_COUNTS}}]}]}
         (tmp_path / (role + ".out")).write_text("MOJTABA_DJANGO_CENSUS=" + json.dumps(result) + "\n")
     return subprocess.run([sys.executable, "-c", source, str(tmp_path)],
                           cwd=ROOT, capture_output=True, text=True)
@@ -105,3 +110,33 @@ def test_census_transport_diagnostics_are_redacted_and_pin_preserved():
     assert "StrictHostKeyChecking=yes" in text
     assert "ForwardAgent=no" in text
     assert not any(line.strip().startswith("cat ") and ".err" in line for line in text.splitlines())
+
+
+def test_pending_detail_reconciles_and_redacts(tmp_path):
+    path = tmp_path / "database.sqlite3"
+    fixture_db(path)
+    with sqlite3.connect(path) as db:
+        db.execute("UPDATE core_agenttask SET action_type='private-action', capability_code='product_validation', execution_id='private-execution', attempt_count=3 WHERE id=2")
+        db.execute("INSERT INTO core_approvalrequest VALUES ('2','AgentTask','pending'), ('2','AgentTask','approved'), ('2','AgentTask','pending')")
+    before = path.read_bytes()
+    result = C.sqlite_census(str(path), tmp_path)
+    g = next(g for a in result["agents"] for g in a["pending_groups"] if g["status"] == "queued")
+    assert g["action"].startswith("unknown:")
+    assert g["capability"] == "product_validation"
+    assert g["has_pending_approval"] == g["has_approved_record"] == 1
+    assert g["with_execution_id"] == g["previously_attempted"] == g["attempt_limit_reached"] == 1
+    assert g["without_approval_record"] == 0
+    assert "private-action" not in str(result) and "private-execution" not in str(result)
+    assert path.read_bytes() == before
+
+
+def test_pending_detail_rejects_inconsistent_or_unsafe_group():
+    g = {"status":"queued","action":"empty","capability":"empty","risk":"low",
+         **{k: int(k in ("total","without_approval_record")) for k in C.GROUP_COUNTS}}
+    row = {"tasks":{"queued":1}, "pending_groups":[g]}
+    assert C.validate_pending_groups(row) == [g]
+    for patch in ({"total":2}, {"action":"private-string"}, {"has_pending_approval":1}, {"total":True}):
+        with pytest.raises(ValueError):
+            C.validate_pending_groups({"tasks":{"queued":1}, "pending_groups":[{**g,**patch}]})
+    with pytest.raises(ValueError):
+        C.validate_pending_groups({"tasks":{"queued":2}, "pending_groups":[g,g]})
