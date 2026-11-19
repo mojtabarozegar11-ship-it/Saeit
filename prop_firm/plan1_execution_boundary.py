@@ -69,10 +69,10 @@ class OwnerAccountExecutionBoundary:
         if review.review_allowed is not True:
             raise ReviewDenied("risk review is not approved")
         trader_capital = (
-            review.trader_aggregate_limit_usd / POLICY.aggregate_risk_pct
+            review.trader_aggregate_limit_usd * Decimal("100") / POLICY.aggregate_risk_pct
         )
         account_capital = (
-            review.account_aggregate_limit_usd / POLICY.aggregate_risk_pct
+            review.account_aggregate_limit_usd * Decimal("100") / POLICY.aggregate_risk_pct
         )
         reservation = self.ledger.reserve(
             reservation_id=reservation_id,
