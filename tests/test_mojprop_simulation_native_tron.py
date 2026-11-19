@@ -93,3 +93,34 @@ class SimulationNativeTronTests(SimpleTestCase):
         body["ret"][0]["contractRet"] = "REVERT"
         with self.assertRaises(ValidationError):
             verify_invoice_transaction(self.invoice, txid, body)
+
+
+    def test_dual_provider_finality(self):
+        from django.test import override_settings
+        from prop_firm.simulation_tron_reconcile import dual_solidified_evidence, RpcProvider
+        txid, body = self.fixture()
+        now = datetime.fromtimestamp((self.timestamp + 3000)/1000, timezone.utc)
+        providers = (RpcProvider("a", "operator-a", "https://a.example.com"),
+                     RpcProvider("b", "operator-b", "https://b.example.org"))
+        def transport(provider, path, requested):
+            if path.endswith("getnowblock"):
+                return {"block_header": {"raw_data": {"number": 110, "timestamp": self.timestamp+2000}}}
+            if path.endswith("gettransactionbyid"):
+                return body
+            return {"id": txid, "blockNumber": 100, "blockTimeStamp": self.timestamp+1000,
+                    "receipt": {"result": "SUCCESS"}}
+        with override_settings(MPW_SIMULATION_TRON_PROVIDERS=providers,
+                               MPW_SIMULATION_TRON_OPERATOR_INDEPENDENCE_ATTESTED=True):
+            self.assertEqual(dual_solidified_evidence(self.invoice, txid, transport=transport, now=now),
+                             verify_invoice_transaction(self.invoice, txid, body))
+            def disagree(provider, path, requested):
+                result = copy.deepcopy(transport(provider, path, requested))
+                if provider.source_id == "b" and path.endswith("gettransactioninfobyid"):
+                    result["blockNumber"] = 101
+                return result
+            with self.assertRaises(ValidationError):
+                dual_solidified_evidence(self.invoice, txid, transport=disagree, now=now)
+        with override_settings(MPW_SIMULATION_TRON_PROVIDERS=providers,
+                               MPW_SIMULATION_TRON_OPERATOR_INDEPENDENCE_ATTESTED=False):
+            with self.assertRaises(ValidationError):
+                dual_solidified_evidence(self.invoice, txid, transport=transport, now=now)
