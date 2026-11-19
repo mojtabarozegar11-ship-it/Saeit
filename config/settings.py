@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "core",
+    "mpw_commerce.apps.MpwCommerceConfig",
     "farnaz.apps.FarnazConfig",
     "command_center",
     # Accounting ledger is part of the production management desk.
