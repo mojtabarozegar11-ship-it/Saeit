@@ -18,7 +18,8 @@ def read_only_independent_pair():
     if getattr(settings, "MPW_TRX_SOLIDITY_RELEASE_VERIFIED", False) is not True:
         raise PaymentHold("Independent provider release is not verified")
     first = RpcProvider(PINNED[0][0], "allnodes", PINNED[0][1])
-    second = RpcProvider(PINNED[1][0], "trongrid", PINNED[1][1])
+    second = RpcProvider(PINNED[1][0], "trongrid", PINNED[1][1],
+                         api_key=getattr(settings, "MPW_TRONGRID_API_KEY", ""))
     now = datetime.now(timezone.utc)
     heights = [solidified_head_height(provider, now) for provider in (first, second)]
     if abs(heights[0] - heights[1]) > 100:

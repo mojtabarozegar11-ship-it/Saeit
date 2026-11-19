@@ -120,7 +120,8 @@ class RpcProvider:
             pass
         else:
             raise PaymentHold("IP-literal RPC hosts forbidden")
-        if type(self.api_key) is not str or len(self.api_key)>512:
+        if (type(self.api_key) is not str or len(self.api_key)>512
+            or any(not 33 <= ord(ch) <= 126 for ch in self.api_key)):
             raise PaymentHold("Untrusted RPC authentication material")
 
 
@@ -163,6 +164,12 @@ def _post(provider: RpcProvider, path: str, txid: str,
                 raw=resp.read(limit+1)
                 if len(raw)>limit:
                     raise PaymentHold("Oversized TRON RPC response")
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                raise PaymentHold("TRON RPC access denied") from exc
+            if exc.code == 429:
+                raise PaymentHold("TRON RPC rate limited") from exc
+            raise PaymentHold("TRON RPC HTTP error") from exc
         except (TimeoutError,urllib.error.URLError,socket.timeout,OSError) as exc:
             raise PaymentHold("TRON RPC unavailable") from exc
         try:response=json.loads(raw)

@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import sys
+from urllib.error import HTTPError
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
@@ -27,10 +28,30 @@ HOLD_REASONS = {
     "Unrecognized invoice envelope": "invoice_envelope",
     "Invoice atomic amount key mismatch": "invoice_atomic_key",
     "Transaction already used": "receipt_identity",
+    "TRON RPC access denied": "rpc_access_denied",
+    "TRON RPC rate limited": "rpc_rate_limited",
+    "TRON RPC HTTP error": "rpc_http_error",
+    "RPC returned an application error": "rpc_application_error",
+    "Only one native TRX TransferContract is accepted": "contract_count",
+    "TRC20, TRC10 and contract calls are not a native TRX transfer": "contract_type",
+    "Missing native transfer contract parameters": "contract_parameters",
+    "Non-integer or zero native SUN transfer": "amount_format",
+    "Failed solidified execution": "failed_execution",
+    "Missing pinned provider or solidity response": "missing_response",
+    "RPC must not redirect": "redirect",
 }
 
 
 def category(exc):
+    cause = exc
+    for _ in range(5):
+        if isinstance(cause, HTTPError):
+            if cause.code in (401, 403, 404, 429, 500, 502, 503, 504):
+                return "http_" + str(cause.code)
+            return "other_http_error"
+        cause = getattr(cause, "__cause__", None)
+        if cause is None:
+            break
     if type(exc).__name__ == "PaymentHold":
         return HOLD_REASONS.get(str(exc), "other_payment_hold")
     return type(exc).__name__
@@ -63,6 +84,7 @@ def run():
     try:
         import django
         django.setup()
+        from django.conf import settings
         from core.models import PaymentIntent, PaymentWebhookEvent, OrderItem, LedgerEntry
         from core.crown_tron_receipts import verified_walletless_credit
         from mpw_commerce.models import CommerceFulfillment, CommerceInvoice
@@ -73,9 +95,11 @@ def run():
     except Exception as exc:
         report["errors"]["setup"] = type(exc).__name__
         return report
+    key = getattr(settings, "MPW_TRONGRID_API_KEY", os.environ.get("MPW_TRONGRID_API_KEY", ""))
+    report["trongrid_credential_configured"] = bool(key)
     nodes = (
         RpcProvider("publicnode-allnodes", "allnodes", "https://tron-solidity-rpc.publicnode.com"),
-        RpcProvider("trongrid", "trongrid", "https://api.trongrid.io"),
+        RpcProvider("trongrid", "trongrid", "https://api.trongrid.io", api_key=key),
     )
     try:
         rows = list(PaymentIntent.objects.filter(provider=PROVIDER, status="paid")
