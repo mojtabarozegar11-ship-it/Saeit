@@ -55,7 +55,7 @@ jobs:
           test ! -L scripts/mojprop_passenger_source_readonly_c118.py
           test "$(git hash-object -- scripts/mojprop_passenger_source_readonly_c118.py)" = "f6507179c762bdea1e1bb28ea17d5e420e2b4dcb"
           test ! -L scripts/mojprop_live_intake_source_drift_readonly_c95.py
-          test "$(git hash-object -- scripts/mojprop_live_intake_source_drift_readonly_c95.py)" = "4a467a4472c748ef134a2aa29df9a58a2b8be885"
+          test "$(git hash-object -- scripts/mojprop_live_intake_source_drift_readonly_c95.py)" = "1afb434610d2f07c738af37403233bd2cc2802e9"
       - name: Connect only through pinned factory runner to the existing cPanel
         shell: bash
         env:
@@ -125,6 +125,12 @@ jobs:
             < scripts/mojprop_starter30_public_presence_readonly_c122.py \
             | python3 -c 'import json,sys; raw=sys.stdin.read(6000); prefix="MOJPROP_C122_STATIC_OWNER_READONLY="; rows=[s for s in raw.splitlines() if s.startswith(prefix)]; assert len(rows)==1,"MISSING_SANITIZED_C122"; d=json.loads(rows[0][len(prefix):]); assert d["schema"]=="mojprop.owner_starter30_public_static.readonly.c122.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["no_payment_scope"] is True; assert set(d["assets"])=={"index.html","journal-template.csv","journal-guide.txt"}; assert all(v in ("reviewed_exact","unreviewed_bytes","missing","unsafe","unavailable") for v in d["assets"].values()); assert all(d[k] is False for k in ("http_public_delivery_proven","email_lead_received","database_accessed","customer_data_accessed","trx_payment_collected","funded_prop_challenge_available","production_deployment_authorized","new_cost_incurred")); assert not set(d).intersection({"email","customer_id","file_path","file_content","secret","trx_address"}); print(rows[0])'
           echo 'MOJPROP_C122_PUBLIC_ASSET_DISK_IDENTITY_READONLY=COMPLETE_NOT_HTTP_OR_PAYMENT' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify separate owner-local store and email archives without extraction or transfer
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 120s ssh -T -F "$work/config" cpanel 'python3 -B -' < scripts/mpw_local_separated_backup_readonly_20261119.py
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
