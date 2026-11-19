@@ -66,6 +66,7 @@ ROUTES = (
     "newsletter_process_queue",
     "company_activity_agent_cycle",
     "weather_agent_cycle",
+    "site_agent_cycle_cli.php",
     "site_agent_workforce.php",
     "site_agents.php",
     "factory_staging_tick",

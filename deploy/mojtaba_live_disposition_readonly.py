@@ -30,7 +30,7 @@ GROUPS = {
     },
     "zomorod_php_site_agent_runtime": {
         "hosts": ("cpanel",),
-        "routes": ("site_agent_workforce.php", "site_agents.php"),
+        "routes": ("site_agent_cycle_cli.php", "site_agent_workforce.php", "site_agents.php"),
         "files": (),
     },
     "factory_site_federation": {

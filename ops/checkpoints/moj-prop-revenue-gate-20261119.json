@@ -1,0 +1,186 @@
+{
+  "schema": "moj-prop.revenue-gate-checkpoint.v1",
+  "recorded_at": "2026-11-19T13:05:00+03:30",
+  "repository": "mojtabarozegar11-ship-it/Saeit",
+  "source_pr": {
+    "number": 2730,
+    "url": "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2730",
+    "title": "[NO EXECUTION] MOJ PROP simulation policy v2",
+    "state": "open",
+    "draft": true,
+    "head": "feature/mojprop-simulation-policy-v2-20261119",
+    "head_sha": "a6162229fe81a8b368d3b2627b5343d9095024a3",
+    "base": "feature/mojprop-demo-reconciliation-20261119",
+    "base_sha": "ce365de6cf37301d1d85e9ff148cf9cc48a8d938",
+    "mergeable": true,
+    "merged": false
+  },
+  "verified_ci": {
+    "workflow": "MOJ PROP simulation policy",
+    "run_id": 44464336262,
+    "run_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44464336262",
+    "conclusion": "success",
+    "tests_run": 77,
+    "tests_failed": 0,
+    "scope": "simulation, sale, reward-reserve and contract tests",
+    "full_django_ci_current_head": "pending_run_44496629018",
+    "full_django_ci_fix_commits": [
+      "e8080ce66c89a29a22e1ce8e2238c07b00a40e48",
+      "3fe774065a1dca26d7a7490d84b6fa8fe7b9b626",
+      "a6162229fe81a8b368d3b2627b5343d9095024a3"
+    ],
+    "full_django_ci_last_failure": {
+      "run_id": 44494880852,
+      "run_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44494880852",
+      "conclusion": "failure",
+      "tests_passed": 4720,
+      "tests_failed": 437,
+      "errors": 233,
+      "skipped": 15,
+      "root_causes": [
+        "PropAccount Python/migration default remained 100 USD while canonical Plan 1 requires 1000 USD.",
+        "C136 source-only tests were not given real main/head SHAs."
+      ],
+      "remediation": "Plan 1 default and migration aligned to 1000 USD; CI now pins origin/main and the real pull-request head SHA."
+    }
+  },
+  "commercial_offer": {
+    "sku": "MOJ-PROP-SIM-01",
+    "entry_fee_trx": 30,
+    "eligible_retry_fee_trx": 18,
+    "retry_discount_percent": 40,
+    "simulated_balance_usd": 1000,
+    "challenge_window_days": 60,
+    "customer_deposit_required": false,
+    "virtual_principal_withdrawable": false,
+    "real_trading_enabled": false,
+    "public_checkout_enabled": false,
+    "invoice_settlement_verified": false,
+    "reward_reserve_independently_verified": false
+  },
+  "gate_matrix": [
+    {
+      "gate": "simulation engine and deterministic policy",
+      "status": "passed",
+      "percent": 100
+    },
+    {
+      "gate": "unit sale/reserve contract tests",
+      "status": "passed_77_of_77",
+      "percent": 100
+    },
+    {
+      "gate": "legal/jurisdiction and translated customer terms",
+      "status": "missing",
+      "percent": 0
+    },
+    {
+      "gate": "independent reward reserve evidence",
+      "status": "missing",
+      "percent": 0
+    },
+    {
+      "gate": "trusted TRX invoice settlement on live route",
+      "status": "missing",
+      "percent": 0
+    },
+    {
+      "gate": "broker/simulator data contract and reconciliation",
+      "status": "missing",
+      "percent": 0
+    },
+    {
+      "gate": "KYC/identity/dispute/refund process",
+      "status": "missing",
+      "percent": 0
+    },
+    {
+      "gate": "merge to main and current-head Django CI",
+      "status": "pending_after_fixes",
+      "percent": 0
+    },
+    {
+      "gate": "public activation",
+      "status": "blocked_by_design",
+      "percent": 0
+    }
+  ],
+  "progress": {
+    "technical_simulation_percent": 100,
+    "ci_scope_percent": 100,
+    "commercial_gate_percent": 20,
+    "definition": "1 of 5 major commercial groups is complete: deterministic simulation/tests. Legal, reserve, settlement, reconciliation and release remain open.",
+    "revenue_verified_usd": 0,
+    "payment_activation_percent": 0
+  },
+  "actions_completed": [
+    "checkpoint قبلی خوانده و اولویت مج پراپ بازیابی شد.",
+    "PR #2730 از GitHub خوانده شد.",
+    "وضعیت open و Draft تأیید شد.",
+    "mergeable بودن PR بررسی شد.",
+    "شاخه head بررسی شد.",
+    "شاخه base بررسی شد.",
+    "تفاوت base با main به‌عنوان مانع ادغام شناسایی شد.",
+    "فهرست 26 فایل تغییرکرده استخراج شد.",
+    "Workflow اختصاصی مج پراپ خوانده شد.",
+    "workflow triggerهای push و pull_request بررسی شد.",
+    "head SHA دقیق ثبت شد.",
+    "آخرین اجرای CI با run 44464336262 بررسی شد.",
+    "وضعیت Job بررسی شد.",
+    "Compile source موفق تأیید شد.",
+    "77 آزمون واقعی از Log استخراج شد.",
+    "صفر شکست آزمون ثبت شد.",
+    "simulation policy خوانده شد.",
+    "simulation readiness خوانده شد.",
+    "challenge commerce خوانده شد.",
+    "synthetic sale خوانده شد.",
+    "rules و حدود ریسک خوانده شد.",
+    "models و محدودیت funded account خوانده شد.",
+    "قیمت 30 TRX و retry برابر 18 TRX تأیید شد.",
+    "شبیه‌سازی بودن موجودی 1000 دلار تأیید شد.",
+    "غیرقابل‌برداشت بودن اصل مجازی تأیید شد.",
+    "خاموش بودن real execution تأیید شد.",
+    "خاموش بودن checkout و invoice در قرارداد تصمیم تأیید شد.",
+    "نبود کامنت و review رسمی روی PR ثبت شد.",
+    "نیاز به full Django CI روی current head ثبت شد.",
+    "نیاز به reserve مستقل ثبت شد.",
+    "نیاز به legal/KYC/broker/settlement ثبت شد.",
+    "هیچ merge، deploy، payment، trade یا هزینه‌ای انجام نشد.",
+    "full Django CI روی current head اضافه و اجرا شد.",
+    "PYTHONPATH تست‌ها برای رفع خطای collection اصلاح شد.",
+    "نتیجهٔ اجرای جامع قبلی 4720 موفق، 437 ناموفق، 233 error و 15 skipped ثبت شد.",
+    "ریشهٔ mismatch سرمایهٔ پیش‌فرض حساب با Plan 1 شناسایی شد.",
+    "default مدل PropAccount به 1000 USD هماهنگ شد.",
+    "migration 0011 برای default سرمایهٔ Plan 1 اضافه شد.",
+    "وجود هر 8 فایل منبع C136 در main و head تأیید شد.",
+    "CI به SHA واقعی main و head برای C136 مجهز شد.",
+    "اجرای جدید full Django با run 44496629018 در حالت pending ثبت شد."
+  ],
+  "blockers": [
+    "PR هنوز Draft و روی شاخه feature است، نه main.",
+    "77 آزمون، جایگزین آزمون کامل Django و آزمون مسیر زنده فروش نیست.",
+    "مسیر عمومی checkout و invoice settlement عمداً خاموش است.",
+    "ذخیره واقعی reward reserve مستقل تأیید نشده است.",
+    "مجوز حقوقی/حوزه قضایی، قرارداد مشتری، KYC و فرآیند refund/dispute ثبت نشده است.",
+    "داده broker/simulator مستقل و reconciliation امضاشده موجود نیست.",
+    "اجرای جدید full Django با run 44496629018 هنوز از GitHub runner شروع نشده و نتیجهٔ نهایی ندارد."
+  ],
+  "next_executable_plan": [
+    "پس از تخصیص runner، نتیجهٔ run 44496629018 خوانده و فقط failureهای باقی‌مانده اصلاح شود.",
+    "ساخت بسته evidence matrix برای مج پراپ بدون فعال‌سازی پرداخت.",
+    "اجرای full Django CI روی head فعلی یا ایجاد workflow read-only محدود برای آن.",
+    "ممیزی route واقعی Moj Prop و علت 404 invoice در محیط کنترل‌شده.",
+    "تطبیق route با tenant مجزا و کنترل host.",
+    "آماده‌سازی متن terms و disclosure فقط برای بازبینی، نه انتشار.",
+    "پس از تکمیل evidence و مجوز صریح، تصمیم جداگانه درباره merge و activation."
+  ],
+  "safety": {
+    "deployment": false,
+    "deletion": false,
+    "payment": false,
+    "transfer": false,
+    "broker_order": false,
+    "public_activation": false,
+    "cost_created": false
+  }
+}

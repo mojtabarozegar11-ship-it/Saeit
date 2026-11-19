@@ -1,0 +1,133 @@
+{
+  "schema": "mojtaba.bot.ai.private-operations-checkpoint.v1",
+  "recorded_at": "2026-11-19T12:31:00+03:30",
+  "cycle": "ادامه مأموریت پس از توقف — ممیزی دو سرور و رفع مانع اجرای Workflow",
+  "repository": "mojtabarozegar11-ship-it/Saeit",
+  "branch": "main",
+  "repository_visibility": "public",
+  "privacy_note": "این رسید فقط داده‌های غیرمحرمانه دارد؛ کلید، رمز، خروجی خام، آدرس حساس و محتوای خصوصی ثبت نشده است. دفتر خصوصی واقعی باید در مسیر خصوصی سرور/Library بماند.",
+  "evidence": {
+    "merged_pr": 2731,
+    "merge_commit": "93ee6952a105a80504fc8b498e8d6f7c3fa5a626",
+    "repair_commit": "7cb61e6bb9d602a3800b7431a256c3c9fb5bb483",
+    "failed_run_before_repair": 44491905890,
+    "successful_run": 44492593452,
+    "successful_run_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44492593452",
+    "gate": "MOJTABA_DB_CENSUS_GATE=PASS_REGISTRY_ONLY",
+    "read_only": true,
+    "retirement_authorized": false,
+    "deployment_performed": false,
+    "deletion_performed": false,
+    "cost_created": false,
+    "topology_run": 44493022998,
+    "topology_run_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44493022998",
+    "topology_gate": "MOJTABA_DUAL_HOST_GATE=PASS_OBSERVATIONS_ONLY"
+  },
+  "census": {
+    "vps": {
+      "registry_records": 20,
+      "enabled_registry_records": 20,
+      "nonterminal_tasks": 240,
+      "orphan_task_records": 0,
+      "route": "pinned_loopback_ssh_22_githubops"
+    },
+    "cpanel": {
+      "registry_records": 5,
+      "enabled_registry_records": 5,
+      "nonterminal_tasks": 1,
+      "orphan_task_records": 0,
+      "route": "pinned_ssh_22_or_existing_cpanel_route"
+    },
+    "total": {
+      "registry_records": 25,
+      "enabled_registry_records": 25,
+      "nonterminal_tasks": 241,
+      "orphan_task_records": 0
+    },
+    "verified_live_agents": null,
+    "single_bot_consolidation_proven": false
+  },
+  "actions_completed": [
+    "وضعیت واقعی PR #2731 و merge شدن آن بررسی شد.",
+    "مجوزهای مخزن و شاخه پیش‌فرض main بررسی شد.",
+    "فهرست Workflowهای مخزن بررسی شد.",
+    "Workflow ممیزی topology خوانده شد.",
+    "Workflow ممیزی Django خوانده شد.",
+    "آخرین اجرای ناموفق 44491905890 شناسایی شد.",
+    "Job ناموفق و مرحله شکست‌خورده استخراج شد.",
+    "Log ناموفق بدون افشای secret بررسی شد.",
+    "رسید اجرای موفق Loopback قبلی 44171716555 بررسی شد.",
+    "تفاوت مسیر عمومی VPS و Loopback Runner مشخص شد.",
+    "علت واقعی شکست به‌صورت فنی ثبت شد.",
+    "Workflow Django برای Loopback امضاشده اصلاح شد.",
+    "fallback عمومی با fingerprint قبلی حفظ شد.",
+    "قفل manual-only و شاخه main حفظ شد.",
+    "قابلیت sudo، استقرار و تغییر سرویس اضافه نشد.",
+    "commit اصلاحی 7cb61e6b ثبت شد.",
+    "وجود route و fingerprint در نسخه اصلاحی کنترل شد.",
+    "Workflow از صفحه GitHub با main اجرا شد.",
+    "اجرای جدید 44492593452 پایش شد.",
+    "Job نهایی موفق بررسی شد.",
+    "رسید VPS استخراج و 20 رکورد و 240 کار غیرنهایی ثبت شد.",
+    "رسید cPanel استخراج و 5 رکورد و 1 کار غیرنهایی ثبت شد.",
+    "گیت دو سرور PASS_REGISTRY_ONLY تأیید شد.",
+    "محدودیت باقی‌مانده برای اثبات live topology مشخص شد.",
+    "Workflow topology از main اجرا شد.",
+    "مسیر VPS از Loopback امضاشده و مسیر cPanel با fingerprint موجود تأیید شد.",
+    "7 cron در VPS و 31 cron در cPanel فقط به‌صورت مشاهده‌شده ثبت شد.",
+    "11 نقش PHP در cPanel فقط به‌صورت source-registry snapshot ثبت شد.",
+    "گیت PASS_OBSERVATIONS_ONLY تأیید شد.",
+    "عدم اثبات worker زنده یکتا و عدم مجوز retirement ثبت شد."
+  ],
+  "progress": {
+    "cycle_audit_gate_percent": 100,
+    "cycle_audit_gate_definition": "4 گیت از 4 گیت بسته شد: merge، اصلاح Workflow، census دو سرور و topology دو میزبان؛ نتیجه فقط read-only observation است.",
+    "pr_merge_percent": 100,
+    "django_dual_host_census_percent": 100,
+    "live_topology_verification_percent": 100,
+    "commercial_readiness_percent": "اندازه‌گیری نشده در این رسید",
+    "overall_business_priority": "مج پراپ"
+  },
+  "blockers": [
+    "تعداد worker زنده یکتا عمداً قابل تأیید نشد و verified_live_agents=null است.",
+    "21 هویت ثبت‌شده/منبعی به‌عنوان live bot اثبات نشده‌اند.",
+    "تحویل task پذیرفته‌شده، شمارش scheduler کامل، تطبیق receipt تاریخی و revision نهایی source هنوز موجود نیست.",
+    "بازنشستگی یا حذف historical records مجاز نیست؛ retirement_authorized=false.",
+    "آمادگی تجاری و درآمد واقعی در این ممیزی اندازه‌گیری نشده است."
+  ],
+  "next_plan": [
+    "اولویت درآمدی بدون تغییر: مج پراپ.",
+    "برای مج پراپ ابتدا receipt قابل‌قبول فروش/تحویل و مسیر پرداخت TRX را به گیت تجاری وصل کن؛ استقرار یا پرداخت بدون بررسی نهایی انجام نشود.",
+    "برای mojtaba.bot.ai مسیر canonical runtime و delivery receipt را جداگانه اثبات کن؛ نام registry به‌تنهایی کافی نیست.",
+    "پس از اثبات runtime، سیگنال‌فروشی را به‌صورت محصول دارای پلن، receipt و کنترل ریسک آماده کن.",
+    "سپس درگاه TRX همه سایت‌ها، MojPlayWin و Moj Coin را تعیین تکلیف کن.",
+    "هر چرخه بعدی باید با نتیجه قابل‌استفاده تجاری و checkpoint جدید تمام شود."
+  ],
+  "topology": {
+    "vps": {
+      "cron_entries": 7,
+      "process_state": "observed",
+      "user_services_state": "observed",
+      "system_services_state": "observed",
+      "agent_live_count": null,
+      "route_indicators_total_not_unique_workers": 0
+    },
+    "cpanel": {
+      "cron_entries": 31,
+      "process_state": "observed",
+      "user_services_state": "unavailable",
+      "system_services_state": "unavailable",
+      "php_known_role_records": 11,
+      "php_enabled_records_not_active_bots": 11,
+      "agent_live_count": null,
+      "route_indicators_total_not_unique_workers": 1
+    },
+    "sources_evaluated": 9,
+    "sources_in_manifest": 9,
+    "source_defined_identity_count_not_live_bots": 21,
+    "verified_live_agents": null,
+    "production_cutover_authorized": false,
+    "retirement_authorized": false,
+    "conclusion": "دو میزبان مشاهده شدند؛ این رسید اثبات worker زنده یکتا یا تحویل task نیست."
+  }
+}

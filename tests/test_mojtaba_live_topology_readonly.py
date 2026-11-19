@@ -522,3 +522,34 @@ def test_vps_fallback_missing_secret_and_bad_fingerprint_fail_closed():
     assert 'echo "$VPS_KEY"' not in workflow
     assert 'sudo ' not in workflow
     assert "MOJTABA_DUAL_HOST_GATE=BLOCKED_INCOMPLETE" in workflow
+
+
+def test_verified_owner_loopback_precedes_public_fallback_and_keeps_manual_guard():
+    workflow = (ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml").read_text(encoding="utf-8")
+    section = workflow.split("on:", 1)[1].split("permissions:", 1)[0]
+    assert "workflow_dispatch:" in section and "workflow_call:" in section
+    assert "push:" not in section and "issue_comment:" not in section and "schedule:" not in section
+    assert '$(id -un)" == "githubrunner"' in workflow
+    assert "44171716555" in workflow
+    assert workflow.index("ssh-keyscan -T 6 -p 22 -t rsa 127.0.0.1") < workflow.index("ssh-keyscan -T 10 -p 22 -t rsa 178.239.147.150")
+    assert "githubops@127.0.0.1" in workflow
+    assert 'UserKnownHostsFile="$d/vps.loopback.known"' in workflow
+    assert "pinned_loopback_ssh_22_githubops" in workflow
+    assert 'elif [[ "$vps_loopback_bad_pin" == "1" ]]; then' in workflow
+    assert "loopback_pin_mismatch_no_fallback" in workflow
+    assert "StrictHostKeyChecking=no" not in workflow
+    assert "sudo " not in workflow
+    assert 'github.ref == \'refs/heads/main\'' in workflow
+
+
+def test_php_site_cli_is_an_explicit_redacted_scheduler_and_process_indicator():
+    private = "/home/private/site_agent_cycle_cli.php"
+    command = "/usr/bin/php " + private + " TOKEN=do-not-log"
+    assert observer.route_flags(command) == ["site_agent_cycle_cli.php"]
+    rows = observer.safe_cron("5 * * * * " + command + "\n")
+    assert rows[0]["known_route_flags"] == ["site_agent_cycle_cli.php"]
+    processes = observer.safe_processes(command)
+    assert processes["route_match_counts"] == {"site_agent_cycle_cli.php": 1}
+    assert private not in json.dumps([rows, processes])
+    assert "do-not-log" not in json.dumps([rows, processes])
+    assert processes["process_identity_proven"] is False

@@ -304,3 +304,16 @@ def test_non_boolean_site_enabled_value_is_not_accepted_as_valid_record():
         snap("cpanel", private_php_site_registry=php)
     )
     assert identities[0]["registration_state"] == "not_in_observed_private_registry"
+
+
+def test_php_site_cli_indicators_reach_correct_source_group_without_retirement():
+    cpanel = snap("cpanel")
+    cpanel["cron"]["entries"] = [{"known_route_flags": ["site_agent_cycle_cli.php"]}]
+    cpanel["processes"]["route_match_counts"] = {"site_agent_cycle_cli.php": 1}
+    report = module.preview(snap("vps"), cpanel, MANIFEST, repository_root=ROOT)
+    php = next(g for g in report["groups"] if g["source_group"] == "zomorod_php_site_agent_runtime")
+    assert php["host_observations"][0]["by_observation_surface"]["user_cron"] == 1
+    assert php["host_observations"][0]["by_observation_surface"]["process_argv_indicator"] == 1
+    assert php["status"] == "candidate_routes_seen_but_not_verified_live"
+    assert php["retirement_authorized"] is False
+    assert report["verified_live_agents"] is None

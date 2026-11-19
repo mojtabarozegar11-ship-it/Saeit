@@ -67,7 +67,32 @@ jobs:
               printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
               chmod 600 "$d/vps.key"
               if ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null 2>&1; then
-                if timeout 15s ssh-keyscan -T 10 -p 22 -t rsa 178.239.147.150 > "$d/vps.known" 2>"$d/vps.keyscan.err"; then
+                # The authenticated runner-to-service-account loopback was
+                # demonstrated by read-only run 44171716555 on this VPS.
+                # Keep the already pinned host key and the original owner.
+                vps_loopback_bad_pin=0
+                if [[ "$(id -un)" == "githubrunner" && -d /home/githubops/factory-runtime ]]; then
+                  if timeout 10s ssh-keyscan -T 6 -p 22 -t rsa 127.0.0.1 > "$d/vps.loopback.known" 2>/dev/null; then
+                    if [[ "$(ssh-keygen -lf "$d/vps.loopback.known" -E sha256 | awk '{print $2}' | sort -u)" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]]; then
+                      if timeout 55s ssh -T -i "$d/vps.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.loopback.known" -o ConnectTimeout=7 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no -p 22 githubops@127.0.0.1 'exec python3 -B - --role vps' < deploy/mojtaba_live_topology_readonly.py > "$d/vps.jsonline" 2>"$d/vps.err"; then
+                        vps_ok=1
+                        echo "MOJTABA_VPS_ROUTE=pinned_loopback_ssh_22_githubops"
+                      else
+                        echo "MOJTABA_VPS_LOOPBACK=ssh_or_interpreter_failed"
+                      fi
+                    else
+                      vps_loopback_bad_pin=1
+                      echo "MOJTABA_VPS_LOOPBACK=host_fingerprint_mismatch_stop"
+                    fi
+                  else
+                    echo "MOJTABA_VPS_LOOPBACK=host_key_unreachable"
+                  fi
+                fi
+                if [[ "$vps_ok" == "1" ]]; then
+                  :
+                elif [[ "$vps_loopback_bad_pin" == "1" ]]; then
+                  echo "MOJTABA_VPS_SSH_OBSERVATION=loopback_pin_mismatch_no_fallback"
+                elif timeout 15s ssh-keyscan -T 10 -p 22 -t rsa 178.239.147.150 > "$d/vps.known" 2>"$d/vps.keyscan.err"; then
                   if [[ "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]]; then
                     echo "MOJTABA_VPS_HOST_KEY=existing_pin_verified"
                     if timeout 55s ssh -T -i "$d/vps.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o ConnectTimeout=12 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no -p 22 githubops@178.239.147.150 'exec python3 - --role vps' < deploy/mojtaba_live_topology_readonly.py > "$d/vps.jsonline" 2>"$d/vps.err"; then
