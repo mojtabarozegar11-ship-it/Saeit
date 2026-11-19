@@ -189,3 +189,7 @@ def MPW_SIMULATION_EMAIL_VERIFIER(user):
 MPW_SIMULATION_TRADING_ENABLED = env.bool("MPW_SIMULATION_TRADING_ENABLED", default=False)
 MPW_SIMULATION_EVENT_KEY = env("MPW_SIMULATION_EVENT_KEY", default="")
 MPW_SIMULATION_QUOTE_PROVIDER = None
+
+# Symbol availability and worker attestation are not inferred from checkout.
+MPW_SIMULATION_ALLOWED_SYMBOLS = tuple(env.list("MPW_SIMULATION_ALLOWED_SYMBOLS", default=[]))
+MPW_SIMULATION_WORKER_READY = env.bool("MPW_SIMULATION_WORKER_READY", default=False)
