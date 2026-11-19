@@ -52,6 +52,21 @@ class SimulationEngineTests(unittest.TestCase):
         filled = e.process_quote(q(2, bid="101", ask="102"))
         self.assertEqual(filled[0].status, "filled")
 
+    def test_unrelated_quote_does_not_reprice_position(self):
+        e = SimulationEngine()
+        e.submit(order("a"), q(1))
+        equity = e.snapshot().equity
+        e.process_quote(MarketQuote("XAUUSD", D("2000"), D("2001"), "2026-11-19T00:00:02Z", 2))
+        self.assertEqual(e.snapshot().equity, equity)
+
+    def test_unrelated_quote_does_not_trigger_pending_order(self):
+        e = SimulationEngine()
+        e.submit(order("a", kind="limit", limit="99", stop="98"), q(1))
+        result = e.process_quote(MarketQuote("XAUUSD", D("98"), D("99"), "2026-11-19T00:00:02Z", 2))
+        self.assertEqual(result, [])
+        self.assertEqual(e.snapshot().pending_count, 1)
+        self.assertEqual(e.snapshot().position_count, 0)
+
     def test_close_profit(self):
         e = SimulationEngine()
         e.submit(order("a"), q(1))
