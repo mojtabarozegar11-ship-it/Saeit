@@ -15,7 +15,7 @@ from .simulation_identity import is_verified_simulation_user
 from .simulation_fulfillment import verified_simulation_purchase
 from .simulation_invoice_contract import COMMERCIAL_CONTRACT_VERSION
 from .simulation_feed import verified_commercial_quote
-from .simulation_completion import completion_evidence
+from .simulation_completion import completion_evidence, review_completion
 
 VERSION = "simulation-engine-v2"
 LEGACY_VERSION = "simulation-engine-v1"
@@ -215,7 +215,14 @@ def advance_account_quotes(*, account_id):
 def terminal_state(*, account_id, owner):
     account = _locked_account(account_id, owner)
     engine, _, _ = _replay(account)
+    expires_at = account.created_at + timedelta(days=account.challenge_days)
+    review = None
+    if account.invoice.contract_version == COMMERCIAL_CONTRACT_VERSION and engine.execution_version == VERSION:
+        # Until the contract has an approved profit target, report necessary
+        # evidence only. A missing target never becomes an automatic pass.
+        review = review_completion(engine, expired=timezone.now() >= expires_at)
     return {
+        "completion_review": review,
         "summary": engine.snapshot(),
         "execution_version": engine.execution_version,
         "review_status": account.status,
