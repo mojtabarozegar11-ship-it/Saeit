@@ -112,6 +112,8 @@ def record_verified_settlement(
 
     with transaction.atomic():
         invoice = PropPlan1Invoice.objects.select_for_update().get(pk=invoice_id)
+        if invoice.product_code != "MOJ-PROP-01" or invoice.contract_version != CONTRACT_VERSION:
+            raise ValidationError("Legacy settlement requires legacy invoice contract")
         expected_fee = _fee_for_purchase_kind(invoice.purchase_kind)
         if (
             invoice.amount_sun != expected_fee
