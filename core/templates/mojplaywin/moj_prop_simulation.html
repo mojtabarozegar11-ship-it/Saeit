@@ -23,7 +23,19 @@
 <article class="mp-rule-card"><span>Aggregate open risk</span><strong>4%</strong></article>
 </div>
 <p>Eligible unsuccessful participants may qualify for a future 18 TRX retry. Retry purchasing is not available yet. Rewards are subject to published eligibility, reserve and payout terms; no return is guaranteed.</p>
-<p role="status">Checkout is not yet available. Do not send any funds.</p>
+{% if simulation_checkout_ready %}
+<form method="post" action="{% url 'moj_prop_simulation_checkout' %}">
+{% csrf_token %}
+<input type="hidden" name="terms_digest" value="{{ simulation_terms_digest }}">
+<input type="hidden" name="checkout_token" value="{{ simulation_checkout_token }}">
+<h2>Challenge terms</h2>
+<div style="white-space:pre-wrap">{{ simulation_terms }}</div>
+<label><input type="checkbox" name="accept_terms" value="yes" required> I accept the displayed challenge terms and understand that the balance is simulated.</label>
+<button type="submit" class="mp-button mp-button-gold">Create 30 TRX invoice</button>
+</form>
+{% else %}
+<p role="status">Checkout is not available for this session. Do not send any funds.</p>
+{% endif %}
 <a class="mp-button mp-button-quiet" href="/moj-prop-interest/form/?lang=en">Request information (no payment)</a>
 </section>
 </main>
