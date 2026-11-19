@@ -179,10 +179,10 @@ def server_census(connection):
             raise ValueError("unexpected_transaction")
         with connection.cursor() as cursor:
             if connection.vendor == "mysql":
-                cursor.execute("SET TRANSACTION READ ONLY")
+                cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
                 cursor.execute("START TRANSACTION")
             else:
-                cursor.execute("BEGIN READ ONLY")
+                cursor.execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
             try:
                 return collect(cursor)
             finally:
@@ -272,6 +272,7 @@ def task_reconciliation(cursor):
     reasons = Counter()
     link_counts = Counter()
     exhausted = Counter()
+    exhausted_cases = []
     candidate_keys = Counter()
     run_ids = set()
     for pk, status, action, attempts, maximum, output, *links in rows:
@@ -288,7 +289,18 @@ def task_reconciliation(cursor):
             for tag in reason_tags(output):
                 reasons[(action, tag)] += 1
         if attempts >= maximum:
-            exhausted[(action, status, tuple(reason_tags(output)))] += 1
+            tags = reason_tags(output)
+            exhausted[(action, status, tags)] += 1
+            if len(exhausted_cases) >= 1000:
+                raise ValueError("exhausted_case_bound")
+            exhausted_cases.append({
+                "case": len(exhausted_cases) + 1, "action": action, "status": status,
+                "attempts": attempts, "maximum": maximum, "reason_tags": list(tags),
+                "links": {col: "field_absent" if col not in link else
+                          "null" if link[col] is None else "present" for col in optional},
+                "run_link_state": "not_evaluated",
+                "_product": link.get("product_id"), "_run": link.get("factory_run_id"),
+            })
         if action in FACTORY_ACTIONS and all(link.get(k) is not None for k in ("product_id", "factory_run_id")):
             candidate_keys[(action, link["product_id"], link["factory_run_id"])] += 1
             run_ids.add(link["factory_run_id"])
@@ -314,14 +326,23 @@ def task_reconciliation(cursor):
                            "run_not_active")
                 result[(action, outcome)] += n
             runs = {"state": "observed", "groups": as_rows(result, ("action","link_state"))}
+            for case in exhausted_cases:
+                if case["action"] in FACTORY_ACTIONS and case["_product"] is not None and case["_run"] is not None:
+                    entry = by_id.get(case["_run"])
+                    case["run_link_state"] = ("run_missing" if entry is None else
+                        "run_product_mismatch" if entry[1] != case["_product"] else
+                        "run_active_product_match" if entry[0] == "active" else "run_not_active")
         else:
             runs = {"state": "run_schema_incomplete"}
+    for case in exhausted_cases:
+        del case["_product"], case["_run"]
     return {
         "pending": len(rows),
         "groups": as_rows(groups, ("action","status")),
         "blocked_reason_indicators_nonexclusive": as_rows(reasons, ("action","reason_tag")),
         "links": as_rows(link_counts, ("action","status","field","state")),
         "exhausted_groups": as_rows(exhausted, ("action","status","reason_tags")),
+        "exhausted_cases_snapshot_local": exhausted_cases,
         "run_links": runs,
         "same_action_product_run_candidate_groups": sum(n > 1 for n in candidate_keys.values()),
         "same_action_product_run_candidate_tasks": sum(n for n in candidate_keys.values() if n > 1),
