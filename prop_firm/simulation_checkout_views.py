@@ -10,10 +10,11 @@ from django.shortcuts import redirect
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.cache import never_cache
-from .simulation_invoice_contract import SimulationInvoiceContract, REQUIRED_GATES
+from .simulation_invoice_contract import SimulationInvoiceContract, REQUIRED_GATES, COMMERCIAL_CONTRACT_VERSION
 from .simulation_invoice_persistence import persist_simulation_invoice
 from .simulation_runtime import trading_runtime_ready
 from .simulation_tron_reconcile import configured_providers
+from .simulation_feed import commercial_feed_configured
 
 SALT = "mojprop.sim.checkout.v2"
 
@@ -31,6 +32,7 @@ def checkout_context(request):
             or getattr(settings, "MPW_SIMULATION_IDENTITY_ENABLED", False) is not True
             or getattr(settings, "MPW_SIMULATION_RECONCILIATION_ENABLED", False) is not True
             or not trading_runtime_ready()
+            or not commercial_feed_configured()
             or not request.user.is_authenticated or not request.user.is_active):
         return {}
     try:
@@ -44,7 +46,8 @@ def checkout_context(request):
     digest = getattr(settings, "MPW_SIMULATION_TERMS_DIGEST", "")
     if not isinstance(terms, str) or not terms.strip() or sha256(terms.encode()).hexdigest() != digest:
         return {}
-    contract = SimulationInvoiceContract(getattr(settings, "MPW_SIMULATION_RECIPIENT", ""), digest)
+    contract = SimulationInvoiceContract(getattr(settings, "MPW_SIMULATION_RECIPIENT", ""), digest,
+                                         version=COMMERCIAL_CONTRACT_VERSION)
     gates = {key: getattr(settings, "MPW_SIMULATION_" + key.upper(), False) for key in REQUIRED_GATES}
     try:
         contract.release(gates)
