@@ -1,0 +1,35 @@
+name: MOJ PROP staff panel reservation contract
+on:
+  push:
+    branches: [feature/mojprop-panel-reservation-contract-20261119]
+    paths:
+      - 'prop_firm/plan1_panel_reservation_contract.py'
+      - 'tests/test_prop_plan1_panel_reservation_contract.py'
+      - '.github/workflows/mojprop-panel-reservation-contract-20261119.yml'
+  pull_request:
+    branches: [feature/mojprop-risk-reservation-boundary-20261119]
+    paths:
+      - 'prop_firm/plan1_panel_reservation_contract.py'
+      - 'tests/test_prop_plan1_panel_reservation_contract.py'
+      - '.github/workflows/mojprop-panel-reservation-contract-20261119.yml'
+permissions:
+  contents: read
+jobs:
+  panel-contract:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/feature/mojprop-panel-reservation-contract-20261119' || github.base_ref == 'feature/mojprop-risk-reservation-boundary-20261119')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Run panel contract and regression tests
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_panel_reservation_contract.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_execution_boundary.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_owner_reservations.py' -v
+      - name: Compile panel contract
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile prop_firm/plan1_panel_reservation_contract.py tests/test_prop_plan1_panel_reservation_contract.py
