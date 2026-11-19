@@ -6,7 +6,7 @@ from django.conf import settings
 from django.core import signing
 from django.core.exceptions import ValidationError
 from django.http import JsonResponse, HttpResponseNotFound
-from django.shortcuts import render
+from django.shortcuts import redirect
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.cache import never_cache
@@ -81,5 +81,5 @@ def start_simulation_checkout(request):
               "amount_sun": invoice.amount_sun, "recipient": invoice.recipient,
               "status": invoice.status}
     if request.content_type == "application/x-www-form-urlencoded":
-        return render(request, "mojplaywin/moj_prop_simulation_invoice.html", result)
+        return redirect("moj_prop_simulation_invoice", order_ref=invoice.order_ref)
     return JsonResponse(result, status=201)
