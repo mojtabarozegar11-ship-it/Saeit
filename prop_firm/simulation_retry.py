@@ -1,8 +1,11 @@
 """One durable retry invoice per proven failed commercial simulation.
 No migration: the existing unique invoice.order_ref is the entitlement key.
-Expiry alone is not failure. A signed event replay must prove drawdown breach.
+Expiry alone is not failure. Replay must prove a breached necessary criterion.
 """
 from hashlib import sha256
+from datetime import timedelta
+from django.utils import timezone
+from .simulation_completion import completion_evidence
 from django.core.exceptions import ValidationError
 from .simulation_invoice_contract import COMMERCIAL_CONTRACT_VERSION
 
@@ -27,6 +30,9 @@ def locked_retry_reference(*, account_id, owner):
             or account.status not in ("active", "expired_review", "failed")):
         raise ValidationError("Commercial failed challenge required")
     engine, sequence, _ = _replay(account)
-    if engine.execution_version != VERSION or sequence < 1 or engine.blocked is not True:
-        raise ValidationError("Verified drawdown failure required")
+    expired = timezone.now() >= account.created_at + timedelta(days=account.challenge_days)
+    if engine.execution_version != VERSION or not completion_evidence(engine, expired=expired):
+        raise ValidationError("Verified challenge failure required")
+    if engine.blocked is True and sequence < 1:
+        raise ValidationError("Missing drawdown evidence")
     return retry_reference(account)
