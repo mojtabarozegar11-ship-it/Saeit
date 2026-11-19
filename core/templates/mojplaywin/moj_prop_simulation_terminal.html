@@ -16,7 +16,8 @@
 <dt>Account status</dt><dd>{{ review_status }}</dd>
 <dt>Trading days with closed positions</dt><dd>{{ trading_days|default_if_none:'Review required' }}</dd>
 <dt>Best day share of net profit</dt><dd>{% if best_day_share != None %}{{ best_day_share|floatformat:2 }}%{% else %}Not applicable{% endif %}</dd></dl>
-{% if review_status == 'expired_review' %}<p>Challenge period ended. Results require review; no reward or pass is implied.</p>{% endif %}
+{% if completion_review.state == 'failed' %}<p role="status">The verified challenge record did not meet one or more required conditions. Check retry eligibility in My challenges. No reward is implied.</p>
+{% elif completion_review.state == 'review_required' or review_status == 'expired_review' %}<p>Challenge period ended. Results require review; no reward or pass is implied.</p>{% endif %}
 {% if summary.blocked %}<p role="alert">Risk limit reached. New positions are blocked.</p>{% endif %}
 {% if runtime_ready and active %}
 <h2>New simulated market order</h2>
