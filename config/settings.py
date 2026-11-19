@@ -159,3 +159,26 @@ for _mojprop_gate in (
     globals()["MPW_MOJPROP_PLAN1_" + _mojprop_gate] = env.bool(
         "MPW_MOJPROP_PLAN1_" + _mojprop_gate, default=False
     )
+
+
+# Dedicated simulation product: default-off until deployment evidence is approved.
+MPW_SIMULATION_IDENTITY_ENABLED = env.bool("MPW_SIMULATION_IDENTITY_ENABLED", default=False)
+MPW_SIMULATION_FROM_EMAIL = env("MPW_SIMULATION_FROM_EMAIL", default="")
+MPW_SIMULATION_CHECKOUT_ENABLED = env.bool("MPW_SIMULATION_CHECKOUT_ENABLED", default=False)
+MPW_SIMULATION_RECONCILIATION_ENABLED = env.bool("MPW_SIMULATION_RECONCILIATION_ENABLED", default=False)
+MPW_SIMULATION_RECIPIENT = env("MPW_SIMULATION_RECIPIENT", default="")
+MPW_SIMULATION_TERMS_TEXT = env("MPW_SIMULATION_TERMS_TEXT", default="")
+MPW_SIMULATION_TERMS_DIGEST = env("MPW_SIMULATION_TERMS_DIGEST", default="")
+for _simulation_gate in (
+    "JURISDICTION_APPROVAL", "TERMS_APPROVAL", "MERCHANT_SETTLEMENT_READY",
+    "IDENTITY_ELIGIBILITY_READY", "SIMULATION_DATA_RIGHTS_VERIFIED",
+    "REWARD_RESERVE_VERIFIED", "DISPUTE_REFUND_READY", "ANTI_TAMPER_READY",
+    "FULFILLMENT_VERIFIED", "OWNER_RELEASE_APPROVAL",
+):
+    globals()["MPW_SIMULATION_" + _simulation_gate] = env.bool(
+        "MPW_SIMULATION_" + _simulation_gate, default=False
+    )
+
+def MPW_SIMULATION_EMAIL_VERIFIER(user):
+    from prop_firm.simulation_identity import is_verified_simulation_user
+    return is_verified_simulation_user(user)
