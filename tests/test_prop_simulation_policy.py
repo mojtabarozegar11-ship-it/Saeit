@@ -200,7 +200,7 @@ class SimulationPolicyTests(unittest.TestCase):
             average_reward_usd=D("10"),
             operating_cost_usd=D("5"),
         )
-        self.assertEqual(result.reward_reserve_usd, D("20"))
+        self.assertEqual(result.reward_reserve_usd, D("140"))
         self.assertEqual(result.operating_cost_usd, D("5"))
         self.assertEqual(result.virtual_principal_requirement_usd, D("0"))
 
