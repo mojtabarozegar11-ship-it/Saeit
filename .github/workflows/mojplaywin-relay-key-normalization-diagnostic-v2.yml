@@ -31,10 +31,10 @@ jobs:
           def candidates(value):
               raw = value.strip()
               out = [("raw", raw)]
-              normalized = raw.replace("\\\\r\\\\n", "\\n").replace("\\\\n", "\\n").replace("\\\\r", "\\r").strip()
+              normalized = raw.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\r").strip()
               out.append(("escaped_newlines_decoded", normalized))
-              if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "'\\"":
-                  out.append(("outer_quotes_removed", raw[1:-1].replace("\\\\n", "\\n").replace("\\\\r", "\\r")))
+              if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
+                  out.append(("outer_quotes_removed", raw[1:-1].replace("\\n", "\n").replace("\\r", "\r")))
               compact = "".join(raw.split())
               try:
                   decoded = base64.b64decode(compact, validate=True).decode("utf-8")
