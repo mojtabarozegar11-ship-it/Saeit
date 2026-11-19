@@ -652,3 +652,22 @@ class PropSimulationInvoiceOwner(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
                               related_name="prop_simulation_invoices")
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class PropSimulationIdentity(models.Model):
+    """Dedicated email-verified nonstaff identity; never links existing staff accounts."""
+    owner = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+                                 related_name="prop_simulation_identity")
+    email = models.EmailField(unique=True, max_length=254)
+    verified_at = models.DateTimeField()
+
+
+class PropSimulationLoginChallenge(models.Model):
+    """Single outstanding email challenge; only the keyed digest is retained."""
+    email = models.EmailField(unique=True, max_length=254)
+    challenge_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    code_digest = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    sent_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    consumed = models.BooleanField(default=False)
