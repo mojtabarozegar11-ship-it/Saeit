@@ -11,7 +11,7 @@
 <h3>Challenge {{ account.pk }}</h3>
 <p>Starting virtual balance: USD {{ account.starting_balance_usd }}. Duration: {{ account.challenge_days }} days.</p>
 <p>Entitlement status: {{ account.status }}. Virtual capital cannot be withdrawn.</p>
-<p>Trading terminal is not yet available. Do not interpret this entitlement as permission to trade real funds.</p>
+<p><a href="{% url 'moj_prop_simulation_terminal' account_id=account.pk %}">Open simulation terminal</a>. Trading availability is checked independently. This account cannot trade real funds.</p>
 </article>
 {% empty %}<p>No purchased challenge accounts.</p>{% endfor %}
 <h2>My invoices</h2>
