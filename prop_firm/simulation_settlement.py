@@ -5,7 +5,7 @@ from django.db import transaction, IntegrityError
 from .models import PropPlan1Invoice, PropPlan1Receipt, TronSettlementLedger, PropSimulationInvoiceOwner
 from .reward_reserve_persistence import allocate_reward_reserve_after_settlement
 from .simulation_fulfillment import provision_simulation_account
-from .simulation_invoice_contract import PRODUCT_CODE, CONTRACT_VERSION, NETWORK
+from .simulation_invoice_contract import PRODUCT_CODE, SUPPORTED_CONTRACT_VERSIONS, NETWORK
 
 @transaction.atomic
 def settle_and_provision(*, invoice_id, owner, tx_hash, observed_network,
@@ -13,7 +13,7 @@ def settle_and_provision(*, invoice_id, owner, tx_hash, observed_network,
                          independently_finalized, evidence_digest,
                          verified_owner_email):
     invoice = PropPlan1Invoice.objects.select_for_update().get(pk=invoice_id)
-    if invoice.product_code != PRODUCT_CODE or invoice.contract_version != CONTRACT_VERSION:
+    if invoice.product_code != PRODUCT_CODE or invoice.contract_version not in SUPPORTED_CONTRACT_VERSIONS:
         raise ValidationError("Simulation invoice required")
     if not owner.is_authenticated or not owner.is_active or owner.email != invoice.buyer_email or verified_owner_email != owner.email:
         raise ValidationError("Verified owner mismatch")
