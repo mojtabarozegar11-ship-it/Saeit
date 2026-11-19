@@ -18,8 +18,21 @@ class FocusedAuditTests(unittest.TestCase):
         self.assertEqual(out["reported_remaining"],"99.5")
         self.assertFalse(out["account_headroom_verified"])
     def test_unlimited_and_unknown_units(self):
-        for units,maximum in [("MB","unlimited"),("unknown","100")]:
+        for units,maximum in [("MB","unknown"),("unknown","100")]:
             self.assertFalse(quota_summary({"result":{"status":1,"data":[{"id":"diskusage","units":units,"count":"5","max":maximum}]}})["recognized"])
     def test_over_quota(self):
         out=quota_summary({"result":{"status":1,"data":[{"id":"diskusage","units":"MB","count":"300","max":"200"}]}})
         self.assertEqual(out["reported_remaining"],"0")
+
+    def test_unit_suffix_and_unlimited(self):
+        out=quota_summary({"result":{"status":1,"data":[{"id":"diskusage","count":"78.71 GB","max":"unlimited"}]}})
+        self.assertTrue(out["recognized"])
+        self.assertEqual(out["reported_limit"],"unlimited")
+        self.assertFalse(out["account_headroom_verified"])
+    def test_mixed_units_never_subtracted(self):
+        out=quota_summary({"result":{"status":1,"data":[{"id":"diskusage","count":"800 MB","max":"40 GB"}]}})
+        self.assertTrue(out["recognized"])
+        self.assertNotIn("reported_remaining",out)
+    def test_matching_suffix_units(self):
+        out=quota_summary({"result":{"status":1,"data":[{"id":"diskusage","count":"12.3 GB","max":"40 GB"}]}})
+        self.assertEqual(out["reported_remaining"],"27.7")
