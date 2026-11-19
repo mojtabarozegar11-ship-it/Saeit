@@ -53,17 +53,37 @@ def quota_summary(payload):
     if len(matches) != 1:
         return out
     row = matches[0]
-    units = row.get("units")
-    if units not in ("MB", "GB", "KB", "bytes", "B", "MiB", "GiB", "KiB"):
-        return out
-    used, limit = str(row.get("count")), str(row.get("max"))
-    if not all(re.fullmatch(r"[0-9]{1,12}(?:\.[0-9]{1,6})?", v) for v in (used, limit)):
-        return out
-    if Decimal(limit) <= 0:
-        return out
-    return {"recognized": True, "reported_used": used, "reported_limit": limit,
-            "reported_units": units, "reported_remaining": str(max(Decimal(0), Decimal(limit)-Decimal(used))),
-            "account_headroom_verified": False, "display_values_only": True}
+    # Some cPanel versions return e.g. "6.73 GB", not a separate units field.
+    # Never silently assume a unit or treat a rounded UI figure as exact quota.
+    units = ("B", "bytes", "KB", "MB", "GB", "TB", "KiB", "MiB", "GiB", "TiB")
+    def parse(value):
+        if type(value) not in (str, int, float):
+            return None
+        match = re.fullmatch(r"([0-9]{1,12}(?:\.[0-9]{1,6})?)(?:\s+([A-Za-z]{1,5}))?", str(value).strip())
+        if not match:
+            return None
+        number, unit = match.groups()
+        unit = unit or row.get("units")
+        if unit not in units:
+            return None
+        return number, unit
+    used = parse(row.get("count"))
+    if used is None:
+        return out | {"reason": "usage_format_unrecognized"}
+    if isinstance(row.get("max"), str) and row["max"].strip().lower() == "unlimited":
+        return out | {"recognized": True, "reported_used": used[0],
+                      "reported_units": used[1], "reported_limit": "unlimited",
+                      "display_values_only": True}
+    limit = parse(row.get("max"))
+    if limit is None or Decimal(limit[0]) <= 0:
+        return out | {"reason": "limit_format_unrecognized"}
+    report = out | {"recognized": True, "reported_used": used[0],
+                    "reported_units": used[1], "reported_limit": limit[0],
+                    "reported_limit_units": limit[1], "display_values_only": True}
+    if used[1] == limit[1]:
+        report["reported_remaining"] = str(max(Decimal(0), Decimal(limit[0]) - Decimal(used[0])))
+    return report
+
 
 def quota():
     for binary in ("/usr/bin/uapi", "/usr/local/cpanel/bin/uapi"):
@@ -81,7 +101,7 @@ def quota():
                         return report
         except (OSError, ValueError, subprocess.SubprocessError):
             continue
-    return {"recognized": False, "account_headroom_verified": False}
+    return {"recognized": False, "account_headroom_verified": False, "reason": "no_recognized_uapi_response"}
 
 def inspect():
     out = {"read_only": True, "business_rows_read": False, "migration_executed": False,
