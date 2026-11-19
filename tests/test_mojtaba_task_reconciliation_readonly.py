@@ -1,5 +1,7 @@
 """Read-only reconciliation contract regression tests; no live hosts."""
 import json
+from copy import deepcopy
+from deploy.mojtaba_task_reconciliation_receipt import validate_reconciliation
 import sqlite3
 import unittest
 from deploy.mojtaba_task_reconciliation_readonly import task_reconciliation, reason_tags
@@ -44,6 +46,44 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual(reason_tags("not json"),("unstructured_reason",))
         self.assertEqual(reason_tags({"error": "arbitrary private content"}),("other_reason",))
         self.assertEqual(reason_tags({"error": "permission timeout"}),("approval_or_permission","retry_or_timeout"))
+
+
+    def test_exhausted_case_and_receipt(self):
+        self.insert(1,"blocked","product_research",1,"owner provenance",100,1)
+        self.insert(2,"queued","product_validation",3,"retry exhausted",101,1)
+        report=json.loads(json.dumps(task_reconciliation(self.db.cursor())))
+        agents=[{"pending_groups":[
+            {"action":"product_research","status":"blocked","total":1,"attempt_limit_reached":0},
+            {"action":"product_validation","status":"queued","total":1,"attempt_limit_reached":1},
+        ]}]
+        self.assertEqual(validate_reconciliation(report,agents,2),report)
+        case=report["exhausted_cases_snapshot_local"][0]
+        self.assertEqual(case["case"],1)
+        self.assertEqual(case["run_link_state"],"run_product_mismatch")
+        self.assertNotIn("_product",case)
+        self.assertNotIn("_run",case)
+        for mutation in ("unknown_label","bad_total","extra_payload","authorization","missing_case","duplicate_group","wrong_exhausted_count"):
+            bad=deepcopy(report)
+            if mutation=="unknown_label":
+                bad["blocked_reason_indicators_nonexclusive"][0]["reason_tag"]="raw secret"
+            elif mutation=="bad_total":
+                bad["links"][0]["total"]=2
+            elif mutation=="extra_payload":
+                bad["exhausted_cases_snapshot_local"][0]["raw_payload"]="secret"
+            elif mutation=="authorization":
+                bad["execution_authorized"]=True
+            elif mutation=="missing_case":
+                bad["exhausted_cases_snapshot_local"]=[]
+            elif mutation=="duplicate_group":
+                bad["groups"].append(bad["groups"][0])
+            else:
+                bad["exhausted_groups"][0]["total"]=2
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                validate_reconciliation(bad,agents,2)
+
+    def test_empty_snapshot_receipt(self):
+        report=json.loads(json.dumps(task_reconciliation(self.db.cursor())))
+        self.assertEqual(validate_reconciliation(report,[],0),report)
 
 if __name__=="__main__":
     unittest.main()
