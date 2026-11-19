@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 import sys
+import hashlib
+import types
 from urllib.error import HTTPError
 from concurrent.futures import ThreadPoolExecutor
 
@@ -90,7 +92,20 @@ def run():
         from mpw_commerce.models import CommerceFulfillment, CommerceInvoice
         from mpw_commerce.downloads import _private_file
         from services.mpw_walletless_commercial_intent import _decode, PROVIDER
-        from services.mpw_tron_independent_solidified_rpc import RpcProvider, query_solidified_transfer
+        from services import mpw_tron_independent_solidified_rpc as live_rpc
+        rpc = live_rpc
+        report["rpc_source"] = "live_installed"
+        candidate = globals().get("MPW_CANDIDATE_RPC_SOURCE")
+        if isinstance(candidate, str):
+            # Isolated in-memory module; do not replace deployed module/import bindings.
+            name = "_mpw_reviewed_readonly_rpc_candidate"
+            rpc = types.ModuleType(name)
+            rpc.__file__ = "<reviewed candidate RPC>"
+            sys.modules[name] = rpc
+            exec(compile(candidate, rpc.__file__, "exec"), rpc.__dict__)
+            report["rpc_source"] = "candidate_in_memory"
+            report["candidate_source_sha256"] = hashlib.sha256(candidate.encode("utf-8")).hexdigest()
+        RpcProvider, query_solidified_transfer = rpc.RpcProvider, rpc.query_solidified_transfer
         from services.mpw_trx_walletless_core import verify_two_source_transfer
     except Exception as exc:
         report["errors"]["setup"] = type(exc).__name__
