@@ -182,3 +182,18 @@ def advance_account_quotes(*, account_id):
         _append_event(account, sequence, uuid.uuid4(), prior, payload)
         prior = account.event_head_digest
     return engine.snapshot()
+
+
+@transaction.atomic
+def terminal_state(*, account_id, owner):
+    account = _locked_account(account_id, owner)
+    engine, _, _ = _replay(account)
+    return {
+        "summary": engine.snapshot(),
+        "positions": list(engine.positions.values()),
+        "pending": list(engine.pending.values()),
+        "recent_closed": list(engine.closed[-20:][::-1]),
+        "expires_at": account.created_at + timedelta(days=account.challenge_days),
+        "active": account.status == "active" and not engine.blocked and
+                  timezone.now() < account.created_at + timedelta(days=account.challenge_days),
+    }
