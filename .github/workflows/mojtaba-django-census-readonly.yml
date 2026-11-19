@@ -30,21 +30,32 @@ jobs:
           d="$(mktemp -d "$RUNNER_TEMP/mojtaba-db.XXXXXXXX")"
           trap 'rm -rf -- "$d"' EXIT
           python3 -m py_compile deploy/mojtaba_django_census_readonly.py
+          report_ssh_status() {
+            local route="$1" rc="$2"
+            case "$rc" in
+              124|137) echo "MOJTABA_DB_TRANSPORT_${route}=timeout";;
+              255) echo "MOJTABA_DB_TRANSPORT_${route}=ssh_connection_or_auth_failed";;
+              *) echo "MOJTABA_DB_TRANSPORT_${route}=remote_command_failed";;
+            esac
+          }
           collect() {
             local role="$1" key="$2" host="$3" port="$4" type="$5" pin="$6" account="$7" cmd="$8"
-            [[ -n "$key" ]] || return 1
+            [[ -n "$key" ]] || { echo "MOJTABA_DB_TRANSPORT_${role}=key_missing"; return 1; }
             printf '%s' "$key" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/$role.key"
             chmod 600 "$d/$role.key"
-            ssh-keygen -y -P '' -f "$d/$role.key" >/dev/null 2>&1 || return 1
-            timeout 15s ssh-keyscan -T 8 -p "$port" -t "$type" "$host" > "$d/$role.known" 2>/dev/null || return 1
-            [[ "$(ssh-keygen -lf "$d/$role.known" -E sha256 | awk '{print $2}' | sort -u)" == "$pin" ]] || return 1
+            ssh-keygen -y -P '' -f "$d/$role.key" >/dev/null 2>&1 || { echo "MOJTABA_DB_TRANSPORT_${role}=key_invalid"; return 1; }
+            timeout 15s ssh-keyscan -T 8 -p "$port" -t "$type" "$host" > "$d/$role.known" 2>/dev/null || { echo "MOJTABA_DB_TRANSPORT_${role}=keyscan_unavailable"; return 1; }
+            [[ "$(ssh-keygen -lf "$d/$role.known" -E sha256 | awk '{print $2}' | sort -u)" == "$pin" ]] || { echo "MOJTABA_DB_TRANSPORT_${role}=host_fingerprint_mismatch_stop"; return 1; }
             timeout 90s ssh -T -i "$d/$role.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/$role.known" -o ConnectTimeout=12 -o ForwardAgent=no -p "$port" "$account@$host" "$cmd" < deploy/mojtaba_django_census_readonly.py > "$d/$role.out" 2>"$d/$role.err"
+            local rc=$?
+            if [[ "$rc" -ne 0 ]]; then report_ssh_status "$role" "$rc"; fi
+            return "$rc"
           }
           collect_vps() {
             local key="$1"
             # The verified runner-to-owner loopback is the preferred VPS route.
             # If loopback is unreachable, retain the existing pinned public fallback.
-            if [[ "$(id -un)" == "githubrunner" && -d /home/githubops/factory-runtime && -n "$key" ]]; then
+            if [[ "$(id -un)" == "githubrunner" && -n "$key" ]]; then
               printf '%s' "$key" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.loopback.key"
               chmod 600 "$d/vps.loopback.key"
               if ssh-keygen -y -P '' -f "$d/vps.loopback.key" >/dev/null 2>&1                   && timeout 10s ssh-keyscan -T 6 -p 22 -t rsa 127.0.0.1 > "$d/vps.loopback.known" 2>/dev/null; then
@@ -57,8 +68,14 @@ jobs:
                 if timeout 90s ssh -T -i "$d/vps.loopback.key" -o IdentitiesOnly=yes -o BatchMode=yes                     -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.loopback.known"                     -o ConnectTimeout=7 -o ForwardAgent=no -p 22 githubops@127.0.0.1                     'cd "$HOME/factory-runtime/django-app" && exec "$HOME/factory-runtime/.venv/bin/python" -B - --role vps'                     < deploy/mojtaba_django_census_readonly.py > "$d/vps.out" 2> "$d/vps.err"; then
                   echo MOJTABA_DB_VPS_ROUTE=pinned_loopback_ssh_22_githubops
                   return 0
+                else
+                  report_ssh_status vps_loopback "$?"
                 fi
+              else
+                echo MOJTABA_DB_TRANSPORT_vps_loopback=key_or_keyscan_unavailable
               fi
+            else
+              echo MOJTABA_DB_TRANSPORT_vps_loopback=runner_or_key_prerequisite_missing
             fi
             collect vps "$key" 178.239.147.150 22 rsa 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' githubops 'cd "$HOME/factory-runtime/django-app" && exec "$HOME/factory-runtime/.venv/bin/python" -B - --role vps'
           }

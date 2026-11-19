@@ -93,3 +93,15 @@ def test_inconsistent_pending_counts_fail_closed(tmp_path):
     r = run_summary(tmp_path, ("vps", "cpanel"), inconsistent=True)
     assert r.returncode == 1
     assert "MOJTABA_DB_CENSUS_VALID_HOSTS=0" in r.stdout
+
+
+def test_census_transport_diagnostics_are_redacted_and_pin_preserved():
+    text = (ROOT / ".github/workflows/mojtaba-django-census-readonly.yml").read_text()
+    assert "report_ssh_status vps_loopback" in text
+    assert "ssh_connection_or_auth_failed" in text
+    assert "host_fingerprint_mismatch_stop" in text
+    assert "keyscan_unavailable" in text
+    assert "&& -d /home/githubops/factory-runtime" not in text
+    assert "StrictHostKeyChecking=yes" in text
+    assert "ForwardAgent=no" in text
+    assert not any(line.strip().startswith("cat ") and ".err" in line for line in text.splitlines())
