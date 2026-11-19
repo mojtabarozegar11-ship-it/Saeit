@@ -133,6 +133,7 @@ from core.moj_prop_views import moj_prop_landing, moj_prop_dashboard, moj_prop_i
 from prop_firm.simulation_checkout_views import start_simulation_checkout
 from prop_firm.simulation_payment_views import simulation_invoice_detail
 from prop_firm.simulation_identity_views import simulation_login, simulation_logout
+from prop_firm.simulation_terminal_views import simulation_terminal
 urlpatterns += [
     path("moj-prop-interest/", moj_prop_interest, name="moj_prop_interest"),
     path("moj-prop-interest/form/", moj_prop_interest_form, name="moj_prop_interest_form"),
@@ -141,6 +142,7 @@ urlpatterns += [
     path("moj-prop/invoice/<slug:order_ref>/", simulation_invoice_detail, name="moj_prop_simulation_invoice"),
     path("moj-prop/account/login/", simulation_login, name="moj_prop_simulation_login"),
     path("moj-prop/account/logout/", simulation_logout, name="moj_prop_simulation_logout"),
+    path("moj-prop/account/<int:account_id>/terminal/", simulation_terminal, name="moj_prop_simulation_terminal"),
     path("moj-prop/checkout/start/", start_simulation_checkout, name="moj_prop_simulation_checkout"),
     path("moj-prop/<str:lang>/dashboard/", moj_prop_dashboard, name="moj_prop_language_dashboard"),
     path("moj-prop/<str:lang>/", moj_prop_landing, name="moj_prop_language"),
