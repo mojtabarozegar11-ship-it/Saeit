@@ -40,7 +40,29 @@ jobs:
             [[ "$(ssh-keygen -lf "$d/$role.known" -E sha256 | awk '{print $2}' | sort -u)" == "$pin" ]] || return 1
             timeout 90s ssh -T -i "$d/$role.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/$role.known" -o ConnectTimeout=12 -o ForwardAgent=no -p "$port" "$account@$host" "$cmd" < deploy/mojtaba_django_census_readonly.py > "$d/$role.out" 2>"$d/$role.err"
           }
-          if ! collect vps "$VPS_KEY" 178.239.147.150 22 rsa 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' githubops 'cd "$HOME/factory-runtime/django-app" && exec "$HOME/factory-runtime/.venv/bin/python" -B - --role vps'; then
+          collect_vps() {
+            local key="$1"
+            # The verified runner-to-owner loopback is the preferred VPS route.
+            # If loopback is unreachable, retain the existing pinned public fallback.
+            if [[ "$(id -un)" == "githubrunner" && -d /home/githubops/factory-runtime && -n "$key" ]]; then
+              printf '%s' "$key" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.loopback.key"
+              chmod 600 "$d/vps.loopback.key"
+              if ssh-keygen -y -P '' -f "$d/vps.loopback.key" >/dev/null 2>&1                   && timeout 10s ssh-keyscan -T 6 -p 22 -t rsa 127.0.0.1 > "$d/vps.loopback.known" 2>/dev/null; then
+                local loopback_fp
+                loopback_fp="$(ssh-keygen -lf "$d/vps.loopback.known" -E sha256 | awk '{print $2}' | sort -u)"
+                if [[ "$loopback_fp" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]]; then
+                  echo MOJTABA_DB_VPS_LOOPBACK=host_fingerprint_mismatch_stop
+                  return 1
+                fi
+                if timeout 90s ssh -T -i "$d/vps.loopback.key" -o IdentitiesOnly=yes -o BatchMode=yes                     -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.loopback.known"                     -o ConnectTimeout=7 -o ForwardAgent=no -p 22 githubops@127.0.0.1                     'cd "$HOME/factory-runtime/django-app" && exec "$HOME/factory-runtime/.venv/bin/python" -B - --role vps'                     < deploy/mojtaba_django_census_readonly.py > "$d/vps.out" 2> "$d/vps.err"; then
+                  echo MOJTABA_DB_VPS_ROUTE=pinned_loopback_ssh_22_githubops
+                  return 0
+                fi
+              fi
+            fi
+            collect vps "$key" 178.239.147.150 22 rsa 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' githubops 'cd "$HOME/factory-runtime/django-app" && exec "$HOME/factory-runtime/.venv/bin/python" -B - --role vps'
+          }
+          if ! collect_vps "$VPS_KEY"; then
             rm -f -- "$d/vps.out"
             echo MOJTABA_DB_VPS=unavailable
           fi
