@@ -13,6 +13,8 @@ from .models import PropSimulationAccount, PropSimulationEvent
 from .simulation_engine import SimulationEngine, MarketQuote, OrderRequest
 from .simulation_identity import is_verified_simulation_user
 from .simulation_fulfillment import verified_simulation_purchase
+from .simulation_invoice_contract import COMMERCIAL_CONTRACT_VERSION
+from .simulation_feed import verified_commercial_quote
 
 VERSION = "simulation-engine-v2"
 LEGACY_VERSION = "simulation-engine-v1"
@@ -106,6 +108,16 @@ def account_snapshot(*, account_id, owner):
     engine, _, _ = _replay(account)
     return engine.snapshot()
 
+
+def _resolve_execution_quote(account, resolver, symbol):
+    quote = resolver(account_id=account.pk, symbol=symbol)
+    if account.invoice.contract_version == COMMERCIAL_CONTRACT_VERSION:
+        return verified_commercial_quote(quote, symbol=symbol, now=timezone.now())
+    if not isinstance(quote, MarketQuote) or quote.symbol != symbol:
+        raise ValidationError("Authoritative quote unavailable")
+    return quote, None
+
+
 @transaction.atomic
 def record_command(*, account_id, owner, command_id, operation, order=None, order_id=None):
     """Only an internal service may resolve quotes. Browser-supplied prices never enter."""
@@ -134,7 +146,7 @@ def record_command(*, account_id, owner, command_id, operation, order=None, orde
         previous = account.execution_events.filter(command_id=command_id).first()
         action["order_id"] = order_id
         if previous is not None:
-            if {k:v for k,v in previous.payload.items() if k != "quote"} != action:
+            if {k:v for k,v in previous.payload.items() if k not in ("quote", "quote_evidence")} != action:
                 raise ValidationError("Conflicting command reuse")
             return engine.snapshot()
         position = engine.positions.get(order_id)
@@ -145,13 +157,13 @@ def record_command(*, account_id, owner, command_id, operation, order=None, orde
         raise ValidationError("Unsupported customer command")
     event = account.execution_events.filter(command_id=command_id).first()
     if event is not None:
-        if {k:v for k,v in event.payload.items() if k != "quote"} != action:
+        if {k:v for k,v in event.payload.items() if k not in ("quote", "quote_evidence")} != action:
             raise ValidationError("Conflicting command reuse")
         return engine.snapshot()
-    quote = resolver(account_id=account.pk, symbol=symbol)
-    if not isinstance(quote, MarketQuote) or quote.symbol != symbol:
-        raise ValidationError("Authoritative quote unavailable")
+    quote, evidence = _resolve_execution_quote(account, resolver, symbol)
     payload = action | {"quote": _quote_payload(quote)}
+    if evidence is not None:
+        payload["quote_evidence"] = evidence
     _apply(engine, payload)
     sequence += 1
     _append_event(account, sequence, command_id, prior, payload)
@@ -185,12 +197,12 @@ def advance_account_quotes(*, account_id):
     symbols = sorted({item.symbol for item in engine.positions.values()} |
                      {item.symbol for item in engine.pending.values()})
     for symbol in symbols:
-        quote = resolver(account_id=account.pk, symbol=symbol)
-        if not isinstance(quote, MarketQuote) or quote.symbol != symbol:
-            raise ValidationError("Authoritative quote unavailable")
+        quote, evidence = _resolve_execution_quote(account, resolver, symbol)
         if quote.sequence <= engine.last_quote_sequence:
             continue
         payload = {"operation": "quote", "version": VERSION, "quote": _quote_payload(quote)}
+        if evidence is not None:
+            payload["quote_evidence"] = evidence
         _apply(engine, payload)
         sequence += 1
         _append_event(account, sequence, uuid.uuid4(), prior, payload)
