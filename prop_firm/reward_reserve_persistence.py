@@ -45,8 +45,15 @@ def allocate_reward_reserve_after_settlement(*, invoice_id):
     )
     if invoice.status != "paid":
         raise ValidationError("settled_paid_invoice_required")
-    if invoice.product_code != "MOJ-PROP-01":
+    from .simulation_invoice_contract import PRODUCT_CODE, CONTRACT_VERSION
+    from .plan1_invoice import CONTRACT_VERSION as LEGACY_VERSION
+    allowed_contracts = {"MOJ-PROP-01": LEGACY_VERSION, PRODUCT_CODE: CONTRACT_VERSION}
+    if invoice.product_code not in allowed_contracts:
         raise ValidationError("unsupported_prop_product")
+    if invoice.contract_version != allowed_contracts[invoice.product_code]:
+        raise ValidationError("unsupported_product_contract_version")
+    if invoice.purchase_kind not in {"first", "retry"}:
+        raise ValidationError("unsupported_purchase_kind")
     expected_fee = (
         30_000_000 if invoice.purchase_kind == "first" else 18_000_000
     )
