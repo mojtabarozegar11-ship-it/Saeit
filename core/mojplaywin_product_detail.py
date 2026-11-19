@@ -72,19 +72,17 @@ def _approved_purchase_url(request, product):
     if not request.is_secure() or request.get_host().split(":")[0].lower() not in MPW_HOSTS:
         return None
     try:
-        from django.urls import reverse, resolve
         from services.mpw_trx_commercial_context import checkout_flags
         from services.mpw_trx_public_catalog import public_trx_product
+        from .mojplaywin_checkout_route import verified_guest_checkout_url
         if checkout_flags(request).get("mpw_trx_easy_enabled") is not True:
             return None
         if public_trx_product(product.pk) is None:
             return None
-        path = reverse("mpw_commerce:book", args=[product.pk])
-        if resolve(path).url_name != "book":
-            return None
-        if not path.startswith("/commerce/book/"):
-            return None
-        return path
+        # Legacy namespaced mpw_commerce:book reverses successfully but
+        # resolves to a different, prepended guest route in private URLconf.
+        # Only the verified effective guest checkout may be linked.
+        return verified_guest_checkout_url(product.pk)
     except Exception:
         # Any missing private component, migration, provider or URL is a HOLD,
         # not an invitation to generate an invoice or mark a sale as live.
@@ -99,17 +97,38 @@ def brand_product_detail(request, product_id):
     if host not in MPW_HOSTS:
         raise Http404("Host not supported")
     if product_id not in PUBLIC_CATALOG:
-        raise Http404("Catalog product not listed")
-    item = PUBLIC_CATALOG[product_id]
-    try:
-        db_product = Product.objects.filter(pk=product_id, active=True).first()
-    except DatabaseError:
-        # Optional catalog migrations must not turn product discovery into 500.
-        # This is a noindex preview, never a claim of sale readiness.
-        logging.getLogger(__name__).warning(
-            "MojPlayWin catalog lookup unavailable; page remains informational"
-        )
-        db_product = None
+        # A product absent from the three original editorial cards must pass
+        # the PRIVATE gateway's current rights, file and checkout-route checks.
+        # This makes future approved SKUs discoverable without a code release.
+        from .mojplaywin_dynamic_catalog import approved_product
+        db_product = approved_product(request, product_id)
+        if db_product is None:
+            raise Http404("Product is not approved for MojPlayWin sale")
+        item = {
+            "title": db_product.title.strip(),
+            "category": "Rights-approved digital download",
+            "description": (
+                "Digital product listed by the verified MojPlayWin catalogue. "
+                "Review the final amount and delivery terms on the secure checkout."
+            ),
+            "details": (
+                "Digital delivery is restricted to the verified buyer",
+                "Payment instructions are issued only with a real order invoice",
+                "The private gateway rechecks product rights and downloadable stock",
+            ),
+            "listed_price": "US $" + format(db_product.price, ".2f"),
+            "expected_price_usd": format(db_product.price, ".2f"),
+        }
+    else:
+        item = PUBLIC_CATALOG[product_id]
+        try:
+            db_product = Product.objects.filter(pk=product_id, active=True).first()
+        except DatabaseError:
+            # An unavailable optional DB cannot generate a purchase link.
+            logging.getLogger(__name__).warning(
+                "MojPlayWin catalog lookup unavailable; page remains informational"
+            )
+            db_product = None
     # Matching the public product name is necessary; a reused database ID
     # must not be associated with someone else's digital product.
     # The card must also match the actual database currency and exact price.

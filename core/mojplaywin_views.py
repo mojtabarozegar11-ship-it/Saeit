@@ -59,19 +59,34 @@ def branded_store_dispatch(request):
  return branded_store(request)
 
 def store(request):
+ # Marketing pages are never evidence of a chargeable or rights-cleared SKU.
+ # Add only products currently released by the existing PRIVATE gateway.
+ from .mojplaywin_dynamic_catalog import parse_cursor, approved_cards
+ from django.utils.cache import patch_vary_headers
+ cursor = parse_cursor(request.GET.get("approved_after", "0"))
+ approved, next_cursor = approved_cards(
+  request, cursor=cursor, excluded_ids=frozenset((72, 225, 879)),
+ )
  # Analytics must never make the public storefront unavailable. The cPanel
- # main-site deploy may publish this view before the optional funnel module
- # and migration have been installed in the independent runtime.
+ # main-site deploy may publish this view before optional migrations exist.
  try:
   from .commerce_funnel import record_funnel_event
   record_funnel_event(request, "view_store")
  except Exception as exc:
-  # No visitor identity, query string or other buyer data enters the log.
   import logging
   logging.getLogger(__name__).warning(
    "MojPlayWin store telemetry unavailable: %s", type(exc).__name__
   )
- return render(request,"mojplaywin/store.html",{"products":PRODUCTS})
+ response = render(request, "mojplaywin/store.html", {
+  "products": PRODUCTS, "approved_products": approved,
+  "approved_next_cursor": next_cursor,
+ })
+ # Page availability is merchant-dependent; never retain a stale buy cue
+ # after merchant revocation in public reverse proxies or shared browsers.
+ response["Cache-Control"] = "private, no-store, max-age=0"
+ response["Referrer-Policy"] = "same-origin"
+ patch_vary_headers(response, ("Cookie",))
+ return response
 
 def venture(request, slug):
  if not _is_mojplaywin(request):
