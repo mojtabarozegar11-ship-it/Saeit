@@ -1,0 +1,94 @@
+{
+  "schema": "mojtaba.bot.ai.private-operations-checkpoint.v1",
+  "recorded_at": "2026-11-19T12:31:00+03:30",
+  "cycle": "ادامه مأموریت پس از توقف — ممیزی دو سرور و رفع مانع اجرای Workflow",
+  "repository": "mojtabarozegar11-ship-it/Saeit",
+  "branch": "main",
+  "repository_visibility": "public",
+  "privacy_note": "این رسید فقط داده‌های غیرمحرمانه دارد؛ کلید، رمز، خروجی خام، آدرس حساس و محتوای خصوصی ثبت نشده است. دفتر خصوصی واقعی باید در مسیر خصوصی سرور/Library بماند.",
+  "evidence": {
+    "merged_pr": 2731,
+    "merge_commit": "93ee6952a105a80504fc8b498e8d6f7c3fa5a626",
+    "repair_commit": "7cb61e6bb9d602a3800b7431a256c3c9fb5bb483",
+    "failed_run_before_repair": 44491905890,
+    "successful_run": 44492593452,
+    "successful_run_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44492593452",
+    "gate": "MOJTABA_DB_CENSUS_GATE=PASS_REGISTRY_ONLY",
+    "read_only": true,
+    "retirement_authorized": false,
+    "deployment_performed": false,
+    "deletion_performed": false,
+    "cost_created": false
+  },
+  "census": {
+    "vps": {
+      "registry_records": 20,
+      "enabled_registry_records": 20,
+      "nonterminal_tasks": 240,
+      "orphan_task_records": 0,
+      "route": "pinned_loopback_ssh_22_githubops"
+    },
+    "cpanel": {
+      "registry_records": 5,
+      "enabled_registry_records": 5,
+      "nonterminal_tasks": 1,
+      "orphan_task_records": 0,
+      "route": "pinned_ssh_22_or_existing_cpanel_route"
+    },
+    "total": {
+      "registry_records": 25,
+      "enabled_registry_records": 25,
+      "nonterminal_tasks": 241,
+      "orphan_task_records": 0
+    },
+    "verified_live_agents": null,
+    "single_bot_consolidation_proven": false
+  },
+  "actions_completed": [
+    "وضعیت واقعی PR #2731 و merge شدن آن بررسی شد.",
+    "مجوزهای مخزن و شاخه پیش‌فرض main بررسی شد.",
+    "فهرست Workflowهای مخزن بررسی شد.",
+    "Workflow ممیزی topology خوانده شد.",
+    "Workflow ممیزی Django خوانده شد.",
+    "آخرین اجرای ناموفق 44491905890 شناسایی شد.",
+    "Job ناموفق و مرحله شکست‌خورده استخراج شد.",
+    "Log ناموفق بدون افشای secret بررسی شد.",
+    "رسید اجرای موفق Loopback قبلی 44171716555 بررسی شد.",
+    "تفاوت مسیر عمومی VPS و Loopback Runner مشخص شد.",
+    "علت واقعی شکست به‌صورت فنی ثبت شد.",
+    "Workflow Django برای Loopback امضاشده اصلاح شد.",
+    "fallback عمومی با fingerprint قبلی حفظ شد.",
+    "قفل manual-only و شاخه main حفظ شد.",
+    "قابلیت sudo، استقرار و تغییر سرویس اضافه نشد.",
+    "commit اصلاحی 7cb61e6b ثبت شد.",
+    "وجود route و fingerprint در نسخه اصلاحی کنترل شد.",
+    "Workflow از صفحه GitHub با main اجرا شد.",
+    "اجرای جدید 44492593452 پایش شد.",
+    "Job نهایی موفق بررسی شد.",
+    "رسید VPS استخراج و 20 رکورد و 240 کار غیرنهایی ثبت شد.",
+    "رسید cPanel استخراج و 5 رکورد و 1 کار غیرنهایی ثبت شد.",
+    "گیت دو سرور PASS_REGISTRY_ONLY تأیید شد.",
+    "محدودیت باقی‌مانده برای اثبات live topology مشخص شد."
+  ],
+  "progress": {
+    "cycle_audit_gate_percent": 75,
+    "cycle_audit_gate_definition": "3 گیت از 4 گیت بسته شد: merge، اصلاح Workflow، census دو سرور؛ topology live هنوز اجرا نشده است.",
+    "pr_merge_percent": 100,
+    "django_dual_host_census_percent": 100,
+    "live_topology_verification_percent": 0,
+    "commercial_readiness_percent": "اندازه‌گیری نشده در این رسید",
+    "overall_business_priority": "مج پراپ"
+  },
+  "blockers": [
+    "این رسید شمارش registry/task است، نه اثبات اجرای live agent.",
+    "یکپارچگی ادعایی فقط‌بودن mojtaba.bot.ai هنوز از topology/process census تأیید نشده است.",
+    "هیچ ادعای فعال‌بودن فروش، سیگنال‌فروشی یا درآمد از این ممیزی صادر نمی‌شود."
+  ],
+  "next_plan": [
+    "اجرای Workflow topology read-only و تعیین وضعیت واقعی process/cron/source lineage.",
+    "اگر topology کامل شد، اولویت اجرایی مج پراپ: مسیر فروش، پرداخت TRX، قرارداد، کنترل ریسک و آماده‌سازی جذب مشتری.",
+    "پس از آن اتصال تجاری mojtaba.bot.ai برای سیگنال‌فروشی، بدون ادعای active بودن تا اثبات route.",
+    "سپس ممیزی درگاه TRX در همه سایت‌ها، فروشگاه MojPlayWin و بازی Moj Coin.",
+    "ثبت هر نتیجه با رسید قابل بازتولید و بدون افشای داده خصوصی."
+  ]
+}
