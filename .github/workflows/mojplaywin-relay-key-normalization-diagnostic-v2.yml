@@ -1,0 +1,84 @@
+name: MojPlayWin relay key normalization diagnostic v2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  key-normalization:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 3
+    env:
+      HOST_KEY: \${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+      VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Classify safe key encodings without network
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import subprocess
+          import tempfile
+
+          def candidates(value):
+              raw = value.strip()
+              out = [("raw", raw)]
+              normalized = raw.replace("\\\\r\\\\n", "\\n").replace("\\\\n", "\\n").replace("\\\\r", "\\r").strip()
+              out.append(("escaped_newlines_decoded", normalized))
+              if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "'\\"":
+                  out.append(("outer_quotes_removed", raw[1:-1].replace("\\\\n", "\\n").replace("\\\\r", "\\r")))
+              compact = "".join(raw.split())
+              try:
+                  decoded = base64.b64decode(compact, validate=True).decode("utf-8")
+                  out.append(("base64_decoded_text", decoded))
+              except Exception:
+                  pass
+              unique = []
+              seen = set()
+              for label, text in out:
+                  if text not in seen:
+                      unique.append((label, text))
+                      seen.add(text)
+              return unique
+
+          def parseable(text):
+              if "BEGIN" not in text or "PRIVATE KEY" not in text:
+                  return False
+              fd, path = tempfile.mkstemp(prefix="mpw-key-", dir=os.environ.get("RUNNER_TEMP"))
+              try:
+                  os.write(fd, text.encode("utf-8"))
+                  os.close(fd)
+                  p = subprocess.run(
+                      ["ssh-keygen", "-y", "-P", "", "-f", path],
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                      timeout=5, check=False,
+                  )
+                  return p.returncode == 0
+              finally:
+                  try:
+                      os.unlink(path)
+                  except OSError:
+                      pass
+
+          for name in ("HOST_KEY", "VPS_KEY"):
+              value = os.environ.get(name, "")
+              rows = []
+              for label, text in candidates(value):
+                  rows.append({
+                      "candidate": label,
+                      "bytes": len(text.encode("utf-8")),
+                      "has_private_marker": "PRIVATE KEY" in text,
+                      "parseable_by_ssh_keygen": parseable(text),
+                  })
+              print(name + "_NORMALIZATION=" + json.dumps(rows, sort_keys=True))
+          print("NETWORK_CONTACTED=0")
+          print("KEY_VALUES_DISCLOSED=0")
+          PY
