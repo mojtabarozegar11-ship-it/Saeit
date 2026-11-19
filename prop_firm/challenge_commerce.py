@@ -13,6 +13,7 @@ from .economics import funded_capacity
 from .rules import POLICY, LEVELS
 from .plans import DEFAULT_PLAN_CODE, plan_for_code
 from .policy_integrity import policy_drift_defects
+from .simulation_policy import SIMULATION_POLICY
 
 REQUIRED = (
     "jurisdiction_authorized",
@@ -130,4 +131,116 @@ def assess_challenge_checkout(*, merchant_tenant, free_treasury_usd,
         owner_declared_funded=plan.capital_funded_owner_declared,
         independent_capital_proof_on_record=plan.funding_independently_verified,
         temporarily_inactive_pending_funding=plan.temporary_owner_hold,
+    )
+
+
+SIMULATION_REQUIRED_ATTESTATIONS = (
+    "jurisdiction_authorized",
+    "terms_approved_and_translated",
+    "simulation_data_rights_verified",
+    "identity_screening_ready",
+    "independently_reconciled_tron_invoice_ready",
+    "challenge_simulation_clearly_disclosed",
+    "market_data_execution_contract_ready",
+    "anti_tamper_evidence_ready",
+    "payout_reserve_independently_verified",
+    "dispute_and_refund_process_ready",
+)
+
+
+@dataclass(frozen=True)
+class SimulationOfferDecision:
+    plan_code: str
+    simulated_balance_usd: Decimal
+    challenge_window_days: int
+    social_visibility_days: int
+    retry_fee_trx: Decimal
+    retry_discount_pct: Decimal
+    payout_mode: str
+    virtual_principal_withdrawable: bool
+    required_reward_reserve_usd: Decimal
+    evidenced_reward_reserve_usd: Decimal
+    eligible_for_external_legal_review: bool
+    blockers: tuple[str, ...]
+    checkout_enabled: bool = False
+    invoice_created: bool = False
+    simulated_execution_enabled: bool = False
+    reward_payout_enabled: bool = False
+
+
+def assess_simulated_challenge_offer(
+    *,
+    merchant_tenant,
+    required_reward_reserve_usd,
+    evidenced_reward_reserve_usd,
+    attestations=None,
+    plan_code=DEFAULT_PLAN_CODE,
+    trusted_merchant_registry=None,
+):
+    """Gate a simulation-only offer without requiring virtual principal cash.
+
+    Real reward liquidity remains a hard prerequisite. This function never
+    creates an invoice, enables checkout, starts a simulation account or pays
+    a reward.
+    """
+    plan = plan_for_code(plan_code)
+    if not isinstance(merchant_tenant, TenantDecision):
+        raise ValueError("Trusted merchant scope needed")
+    if not isinstance(attestations, dict):
+        attestations = {}
+    required = Decimal(str(required_reward_reserve_usd))
+    evidenced = Decimal(str(evidenced_reward_reserve_usd))
+    if not required.is_finite() or required < 0:
+        raise ValueError("required_reward_reserve_usd must be finite and nonnegative")
+    if not evidenced.is_finite() or evidenced < 0:
+        raise ValueError("evidenced_reward_reserve_usd must be finite and nonnegative")
+
+    blockers = [
+        key for key in SIMULATION_REQUIRED_ATTESTATIONS
+        if attestations.get(key) is not True
+    ]
+    if policy_drift_defects():
+        blockers.append("canonical_moj_prop_policy_mismatch")
+    if plan.account_mode != SIMULATION_POLICY.account_mode:
+        blockers.append("plan_not_simulation_mode")
+    if plan.payout_mode != SIMULATION_POLICY.payout_mode:
+        blockers.append("plan_reward_mode_mismatch")
+    if plan.virtual_principal_withdrawable is not False:
+        blockers.append("virtual_principal_withdrawal_enabled")
+    if evidenced < required:
+        blockers.append("real_reward_reserve_shortfall")
+    if (
+        merchant_tenant.host not in ("mojplaywin.com", "www.mojplaywin.com")
+        or merchant_tenant.brand != "moj_prop"
+        or merchant_tenant.eligible_for_checkout_review is not True
+        or merchant_tenant.payment_enabled is not False
+        or merchant_tenant.invoice_created is not False
+    ):
+        blockers.append("dedicated_moj_prop_tron_merchant_not_verified")
+    if type(trusted_merchant_registry) is not dict:
+        blockers.append("protected_prop_merchant_registry_missing")
+    else:
+        try:
+            actual_tenant = registered_scope(
+                host=merchant_tenant.host,
+                brand=merchant_tenant.brand,
+                registry=trusted_merchant_registry,
+            )
+            if actual_tenant != merchant_tenant:
+                blockers.append("prop_merchant_registration_changed_or_forged")
+        except (ValueError, TypeError, AttributeError):
+            blockers.append("prop_merchant_registration_changed_or_forged")
+    return SimulationOfferDecision(
+        plan_code=plan.code,
+        simulated_balance_usd=plan.starting_capital_usd,
+        challenge_window_days=plan.duration_days,
+        social_visibility_days=SIMULATION_POLICY.post_visibility_days,
+        retry_fee_trx=plan.retry_fee_trx,
+        retry_discount_pct=plan.retry_discount_pct,
+        payout_mode=plan.payout_mode,
+        virtual_principal_withdrawable=plan.virtual_principal_withdrawable,
+        required_reward_reserve_usd=required,
+        evidenced_reward_reserve_usd=evidenced,
+        eligible_for_external_legal_review=not blockers,
+        blockers=tuple(dict.fromkeys(blockers)),
     )
