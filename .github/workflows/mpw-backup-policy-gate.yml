@@ -1,0 +1,23 @@
+name: MojPlayWin backup policy gate
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fail-closed-backup-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enforce stream-only production backup policy
+        run: python3 scripts/mpw_backup_policy_gate.py .github/workflows scripts

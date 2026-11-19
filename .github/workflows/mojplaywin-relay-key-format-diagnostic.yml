@@ -1,0 +1,42 @@
+name: MojPlayWin relay key format diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  key-format:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 3
+    env:
+      HOST_KEY: \${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+      VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate key formats without network or disclosure
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mpw-key-format"
+          install -d -m 700 "$work"
+          for spec in HOST_KEY HOST VPS_KEY VPS; do
+            case "$spec" in
+              HOST_KEY) value="$HOST_KEY"; label=HOST;;
+              VPS_KEY) value="$VPS_KEY"; label=VPS;;
+              *) continue;;
+            esac
+            test -n "$value"
+            printf '%s' "$value" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$work/$label.key"
+            chmod 600 "$work/$label.key"
+            if ssh-keygen -y -P '' -f "$work/$label.key" > /dev/null 2> "$work/$label.err"; then
+              printf '%s\n' "$label"_KEY_FORMAT=VALID
+            else
+              printf '%s\n' "$label"_KEY_FORMAT=INVALID
+              printf '%s\n' "$label"_KEY_ERROR_CLASS=PRIVATE_KEY_PARSE_FAILED
+            fi
+          done
+          printf '%s\n' 'NETWORK_CONTACTED=0' 'CPANEL_CONTACTED=0' 'VPS_CONTACTED=0' 'KEY_VALUES_DISCLOSED=0'
