@@ -643,6 +643,8 @@ class PropSimulationAccount(models.Model):
     challenge_days = models.PositiveSmallIntegerField(default=60)
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=16, default="active")
+    event_head_sequence = models.PositiveBigIntegerField(default=0)
+    event_head_digest = models.CharField(max_length=64, default="0" * 64)
 
 
 class PropSimulationInvoiceOwner(models.Model):
