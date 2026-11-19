@@ -10,6 +10,9 @@ class PrepareHandoffTests(TestCase):
     def setUp(self):
         self.old = Agent.objects.create(code="economic-master-agent",
             name="Legacy", mission="Preserve", active=True)
+        self.before_active = Agent.objects.filter(active=True).count()
+        self.before_caps = list(AgentCapability.objects.order_by("pk").values())
+        self.before_agents = list(Agent.objects.exclude(code=BOT_CODE).order_by("pk").values())
         self.task = AgentTask.objects.create(agent=self.old, action_type="legacy",
             status="queued")
 
@@ -22,8 +25,8 @@ class PrepareHandoffTests(TestCase):
         report = self.run_prepare()
         self.assertFalse(report["canonical_active"])
         self.assertIsNone(report["live_worker_count"])
-        self.assertEqual(report["other_active_records"], 1)
-        self.assertEqual(report["registered_agents"][0]["unreconciled_tasks"], 1)
+        self.assertEqual(report["other_active_records"], self.before_active)
+        self.assertEqual(next(row for row in report["registered_agents"] if row["code"] == self.old.code)["unreconciled_tasks"], 1)
         self.assertFalse(Agent.objects.filter(code=BOT_CODE).exists())
 
     def test_provision_requires_both_flags(self):
@@ -39,7 +42,7 @@ class PrepareHandoffTests(TestCase):
         self.assertTrue(result["canonical_record_created"])
         self.assertTrue(bot.active)
         self.assertEqual(bot.capabilities.count(), 0)
-        self.assertEqual(AgentCapability.objects.count(), 0)
+        self.assertEqual(list(AgentCapability.objects.order_by("pk").values()), self.before_caps)
         self.old.refresh_from_db()
         self.task.refresh_from_db()
         self.assertTrue(self.old.active)
@@ -57,12 +60,12 @@ class PrepareHandoffTests(TestCase):
         self.run_prepare("--provision-site-only", "--confirm-maintenance-window")
         with self.assertRaisesRegex(CommandError, "LEGACY_SEED_DISABLED"):
             call_command("seed_online_income_agents")
-        self.assertFalse(Agent.objects.filter(code="moj_1ro_1").exists())
-        self.assertEqual(AgentCapability.objects.count(), 0)
+        self.assertEqual(list(Agent.objects.exclude(code=BOT_CODE).order_by("pk").values()), self.before_agents)
+        self.assertEqual(list(AgentCapability.objects.order_by("pk").values()), self.before_caps)
 
     def test_unknown_status_is_unreconciled(self):
         self.task.status = "unrecognized"
         self.task.save(update_fields=["status"])
         result = self.run_prepare()
-        self.assertEqual(result["registered_agents"][0]["unreconciled_tasks"], 1)
+        self.assertEqual(next(row for row in result["registered_agents"] if row["code"] == self.old.code)["unreconciled_tasks"], 1)
         self.assertFalse(result["retirement_authorized"])

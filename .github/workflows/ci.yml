@@ -13,7 +13,11 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # The real Linux namespace integration tests require unprivileged
+    # user namespaces. Keep this supported runner explicit while the
+    # Ubuntu 26.04 isolation compatibility is reviewed. No security
+    # sysctls are changed and no isolated test is skipped.
+    runs-on: ubuntu-22.04
     env:
       DEBUG: "true"
       SECRET_KEY: "ci-only-secret-key"
@@ -43,6 +47,14 @@ jobs:
         run: python manage.py migrate --noinput
       - name: Build static manifest
         run: python manage.py collectstatic --noinput
+      - name: Verify real namespace prerequisites
+        run: |
+          if ! command -v bwrap >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends bubblewrap
+          fi
+          test -x /usr/bin/bwrap
+          /usr/bin/unshare -Urn /usr/bin/bwrap --share-net --unshare-pid --unshare-ipc --unshare-uts --ro-bind /usr /usr --ro-bind /lib /lib --ro-bind /lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
       - name: Run tests
         env:
           PYTHONPATH: ${{ runner.temp }}/mpw-pdf-parser

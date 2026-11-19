@@ -115,7 +115,10 @@ def run_daily_cycle():
     # A missing optional research record uses the designated director lane;
     # an inconsistent recorded handoff is never bypassed by fallback.
     if research is None or (not research.active and not Agent.objects.filter(code=BOT_CODE).exists()):
-        agent = specialist_owner('content-director')
+        try:
+            agent = specialist_owner('content-director')
+        except Agent.DoesNotExist as exc:
+            raise RuntimeError('No active content agent') from exc
     else:
         agent = specialist_owner('content-research')
     if not agent.active:
