@@ -208,7 +208,8 @@ class SimulationEngine:
             return "per_trade_risk_limit"
         if risk + sum((p.open_risk for p in self.positions.values()), D("0")) > max_open:
             return "aggregate_open_risk_limit"
-        if self._current_equity() - risk <= max(self.daily_floor, self.total_floor):
+        remaining_open_loss = sum((max(D("0"), (p.current_bid - p.stop_loss) if p.side == "buy" else (p.stop_loss - p.current_ask)) * p.quantity + self.commission_per_unit * p.quantity for p in self.positions.values()), D("0"))
+        if self._current_equity() - risk - remaining_open_loss <= max(self.daily_floor, self.total_floor):
             return "drawdown_headroom_limit"
         return None
 
@@ -216,7 +217,8 @@ class SimulationEngine:
         if self.blocked:
             return Execution(order.order_id, "rejected", order.symbol,
                              order.side, order.quantity, None, "account_blocked")
-        if order.order_id in self.positions or order.order_id in self.pending:
+        if (order.order_id in self.positions or order.order_id in self.pending
+                or any(item[0] == order.order_id for item in self.closed)):
             return Execution(order.order_id, "rejected", order.symbol,
                              order.side, order.quantity, None, "duplicate_order_id")
         if order.symbol != quote.symbol:
@@ -246,7 +248,23 @@ class SimulationEngine:
                 position.current_bid = quote.bid
                 position.current_ask = quote.ask
         executions = []
+        # Protective exits execute at the observed executable quote, not an
+        # invented stop price. Adverse gaps therefore remain visible.
+        for order_id, position in list(self.positions.items()):
+            if position.symbol != quote.symbol:
+                continue
+            mark = quote.bid if position.side == "buy" else quote.ask
+            stop_hit = mark <= position.stop_loss if position.side == "buy" else mark >= position.stop_loss
+            target_hit = position.take_profit is not None and (
+                mark >= position.take_profit if position.side == "buy" else mark <= position.take_profit)
+            if stop_hit or target_hit:
+                executions.append(self._close_at_quote(order_id, quote, "stop_loss" if stop_hit else "take_profit"))
+        self._enforce_drawdown()
         for order_id, order in list(self.pending.items()):
+            if self.blocked:
+                executions.append(Execution(order_id, "rejected", order.symbol, order.side, order.quantity, None, "account_blocked"))
+                self.pending.pop(order_id)
+                continue
             if order.symbol != quote.symbol:
                 continue
             trigger = (
@@ -262,7 +280,10 @@ class SimulationEngine:
             )
             if trigger:
                 entry = self._execution_price(order, quote)
-                reason = self._risk_gate(order, entry)
+                try:
+                    reason = self._risk_gate(order, entry)
+                except ValueError:
+                    reason = "invalid_protective_stop_at_fill"
                 if reason:
                     executions.append(Execution(order.order_id, "rejected",
                                                 order.symbol, order.side,
@@ -293,6 +314,13 @@ class SimulationEngine:
         if quote.symbol != position.symbol or quote.sequence <= self.last_quote_sequence:
             raise ValueError("invalid or stale close quote")
         self.last_quote_sequence = quote.sequence
+        for item in self.positions.values():
+            if item.symbol == quote.symbol:
+                item.current_bid, item.current_ask = quote.bid, quote.ask
+        return self._close_at_quote(order_id, quote, reason)
+
+    def _close_at_quote(self, order_id, quote, reason):
+        position = self.positions[order_id]
         exit_price = quote.bid if position.side == "buy" else quote.ask
         direction = D("1") if position.side == "buy" else D("-1")
         gross = (exit_price - position.entry_price) * position.quantity * direction
