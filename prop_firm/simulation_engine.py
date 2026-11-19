@@ -242,10 +242,13 @@ class SimulationEngine:
             raise ValueError("quote sequence must increase")
         self.last_quote_sequence = quote.sequence
         for position in self.positions.values():
-            position.current_bid = quote.bid
-            position.current_ask = quote.ask
+            if position.symbol == quote.symbol:
+                position.current_bid = quote.bid
+                position.current_ask = quote.ask
         executions = []
         for order_id, order in list(self.pending.items()):
+            if order.symbol != quote.symbol:
+                continue
             trigger = (
                 order.order_type == "limit" and (
                     (order.side == "buy" and quote.ask <= order.limit_price)
