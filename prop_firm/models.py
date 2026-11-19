@@ -60,7 +60,7 @@ class PropAccount(models.Model):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.WAITING)
     tier_index = models.PositiveSmallIntegerField(default=0)
     starting_capital_usd = models.DecimalField(max_digits=18, decimal_places=2,
-                                               default=Decimal("1000.00"))
+                                               default=Decimal("100.00"))
     reference = models.CharField(max_length=96, blank=True)
     challenge_enrollment = models.ForeignKey(
         "PropChallengeEnrollment", null=True, blank=True,
