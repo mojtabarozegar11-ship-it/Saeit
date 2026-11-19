@@ -69,3 +69,36 @@ class PrepareHandoffTests(TestCase):
         result = self.run_prepare()
         self.assertEqual(next(row for row in result["registered_agents"] if row["code"] == self.old.code)["unreconciled_tasks"], 1)
         self.assertFalse(result["retirement_authorized"])
+
+    def test_pending_groups_preserve_exact_status_risk_and_claim_counts(self):
+        self.task.action_type = "legacy_research"
+        self.task.capability_code = "legacy_research"
+        self.task.risk_snapshot = "high"
+        self.task.execution_id = "private-claim-must-not-leak"
+        self.task.attempt_count = 1
+        self.task.input_data = {"secret": "private-payload-must-not-leak"}
+        self.task.save()
+        AgentTask.objects.create(agent=self.old, action_type="legacy_research",
+            capability_code="legacy_research", risk_snapshot="high", status="queued")
+        AgentTask.objects.create(agent=self.old, action_type="legacy_research",
+            capability_code="legacy_research", risk_snapshot="high", status="unrecognized")
+        AgentTask.objects.create(agent=self.old, action_type="legacy_research", status="completed")
+        cap = AgentCapability.objects.create(code="legacy_research", name="Research", active=True)
+        bot = Agent.objects.create(code=BOT_CODE, name="Canonical", mission="Preserve", active=True)
+        bot.capabilities.add(cap)
+        before = list(AgentTask.objects.order_by("pk").values())
+        report = self.run_prepare()
+        row = next(r for r in report["registered_agents"] if r["code"] == self.old.code)
+        groups = {g["status"]: g for g in row["pending_task_groups"]}
+        self.assertEqual(row["unreconciled_tasks"], 3)
+        self.assertEqual(set(groups), {"queued", "unrecognized"})
+        self.assertEqual(groups["queued"]["total"], 2)
+        self.assertEqual(groups["queued"]["with_execution_id"], 1)
+        self.assertEqual(groups["queued"]["previously_attempted"], 1)
+        self.assertEqual(groups["queued"]["risk_snapshot"], "high")
+        self.assertTrue(groups["queued"]["canonical_capability_registered"])
+        self.assertFalse(groups["queued"]["transfer_authorized"])
+        self.assertFalse(report["task_transfer_authorized"])
+        self.assertNotIn("private-claim-must-not-leak", json.dumps(report))
+        self.assertNotIn("private-payload-must-not-leak", json.dumps(report))
+        self.assertEqual(list(AgentTask.objects.order_by("pk").values()), before)

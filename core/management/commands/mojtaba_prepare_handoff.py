@@ -8,18 +8,38 @@ economic/factory capabilities or retire any predecessor.
 import json
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import Count
-from core.models import Agent, AgentTask
+from django.db.models import Count, Q
+from core.models import Agent, AgentTask, AgentCapability
 from core.unified_bot_identity import BOT_CODE, BOT_NAME
 
 TERMINAL = ("completed", "failed", "cancelled")
 
 def inventory():
     rows = []
+    # A snapshot is an operator planning aid, never authorization or an
+    # independent attestation of a running successor.
+    canonical_capabilities = set(
+        AgentCapability.objects.filter(active=True, agents__code=BOT_CODE,
+                                       agents__active=True).values_list("code", flat=True)
+    )
     for agent in Agent.objects.order_by("code").prefetch_related("capabilities"):
         statuses = {r["status"]: r["total"] for r in AgentTask.objects.filter(
             agent=agent).values("status").annotate(total=Count("pk"))}
         pending = sum(n for status, n in statuses.items() if status not in TERMINAL)
+        pending_groups = list(
+            AgentTask.objects.filter(agent=agent).exclude(status__in=TERMINAL)
+            .values("action_type", "capability_code", "risk_snapshot", "status")
+            .annotate(total=Count("pk"),
+                      with_execution_id=Count("pk", filter=~Q(execution_id="")),
+                      previously_attempted=Count("pk", filter=Q(attempt_count__gt=0)))
+            .order_by("action_type", "capability_code", "risk_snapshot", "status")
+        )
+        for group in pending_groups:
+            group["canonical_capability_registered"] = (
+                bool(group["capability_code"]) and
+                group["capability_code"] in canonical_capabilities
+            )
+            group["transfer_authorized"] = False
         open_stories = agent.newsletter_stories.exclude(
             status__in=("published", "rejected", "cancelled")).count()
         distributions = agent.newsletter_stories.filter(
@@ -28,12 +48,14 @@ def inventory():
             "canonical": agent.code == BOT_CODE,
             "active_capabilities": sorted(c.code for c in agent.capabilities.all() if c.active),
             "tasks_by_status": statuses, "unreconciled_tasks": pending,
+            "pending_task_groups": pending_groups,
             "open_stories": open_stories, "pending_distributions": distributions,
             "runtime_verified": False, "retirement_authorized": False})
     return {"canonical_bot": BOT_CODE, "registered_agents": rows,
         "canonical_active": any(r["canonical"] and r["active"] for r in rows),
         "other_active_records": sum(r["active"] and not r["canonical"] for r in rows),
-        "live_worker_count": None, "retirement_authorized": False}
+        "live_worker_count": None, "retirement_authorized": False,
+        "task_transfer_authorized": False, "snapshot_is_live_execution_proof": False}
 
 class Command(BaseCommand):
     help = "Preview all Django agent handoff dependencies; explicitly prepare the one site owner."

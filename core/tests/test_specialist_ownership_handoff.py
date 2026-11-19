@@ -81,3 +81,10 @@ class SpecialistOwnershipTests(TestCase):
             with self.assertRaisesRegex(RuntimeError,"RECEIPT_INVALID"):
                 run_daily_cycle()
             network.assert_not_called()
+
+    def test_unknown_nonterminal_task_blocks_handoff(self):
+        self.retire()
+        self.receipt()
+        AgentTask.objects.create(agent=self.old, status="unrecognized")
+        with self.assertRaisesRegex(RuntimeError, "HANDOFF_REQUIRED"):
+            ensure_agent()

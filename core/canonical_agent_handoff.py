@@ -7,7 +7,7 @@ It only authorizes new work under the already provisioned canonical owner.
 from core.models import Agent, AgentTask
 from core.unified_bot_identity import BOT_CODE
 
-PENDING = ("queued", "running", "blocked")
+TERMINAL = ("completed", "failed", "cancelled")
 
 
 def canonical_owner_for(legacy_code: str) -> Agent:
@@ -18,7 +18,7 @@ def canonical_owner_for(legacy_code: str) -> Agent:
         raise RuntimeError("MOJTABA_CANONICAL_AGENT_NOT_PROVISIONED")
     legacy = Agent.objects.filter(code=legacy_code).first()
     if legacy is not None:
-        pending = AgentTask.objects.filter(agent=legacy, status__in=PENDING).exists()
+        pending = AgentTask.objects.filter(agent=legacy).exclude(status__in=TERMINAL).exists()
         # A retired newsletter agent may still own drafts, scheduled posts or
         # distribution retries. Preserve and reconcile those records before
         # routing new editorial work to the canonical bot.
