@@ -18,6 +18,8 @@ SALT = "mojprop.sim.checkout.v2"
 def checkout_context(request):
     if (request.get_host().lower() != "mojplaywin.com" or not request.is_secure()
             or getattr(settings, "MPW_SIMULATION_CHECKOUT_ENABLED", False) is not True
+            or getattr(settings, "MPW_SIMULATION_IDENTITY_ENABLED", False) is not True
+            or getattr(settings, "MPW_SIMULATION_RECONCILIATION_ENABLED", False) is not True
             or not request.user.is_authenticated or not request.user.is_active):
         return {}
     verifier = getattr(settings, "MPW_SIMULATION_EMAIL_VERIFIER", None)
