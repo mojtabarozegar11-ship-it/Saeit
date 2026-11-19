@@ -131,11 +131,13 @@ urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/",
 # Moj Prop is a MojPlayWin-only informational division. Checkout and broker execution are disabled.
 from core.moj_prop_views import moj_prop_landing, moj_prop_dashboard, moj_prop_interest, moj_prop_interest_form
 from prop_firm.simulation_checkout_views import start_simulation_checkout
+from prop_firm.simulation_payment_views import simulation_invoice_detail
 urlpatterns += [
     path("moj-prop-interest/", moj_prop_interest, name="moj_prop_interest"),
     path("moj-prop-interest/form/", moj_prop_interest_form, name="moj_prop_interest_form"),
     path("moj-prop/", moj_prop_landing, name="moj_prop_landing"),
     path("moj-prop/dashboard/", moj_prop_dashboard, name="moj_prop_dashboard"),
+    path("moj-prop/invoice/<slug:order_ref>/", simulation_invoice_detail, name="moj_prop_simulation_invoice"),
     path("moj-prop/checkout/start/", start_simulation_checkout, name="moj_prop_simulation_checkout"),
     path("moj-prop/<str:lang>/dashboard/", moj_prop_dashboard, name="moj_prop_language_dashboard"),
     path("moj-prop/<str:lang>/", moj_prop_landing, name="moj_prop_language"),
