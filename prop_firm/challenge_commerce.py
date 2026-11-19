@@ -174,7 +174,7 @@ def assess_simulated_challenge_offer(
     required_reward_reserve_usd,
     evidenced_reward_reserve_usd,
     attestations=None,
-    plan_code=DEFAULT_PLAN_CODE,
+    plan_code="MOJ-PROP-SIM-01",
     trusted_merchant_registry=None,
 ):
     """Gate a simulation-only offer without requiring virtual principal cash.
@@ -183,7 +183,8 @@ def assess_simulated_challenge_offer(
     creates an invoice, enables checkout, starts a simulation account or pays
     a reward.
     """
-    plan = plan_for_code(plan_code)
+    if plan_code != "MOJ-PROP-SIM-01":
+        raise ValueError("Independent simulation product required")
     if not isinstance(merchant_tenant, TenantDecision):
         raise ValueError("Trusted merchant scope needed")
     if not isinstance(attestations, dict):
@@ -201,11 +202,7 @@ def assess_simulated_challenge_offer(
     ]
     if policy_drift_defects():
         blockers.append("canonical_moj_prop_policy_mismatch")
-    if plan.account_mode != SIMULATION_POLICY.account_mode:
-        blockers.append("plan_not_simulation_mode")
-    if plan.payout_mode != SIMULATION_POLICY.payout_mode:
-        blockers.append("plan_reward_mode_mismatch")
-    if plan.virtual_principal_withdrawable is not False:
+    if SIMULATION_POLICY.virtual_principal_withdrawable is not False:
         blockers.append("virtual_principal_withdrawal_enabled")
     if evidenced < required:
         blockers.append("real_reward_reserve_shortfall")
@@ -231,14 +228,14 @@ def assess_simulated_challenge_offer(
         except (ValueError, TypeError, AttributeError):
             blockers.append("prop_merchant_registration_changed_or_forged")
     return SimulationOfferDecision(
-        plan_code=plan.code,
-        simulated_balance_usd=plan.starting_capital_usd,
-        challenge_window_days=plan.duration_days,
+        plan_code=plan_code,
+        simulated_balance_usd=SIMULATION_POLICY.starting_balance_usd,
+        challenge_window_days=SIMULATION_POLICY.challenge_window_days,
         social_visibility_days=SIMULATION_POLICY.post_visibility_days,
-        retry_fee_trx=plan.retry_fee_trx,
-        retry_discount_pct=plan.retry_discount_pct,
-        payout_mode=plan.payout_mode,
-        virtual_principal_withdrawable=plan.virtual_principal_withdrawable,
+        retry_fee_trx=SIMULATION_POLICY.retry_fee_trx,
+        retry_discount_pct=SIMULATION_POLICY.retry_discount_pct,
+        payout_mode=SIMULATION_POLICY.payout_mode,
+        virtual_principal_withdrawable=SIMULATION_POLICY.virtual_principal_withdrawable,
         required_reward_reserve_usd=required,
         evidenced_reward_reserve_usd=evidenced,
         eligible_for_external_legal_review=not blockers,
