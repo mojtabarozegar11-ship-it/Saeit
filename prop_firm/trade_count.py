@@ -25,11 +25,23 @@ class ChallengeTradeCount:
 
 
 def count_challenge_trades(executions, *, paid_at, required=50):
+    return _count_trades(executions, paid_at=paid_at, required=required,
+                         duration_days=DURATION_DAYS, minimum=POLICY.min_closed_trades_per_challenge)
+
+
+def count_simulation_trades(executions, *, paid_at, required=50):
+    from .simulation_policy import SIMULATION_POLICY
+    return _count_trades(executions, paid_at=paid_at, required=required,
+                         duration_days=SIMULATION_POLICY.challenge_window_days,
+                         minimum=SIMULATION_POLICY.minimum_closed_positions)
+
+
+def _count_trades(executions, *, paid_at, required, duration_days, minimum):
     start = aware_utc(paid_at, "paid_at")
-    end = start + timedelta(days=DURATION_DAYS)
+    end = start + timedelta(days=duration_days)
     # A caller must not defeat v1.2 qualification by requesting fewer than
     # the owner-approved fifty independently verified closed positions.
-    if type(required) is not int or required < POLICY.min_closed_trades_per_challenge:
+    if type(required) is not int or required < minimum:
         raise ValueError("Required trade count cannot be below the canonical policy")
     if executions is None:
         raise ValueError("Trusted trade ledger required")
