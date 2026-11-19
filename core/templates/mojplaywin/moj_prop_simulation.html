@@ -1,0 +1,30 @@
+{% extends "mojplaywin/site_base.html" %}
+{% load static %}
+{% block html_lang %}en{% endblock %}
+{% block title %}MOJ PROP | Simulated Trading Challenge{% endblock %}
+{% block meta_description %}A 60-day simulated trading challenge with a virtual USD 1,000 balance.{% endblock %}
+{% block page_head %}
+<meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="{% static 'site/moj_prop.css' %}">
+{% endblock %}
+{% block content %}
+<main class="mp-prop" lang="en">
+<section class="mp-section">
+<p class="mp-index">MOJ PROP · BY MOJPLAYWIN</p>
+<h1>60-day simulated trading challenge</h1>
+<p>Practice trading using synthetic replay data and a virtual USD 1,000 starting balance. No real brokerage account or withdrawable principal is provided. The entry fee is a service fee, not an investment deposit.</p>
+<div class="mp-rule-grid">
+<article class="mp-rule-card"><span>Entry fee</span><strong>30 TRX</strong></article>
+<article class="mp-rule-card"><span>Virtual starting balance</span><strong>$1,000</strong></article>
+<article class="mp-rule-card"><span>Challenge duration</span><strong>60 days</strong></article>
+<article class="mp-rule-card"><span>Daily loss limit</span><strong>6%</strong></article>
+<article class="mp-rule-card"><span>Total loss limit</span><strong>8%</strong></article>
+<article class="mp-rule-card"><span>Risk per trade</span><strong>3%</strong></article>
+<article class="mp-rule-card"><span>Aggregate open risk</span><strong>4%</strong></article>
+</div>
+<p>Eligible unsuccessful participants may qualify for a future 18 TRX retry. Retry purchasing is not available yet. Rewards are subject to published eligibility, reserve and payout terms; no return is guaranteed.</p>
+<p role="status">Checkout is not yet available. Do not send any funds.</p>
+<a class="mp-button mp-button-quiet" href="/moj-prop-interest/form/?lang=en">Request information (no payment)</a>
+</section>
+</main>
+{% endblock %}
