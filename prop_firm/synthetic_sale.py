@@ -35,6 +35,19 @@ class SyntheticSaleOffer:
     virtual_principal_withdrawable: bool = False
     customer_deposit_required: bool = False
     performance_rewards_real: bool = True
+    reward_reserve_pct_of_settled_fee: int = 80
+    maximum_reward_is_settled_reserve: bool = True
+
+    def public_disclosure(self):
+        return {
+            "account_mode": "simulated",
+            "simulated_balance_usd": self.simulated_balance_usd,
+            "virtual_principal_withdrawable": self.virtual_principal_withdrawable,
+            "customer_deposit_required": self.customer_deposit_required,
+            "performance_rewards_real": self.performance_rewards_real,
+            "reward_reserve_pct_of_settled_fee": self.reward_reserve_pct_of_settled_fee,
+            "maximum_reward_is_settled_reserve": self.maximum_reward_is_settled_reserve,
+        }
 
     def __post_init__(self):
         if self.entry_fee_trx <= 0 or self.retry_fee_trx <= 0:
@@ -43,6 +56,10 @@ class SyntheticSaleOffer:
             raise ValueError("retry price must be lower than entry price")
         if self.data_mode != "synthetic_replay":
             raise ValueError("synthetic offer requires synthetic_replay mode")
+        if self.reward_reserve_pct_of_settled_fee != 80:
+            raise ValueError("reward reserve policy must allocate 80 percent")
+        if self.maximum_reward_is_settled_reserve is not True:
+            raise ValueError("reward commitment must be bounded by settled reserve")
 
 
 @dataclass(frozen=True)
