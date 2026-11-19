@@ -49,19 +49,25 @@ class LiteFinanceDemoReconciler:
             raise TypeError("bounded tuple of reports required")
         if type(reservation_to_trader) is not dict:
             raise TypeError("server-side reservation map required")
+
         verified_snapshot = self.contract.validate_snapshot(snapshot)
         if not verified_snapshot.owner_account_ref:
             raise ReconciliationRejected("owner account reference missing")
+
         reasons: list[str] = []
         orders: set[str] = set()
         reservations: set[str] = set()
         verified_orders: list[str] = []
         cancelled_orders: list[str] = []
+
         for report in reports:
+            if type(report) is not DemoExecutionReport:
+                raise TypeError("exact DemoExecutionReport required")
             if report.broker_order_ref in orders:
                 reasons.append("duplicate_broker_order_reference")
                 continue
             orders.add(report.broker_order_ref)
+
             expected_trader = reservation_to_trader.get(report.reservation_id)
             if expected_trader is None:
                 reasons.append("reservation_not_in_server_map")
@@ -70,6 +76,7 @@ class LiteFinanceDemoReconciler:
                 reasons.append("duplicate_reservation_reference")
                 continue
             reservations.add(report.reservation_id)
+
             try:
                 self.contract.validate_execution_report(
                     report,
@@ -79,10 +86,12 @@ class LiteFinanceDemoReconciler:
             except Exception as exc:
                 reasons.append(type(exc).__name__)
                 continue
+
             if report.status == "cancelled":
                 cancelled_orders.append(report.broker_order_ref)
             else:
                 verified_orders.append(report.broker_order_ref)
+
         return DemoReconciliationResult(
             verified=not reasons,
             reasons=tuple(reasons),
