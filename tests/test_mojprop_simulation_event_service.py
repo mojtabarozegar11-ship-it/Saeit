@@ -83,3 +83,25 @@ class SimulationEventTests(TestCase):
         self.assertEqual(account_snapshot(account_id=self.account.pk, owner=self.owner), result)
         self.account.refresh_from_db()
         self.assertEqual(self.account.event_head_sequence, 2)
+
+    @override_settings(ALLOWED_HOSTS=["mojplaywin.com", "zomorodmelal.ir"],
+                       MPW_SIMULATION_ALLOWED_SYMBOLS=("EURUSD",),
+                       MPW_SIMULATION_WORKER_READY=True)
+    def test_terminal_owner_scope_and_submission_without_browser_price(self):
+        path = f"/moj-prop/account/{self.account.pk}/terminal/"
+        self.client.force_login(self.owner)
+        self.assertContains(self.client.get(path, secure=True, HTTP_HOST="mojplaywin.com"),
+                            "Virtual balance")
+        self.assertEqual(self.client.get(path, secure=True, HTTP_HOST="zomorodmelal.ir").status_code, 404)
+        self.assertEqual(self.client.get(path, secure=False, HTTP_HOST="mojplaywin.com").status_code, 404)
+        body = {"operation":"submit", "command_id":str(uuid.uuid4()), "symbol":"EURUSD",
+                "side":"buy", "quantity":"1", "stop_loss":"99", "take_profit":""}
+        invalid = self.client.post(path, {**body, "price":"1"}, secure=True, HTTP_HOST="mojplaywin.com")
+        self.assertContains(invalid, "Order could not be processed")
+        self.assertFalse(PropSimulationEvent.objects.exists())
+        self.assertEqual(self.client.post(path, body, secure=True, HTTP_HOST="mojplaywin.com").status_code, 302)
+        self.assertEqual(PropSimulationEvent.objects.get().payload["quote"]["ask"], "101")
+        outsider = get_user_model().objects.create_user(username="other-terminal", email="other@farmco.org")
+        PropSimulationIdentity.objects.create(owner=outsider, email=outsider.email, verified_at=timezone.now())
+        self.client.force_login(outsider)
+        self.assertEqual(self.client.get(path, secure=True, HTTP_HOST="mojplaywin.com").status_code, 404)
