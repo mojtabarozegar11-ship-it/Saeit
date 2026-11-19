@@ -69,15 +69,15 @@ def quota_summary(payload):
         return number, unit
     used = parse(row.get("count"))
     if used is None:
-        return out | {"reason": "usage_format_unrecognized"}
+        return {**out, "reason": "usage_format_unrecognized"}
     if isinstance(row.get("max"), str) and row["max"].strip().lower() == "unlimited":
-        return out | {"recognized": True, "reported_used": used[0],
+        return {**out, "recognized": True, "reported_used": used[0],
                       "reported_units": used[1], "reported_limit": "unlimited",
                       "display_values_only": True}
     limit = parse(row.get("max"))
     if limit is None or Decimal(limit[0]) <= 0:
-        return out | {"reason": "limit_format_unrecognized"}
-    report = out | {"recognized": True, "reported_used": used[0],
+        return {**out, "reason": "limit_format_unrecognized"}
+    report = {**out, "recognized": True, "reported_used": used[0],
                     "reported_units": used[1], "reported_limit": limit[0],
                     "reported_limit_units": limit[1], "display_values_only": True}
     if used[1] == limit[1]:
