@@ -66,7 +66,7 @@ class StoreBackupBoundaryTests(unittest.TestCase):
         self.assertEqual(account_quota_fields(d)["account_disk_headroom_reported_mb"],0)
     def test_account_rejects_untrusted_response(self):
         for field,value in (("megabytes_used",float("nan")),("megabytes_remain",True),
-                            ("under_quota_overall","1"),("inodes_used",-1)):
+                            ("under_quota_overall","01"),("inodes_used",-1)):
             with self.subTest(field=field):
                 d=self.account_document()
                 d["result"]["data"][field]=value
@@ -74,8 +74,8 @@ class StoreBackupBoundaryTests(unittest.TestCase):
                     account_quota_fields(d)
         d=self.account_document()
         d["result"]["warnings"]=["stale"]
-        with self.assertRaises(ValueError):
-            account_quota_fields(d)
+        self.assertTrue(account_quota_fields(d)["quota_warnings_present"])
+        self.assertFalse(account_quota_fields(d)["backup_capacity_proven"])
     def test_account_local_response_not_interchangeable(self):
         with self.assertRaises(ValueError):
             quota_fields(self.account_document())
@@ -109,3 +109,20 @@ class StoreBackupBoundaryTests(unittest.TestCase):
     def test_arbitrary_cpanel_function_not_allowed(self):
         with self.assertRaises(ValueError):
             quota("not_allowed")
+
+    def test_documented_numeric_strings_and_optional_inode_counts(self):
+        d=self.account_document()
+        data=d["result"]["data"]
+        for k in ("megabyte_limit","megabytes_used","megabytes_remain","under_quota_overall","under_inode_limit","under_megabyte_limit"):
+            data[k]=str(data[k])
+        del data["inodes_remain"]
+        r=account_quota_fields(d)
+        self.assertEqual(r["account_disk_headroom_reported_mb"],950.25)
+        self.assertIsNone(r["account_inode_headroom_reported"])
+        self.assertFalse(r["backup_capacity_proven"])
+    def test_reject_noncanonical_numbers(self):
+        for value in ("1e9","-1","NaN"," 5 ",True):
+            d=self.account_document()
+            d["result"]["data"]["megabytes_used"]=value
+            with self.assertRaises(ValueError):
+                account_quota_fields(d)
