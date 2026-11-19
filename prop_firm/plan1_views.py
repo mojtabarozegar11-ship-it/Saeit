@@ -46,6 +46,9 @@ def start_plan1_invoice(request):
         return JsonResponse({"detail": "verified account email required"}, status=400)
     if payload.get("buyer_terms_acceptance") is not True:
         return JsonResponse({"detail": "terms acceptance required"}, status=400)
+
+    purchase_kind = payload.get("purchase_kind", "first")
+    retry_eligibility_verified = payload.get("retry_eligibility_verified") is True
     try:
         invoice = persist_plan1_invoice(
             order_ref=payload.get("order_ref"),
@@ -53,6 +56,8 @@ def start_plan1_invoice(request):
             buyer_terms_acceptance=True,
             recipient=settings.MPW_MOJPROP_PLAN1_RECIPIENT,
             contract_digest=settings.MPW_MOJPROP_PLAN1_TRUSTED_CONTRACT_SHA256,
+            purchase_kind=purchase_kind,
+            retry_eligibility_verified=retry_eligibility_verified,
         )
     except Exception as exc:
         return JsonResponse({"detail": str(exc)}, status=400)
@@ -60,6 +65,7 @@ def start_plan1_invoice(request):
         {
             "invoice_ref": invoice.order_ref,
             "product": invoice.product_code,
+            "purchase_kind": invoice.purchase_kind,
             "network": invoice.network,
             "amount_sun": invoice.amount_sun,
             "status": invoice.status,
