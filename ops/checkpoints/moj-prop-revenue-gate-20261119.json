@@ -9,7 +9,7 @@
     "state": "open",
     "draft": true,
     "head": "feature/mojprop-simulation-policy-v2-20261119",
-    "head_sha": "dfd192be6cc4b42303fcd057d781fe6337abe85e",
+    "head_sha": "a6162229fe81a8b368d3b2627b5343d9095024a3",
     "base": "feature/mojprop-demo-reconciliation-20261119",
     "base_sha": "ce365de6cf37301d1d85e9ff148cf9cc48a8d938",
     "mergeable": true,
@@ -23,7 +23,26 @@
     "tests_run": 77,
     "tests_failed": 0,
     "scope": "simulation, sale, reward-reserve and contract tests",
-    "full_django_ci_current_head": "not_verified"
+    "full_django_ci_current_head": "pending_run_44496629018",
+    "full_django_ci_fix_commits": [
+      "e8080ce66c89a29a22e1ce8e2238c07b00a40e48",
+      "3fe774065a1dca26d7a7490d84b6fa8fe7b9b626",
+      "a6162229fe81a8b368d3b2627b5343d9095024a3"
+    ],
+    "full_django_ci_last_failure": {
+      "run_id": 44494880852,
+      "run_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44494880852",
+      "conclusion": "failure",
+      "tests_passed": 4720,
+      "tests_failed": 437,
+      "errors": 233,
+      "skipped": 15,
+      "root_causes": [
+        "PropAccount Python/migration default remained 100 USD while canonical Plan 1 requires 1000 USD.",
+        "C136 source-only tests were not given real main/head SHAs."
+      ],
+      "remediation": "Plan 1 default and migration aligned to 1000 USD; CI now pins origin/main and the real pull-request head SHA."
+    }
   },
   "commercial_offer": {
     "sku": "MOJ-PROP-SIM-01",
@@ -77,7 +96,7 @@
     },
     {
       "gate": "merge to main and current-head Django CI",
-      "status": "not_authorized_and_not_verified",
+      "status": "pending_after_fixes",
       "percent": 0
     },
     {
@@ -126,7 +145,16 @@
     "نیاز به full Django CI روی current head ثبت شد.",
     "نیاز به reserve مستقل ثبت شد.",
     "نیاز به legal/KYC/broker/settlement ثبت شد.",
-    "هیچ merge، deploy، payment، trade یا هزینه‌ای انجام نشد."
+    "هیچ merge، deploy، payment، trade یا هزینه‌ای انجام نشد.",
+    "full Django CI روی current head اضافه و اجرا شد.",
+    "PYTHONPATH تست‌ها برای رفع خطای collection اصلاح شد.",
+    "نتیجهٔ اجرای جامع قبلی 4720 موفق، 437 ناموفق، 233 error و 15 skipped ثبت شد.",
+    "ریشهٔ mismatch سرمایهٔ پیش‌فرض حساب با Plan 1 شناسایی شد.",
+    "default مدل PropAccount به 1000 USD هماهنگ شد.",
+    "migration 0011 برای default سرمایهٔ Plan 1 اضافه شد.",
+    "وجود هر 8 فایل منبع C136 در main و head تأیید شد.",
+    "CI به SHA واقعی main و head برای C136 مجهز شد.",
+    "اجرای جدید full Django با run 44496629018 در حالت pending ثبت شد."
   ],
   "blockers": [
     "PR هنوز Draft و روی شاخه feature است، نه main.",
@@ -134,9 +162,11 @@
     "مسیر عمومی checkout و invoice settlement عمداً خاموش است.",
     "ذخیره واقعی reward reserve مستقل تأیید نشده است.",
     "مجوز حقوقی/حوزه قضایی، قرارداد مشتری، KYC و فرآیند refund/dispute ثبت نشده است.",
-    "داده broker/simulator مستقل و reconciliation امضاشده موجود نیست."
+    "داده broker/simulator مستقل و reconciliation امضاشده موجود نیست.",
+    "اجرای جدید full Django با run 44496629018 هنوز از GitHub runner شروع نشده و نتیجهٔ نهایی ندارد."
   ],
   "next_executable_plan": [
+    "پس از تخصیص runner، نتیجهٔ run 44496629018 خوانده و فقط failureهای باقی‌مانده اصلاح شود.",
     "ساخت بسته evidence matrix برای مج پراپ بدون فعال‌سازی پرداخت.",
     "اجرای full Django CI روی head فعلی یا ایجاد workflow read-only محدود برای آن.",
     "ممیزی route واقعی Moj Prop و علت 404 invoice در محیط کنترل‌شده.",
