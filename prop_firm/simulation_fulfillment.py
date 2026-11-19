@@ -2,12 +2,12 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from .models import PropPlan1Invoice, PropPlan1Receipt, PropRewardReserveAllocation, PropSimulationInvoiceOwner
-from .simulation_invoice_contract import PRODUCT_CODE, CONTRACT_VERSION, NETWORK, FEES_SUN
+from .simulation_invoice_contract import PRODUCT_CODE, SUPPORTED_CONTRACT_VERSIONS, COMMERCIAL_CONTRACT_VERSION, NETWORK, FEES_SUN
 
 @transaction.atomic
 def verified_simulation_purchase(*, invoice_id, buyer_email):
     invoice = PropPlan1Invoice.objects.select_for_update().get(pk=invoice_id)
-    if (invoice.product_code != PRODUCT_CODE or invoice.contract_version != CONTRACT_VERSION
+    if (invoice.product_code != PRODUCT_CODE or invoice.contract_version not in SUPPORTED_CONTRACT_VERSIONS
             or invoice.network != NETWORK or invoice.status != "paid"
             or invoice.buyer_email != buyer_email or invoice.buyer_terms_acceptance is not True
             or invoice.amount_sun != FEES_SUN.get(invoice.purchase_kind)):
@@ -24,7 +24,7 @@ def verified_simulation_purchase(*, invoice_id, buyer_email):
         raise ValidationError("Reward reserve allocation required")
     return {"invoice_id": invoice.pk, "order_ref": invoice.order_ref,
             "account_mode": "simulated", "starting_balance_usd": 1000,
-            "challenge_days": 60, "data_mode": "synthetic_replay"}
+            "challenge_days": 60, "data_mode": ("licensed_market_data" if invoice.contract_version == COMMERCIAL_CONTRACT_VERSION else "synthetic_replay")}
 
 
 @transaction.atomic
