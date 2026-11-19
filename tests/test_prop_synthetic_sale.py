@@ -19,6 +19,12 @@ class SyntheticSaleTests(unittest.TestCase):
         self.assertEqual(offer.reward_reserve_pct_of_settled_fee, 80)
         self.assertTrue(offer.maximum_reward_is_settled_reserve)
         self.assertEqual(offer.public_disclosure()["account_mode"], "simulated")
+        disclosure = offer.public_disclosure()
+        self.assertEqual(disclosure["data_mode"], "synthetic_replay")
+        self.assertEqual(disclosure["challenge_days"], 60)
+        self.assertEqual(disclosure["entry_fee_trx"], 30)
+        self.assertEqual(disclosure["retry_fee_trx"], 18)
+        self.assertEqual(disclosure["retry_discount_pct"], 40)
 
     def test_default_decision_is_fail_closed(self):
         result = assess_synthetic_sale(
