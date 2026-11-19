@@ -1,13 +1,13 @@
 """Ten MOJ PROP business plans over one shared, audited challenge ruleset.
 
-Plan 1 preserves the owner-confirmed 30 TRX / 100 USD model. Plans 2..10
+Plan 1 uses the owner-confirmed 30 TRX / nominal simulated USD 1,000 model. Plans 2..10
 are proposed differentiated *starting capital tiers*, with their own quoted
 TRX fees. Prices are recommendations for review, NOT published checkout quotes,
 real funding promises, or verified financial return. Every plan uses the SAME
 28-day two-stage evaluation, at least 50 independently verified closed
-positions, and the one Instagram plus one Facebook post held 28 days.
+positions, with social retention kept at 28 days separately from the trading window.
 
-The owner declares Plan 1 funded and operational. This assertion is NOT an
+The owner directs Plan 1 as the sole priority, but simulation and reward-reserve gates remain required. This assertion is NOT an
 independently audited bank/broker balance or proof of live customer checkout.
 Plans 2-10 are explicitly on temporary funding hold, irrespective of how many
 paper attestations become true. A buyer agreement must bind plan and fee.
@@ -65,7 +65,7 @@ class ChallengePlan:
     customer_deposit_required: bool = SIMULATION_POLICY.customer_deposit_required
 
 
-# Numbers are provisional except plan 1's owner-specified 30 TRX. Higher fees
+# Numbers are provisional except Plan 1's owner-specified 30 TRX and 18 TRX retry fee. Higher fees
 # are internal proposed prices. Do not turn on customer billing using them.
 PROPOSED_TIERS_AND_TRX = (
     (0, "30"), (1, "45"), (2, "75"), (3, "120"), (4, "200"),
