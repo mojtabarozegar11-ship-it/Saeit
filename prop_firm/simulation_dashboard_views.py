@@ -5,7 +5,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_safe
 from .simulation_identity import is_verified_simulation_user
 from .models import PropSimulationAccount, PropPlan1Invoice
-from .simulation_invoice_contract import PRODUCT_CODE, CONTRACT_VERSION
+from .simulation_invoice_contract import PRODUCT_CODE, SUPPORTED_CONTRACT_VERSIONS
 
 @never_cache
 @require_safe
@@ -15,12 +15,12 @@ def simulation_dashboard(request):
         raise Http404
     invoices = PropPlan1Invoice.objects.filter(
         simulation_owner__owner=request.user, buyer_email=request.user.email,
-        product_code=PRODUCT_CODE, contract_version=CONTRACT_VERSION,
+        product_code=PRODUCT_CODE, contract_version__in=SUPPORTED_CONTRACT_VERSIONS,
     ).order_by("-created_at")[:50]
     accounts = PropSimulationAccount.objects.filter(
         owner=request.user, invoice__simulation_owner__owner=request.user,
         invoice__buyer_email=request.user.email, invoice__product_code=PRODUCT_CODE,
-        invoice__contract_version=CONTRACT_VERSION, invoice__status="paid",
+        invoice__contract_version__in=SUPPORTED_CONTRACT_VERSIONS, invoice__status="paid",
     ).order_by("-created_at")[:50]
     response = render(request, "mojplaywin/moj_prop_simulation_dashboard.html",
                       {"invoices": invoices, "accounts": accounts})
