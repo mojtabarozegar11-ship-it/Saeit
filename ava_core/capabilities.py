@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import math
 from types import MappingProxyType
+from threading import RLock
 from typing import Callable, Mapping, Protocol
 
 from .identity import validate_owner_id
@@ -114,25 +115,40 @@ class CapabilityAdapter(Protocol):
     def __call__(self, request: ActionRequest) -> AdapterResult: ...
 
 
+class ActionClaimStore(Protocol):
+    """Host-owned, durable atomic reservation; return True only after commit."""
+    def reserve(self, request: ActionRequest, operation: OperationSpec) -> bool: ...
+
+
 class CapabilityHub:
     """One namespace for modules: never starts another bot or background worker.
 
     Registration comes from the authenticated host. Nonlocal effects require a
     host decision for that exact request. Request IDs cannot be reused within
     one running instance, including when an adapter raises after side effects.
-    An external persistent idempotency ledger is needed before production use.
+    Mutating effects require a host-supplied durable claim store. A claim is
+    evidence of an attempt, never proof of its external outcome.
     """
 
     def __init__(self, *, owner_id: str,
-                 authorize: Callable[[str, ActionRequest, OperationSpec], bool] | None = None) -> None:
+                 authorize: Callable[[str, ActionRequest, OperationSpec], bool] | None = None,
+                 claim_store: ActionClaimStore | None = None) -> None:
         validate_owner_id(owner_id)
         if authorize is not None and not callable(authorize):
             raise TypeError("authorize must be callable")
+        if claim_store is not None and not callable(getattr(claim_store, "reserve", None)):
+            raise TypeError("Claim store must implement reserve")
         self.owner_id = owner_id
+        self._claim_store = claim_store
+        self._attempt_lock = RLock()
         self._authorize = authorize
         self._adapters: dict[str, tuple[CapabilitySpec, CapabilityAdapter]] = {}
         self._attempted: set[str] = set()
         self._receipts: dict[str, ActionReceipt] = {}
+
+    @property
+    def durable_claim_store_configured(self) -> bool:
+        return self._claim_store is not None
 
     def register(self, spec: CapabilitySpec, adapter: CapabilityAdapter) -> None:
         if not isinstance(spec, CapabilitySpec) or not callable(adapter):
@@ -163,7 +179,17 @@ class CapabilityHub:
             self._authorize is None or self._authorize(self.owner_id, request, operation) is not True
         ):
             raise PermissionError("Independent authorization required for this exact external action")
-        self._attempted.add(request.request_id)
+        if operation.effect not in ("local", "read") and self._claim_store is None:
+            raise PermissionError("Durable action claim store required for mutating effects")
+        # Recheck after authorization to prevent concurrent or reentrant attempts.
+        with self._attempt_lock:
+            if request.request_id in self._attempted:
+                raise PermissionError("Action request ID was already attempted")
+            # Mark before any potentially ambiguous store call; do not auto retry.
+            self._attempted.add(request.request_id)
+            if operation.effect != "local" and self._claim_store is not None:
+                if self._claim_store.reserve(request, operation) is not True:
+                    raise PermissionError("Durable action claim already exists or was not committed")
         result = adapter(request)
         if not isinstance(result, AdapterResult):
             raise TypeError("Trusted adapter returned an invalid result; do not retry automatically")

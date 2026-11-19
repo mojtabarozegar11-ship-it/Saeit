@@ -15,7 +15,7 @@ from .affect import AffectSnapshot, AffectiveCompanion, PersonalityTraits
 from .audit import SQLiteCodeAuditTrail
 from .capabilities import (
     ActionReceipt, ActionRequest, CapabilityAdapter, CapabilityHub, CapabilitySpec,
-    OperationSpec,
+    OperationSpec, ActionClaimStore,
 )
 from .core import AvaReply, Brain, ConversationEngine, MemoryItem, MemoryStore
 from .embodiment import BodyCommand, EmbodimentGateway, RobotAdapter, RobotState, SimulatedBody, SimulationReceipt
@@ -49,6 +49,7 @@ class AvaRuntimeStatus:
     code_audit_events: int = 0
     bot_name: str = BOT_ID
     connected_capabilities: tuple[str, ...] = ()
+    durable_action_claim_store_configured: bool = False
 
 
 class MojtabaBot:
@@ -76,6 +77,7 @@ class MojtabaBot:
         code_audit: SQLiteCodeAuditTrail | None = None,
         capabilities: tuple[tuple[CapabilitySpec, CapabilityAdapter], ...] = (),
         authorize_action: Callable[[str, ActionRequest, OperationSpec], bool] | None = None,
+        action_claim_store: ActionClaimStore | None = None,
     ) -> None:
         self.affect = AffectiveCompanion(
             owner_id=owner_id, traits=traits,
@@ -99,7 +101,8 @@ class MojtabaBot:
         self.code_audit = code_audit
         self._verified_checks: dict[str, CheckEvidence] = {}
         self.owner_id = owner_id
-        self.capabilities = CapabilityHub(owner_id=owner_id, authorize=authorize_action)
+        self.capabilities = CapabilityHub(owner_id=owner_id, authorize=authorize_action,
+                                          claim_store=action_claim_store)
         if not isinstance(capabilities, tuple):
             raise TypeError("capabilities must be a tuple of registered adapters")
         for spec, adapter in capabilities:
@@ -237,6 +240,7 @@ class MojtabaBot:
             code_audit_events=(self.code_audit.verify(self.owner_id).event_count
                                if self.code_audit is not None else 0),
             connected_capabilities=tuple(spec.name for spec in self.connected_capabilities()),
+            durable_action_claim_store_configured=self.capabilities.durable_claim_store_configured,
         )
 
 
