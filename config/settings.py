@@ -32,6 +32,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "core",
+    # Historical MojPlayWin commerce schema; all public/payment gates remain fail-closed.
+    "mpw_commerce.apps.MpwCommerceConfig",
     "farnaz.apps.FarnazConfig",
     "command_center",
     # Accounting ledger is part of the production management desk.
@@ -138,6 +140,7 @@ MOJTABA_SIGNAL_FREE_SIGNUP_ENABLED = env.bool("MOJTABA_SIGNAL_FREE_SIGNUP_ENABLE
 # SMTP ownership/consent and rollback are independently verified. Both flags stay off.
 MPW_GUEST_RECOVERY_ENABLED = env.bool("MPW_GUEST_RECOVERY_ENABLED", default=False)
 MPW_GUEST_RECOVERY_EMAIL_APPROVED = env.bool("MPW_GUEST_RECOVERY_EMAIL_APPROVED", default=False)
+MPW_GUEST_EMAIL_SEND_APPROVED = env.bool("MPW_GUEST_EMAIL_SEND_APPROVED", default=False)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
