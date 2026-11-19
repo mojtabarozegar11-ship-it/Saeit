@@ -3,7 +3,8 @@ from decimal import Decimal as D
 import unittest
 
 from prop_firm.plan1_litefinance_demo_contract import (
-    DemoAccountSnapshot, DemoExecutionReport,
+    DemoAccountSnapshot,
+    DemoExecutionReport,
     LiteFinanceDemoEvidenceContract,
 )
 from prop_firm.plan1_demo_reconciliation import LiteFinanceDemoReconciler
@@ -120,18 +121,14 @@ class DemoReconciliationTests(unittest.TestCase):
         result = self.reconcile(reports=(report,))
         self.assertFalse(result.verified)
 
-    def test_snapshot_contract_is_reused(self):
+    def test_invalid_snapshot_is_rejected_before_reports(self):
         snapshot = DemoAccountSnapshot(
             **{**self.snapshot.__dict__, "evidence_digest": "bad"}
         )
-        result = self.reconciler.reconcile(
-            snapshot=snapshot, reports=(), reservation_to_trader={}
-        )
-        self.assertFalse(result.verified) if False else self.assertRaises(
-            Exception,
-            self.reconciler.reconcile,
-            snapshot=snapshot, reports=(), reservation_to_trader={},
-        )
+        with self.assertRaises(Exception):
+            self.reconciler.reconcile(
+                snapshot=snapshot, reports=(), reservation_to_trader={}
+            )
 
     def test_reports_must_be_tuple(self):
         with self.assertRaises(TypeError):
@@ -152,6 +149,13 @@ class DemoReconciliationTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.reconciler.reconcile(
                 snapshot=self.snapshot, reports=reports,
+                reservation_to_trader={"RES-001": "TRADER-A"},
+            )
+
+    def test_non_report_object_is_rejected_cleanly(self):
+        with self.assertRaises(TypeError):
+            self.reconciler.reconcile(
+                snapshot=self.snapshot, reports=(object(),),
                 reservation_to_trader={"RES-001": "TRADER-A"},
             )
 
