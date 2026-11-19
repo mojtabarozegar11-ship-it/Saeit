@@ -136,6 +136,40 @@ class SimulationEngineTests(unittest.TestCase):
         self.assertEqual(result[0].reason, "invalid_protective_stop_at_fill")
         self.assertEqual(e.snapshot().position_count, 0)
 
+    def test_new_utc_day_carries_last_mark_and_keeps_fixed_daily_allowance(self):
+        e = SimulationEngine()
+        e.submit(order("a", stop="99"), q(1))
+        e.close("a", q(2, bid="103", ask="104"))
+        self.assertEqual(e.realized_by_day["2026-11-19"], D("2"))
+        e.process_quote(MarketQuote("EURUSD", D("100"), D("101"), "2026-11-20T00:00:01Z", 3))
+        self.assertEqual(e.day_open_equity, D("1002"))
+        self.assertEqual(e.daily_floor, D("942"))
+
+    def test_overnight_gap_is_not_erased_by_daily_reset(self):
+        e = SimulationEngine()
+        e.submit(order("a", stop="99", quantity="10"), q(1))
+        e.process_quote(MarketQuote("EURUSD", D("90"), D("91"), "2026-11-20T00:00:01Z", 2))
+        self.assertEqual(e.day_open_equity, D("990"))
+        self.assertEqual(e.realized_by_day["2026-11-20"], D("-110"))
+        self.assertTrue(e.snapshot().blocked)
+
+    def test_quote_time_cannot_move_backwards_even_with_higher_sequence(self):
+        e = SimulationEngine()
+        e.submit(order("a"), q(2))
+        with self.assertRaises(ValueError):
+            e.process_quote(q(1).__class__("EURUSD", D("100"), D("101"),
+                                           "2026-11-19T00:00:01Z", 3))
+        self.assertEqual(e.last_quote_sequence, 2)
+
+    def test_new_day_cannot_clear_drawdown_breach(self):
+        e = SimulationEngine()
+        e.submit(order("a", stop="99", quantity="10"), q(1))
+        e.process_quote(q(2, bid="90", ask="91"))
+        e.process_quote(MarketQuote("EURUSD", D("100"), D("101"), "2026-11-20T00:00:01Z", 3))
+        self.assertTrue(e.snapshot().blocked)
+        self.assertEqual(e.submit(order("b"), MarketQuote("EURUSD", D("100"), D("101"),
+                         "2026-11-20T00:00:02Z", 4)).reason, "account_blocked")
+
     def test_real_side_effects_are_impossible(self):
         e = SimulationEngine()
         self.assertFalse(hasattr(e, "broker_client"))
