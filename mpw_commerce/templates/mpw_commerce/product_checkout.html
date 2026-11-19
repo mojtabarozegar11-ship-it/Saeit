@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>{{ product.title }} — TRX checkout | MojPlayWin</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #101520; color: #f4f7f9; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 20px; line-height: 1.55; }
+    main { max-width: 670px; margin: 2vh auto; padding: clamp(20px, 5vw, 36px); border: 1px solid #425369; border-radius: 18px; background: #192536; }
+    h1 { line-height: 1.15; font-size: clamp(24px, 5vw, 36px); }
+    p, li { max-width: 68ch; }
+    .price { font-size: 27px; font-weight: 750; margin: 8px 0 18px; }
+    .hint { color: #cfdbec; }
+    .notice { border: 1px solid #6d849c; border-radius: 12px; padding: 12px 16px; background: #243348; }
+    label { display: block; font-weight: 650; margin: 20px 0 7px; }
+    input { display: block; width: 100%; padding: 12px 14px; font: inherit; background: #fff; color: #121a23; border: 2px solid #8aa2bc; border-radius: 9px; }
+    input:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid #98e5da; outline-offset: 3px; }
+    button { background: #8ff1cf; color: #102420; border: 0; border-radius: 9px; padding: 14px 18px; font: inherit; font-weight: 750; cursor: pointer; margin-top: 15px; width: 100%; }
+    a { color: #a6efe3; }
+    small { color: #cfdbec; }
+  </style>
+</head>
+<body>
+<main>
+  <small>MOJPLAYWIN · DIGITAL PRODUCT · TRON NETWORK</small>
+  <h1>{{ product.title }}</h1>
+  <p class="price">$ {{ price_usd }} USD</p>
+  <p class="hint">No registration, wallet connection, or wallet signature is required.</p>
+  <div class="notice">
+    <strong>Before paying</strong>
+    <ul>
+      <li>This form creates an invoice. It does not charge you or access your wallet.</li>
+      <li>Only the next invoice gives the exact native TRX amount, receiving address, and payment deadline.</li>
+      <li>Send TRX on TRON mainnet only. Never send money to an expired invoice or pay twice.</li>
+      <li>Your digital download is unlocked only after independent server-side blockchain confirmation.</li>
+    </ul>
+  </div>
+  <form method="post" action="/commerce/trx-easy/start/{{ product.pk }}/" accept-charset="UTF-8">
+    {% csrf_token %}
+    <label for="purchase-email">Email for purchase ownership and future recovery</label>
+    <input id="purchase-email" name="email" type="email" autocomplete="email"
+           inputmode="email" maxlength="254" placeholder="you@example.com" required>
+    <p class="hint">Use an address you control. Keep your invoice reference: automated email recovery may be unavailable until activated.</p>
+    <button type="submit">Create my TRX invoice</button>
+  </form>
+  <p><small>Already paid? Do not pay again. Use <a href="/commerce/trx-easy/purchases/">My TRX purchases</a>, or contact <a href="mailto:support@mojplaywin.com">purchase support</a> with your order reference and transaction hash. Never share seed phrases or private keys.</small></p>
+  <p><a href="/store/">Back to products</a> · <a href="/terms/">Terms</a> · <a href="/privacy/">Privacy</a></p>
+</main>
+</body>
+</html>
