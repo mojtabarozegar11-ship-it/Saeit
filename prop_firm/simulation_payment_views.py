@@ -10,7 +10,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 from .models import PropPlan1Invoice
-from .simulation_invoice_contract import PRODUCT_CODE, CONTRACT_VERSION
+from .simulation_invoice_contract import PRODUCT_CODE, SUPPORTED_CONTRACT_VERSIONS
 from .simulation_tron_reconcile import reconcile_simulation_invoice
 from .simulation_checkout_views import checkout_context
 
@@ -24,7 +24,7 @@ def owned_invoice(request, order_ref):
         raise Http404
     return get_object_or_404(PropPlan1Invoice, order_ref=order_ref,
                              simulation_owner__owner=request.user, buyer_email=request.user.email, product_code=PRODUCT_CODE,
-                             contract_version=CONTRACT_VERSION)
+                             contract_version__in=SUPPORTED_CONTRACT_VERSIONS)
 
 @never_cache
 @csrf_protect
