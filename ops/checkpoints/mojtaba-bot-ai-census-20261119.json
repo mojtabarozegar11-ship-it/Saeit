@@ -18,7 +18,10 @@
     "retirement_authorized": false,
     "deployment_performed": false,
     "deletion_performed": false,
-    "cost_created": false
+    "cost_created": false,
+    "topology_run": 44493022998,
+    "topology_run_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/44493022998",
+    "topology_gate": "MOJTABA_DUAL_HOST_GATE=PASS_OBSERVATIONS_ONLY"
   },
   "census": {
     "vps": {
@@ -68,27 +71,63 @@
     "رسید VPS استخراج و 20 رکورد و 240 کار غیرنهایی ثبت شد.",
     "رسید cPanel استخراج و 5 رکورد و 1 کار غیرنهایی ثبت شد.",
     "گیت دو سرور PASS_REGISTRY_ONLY تأیید شد.",
-    "محدودیت باقی‌مانده برای اثبات live topology مشخص شد."
+    "محدودیت باقی‌مانده برای اثبات live topology مشخص شد.",
+    "Workflow topology از main اجرا شد.",
+    "مسیر VPS از Loopback امضاشده و مسیر cPanel با fingerprint موجود تأیید شد.",
+    "7 cron در VPS و 31 cron در cPanel فقط به‌صورت مشاهده‌شده ثبت شد.",
+    "11 نقش PHP در cPanel فقط به‌صورت source-registry snapshot ثبت شد.",
+    "گیت PASS_OBSERVATIONS_ONLY تأیید شد.",
+    "عدم اثبات worker زنده یکتا و عدم مجوز retirement ثبت شد."
   ],
   "progress": {
-    "cycle_audit_gate_percent": 75,
-    "cycle_audit_gate_definition": "3 گیت از 4 گیت بسته شد: merge، اصلاح Workflow، census دو سرور؛ topology live هنوز اجرا نشده است.",
+    "cycle_audit_gate_percent": 100,
+    "cycle_audit_gate_definition": "4 گیت از 4 گیت بسته شد: merge، اصلاح Workflow، census دو سرور و topology دو میزبان؛ نتیجه فقط read-only observation است.",
     "pr_merge_percent": 100,
     "django_dual_host_census_percent": 100,
-    "live_topology_verification_percent": 0,
+    "live_topology_verification_percent": 100,
     "commercial_readiness_percent": "اندازه‌گیری نشده در این رسید",
     "overall_business_priority": "مج پراپ"
   },
   "blockers": [
-    "این رسید شمارش registry/task است، نه اثبات اجرای live agent.",
-    "یکپارچگی ادعایی فقط‌بودن mojtaba.bot.ai هنوز از topology/process census تأیید نشده است.",
-    "هیچ ادعای فعال‌بودن فروش، سیگنال‌فروشی یا درآمد از این ممیزی صادر نمی‌شود."
+    "تعداد worker زنده یکتا عمداً قابل تأیید نشد و verified_live_agents=null است.",
+    "21 هویت ثبت‌شده/منبعی به‌عنوان live bot اثبات نشده‌اند.",
+    "تحویل task پذیرفته‌شده، شمارش scheduler کامل، تطبیق receipt تاریخی و revision نهایی source هنوز موجود نیست.",
+    "بازنشستگی یا حذف historical records مجاز نیست؛ retirement_authorized=false.",
+    "آمادگی تجاری و درآمد واقعی در این ممیزی اندازه‌گیری نشده است."
   ],
   "next_plan": [
-    "اجرای Workflow topology read-only و تعیین وضعیت واقعی process/cron/source lineage.",
-    "اگر topology کامل شد، اولویت اجرایی مج پراپ: مسیر فروش، پرداخت TRX، قرارداد، کنترل ریسک و آماده‌سازی جذب مشتری.",
-    "پس از آن اتصال تجاری mojtaba.bot.ai برای سیگنال‌فروشی، بدون ادعای active بودن تا اثبات route.",
-    "سپس ممیزی درگاه TRX در همه سایت‌ها، فروشگاه MojPlayWin و بازی Moj Coin.",
-    "ثبت هر نتیجه با رسید قابل بازتولید و بدون افشای داده خصوصی."
-  ]
+    "اولویت درآمدی بدون تغییر: مج پراپ.",
+    "برای مج پراپ ابتدا receipt قابل‌قبول فروش/تحویل و مسیر پرداخت TRX را به گیت تجاری وصل کن؛ استقرار یا پرداخت بدون بررسی نهایی انجام نشود.",
+    "برای mojtaba.bot.ai مسیر canonical runtime و delivery receipt را جداگانه اثبات کن؛ نام registry به‌تنهایی کافی نیست.",
+    "پس از اثبات runtime، سیگنال‌فروشی را به‌صورت محصول دارای پلن، receipt و کنترل ریسک آماده کن.",
+    "سپس درگاه TRX همه سایت‌ها، MojPlayWin و Moj Coin را تعیین تکلیف کن.",
+    "هر چرخه بعدی باید با نتیجه قابل‌استفاده تجاری و checkpoint جدید تمام شود."
+  ],
+  "topology": {
+    "vps": {
+      "cron_entries": 7,
+      "process_state": "observed",
+      "user_services_state": "observed",
+      "system_services_state": "observed",
+      "agent_live_count": null,
+      "route_indicators_total_not_unique_workers": 0
+    },
+    "cpanel": {
+      "cron_entries": 31,
+      "process_state": "observed",
+      "user_services_state": "unavailable",
+      "system_services_state": "unavailable",
+      "php_known_role_records": 11,
+      "php_enabled_records_not_active_bots": 11,
+      "agent_live_count": null,
+      "route_indicators_total_not_unique_workers": 1
+    },
+    "sources_evaluated": 9,
+    "sources_in_manifest": 9,
+    "source_defined_identity_count_not_live_bots": 21,
+    "verified_live_agents": null,
+    "production_cutover_authorized": false,
+    "retirement_authorized": false,
+    "conclusion": "دو میزبان مشاهده شدند؛ این رسید اثبات worker زنده یکتا یا تحویل task نیست."
+  }
 }
