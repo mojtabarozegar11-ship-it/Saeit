@@ -1,4 +1,4 @@
-"""Conservative unique CLOSED-trade counting for one 28-day MOJ PROP cohort.
+"""Conservative unique CLOSED-trade counting for one 60-day simulated MOJ PROP cohort.
 
 Counts closed positions, not order requests or separate fills. Input must be
 authoritatively sourced and reconciled: one stable external position ID from
@@ -9,7 +9,7 @@ activity can satisfy the fifty-trade condition.
 from dataclasses import dataclass
 from datetime import timedelta
 
-from .social_policy import aware_utc, DURATION_DAYS
+from .social_policy import aware_utc
 from .rules import POLICY
 
 
@@ -26,7 +26,7 @@ class ChallengeTradeCount:
 
 def count_challenge_trades(executions, *, paid_at, required=50):
     start = aware_utc(paid_at, "paid_at")
-    end = start + timedelta(days=DURATION_DAYS)
+    end = start + timedelta(days=POLICY.challenge_window_days)
     # A caller must not defeat v1.2 qualification by requesting fewer than
     # the owner-approved fifty independently verified closed positions.
     if type(required) is not int or required < POLICY.min_closed_trades_per_challenge:
