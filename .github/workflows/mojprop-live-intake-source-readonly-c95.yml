@@ -137,6 +137,18 @@ jobs:
           set -euo pipefail
           work="$RUNNER_TEMP/mojprop-source-c95"
           timeout 90s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mpw_live_release_readiness_readonly_20261119.py | python3 -c 'import json,sys; p="MPW_RELEASE_READONLY="; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["read_only"] is True and d["release_authorized"] is False; print(rows[0])'
+      - name: Observe existing receipt evidence without financial writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 90s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py | python3 -c 'import json,sys; p="MPW_TRX_CANARY_RECEIPT_READONLY="; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["read_only"] is True and d["no_host_changes_or_financial_writes"] is True; print(rows[0])'
+      - name: Probe two finalized TRON heads from cPanel without any transfer
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 35s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < scripts/mpw_tron_finalized_heads_readonly_20261119.py
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
