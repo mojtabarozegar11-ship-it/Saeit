@@ -7,7 +7,7 @@ from django.utils import timezone
 from core.models import Agent, AuditLog
 from core.mojtaba_site_fleet import CANONICAL_BOT, ROUTES
 from core.mojtaba_site_receipts import (
-    ACTION, record_public_cycle, inspect_public_monitor_continuity
+    ACTION, CLAIM, record_public_cycle, inspect_public_monitor_continuity
 )
 
 
@@ -29,6 +29,22 @@ class MonitorContinuityTests(TestCase):
             active=True,
         )
 
+    def claim(self, cycle_id):
+        agent = Agent.objects.get(code="mojtaba-bot-ai")
+        AuditLog.objects.create(actor_type="system", actor_id="mojtaba-bot-ai",
+            action=CLAIM, target_type="Agent", target_id=str(agent.pk), trace_id=cycle_id,
+            before_state={}, after_state={"canonical_identity": "mojtaba-bot-ai",
+                "effect": "read", "automatic_retry": False})
+
+    def test_claimless_historical_receipts_do_not_qualify(self):
+        self.claim("a"*32)
+        record_public_cycle(public_report(), cycle_id="a"*32)
+        AuditLog.objects.filter(trace_id="a"*32).update(created_at=timezone.now()-timedelta(minutes=10))
+        self.claim("b"*32)
+        record_public_cycle(public_report(), cycle_id="b"*32)
+        AuditLog.objects.filter(action=CLAIM, trace_id="a"*32).delete()
+        self.assertFalse(inspect_public_monitor_continuity()["all_public_monitors_have_two_cycles"])
+
     def test_no_receipts_is_not_ready(self):
         result = inspect_public_monitor_continuity()
         self.assertFalse(result["all_public_monitors_have_two_cycles"])
@@ -37,10 +53,12 @@ class MonitorContinuityTests(TestCase):
             self.assertEqual(state["successful_public_observation_receipts_24h"], 0)
 
     def test_two_separate_receipts_spaced_five_minutes_count(self):
+        self.claim("1"*32)
         record_public_cycle(public_report(), cycle_id="1" * 32)
-        AuditLog.objects.filter(action=ACTION, trace_id="1"*32).update(
+        AuditLog.objects.filter(trace_id="1"*32).update(
             created_at=timezone.now() - timedelta(minutes=10)
         )
+        self.claim("2"*32)
         record_public_cycle(public_report(), cycle_id="2" * 32)
         result = inspect_public_monitor_continuity()
         self.assertTrue(result["all_public_monitors_have_two_cycles"])
@@ -49,15 +67,18 @@ class MonitorContinuityTests(TestCase):
         self.assertFalse(result["legacy_host_cleanup_authorized"])
 
     def test_two_fast_replays_do_not_qualify(self):
+        self.claim("3"*32)
         record_public_cycle(public_report(), cycle_id="3" * 32)
+        self.claim("4"*32)
         record_public_cycle(public_report(), cycle_id="4" * 32)
         self.assertFalse(inspect_public_monitor_continuity()[
             "all_public_monitors_have_two_cycles"
         ])
 
     def test_duplicate_target_record_invalidates_one_cycle(self):
+        self.claim("5"*32)
         record_public_cycle(public_report(), cycle_id="5" * 32)
-        AuditLog.objects.filter(action=ACTION, trace_id="5"*32).update(
+        AuditLog.objects.filter(trace_id="5"*32).update(
             created_at=timezone.now() - timedelta(minutes=10)
         )
         AuditLog.objects.create(
@@ -66,6 +87,7 @@ class MonitorContinuityTests(TestCase):
             target_id="mojplaywin", trace_id="5"*32,
             after_state={"all_public_routes_ok": True},
         )
+        self.claim("6"*32)
         record_public_cycle(public_report(), cycle_id="6" * 32)
         result = inspect_public_monitor_continuity()
         self.assertFalse(result["sites"]["mojplaywin"][
@@ -77,10 +99,12 @@ class MonitorContinuityTests(TestCase):
         first = public_report()
         first["observations"][0]["state"] = "unverified"
         first["observations"][0]["response_sha256"] = None
+        self.claim("7"*32)
         record_public_cycle(first, cycle_id="7" * 32)
-        AuditLog.objects.filter(action=ACTION, trace_id="7"*32).update(
+        AuditLog.objects.filter(trace_id="7"*32).update(
             created_at=timezone.now() - timedelta(minutes=10)
         )
+        self.claim("8"*32)
         record_public_cycle(public_report(), cycle_id="8" * 32)
         result = inspect_public_monitor_continuity()
         self.assertFalse(result["sites"]["zomorodmelal"]["two_distinct_spaced_cycles"])

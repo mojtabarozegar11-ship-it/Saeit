@@ -16,6 +16,7 @@ from .models import Agent, AuditLog
 from .mojtaba_site_fleet import CANONICAL_BOT, ROUTES, SiteFleetError
 
 ACTION = "mojtaba_site_public_monitor"
+CLAIM = "mojtaba_site_cycle_claimed"
 ACTOR = "mojtaba-bot-ai"
 QUALITY_ISSUES = frozenset({
     "missing_title", "title_over_100_chars", "h1_count_not_one",
@@ -119,6 +120,12 @@ def summarize_public_cycle(report):
     return result
 
 
+def valid_claim(claim, agent):
+    return (claim.target_type == "Agent" and claim.target_id == str(agent.pk)
+            and claim.after_state == {"canonical_identity": ACTOR, "effect": "read",
+                                      "automatic_retry": False})
+
+
 def record_public_cycle(report, *, cycle_id):
     """Atomically insert two site receipts, idempotent under canonical DB lock."""
     if not isinstance(cycle_id, str) or not CYCLE_ID.fullmatch(cycle_id):
@@ -128,6 +135,10 @@ def record_public_cycle(report, *, cycle_id):
         agent = Agent.objects.select_for_update().filter(code=ACTOR, active=True).first()
         if agent is None:
             raise SiteFleetError("CANONICAL_AGENT_NOT_PROVISIONED")
+        claims = list(AuditLog.objects.filter(actor_type="system", actor_id=ACTOR,
+                    action=CLAIM, trace_id=cycle_id)[:2])
+        if len(claims) != 1 or not valid_claim(claims[0], agent):
+            raise SiteFleetError("CANONICAL_CYCLE_CLAIM_REQUIRED")
         old = list(AuditLog.objects.filter(
             actor_type="system", actor_id=ACTOR,
             action=ACTION, trace_id=cycle_id
@@ -173,6 +184,12 @@ def inspect_public_monitor_continuity(*, now=None):
             "target_id", "trace_id", "created_at", "after_state",
         )[:250]
     )
+    agent = Agent.objects.filter(code=ACTOR, active=True).first()
+    claims = {}
+    if agent is not None:
+        for claim in AuditLog.objects.filter(actor_type="system", actor_id=ACTOR,
+                action=CLAIM, trace_id__in={r["trace_id"] for r in records}):
+            claims.setdefault(claim.trace_id, []).append(claim)
     results = {}
     for tenant, roles in ROUTES.items():
         # No trust in missing identifiers or duplicated audit rows.
@@ -188,6 +205,10 @@ def inspect_public_monitor_continuity(*, now=None):
                     and len(items) == 1):
                 continue
             item = items[0]
+            matching = claims.get(key, [])
+            if (len(matching) != 1 or not valid_claim(matching[0], agent)
+                    or matching[0].created_at > item["created_at"]):
+                continue
             state = item.get("after_state")
             if not isinstance(state, dict):
                 continue
@@ -198,6 +219,14 @@ def inspect_public_monitor_continuity(*, now=None):
                     or state.get("legacy_agent_retirement_authorized") is not False
                     or not isinstance(state.get("sha256_public_observations"), str)
                     or not SHA.fullmatch(state["sha256_public_observations"])):
+                continue
+            health = state.get("role_health_results")
+            if (not isinstance(health, list) or len(health) != len(roles)
+                    or any(not isinstance(row, dict) or set(row) != {"role", "state", "response_sha256"}
+                           or not isinstance(row["role"], str) or row["state"] != "http_probe_ok"
+                           or not isinstance(row["response_sha256"], str)
+                           or not SHA.fullmatch(row["response_sha256"]) for row in health)
+                    or {row["role"] for row in health} != set(roles)):
                 continue
             good.append(item["created_at"])
         times = sorted(good)

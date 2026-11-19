@@ -6,7 +6,7 @@ from django.test import TestCase
 
 from core.models import Agent, AuditLog
 from core.mojtaba_site_fleet import CANONICAL_BOT, ROUTES, SiteFleetError
-from core.mojtaba_site_receipts import record_public_cycle, summarize_public_cycle, ACTION
+from core.mojtaba_site_receipts import record_public_cycle, summarize_public_cycle, ACTION, CLAIM
 
 
 def report():
@@ -27,8 +27,21 @@ class ReceiptTests(TestCase):
         Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba.bot",
                              mission="two-site public observability", active=True)
 
+    def claim(self, cycle_id):
+        agent = Agent.objects.get(code="mojtaba-bot-ai")
+        AuditLog.objects.create(actor_type="system", actor_id="mojtaba-bot-ai",
+            action=CLAIM, target_type="Agent", target_id=str(agent.pk), trace_id=cycle_id,
+            before_state={}, after_state={"canonical_identity": "mojtaba-bot-ai",
+                "effect": "read", "automatic_retry": False})
+
+    def test_unclaimed_report_refused(self):
+        with self.assertRaisesRegex(SiteFleetError, "CLAIM_REQUIRED"):
+            record_public_cycle(report(), cycle_id="0"*32)
+        self.assertFalse(AuditLog.objects.filter(action=ACTION).exists())
+
     def test_actual_two_site_auditlog_records_and_idempotent_replay(self):
         payload = report()
+        self.claim("f"*32)
         result = record_public_cycle(payload, cycle_id="f"*32)
         self.assertTrue(result["written"])
         self.assertEqual(result["site_receipts"], 2)
@@ -43,6 +56,7 @@ class ReceiptTests(TestCase):
 
     def test_replayed_id_with_changed_output_is_refused(self):
         payload = report()
+        self.claim("e"*32)
         record_public_cycle(payload, cycle_id="e"*32)
         payload["observations"][0]["state"] = "unverified"
         payload["observations"][0]["response_sha256"] = None
@@ -66,6 +80,7 @@ class ReceiptTests(TestCase):
     def test_customer_payload_is_discarded_not_persisted(self):
         payload = report()
         payload["observations"][0]["secret_internal_value"] = "MUST_NOT_STORE"
+        self.claim("b"*32)
         record_public_cycle(payload, cycle_id="b"*32)
         for row in AuditLog.objects.filter(action=ACTION):
             self.assertNotIn("MUST_NOT_STORE", str(row.after_state))
@@ -79,6 +94,7 @@ class ReceiptTests(TestCase):
             "source_content_logged": False, "private_title": "MUST_NOT_STORE"
         }
         payload["observations"][0]["site_html_quality"] = expected
+        self.claim("9"*32)
         record_public_cycle(payload, cycle_id="9"*32)
         row = AuditLog.objects.get(action=ACTION, target_id="zomorodmelal")
         self.assertEqual(row.after_state["structural_qa_reported_roles"], 1)
@@ -119,6 +135,7 @@ class ReceiptTests(TestCase):
         commerce = next(x for x in payload["observations"]
                         if x["tenant"] == "zomorodmelal" and x["role"] == "commerce")
         commerce.update(state="unverified", http_status=503, response_sha256=None)
+        self.claim("6"*32)
         record_public_cycle(payload, cycle_id="6" * 32)
         row = AuditLog.objects.get(action=ACTION, target_id="zomorodmelal").after_state
         self.assertEqual({x["role"] for x in row["role_health_results"]}, set(ROUTES["zomorodmelal"]))

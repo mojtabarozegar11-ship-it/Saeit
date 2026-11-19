@@ -9,9 +9,8 @@ from ava_core.capabilities import ActionRequest, CapabilityHub
 from core.models import Agent, AuditLog
 from core.mojtaba_site_adapter import site_capability
 from core.mojtaba_site_fleet import SiteFleetError
-from core.mojtaba_site_receipts import ACTION, ACTOR, CYCLE_ID, record_public_cycle
+from core.mojtaba_site_receipts import ACTION, ACTOR, CLAIM, CYCLE_ID, record_public_cycle
 
-CLAIM = "mojtaba_site_cycle_claimed"
 
 def execute_site_cycle(cycle_id, *, transport=None):
     if not isinstance(cycle_id, str) or not CYCLE_ID.fullmatch(cycle_id):
