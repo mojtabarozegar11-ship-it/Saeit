@@ -1,13 +1,13 @@
 """Ten MOJ PROP business plans over one shared, audited challenge ruleset.
 
-Plan 1 uses the owner-confirmed 30 TRX / nominal simulated USD 1,000 model. Plans 2..10
+Plan 1 preserves the owner-confirmed 30 TRX / 100 USD model. Plans 2..10
 are proposed differentiated *starting capital tiers*, with their own quoted
 TRX fees. Prices are recommendations for review, NOT published checkout quotes,
 real funding promises, or verified financial return. Every plan uses the SAME
 28-day two-stage evaluation, at least 50 independently verified closed
-positions, with social retention kept at 28 days separately from the trading window.
+positions, and the one Instagram plus one Facebook post held 28 days.
 
-The owner directs Plan 1 as the sole priority, but simulation and reward-reserve gates remain required. This assertion is NOT an
+The owner declares Plan 1 funded and operational. This assertion is NOT an
 independently audited bank/broker balance or proof of live customer checkout.
 Plans 2-10 are explicitly on temporary funding hold, irrespective of how many
 paper attestations become true. A buyer agreement must bind plan and fee.
@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from .rules import LEVELS, POLICY
-from .simulation_policy import SIMULATION_POLICY
 
 PLAN_PREFIX = "MOJ-PROP-"
 ALL_PLANS_SELLABLE = False
@@ -29,8 +28,6 @@ class ChallengePlan:
     number: int
     code: str
     entry_fee_trx: Decimal
-    retry_fee_trx: Decimal
-    retry_discount_pct: Decimal
     starting_tier_index: int
     starting_capital_usd: Decimal
     maximum_capital_usd: Decimal
@@ -59,13 +56,9 @@ class ChallengePlan:
     checkout_enabled: bool = False
     account_activation_enabled: bool = False
     prices_approved_for_public_sale: bool = False
-    account_mode: str = SIMULATION_POLICY.account_mode
-    payout_mode: str = SIMULATION_POLICY.payout_mode
-    virtual_principal_withdrawable: bool = SIMULATION_POLICY.virtual_principal_withdrawable
-    customer_deposit_required: bool = SIMULATION_POLICY.customer_deposit_required
 
 
-# Numbers are provisional except Plan 1's owner-specified 30 TRX and 18 TRX retry fee. Higher fees
+# Numbers are provisional except plan 1's owner-specified 30 TRX. Higher fees
 # are internal proposed prices. Do not turn on customer billing using them.
 PROPOSED_TIERS_AND_TRX = (
     (0, "30"), (1, "45"), (2, "75"), (3, "120"), (4, "200"),
@@ -78,8 +71,6 @@ def _make_plan(number, starting_tier_index, fee):
         number=number,
         code=f"{PLAN_PREFIX}{number:02d}",
         entry_fee_trx=Decimal(fee),
-        retry_fee_trx=SIMULATION_POLICY.retry_fee_trx,
-        retry_discount_pct=SIMULATION_POLICY.retry_discount_pct,
         starting_tier_index=starting_tier_index,
         starting_capital_usd=LEVELS[starting_tier_index],
         maximum_capital_usd=LEVELS[-1],
@@ -100,7 +91,7 @@ def _make_plan(number, starting_tier_index, fee):
         trader_bots_allowed=POLICY.trader_bots_allowed,
         business_status=(OWNER_ACTIVE_STATUS if number == 1 else FUNDING_HOLD_STATUS),
         entry_fee_owner_confirmed=(number == 1),
-        capital_funded_owner_declared=False,
+        capital_funded_owner_declared=(number == 1),
         business_active_owner_declared=(number == 1),
         temporary_owner_hold=(number > 1),
     )
@@ -145,8 +136,6 @@ def plan_public_summary(plan):
         "fee_trx_proposed": str(plan.entry_fee_trx),
         "entry_fee_owner_confirmed": plan.entry_fee_owner_confirmed,
         "fee_is_final_for_sale": False,
-        "retry_fee_trx": str(plan.retry_fee_trx),
-        "retry_discount_pct": str(plan.retry_discount_pct),
         "business_status": plan.business_status,
         "capital_funded_owner_declared": plan.capital_funded_owner_declared,
         "business_active_owner_declared": plan.business_active_owner_declared,
@@ -158,8 +147,4 @@ def plan_public_summary(plan):
         "bots_allowed": plan.trader_bots_allowed,
         "checkout_enabled": False,
         "real_funding_guaranteed": False,
-        "account_mode": plan.account_mode,
-        "payout_mode": plan.payout_mode,
-        "virtual_principal_withdrawable": plan.virtual_principal_withdrawable,
-        "customer_deposit_required": plan.customer_deposit_required,
     }
