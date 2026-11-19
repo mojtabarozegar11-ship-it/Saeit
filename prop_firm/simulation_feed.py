@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
-from typing import Iterable, Optional
+from typing import Optional
 
 from .simulation_engine import MarketQuote
 
@@ -56,7 +56,8 @@ class QuoteEnvelope:
                 "symbols": list(self.attestation.symbols),
                 "issued_at": self.attestation.issued_at,
                 "expires_at": self.attestation.expires_at,
-                "payload_digest": self.attestation.payload_digest,
+                # The signed digest is carried outside the canonical payload
+                # to avoid a self-referential hash.
             },
             "previous_envelope_digest": self.previous_envelope_digest,
         }
