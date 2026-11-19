@@ -303,6 +303,7 @@ class FourWeekProofTests(TestCase):
         self.assertTrue(phase_one["social_posting"].satisfied)
         self.assertTrue(phase_one["assessment"].passed)
         self.phase1.status=PropAccount.Status.PASSED
+        self.phase1.closed_at=START+timedelta(days=6)
         self.phase1.save()
         phase_two=account_projection(self.phase2)
         self.assertTrue(phase_two["social_posting"].satisfied)
@@ -318,6 +319,7 @@ class FourWeekProofTests(TestCase):
         self.review(self.submit("instagram"))
         self.review(self.submit("facebook"))
         self.phase1.status=PropAccount.Status.PASSED
+        self.phase1.closed_at=START+timedelta(days=6)
         self.phase1.save()
         result=account_projection(self.phase2)
         self.assertEqual(result["challenge_trade_count"].valid_closed_positions,49)
@@ -332,6 +334,7 @@ class FourWeekProofTests(TestCase):
         self.review(self.submit("instagram"))
         self.review(self.submit("facebook"))
         self.phase1.status=PropAccount.Status.PASSED
+        self.phase1.closed_at=START+timedelta(days=6)
         self.phase1.save()
         result=account_projection(self.phase2)
         self.assertEqual(result["challenge_trade_count"].valid_closed_positions,13)
