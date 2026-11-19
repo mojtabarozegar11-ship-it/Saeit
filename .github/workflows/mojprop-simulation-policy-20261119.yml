@@ -27,6 +27,7 @@ jobs:
             prop_firm/simulation_feed.py \
             prop_firm/simulation_readiness.py \
             prop_firm/synthetic_sale.py \
+            prop_firm/reward_reserve.py \
             prop_firm/rules.py \
             prop_firm/plans.py \
             prop_firm/challenge_commerce.py \
@@ -37,12 +38,14 @@ jobs:
             tests/test_prop_simulation_engine.py \
             tests/test_prop_simulation_feed.py \
             tests/test_prop_simulation_readiness.py \
-            tests/test_prop_synthetic_sale.py
-      - name: Run simulation policy, engine, feed, readiness and sale tests
+            tests/test_prop_synthetic_sale.py \
+            tests/test_prop_reward_reserve.py
+      - name: Run simulation, sale and reserve tests
         run: |
           python -m unittest \
             tests/test_prop_simulation_policy.py \
             tests/test_prop_simulation_engine.py \
             tests/test_prop_simulation_feed.py \
             tests/test_prop_simulation_readiness.py \
-            tests/test_prop_synthetic_sale.py -v
+            tests/test_prop_synthetic_sale.py \
+            tests/test_prop_reward_reserve.py -v
