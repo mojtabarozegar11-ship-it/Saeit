@@ -11,7 +11,7 @@ jobs:
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     env:
-      HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+      HOST_KEY: \${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,8 +47,7 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$work/config"
-          printf '%s
-' "$work" > "$RUNNER_TEMP/mpw-provenance-v6-path"
+          printf '%s\n' "$work" > "$RUNNER_TEMP/mpw-provenance-v6-path"
 
       - name: Read metadata only
         shell: bash
@@ -81,5 +80,4 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s
-' 'READ_ONLY=1' 'CONTENT_READ=0' 'TEMPORARY_FILES=0' 'DELETION=0' 'DEPLOYMENT=0' 'EXTERNAL_TRANSFER=0' 'RESTORE=0'
+          printf '%s\n' 'READ_ONLY=1' 'CONTENT_READ=0' 'TEMPORARY_FILES=0' 'DELETION=0' 'DEPLOYMENT=0' 'EXTERNAL_TRANSFER=0' 'RESTORE=0'
