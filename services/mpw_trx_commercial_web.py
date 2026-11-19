@@ -133,7 +133,7 @@ def _show_invoice(request, invoice_id):
     from django.http import Http404,HttpResponse
     from django.utils import timezone
     from django.middleware.csrf import get_token
-    _ensure_live(request)
+    _ensure_live(request,for_paid_read=True)
     intent=_get_owner_invoice(request,invoice_id)
     try:
         invoice=_decode(intent)
@@ -152,6 +152,7 @@ def _show_invoice(request, invoice_id):
             'or contact support with your order number.</p>'
             '<p>For a fresh quote, open the product again from the '
             '<a href="/store/">store</a>.</p>')
+    _ensure_live(request)  # Never display a payable quote while new issuance is paused.
     html,csp=render_one_tap_invoice(invoice,
         status_path=f"/commerce/trx-easy/status/{invoice_id}/")
     # Include a same-origin, CSRF-protected POST path. The GET status endpoint
@@ -180,10 +181,15 @@ def _reconcile_invoice(request, invoice_id):
     from django.http import JsonResponse
     from services.mpw_walletless_commercial_intent import reconcile_commercial_intent_from_candidates
     from services.mpw_tron_readonly_deposit_candidates import find_candidate_hashes
-    from services.mpw_trx_commercial_chain import read_only_independent_pair
+    from django.core.cache import cache
     _ensure_live(request,for_paid_read=True)
-    _get_owner_invoice(request,invoice_id)
+    intent = _get_owner_invoice(request,invoice_id)
+    if intent.status != WAITING or not cache.add(
+        f"mpw-trx-reconcile:{invoice_id}", 1, timeout=90
+    ):
+        return _nocache(JsonResponse(commercial_buyer_status(invoice_id,request.user.pk)))
     try:
+        from services.mpw_trx_commercial_chain import read_only_independent_pair
         reconcile_commercial_intent_from_candidates(
             invoice_id, request.user.pk, server_lookup=find_candidate_hashes,
             pair=read_only_independent_pair(),

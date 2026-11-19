@@ -16,6 +16,20 @@ def can_access_purchased_digital_item(item_id,customer_id):
                   order__status="paid").first())
     if item is None:
         return False
+    # Native walletless TRX uses PaymentIntent + finalized event + credit,
+    # not the signed CommerceInvoice receipt format. Keep both paths separate.
+    from core.models import PaymentIntent
+    from core.crown_tron_receipts import verified_walletless_credit
+    intent = PaymentIntent.objects.filter(order=item.order, provider="mpw_walletless_trx_v1").first()
+    if intent is not None:
+        if CommerceInvoice.objects.filter(order=item.order).exists():
+            return False
+        if not verified_walletless_credit(item.order, intent):
+            return False
+        return CommerceFulfillment.objects.filter(
+            item=item, kind=CommerceFulfillment.Kind.DIGITAL,
+            status__in=(CommerceFulfillment.Status.READY, CommerceFulfillment.Status.COMPLETE),
+        ).exists()
     # Existing paid buyer rights are keyed to the durable grant; unpublishing
     # a product afterwards does not silently revoke an already-paid download.
     try:

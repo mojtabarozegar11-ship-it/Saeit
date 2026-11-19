@@ -42,7 +42,7 @@ REQUIRED = (
     "mpw_commerce/entitlements.py",
     "mpw_commerce/policy.py",
     "mpw_commerce/settlement.py",
-    "core/migrations/0049_mpw_guest_email_recovery.py",
+    "core/migrations/0047_mpw_guest_email_recovery.py",
 )
 
 
