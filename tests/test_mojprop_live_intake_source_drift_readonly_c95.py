@@ -104,17 +104,6 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
                          "505a1d237e3deb156e7e394e94b1c34ddf1e0071")
 
 
-    def test_canonical_intake_and_simulation_paths_remain_distinct(self):
-        from django.urls import resolve
-        for path, name in (
-            ("/moj-prop-intake/", "mojprop_intake"),
-            ("/moj-prop/intake/", "mojprop_intake_legacy"),
-            ("/moj-prop/", "moj_prop_landing"),
-            ("/moj-prop/account/login/", "moj_prop_simulation_login"),
-            ("/moj-prop/checkout/start/", "moj_prop_simulation_checkout"),
-        ):
-            self.assertEqual(resolve(path).url_name, name)
-
     def test_all_pins_match_exact_reviewed_source_bytes_in_this_commit(self):
         # A reviewed source-only PR must pin its exact Git blob without treating it as proof of public deployment.
         # The live host probe compares these fixed hashes without uploading

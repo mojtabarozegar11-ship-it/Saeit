@@ -23,3 +23,14 @@ class SimulationRuntimeAuditTests(TestCase):
         self.assertNotIn("not-a-public-receiving-address", out.getvalue())
         self.assertEqual(PropSimulationAccount.objects.count(), 0)
         self.assertEqual(PropPlan1Invoice.objects.count(), 0)
+
+    def test_canonical_intake_and_simulation_paths_remain_distinct(self):
+        from django.urls import resolve
+        for path, name in (
+            ("/moj-prop-intake/", "mojprop_intake"),
+            ("/moj-prop/intake/", "mojprop_intake_legacy"),
+            ("/moj-prop/", "moj_prop_landing"),
+            ("/moj-prop/account/login/", "moj_prop_simulation_login"),
+            ("/moj-prop/checkout/start/", "moj_prop_simulation_checkout"),
+        ):
+            self.assertEqual(resolve(path).url_name, name)
