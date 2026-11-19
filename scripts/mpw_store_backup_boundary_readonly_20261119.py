@@ -3,6 +3,7 @@ Run as the existing cPanel account with the existing Python interpreter and -B.
 No dump, migration, mail, restart, or backup creation; no identifiers in output.
 """
 import json
+import math
 import os
 from pathlib import Path
 import pwd
@@ -53,7 +54,7 @@ def quota_fields(document):
         document.get("func") != "get_local_quota_info"):
         raise ValueError("unexpected quota response")
     result = document["result"]
-    if result.get("status") != 1 or result.get("errors"):
+    if type(result.get("status")) is not int or result["status"] != 1 or result.get("errors") or result.get("warnings"):
         raise ValueError("quota unavailable")
     data = result["data"]
     keys = ("bytes_used", "byte_limit", "inodes_used", "inode_limit")
@@ -64,18 +65,46 @@ def quota_fields(document):
             "local_inode_headroom": max(0, data["inode_limit"]-data["inodes_used"]) if data["inode_limit"] else None,
             "account_total_quota_proven": False}
 
-def quota():
+def account_quota_fields(document):
+    """Validate account-wide quota separately; never infer it from statvfs."""
+    if document.get("module") != "Quota" or document.get("func") != "get_quota_info":
+        raise ValueError("unexpected account quota response")
+    result = document["result"]
+    if type(result.get("status")) is not int or result["status"] != 1 or result.get("errors") or result.get("warnings"):
+        raise ValueError("account quota unavailable or ambiguous")
+    data = result["data"]
+    disk = ("megabyte_limit", "megabytes_used", "megabytes_remain")
+    inode = ("inode_limit", "inodes_used", "inodes_remain")
+    flags = ("under_megabyte_limit", "under_inode_limit", "under_quota_overall")
+    if any(type(data.get(k)) not in (int,float) or not math.isfinite(data[k]) or data[k] < 0 for k in disk):
+        raise ValueError("invalid account disk counters")
+    if any(type(data.get(k)) is not int or data[k] < 0 for k in inode):
+        raise ValueError("invalid account inode counters")
+    if any(type(data.get(k)) is not int or data[k] not in (0,1) for k in flags):
+        raise ValueError("invalid account quota status")
+    # Zero means unlimited/disabled, not known usable capacity.
+    disk_remaining = min(data["megabytes_remain"], max(0, data["megabyte_limit"] - data["megabytes_used"])) if data["megabyte_limit"] else None
+    inode_remaining = min(data["inodes_remain"], max(0, data["inode_limit"] - data["inodes_used"])) if data["inode_limit"] else None
+    return {**{k: data[k] for k in disk + inode + flags},
+            "account_disk_headroom_reported_mb": disk_remaining,
+            "account_inode_headroom_reported": inode_remaining,
+            "account_total_quota_observed": True,
+            "backup_capacity_proven": False}
+
+def quota(function="get_local_quota_info"):
+    if function not in ("get_local_quota_info", "get_quota_info"):
+        raise ValueError("unsupported read-only quota function")
     st = UAPI.stat()
     if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022:
         raise ValueError("unsafe UAPI executable")
-    p = subprocess.run([str(UAPI), "--output=json", "Quota", "get_local_quota_info"],
+    p = subprocess.run([str(UAPI), "--output=json", "Quota", function],
                        capture_output=True, timeout=20, check=True)
     if len(p.stdout) > 65536:
         raise ValueError("quota response too large")
-    return quota_fields(json.loads(p.stdout))
+    return (quota_fields if function == "get_local_quota_info" else account_quota_fields)(json.loads(p.stdout))
 
 def inspect():
-    out = {"schema": "mpw.store_backup_boundary.readonly.v1", "read_only": True,
+    out = {"schema": "mpw.store_backup_boundary.readonly.v2", "read_only": True,
            "customer_rows_read": False, "dump_executed": False,
            "restore_verified": False, "release_authorized": False}
     if pwd.getpwuid(os.getuid()).pw_name != OWNER or ROOT.resolve() != ROOT:
@@ -85,6 +114,10 @@ def inspect():
         out["local_quota"] = quota()
     except Exception as exc:
         out["quota_error_type"] = type(exc).__name__
+    try:
+        out["account_quota"] = quota("get_quota_info")
+    except Exception as exc:
+        out["account_quota_error_type"] = type(exc).__name__
     try:
         if DEST.resolve() == DEST and DEST.is_dir():
             st = DEST.stat()
