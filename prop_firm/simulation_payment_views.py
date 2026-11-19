@@ -1,5 +1,6 @@
 """Customer reconciliation: transaction IDs are untrusted hints, never payment proofs."""
 import re
+from dataclasses import replace
 from hashlib import sha256
 from django.conf import settings
 from django.core.cache import cache
@@ -10,7 +11,8 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 from .models import PropPlan1Invoice
-from .simulation_invoice_contract import PRODUCT_CODE, SUPPORTED_CONTRACT_VERSIONS
+from .simulation_invoice_contract import PRODUCT_CODE, SUPPORTED_CONTRACT_VERSIONS, COMMERCIAL_CONTRACT_VERSION, FEES_SUN
+from .simulation_retry import RETRY_PREFIX
 from .simulation_tron_reconcile import reconcile_simulation_invoice
 from .simulation_checkout_views import checkout_context
 
@@ -58,7 +60,16 @@ def simulation_invoice_detail(request, order_ref):
     # Preserve past buyer reconciliation even while new sales are suspended.
     context = checkout_context(request) if invoice.status == "pending" and enabled else {}
     contract = context.get("simulation_contract")
-    payment_instructions = bool(contract and invoice.purchase_kind == "first"
+    # A retry was admitted under the locked source-account replay at invoice
+    # creation. Do not show a payment address on legacy or mismatched contracts.
+    if (contract and invoice.purchase_kind == "retry"
+            and invoice.order_ref.startswith(RETRY_PREFIX)
+            and invoice.contract_version == COMMERCIAL_CONTRACT_VERSION):
+        contract = replace(contract, purchase_kind="retry")
+    payment_instructions = bool(contract
+        and invoice.purchase_kind == contract.purchase_kind
+        and invoice.amount_sun == FEES_SUN.get(contract.purchase_kind)
+        and invoice.contract_version == contract.version
         and contract.digest() == invoice.contract_digest
         and contract.recipient == invoice.recipient)
     return render(request, "mojplaywin/moj_prop_simulation_invoice.html", {
