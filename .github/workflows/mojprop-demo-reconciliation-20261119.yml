@@ -1,0 +1,29 @@
+name: MOJ PROP demo reconciliation
+
+on:
+  push:
+    branches:
+      - feature/mojprop-demo-reconciliation-20261119
+  pull_request:
+    branches:
+      - feature/mojprop-litefinance-demo-contract-20261119
+
+permissions:
+  contents: read
+
+jobs:
+  exact-reconciliation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile isolated contract and reconciliation
+        run: |
+          python -m py_compile \
+            prop_firm/plan1_litefinance_demo_contract.py \
+            prop_firm/plan1_demo_reconciliation.py \
+            tests/test_prop_plan1_demo_reconciliation.py
+      - name: Run reconciliation tests
+        run: python -m unittest tests/test_prop_plan1_demo_reconciliation.py -v
