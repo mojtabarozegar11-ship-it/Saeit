@@ -44,6 +44,10 @@ def moj_prop_landing(request, lang="en"):
     if lang == "en":
         from prop_firm.simulation_checkout_views import checkout_page_context
         data.update(checkout_page_context(request))
+        from prop_firm.simulation_identity_views import available
+        from prop_firm.simulation_identity import is_verified_simulation_user
+        data["simulation_identity_available"] = available(request)
+        data["simulation_identity_verified"] = is_verified_simulation_user(request.user) if available(request) else False
     template = "mojplaywin/moj_prop_simulation.html" if lang == "en" else "mojplaywin/moj_prop.html"
     response = render(request, template, data)
     # The CSRF token is per browser; shared caching can leak or break it.
