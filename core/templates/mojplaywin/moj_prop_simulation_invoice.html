@@ -8,7 +8,7 @@
 <p>Status: {{ status }}</p>
 {% if verification_error %}<p role="alert">{{ verification_error }}</p>{% endif %}
 {% if status == "pending" and show_payment_instructions %}
-<p>Amount: 30 TRX ({{ amount_sun }} SUN). Network: {{ network }}.</p>
+<p>Amount: {% if amount_sun == 18000000 %}18{% else %}30{% endif %} TRX ({{ amount_sun }} SUN). Network: {{ network }}.</p>
 <p>Recipient: <code>{{ recipient }}</code></p>
 <p>Required transaction memo: <code>{{ order_ref }}</code></p>
 <p>Only use a wallet that supports a TRON transaction memo. If your wallet cannot attach this exact memo, do not pay.</p>
