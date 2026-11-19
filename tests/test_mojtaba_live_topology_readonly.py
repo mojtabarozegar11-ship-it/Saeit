@@ -540,3 +540,16 @@ def test_verified_owner_loopback_precedes_public_fallback_and_keeps_manual_guard
     assert "StrictHostKeyChecking=no" not in workflow
     assert "sudo " not in workflow
     assert 'github.ref == \'refs/heads/main\'' in workflow
+
+
+def test_php_site_cli_is_an_explicit_redacted_scheduler_and_process_indicator():
+    private = "/home/private/site_agent_cycle_cli.php"
+    command = "/usr/bin/php " + private + " TOKEN=do-not-log"
+    assert observer.route_flags(command) == ["site_agent_cycle_cli.php"]
+    rows = observer.safe_cron("5 * * * * " + command + "\n")
+    assert rows[0]["known_route_flags"] == ["site_agent_cycle_cli.php"]
+    processes = observer.safe_processes(command)
+    assert processes["route_match_counts"] == {"site_agent_cycle_cli.php": 1}
+    assert private not in json.dumps([rows, processes])
+    assert "do-not-log" not in json.dumps([rows, processes])
+    assert processes["process_identity_proven"] is False
