@@ -38,6 +38,9 @@ def inspect(path: Path) -> list[str]:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return ["POLICY_FILE_UNREADABLE"]
+    # Do not lint this gate against its own detection patterns.
+    if path.name == Path(__file__).name and path.resolve() == Path(__file__).resolve():
+        return []
     if path == LEGACY_DISABLED:
         return [] if legacy_is_fail_closed(text) else ["LEGACY_PRECOMPRESSION_NOT_DISABLED"]
     findings: list[str] = []
