@@ -1,7 +1,7 @@
 from decimal import Decimal as D
 from types import SimpleNamespace
 from unittest import TestCase
-from prop_firm.simulation_completion import completion_evidence
+from prop_firm.simulation_completion import completion_evidence, review_completion
 
 class SimulationCompletionTests(TestCase):
     def state(self, **overrides):
@@ -23,3 +23,25 @@ class SimulationCompletionTests(TestCase):
         self.assertEqual(completion_evidence(self.state(closed_trade_count=0),expired=False),())
     def test_drawdown_is_definite_failure_before_expiry(self):
         self.assertEqual(completion_evidence(self.state(blocked=True),expired=False),("drawdown_limit_reached",))
+
+    def test_review_missing_target(self):
+        result=review_completion(self.state(),expired=True)
+        self.assertEqual(result["state"],"review_required")
+        self.assertFalse(result["pass_attested"])
+    def test_review_target_below_required_profit(self):
+        result=review_completion(self.state(),expired=True,reviewed_profit_target_pct=D("11"))
+        self.assertEqual(result["state"],"failed")
+        self.assertFalse(result["pass_attested"])
+    def test_review_candidate_never_attests_pass(self):
+        result=review_completion(self.state(),expired=True,reviewed_profit_target_pct=D("10"))
+        self.assertEqual(result["state"],"pass_candidate")
+        self.assertFalse(result["pass_attested"])
+    def test_invalid_review_targets(self):
+        for target in (None,True,10,D("NaN"),D("Infinity"),D("0"),D("-1")):
+            self.assertEqual(review_completion(self.state(),expired=True,reviewed_profit_target_pct=target)["state"],"review_required")
+    def test_review_pending_positions_no_pass(self):
+        result=review_completion(self.state(positions={"open":1}),expired=True,reviewed_profit_target_pct=D("10"))
+        self.assertEqual(result["state"],"review_required")
+    def test_review_early_no_pass(self):
+        result=review_completion(self.state(),expired=False,reviewed_profit_target_pct=D("10"))
+        self.assertEqual(result["state"],"in_progress")
