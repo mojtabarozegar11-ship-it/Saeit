@@ -7,6 +7,9 @@ on:
     paths:
       - "deploy/mojtaba_live_topology_readonly.py"
       - "deploy/mojtaba_live_disposition_readonly.py"
+      - "deploy/mojtaba_django_census_readonly.py"
+      - ".github/workflows/mojtaba-django-census-readonly.yml"
+      - "tests/test_mojtaba_django_census_readonly.py"
       - "runtime/mojtaba_bot_disposition_sources_v1.json"
       - "runtime/mojtaba_readonly_evidence_20261112_154350Z.json"
       - "tests/test_mojtaba_live_topology_readonly.py"
@@ -19,6 +22,9 @@ on:
     paths:
       - "deploy/mojtaba_live_topology_readonly.py"
       - "deploy/mojtaba_live_disposition_readonly.py"
+      - "deploy/mojtaba_django_census_readonly.py"
+      - ".github/workflows/mojtaba-django-census-readonly.yml"
+      - "tests/test_mojtaba_django_census_readonly.py"
       - "runtime/mojtaba_bot_disposition_sources_v1.json"
       - "runtime/mojtaba_readonly_evidence_20261112_154350Z.json"
       - "tests/test_mojtaba_live_topology_readonly.py"
@@ -53,11 +59,12 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Validate source and manifest structure
         run: |
-          python -m py_compile deploy/mojtaba_live_topology_readonly.py deploy/mojtaba_live_disposition_readonly.py
+          python -m py_compile deploy/mojtaba_live_topology_readonly.py deploy/mojtaba_live_disposition_readonly.py deploy/mojtaba_django_census_readonly.py
           python -m json.tool runtime/mojtaba_bot_disposition_sources_v1.json >/dev/null
           python -m json.tool runtime/mojtaba_readonly_evidence_20261112_154350Z.json >/dev/null
       - name: Prove audit remains non-mutating, fail-closed and secrets-free
         run: |
           python -m pytest -q \
             tests/test_mojtaba_live_topology_readonly.py \
-            tests/test_mojtaba_live_disposition_readonly.py
+            tests/test_mojtaba_live_disposition_readonly.py \
+            tests/test_mojtaba_django_census_readonly.py
