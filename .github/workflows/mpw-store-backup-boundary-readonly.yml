@@ -1,0 +1,67 @@
+name: MPW store backup boundary and quota — read only
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mpw-store-backup-boundary-readonly.yml"
+      - "scripts/mpw_store_backup_boundary_readonly_20261119.py"
+      - "tests/test_mpw_store_backup_boundary_readonly_20261119.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read_only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      ((github.event_name == 'pull_request' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify fixed sources and run pure unit regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mpw_store_backup_boundary_readonly_20261119.py
+          test ! -L tests/test_mpw_store_backup_boundary_readonly_20261119.py
+          test "$(git hash-object -- scripts/mpw_store_backup_boundary_readonly_20261119.py)" = "c26374469fcc39a5fbf94a0d4643627a175ceb54"
+          test "$(git hash-object -- tests/test_mpw_store_backup_boundary_readonly_20261119.py)" = "255be2e51c567446f50e96d768998a6e6fd4f37c"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mpw_store_backup_boundary_readonly_20261119 -v
+      - name: Connect only through pinned factory runner to the existing cPanel
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/mpw-store-backup-boundary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 40s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
+      - name: Inspect quota and dependency boundary only
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mpw-store-backup-boundary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 90s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mpw_store_backup_boundary_readonly_20261119.py | python3 -c 'import json,sys; p="MPW_STORE_BACKUP_BOUNDARY_READONLY="; raw=sys.stdin.read(12001); assert len(raw)<=12000; rows=[x for x in raw.splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["schema"]=="mpw.store_backup_boundary.readonly.v2" and d["read_only"] is True and d["owner_runtime_verified"] is True and d["customer_rows_read"] is False and d["dump_executed"] is False and d["restore_verified"] is False and d["release_authorized"] is False; print(rows[0])'
+      - name: Remove ephemeral relay authentication material
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/mpw-store-backup-boundary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if test -d "$work"; then rm -f "$work/host.key" "$work/known" "$work/config"; rmdir "$work"; fi
