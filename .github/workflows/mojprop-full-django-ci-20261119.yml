@@ -48,6 +48,14 @@ jobs:
           DEBUG: "False"
           ALLOWED_HOSTS: localhost,127.0.0.1
         run: python manage.py collectstatic --noinput
+      - name: Pin C136 reviewed source refs
+        run: |
+          main_sha="$(git rev-parse origin/main)"
+          prop_sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          test "${#main_sha}" -eq 40
+          test "${#prop_sha}" -eq 40
+          echo "C136_MAIN_SHA=$main_sha" >> "$GITHUB_ENV"
+          echo "C136_PROP_SHA=$prop_sha" >> "$GITHUB_ENV"
       - name: Run full Django tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests:${{ runner.temp }}/mpw-pdf-parser
