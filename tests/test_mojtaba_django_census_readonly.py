@@ -52,3 +52,44 @@ def test_workflow_is_manual_main_only_and_source_is_read_only():
     assert "StrictHostKeyChecking=yes" in text
     assert "runs-on: [self-hosted, factory-vps]" in text
     assert all(q.startswith("SELECT ") for q in C.QUERIES)
+
+
+def run_summary(tmp_path, roles, inconsistent=False):
+    import json
+    import subprocess
+    import sys
+    import textwrap
+    workflow = (ROOT / ".github/workflows/mojtaba-django-census-readonly.yml").read_text()
+    source = textwrap.dedent(workflow.split("<<'SUMMARY'\n", 1)[1].split("\n          SUMMARY", 1)[0])
+    for role in roles:
+        result = {"schema": C.SCHEMA, "host": role, "state": "registry_snapshot_only",
+                  "read_only_database_transaction": True, "retirement_authorized": False,
+                  "registry_records": 1, "enabled_registry_records": 1,
+                  "nonterminal_tasks": 1, "orphan_task_records": 0,
+                  "agents": [{"code": "mojtaba-bot-ai", "enabled_registry_record": True,
+                              "tasks": {"queued": 1}, "nonterminal_tasks": 0 if inconsistent else 1}]}
+        (tmp_path / (role + ".out")).write_text("MOJTABA_DJANGO_CENSUS=" + json.dumps(result) + "\n")
+    return subprocess.run([sys.executable, "-c", source, str(tmp_path)],
+                          cwd=ROOT, capture_output=True, text=True)
+
+
+@pytest.mark.parametrize("roles", [(), ("vps",), ("cpanel",)])
+def test_incomplete_host_summary_fails_closed(tmp_path, roles):
+    r = run_summary(tmp_path, roles)
+    assert r.returncode == 1
+    assert "MOJTABA_DB_CENSUS_GATE=BLOCKED_INCOMPLETE" in r.stdout
+    assert "PASS_REGISTRY_ONLY" not in r.stdout
+
+
+def test_consistent_dual_host_summary_only_certifies_registry(tmp_path):
+    r = run_summary(tmp_path, ("vps", "cpanel"))
+    assert r.returncode == 0, r.stderr
+    assert "MOJTABA_DB_CENSUS_VALID_HOSTS=2" in r.stdout
+    assert "MOJTABA_DB_CENSUS_GATE=PASS_REGISTRY_ONLY" in r.stdout
+    assert '"retirement_authorized": false' in r.stdout
+
+
+def test_inconsistent_pending_counts_fail_closed(tmp_path):
+    r = run_summary(tmp_path, ("vps", "cpanel"), inconsistent=True)
+    assert r.returncode == 1
+    assert "MOJTABA_DB_CENSUS_VALID_HOSTS=0" in r.stdout
