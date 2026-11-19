@@ -2,12 +2,14 @@
 import re
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from .models import PropPlan1Invoice
+from .models import PropPlan1Invoice, PropSimulationInvoiceOwner
 from .simulation_invoice_contract import SimulationInvoiceContract
 
 @transaction.atomic
-def persist_simulation_invoice(*, order_ref, buyer_email, contract, gates,
+def persist_simulation_invoice(*, order_ref, owner, buyer_email, contract, gates,
                                buyer_terms_acceptance, retry_eligibility_verified=False):
+    if not owner.is_authenticated or not owner.is_active or owner.pk is None or owner.email != buyer_email:
+        raise ValidationError("Authenticated invoice owner required")
     if not isinstance(contract, SimulationInvoiceContract):
         raise ValidationError("Simulation contract required")
     if buyer_terms_acceptance is not True:
@@ -30,4 +32,8 @@ def persist_simulation_invoice(*, order_ref, buyer_email, contract, gates,
         order_ref=order_ref, defaults=defaults)
     if not created and any(getattr(invoice, key) != value for key, value in defaults.items() if key != "status"):
         raise ValidationError("Immutable invoice contract mismatch")
+    if created:
+        PropSimulationInvoiceOwner.objects.create(invoice=invoice, owner=owner)
+    elif not PropSimulationInvoiceOwner.objects.filter(invoice=invoice, owner=owner).exists():
+        raise ValidationError("Invoice ownership mismatch")
     return invoice
