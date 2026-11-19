@@ -155,6 +155,18 @@ jobs:
           set -euo pipefail
           work="$RUNNER_TEMP/mojprop-source-c95"
           python3 -c 'from pathlib import Path; source=Path("services/mpw_tron_independent_solidified_rpc.py").read_text(encoding="utf-8"); audit=Path("scripts/mpw_existing_paid_dual_proof_readonly_20261119.py").read_text(encoding="utf-8"); print("MPW_CANDIDATE_RPC_SOURCE = "+repr(source)); print(audit)' | timeout 100s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' | python3 -c 'import json,sys; p="MPW_EXISTING_DUAL_PROOF_READONLY="; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["read_only"] is True and d["new_payment_created"] is False and d.get("rpc_source")=="candidate_in_memory"; print(rows[0])'
+      - name: Inspect public Passenger registration using existing reviewed diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 100s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - inspect' < scripts/mpw_public_passenger_runtime_readonly_20261102.py | python3 -c 'import json,sys; d=json.loads(sys.stdin.read(20000)); assert d["files_modified"] is False and d["release_permitted"] is False; print("MPW_PASSENGER_READONLY="+json.dumps(d,sort_keys=True))'
+      - name: Classify store database backup scope and local free space without dumping
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 60s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mpw_db_backup_scope_readonly_20261119.py
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
