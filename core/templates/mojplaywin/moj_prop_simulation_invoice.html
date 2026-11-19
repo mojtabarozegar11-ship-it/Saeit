@@ -9,6 +9,8 @@
 {% if status == "pending" %}
 <p>Amount: 30 TRX ({{ amount_sun }} SUN). Network: {{ network }}.</p>
 <p>Recipient: <code>{{ recipient }}</code></p>
+<p>Required transaction memo: <code>{{ order_ref }}</code></p>
+<p>Only use a wallet that supports a TRON transaction memo. If your wallet cannot attach this exact memo, do not pay.</p>
 <p>Use native TRX only. Do not make repeat payments. An invoice is not proof of settlement. Access requires independently reconciled payment.</p>
 {% else %}
 <p>Do not send another payment for this invoice.</p>
