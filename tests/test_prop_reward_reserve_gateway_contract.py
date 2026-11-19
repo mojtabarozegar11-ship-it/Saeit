@@ -27,8 +27,8 @@ class RewardReserveGatewayContractTests(unittest.TestCase):
         self.assertNotIn("amount_sun=AMOUNT_SUN", self.persistence)
 
     def test_settlement_creates_receipt_then_reserve(self):
-        receipt_index = self.persistence.index("PropPlan1Receipt.objects.create")
-        reserve_index = self.persistence.index("allocate_reward_reserve_after_settlement")
+        receipt_index = self.persistence.index("receipt = PropPlan1Receipt.objects.create")
+        reserve_index = self.persistence.index("        allocate_reward_reserve_after_settlement(invoice_id=invoice.pk)")
         self.assertLess(receipt_index, reserve_index)
 
     def test_settlement_requires_attestation(self):
