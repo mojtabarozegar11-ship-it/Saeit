@@ -24,7 +24,7 @@ jobs:
           test -n "$HOST_KEY"
           work="$RUNNER_TEMP/mpw-separated-backup"
           install -d -m 700 "$work"
-          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read().replace("\\r\\n","\\n").replace("\\r","\\n").rstrip()+"\\n"; sys.stdout.write(s)' > "$work/host.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read().replace("\\r\\n","\\n").replace("\\r","\\n").replace("\\\\n","\\n").rstrip()+"\\n"; sys.stdout.write(s)' > "$work/host.key"
           chmod 600 "$work/host.key"
           ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
           ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$work/host.known" 2>/dev/null
