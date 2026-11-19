@@ -1,14 +1,15 @@
 import os
 
 from openai import OpenAI
+from mojtaba_identity import BOT_ID
 
 from .models import ChatMessage
 from .master_agent_capability_pack import capability_pack_prompt
 from .chat_operation_security import is_authorized_chat_operator
 
 
-SYSTEM_PROMPT = """
-You are the Master Agent assistant for Saeit.
+SYSTEM_PROMPT = f"""
+You are {BOT_ID}, the single public Master Agent assistant identity for Saeit.
 You are a controlled management and research assistant.
 Explain plans, research tasks, risks, and required approvals clearly.
 Never claim that an action was executed when it was only discussed.
@@ -47,7 +48,7 @@ class MasterAgentChat:
                     role="assistant",
                     content=reply,
                     metadata={
-                        "agent": "master_agent",
+                        "agent": "master_agent", "bot_id": BOT_ID,
                         "capability_pack": "1.0.0",
                         "operation_id": operation.operation_id,
                         "execution": "forbidden",
@@ -69,12 +70,22 @@ class MasterAgentChat:
                 import json
                 try:
                     result = execute_approved_chat_operation(approval)
-                    reply = (
-                        "اجرا انجام شد. "
-                        f"عملیات: {operation.action} | "
-                        + json.dumps(result.get("result", result), ensure_ascii=False, default=str)[:3500]
-                    )
-                    execution = "direct_owner_chat_executed"
+                    state = result.get("status")
+                    if state == "executed":
+                        reply = (
+                            "اجرا انجام شد. "
+                            f"عملیات: {operation.action} | "
+                            + json.dumps(result.get("result", {}), ensure_ascii=False, default=str)[:3500]
+                        )
+                        execution = "direct_owner_chat_executed"
+                    else:
+                        messages = {
+                            "already_executed": "این تأیید قبلاً اجرا شده است؛ اجرای جدید انجام نشد.",
+                            "execution_in_progress": "عملیات در حال اجراست؛ موفقیت هنوز تأیید نشده است.",
+                            "manual_reconciliation_required": "نتیجه نیازمند تطبیق دستی است؛ اجرای مجدد خودکار انجام نشد.",
+                        }
+                        reply = messages.get(state, "وضعیت اجرا تأیید نشده است؛ موفقیت گزارش نمی‌شود.")
+                        execution = state if state in messages else "execution_unverified"
                 except Exception as exc:
                     # The executor owns terminal states. Never reset an already
                     # claimed action to "approved" or hide an ambiguous outcome.
@@ -101,7 +112,7 @@ class MasterAgentChat:
                 role="assistant",
                 content=reply,
                 metadata={
-                    "agent": "master_agent",
+                    "agent": "master_agent", "bot_id": BOT_ID,
                     "capability_pack": "1.0.0",
                     "operation_id": operation.operation_id,
                     "approval_id": approval.pk,
@@ -137,6 +148,6 @@ class MasterAgentChat:
             session=session,
             role="assistant",
             content=reply,
-            metadata={"agent": "master_agent", "capability_pack": "1.0.0"},
+            metadata={"agent": "master_agent", "bot_id": BOT_ID, "capability_pack": "1.0.0"},
         )
         return reply
