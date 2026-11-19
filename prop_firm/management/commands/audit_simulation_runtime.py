@@ -13,6 +13,9 @@ from prop_firm.models import (
 )
 from prop_firm.simulation_invoice_contract import REQUIRED_GATES, valid_tron_recipient
 from prop_firm.simulation_runtime import trading_runtime_ready
+from prop_firm.simulation_feed import commercial_feed_configured
+from prop_firm.simulation_tron_reconcile import configured_providers
+from django.core.exceptions import ValidationError
 
 ROUTES = {
     "/moj-prop/": "moj_prop_landing",
@@ -47,7 +50,14 @@ def audit():
     migrations = ("prop_firm", "0017_simulation_event_head") in applied
     terms = getattr(settings, "MPW_SIMULATION_TERMS_TEXT", "")
     digest = getattr(settings, "MPW_SIMULATION_TERMS_DIGEST", "")
+    try:
+        configured_providers()
+        dual_provider_configured = True
+    except ValidationError:
+        dual_provider_configured = False
     config = {
+        "licensed_quote_configured": commercial_feed_configured(),
+        "dual_provider_configured": dual_provider_configured,
         "identity_enabled": getattr(settings, "MPW_SIMULATION_IDENTITY_ENABLED", False) is True,
         "smtp_from_configured": bool(getattr(settings, "MPW_SIMULATION_FROM_EMAIL", "")),
         "smtp_backend_configured": settings.EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend" and bool(settings.EMAIL_HOST),
