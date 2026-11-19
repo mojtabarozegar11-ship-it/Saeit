@@ -12,6 +12,7 @@ from django.views.decorators.http import require_http_methods
 from .models import PropPlan1Invoice
 from .simulation_invoice_contract import PRODUCT_CODE, CONTRACT_VERSION
 from .simulation_tron_reconcile import reconcile_simulation_invoice
+from .simulation_checkout_views import checkout_context
 
 def owned_invoice(request, order_ref):
     if request.get_host().lower() != "mojplaywin.com" or not request.is_secure():
@@ -54,9 +55,15 @@ def simulation_invoice_detail(request, order_ref):
         else:
             return redirect("moj_prop_simulation_invoice", order_ref=invoice.order_ref)
         invoice.refresh_from_db()
+    # Preserve past buyer reconciliation even while new sales are suspended.
+    context = checkout_context(request) if invoice.status == "pending" and enabled else {}
+    contract = context.get("simulation_contract")
+    payment_instructions = bool(contract and invoice.purchase_kind == "first"
+        and contract.digest() == invoice.contract_digest
+        and contract.recipient == invoice.recipient)
     return render(request, "mojplaywin/moj_prop_simulation_invoice.html", {
         "order_ref": invoice.order_ref, "network": invoice.network,
         "amount_sun": invoice.amount_sun, "recipient": invoice.recipient,
         "status": invoice.status, "reconciliation_enabled": enabled, "verification_error": error,
-        "show_payment_instructions": enabled and getattr(settings, "MPW_SIMULATION_CHECKOUT_ENABLED", False) is True,
+        "show_payment_instructions": payment_instructions,
     })

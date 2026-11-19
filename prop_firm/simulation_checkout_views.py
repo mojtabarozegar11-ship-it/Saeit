@@ -16,6 +16,14 @@ from .simulation_runtime import trading_runtime_ready
 
 SALT = "mojprop.sim.checkout.v2"
 
+def _unique_json_pairs(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON member")
+        result[key] = value
+    return result
+
 def checkout_context(request):
     if (request.get_host().lower() != "mojplaywin.com" or not request.is_secure()
             or getattr(settings, "MPW_SIMULATION_CHECKOUT_ENABLED", False) is not True
@@ -61,12 +69,18 @@ def start_simulation_checkout(request):
         if request.content_type == "application/json":
             if len(request.body) > 8192:
                 raise ValueError()
-            data = json.loads(request.body)
+            data = json.loads(request.body, object_pairs_hook=_unique_json_pairs)
+            if type(data) is not dict:
+                raise ValueError()
         elif request.content_type == "application/x-www-form-urlencoded":
+            if len(request.body) > 8192:
+                raise ValueError()
             data = request.POST
             if any(len(data.getlist(k)) != 1 for k in data):
                 raise ValueError()
         else:
+            raise ValueError()
+        if set(data) - {"accept_terms", "terms_digest", "checkout_token", "csrfmiddlewaretoken"}:
             raise ValueError()
         if not hasattr(data, "get") or (data.get("accept_terms") is not True if request.content_type == "application/json" else data.get("accept_terms") != "yes"):
             raise ValueError()
