@@ -16,6 +16,9 @@ class SyntheticSaleTests(unittest.TestCase):
         self.assertEqual(offer.data_mode, "synthetic_replay")
         self.assertFalse(offer.virtual_principal_withdrawable)
         self.assertFalse(offer.customer_deposit_required)
+        self.assertEqual(offer.reward_reserve_pct_of_settled_fee, 80)
+        self.assertTrue(offer.maximum_reward_is_settled_reserve)
+        self.assertEqual(offer.public_disclosure()["account_mode"], "simulated")
 
     def test_default_decision_is_fail_closed(self):
         result = assess_synthetic_sale(
@@ -58,6 +61,12 @@ class SyntheticSaleTests(unittest.TestCase):
         offer = SyntheticSaleOffer()
         self.assertFalse(offer.customer_deposit_required)
         self.assertFalse(offer.virtual_principal_withdrawable)
+
+    def test_reward_cap_policy_cannot_drift(self):
+        with self.assertRaises(ValueError):
+            SyntheticSaleOffer(reward_reserve_pct_of_settled_fee=70)
+        with self.assertRaises(ValueError):
+            SyntheticSaleOffer(maximum_reward_is_settled_reserve=False)
 
     def test_retry_price_and_discount_are_fixed(self):
         offer = SyntheticSaleOffer()
