@@ -524,7 +524,7 @@ class TronSettlementLedger(models.Model):
                 name="mp_tron_network_tx_unique",
             ),
             models.CheckConstraint(
-                condition=Q(amount_sun=30_000_000),
+                condition=Q(amount_sun__in=[18_000_000, 30_000_000]),
                 name="mp_tron_plan1_amount_exact",
             ),
         ]
@@ -537,9 +537,14 @@ class PropPlan1Invoice(models.Model):
         ("paid", "Paid"),
         ("expired", "Expired"),
     ]
+    PURCHASE_KIND_CHOICES = [
+        ("first", "First purchase"),
+        ("retry", "Eligible retry purchase"),
+    ]
     order_ref = models.CharField(max_length=96, unique=True)
     buyer_email = models.EmailField(max_length=254)
     product_code = models.CharField(max_length=16, default="MOJ-PROP-01")
+    purchase_kind = models.CharField(max_length=8, choices=PURCHASE_KIND_CHOICES, default="first")
     contract_version = models.CharField(max_length=32)
     network = models.CharField(max_length=24)
     amount_sun = models.PositiveBigIntegerField(default=30_000_000)
@@ -553,7 +558,10 @@ class PropPlan1Invoice(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                condition=Q(amount_sun=30_000_000),
+                condition=(
+                    (Q(purchase_kind="first") & Q(amount_sun=30_000_000))
+                    | (Q(purchase_kind="retry") & Q(amount_sun=18_000_000))
+                ),
                 name="mp_plan1_invoice_amount_exact",
             ),
         ]
@@ -568,3 +576,58 @@ class PropPlan1Receipt(models.Model):
         TronSettlementLedger, on_delete=models.PROTECT, related_name="receipt"
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class PropRewardReserveAllocation(models.Model):
+    """Durable reserve allocation created only after an attested paid invoice."""
+    invoice = models.OneToOneField(
+        PropPlan1Invoice, on_delete=models.PROTECT, related_name="reward_reserve"
+    )
+    settlement = models.OneToOneField(
+        TronSettlementLedger, on_delete=models.PROTECT, related_name="reward_reserve"
+    )
+    fee_sun = models.PositiveBigIntegerField()
+    reward_reserve_sun = models.PositiveBigIntegerField()
+    refund_reserve_sun = models.PositiveBigIntegerField()
+    operating_buffer_sun = models.PositiveBigIntegerField()
+    committed_reward_sun = models.PositiveBigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(fee_sun__in=[18_000_000, 30_000_000]),
+                name="mp_reward_fee_supported",
+            ),
+            models.CheckConstraint(
+                condition=Q(reward_reserve_sun__gt=0)
+                & Q(refund_reserve_sun__gte=0)
+                & Q(operating_buffer_sun__gte=0)
+                & Q(committed_reward_sun__gte=0),
+                name="mp_reward_reserve_nonnegative",
+            ),
+        ]
+
+
+class PropRewardCommitment(models.Model):
+    """Immutable audit row for a reward reserved against a settled sale."""
+    allocation = models.ForeignKey(
+        PropRewardReserveAllocation, on_delete=models.PROTECT,
+        related_name="commitments"
+    )
+    commitment_ref = models.CharField(max_length=96, unique=True)
+    amount_sun = models.PositiveBigIntegerField()
+    status = models.CharField(max_length=12, default="committed")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount_sun__gt=0),
+                name="mp_reward_commitment_positive",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["allocation", "-created_at"], name="mp_reward_alloc_created"),
+        ]
