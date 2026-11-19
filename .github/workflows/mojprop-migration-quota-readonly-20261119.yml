@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           test ! -L scripts/mojprop_migration_quota_readonly_20261119.py
-          test "$(git hash-object -- scripts/mojprop_migration_quota_readonly_20261119.py)" = "cd1973e421bcacd2dc25c0a4198b6ed2a73dbc4b"
+          test "$(git hash-object -- scripts/mojprop_migration_quota_readonly_20261119.py)" = "c5b370afefd5d11aac7fe32cc1a2ec6fa3a1dcef"
           python3 -B -m unittest tests.test_mojprop_migration_quota_readonly -q
       - name: Connect only through pinned factory runner to the existing cPanel
         shell: bash
