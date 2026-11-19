@@ -1,5 +1,9 @@
 import unittest
-from scripts.mpw_store_backup_boundary_readonly_20261119 import boundary, quota_fields, account_quota_fields
+from unittest.mock import patch, Mock
+import json
+import stat
+from types import SimpleNamespace
+from scripts.mpw_store_backup_boundary_readonly_20261119 import boundary, quota_fields, account_quota_fields, quota
 
 class StoreBackupBoundaryTests(unittest.TestCase):
     def test_transitive_parents_and_cycles(self):
@@ -75,3 +79,33 @@ class StoreBackupBoundaryTests(unittest.TestCase):
     def test_account_local_response_not_interchangeable(self):
         with self.assertRaises(ValueError):
             quota_fields(self.account_document())
+
+    @patch("scripts.mpw_store_backup_boundary_readonly_20261119.subprocess.run")
+    @patch("scripts.mpw_store_backup_boundary_readonly_20261119.Path.stat")
+    def test_quota_falls_back_to_same_owner_without_user_argument(self, file_stat, run):
+        file_stat.return_value = SimpleNamespace(st_mode=stat.S_IFREG | 0o755, st_uid=0)
+        run.side_effect = [SimpleNamespace(returncode=1,stdout=b"",stderr=b"private"),
+                           SimpleNamespace(returncode=0,stdout=json.dumps(self.account_document()).encode(),stderr=b"")]
+        r = quota("get_quota_info")
+        self.assertTrue(r["success"])
+        self.assertEqual(r["prior_attempts"],["nonzero_exit_1"])
+        self.assertIn("--user=zomorod2",run.call_args_list[0].args[0])
+        self.assertNotIn("--user=zomorod2",run.call_args_list[1].args[0])
+        self.assertNotIn("private",str(r))
+    @patch("scripts.mpw_store_backup_boundary_readonly_20261119.subprocess.run")
+    @patch("scripts.mpw_store_backup_boundary_readonly_20261119.Path.stat")
+    def test_quota_denials_are_bounded_and_sanitized(self, file_stat, run):
+        file_stat.return_value = SimpleNamespace(st_mode=stat.S_IFREG | 0o755, st_uid=0)
+        run.return_value = SimpleNamespace(returncode=1,stdout=b"private",stderr=b"private")
+        r = quota("get_quota_info")
+        self.assertEqual(r,{"success":False,"attempts":["nonzero_exit_1"]*4})
+        self.assertEqual(run.call_count,4)
+    @patch("scripts.mpw_store_backup_boundary_readonly_20261119.subprocess.run")
+    @patch("scripts.mpw_store_backup_boundary_readonly_20261119.Path.stat")
+    def test_untrusted_quota_binary_is_never_executed(self, file_stat, run):
+        file_stat.return_value = SimpleNamespace(st_mode=stat.S_IFREG | 0o777,st_uid=0)
+        self.assertFalse(quota()["success"])
+        run.assert_not_called()
+    def test_arbitrary_cpanel_function_not_allowed(self):
+        with self.assertRaises(ValueError):
+            quota("not_allowed")
