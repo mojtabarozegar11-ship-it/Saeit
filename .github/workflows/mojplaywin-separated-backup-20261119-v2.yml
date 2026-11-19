@@ -34,30 +34,30 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           cat > "$d/config" <<EOF
-Host saeit-vps
-  HostName 178.239.147.150
-  User githubops
-  Port 22
-  IdentityFile $d/vps.key
-  UserKnownHostsFile $d/vps.known
-Host saeit-cpanel
-  HostName zohal.pws-dns.net
-  User zomorod2
-  Port 1396
-  IdentityFile $d/host.key
-  UserKnownHostsFile $d/host.known
-  ProxyJump saeit-vps
-Host *
-  StrictHostKeyChecking yes
-  IdentitiesOnly yes
-  BatchMode yes
-  ConnectTimeout 15
-  ConnectionAttempts 1
-  ServerAliveInterval 20
-  ServerAliveCountMax 3
-  ForwardAgent no
-  RequestTTY no
-EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ServerAliveInterval 20
+            ServerAliveCountMax 3
+            ForwardAgent no
+            RequestTTY no
+          EOF
           chmod 600 "$d/config"
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
@@ -69,40 +69,40 @@ EOF
           set -euo pipefail
           d="$(cat "$RUNNER_TEMP/mpw-separated-backup-ssh-path")"
           timeout 1800s ssh -T -F "$d/config" saeit-cpanel 'bash -s' <<'REMOTE_SCRIPT'
-set -euo pipefail
-umask 077
-dest=/home/zomorod2/separated-backups/20261119
-mkdir -p "$dest"
-chmod 700 "$dest"
-store="$dest/mojplaywin-store-code-20261119.tar.gz"
-email="$dest/mojplaywin-email-mailboxes-20261119.tar.gz"
-if [ ! -s "$store" ]; then
-  tmp="$store.part.$$"
-  tar --exclude='*.env' --exclude='.env' --exclude='*.sqlite3' --exclude='db.sqlite3' --exclude='*.log' --exclude='backups' -czf "$tmp" -C /home/zomorod2/Saeit-staging config core services templates mpw_commerce mpw_native_checkout passenger_wsgi.py requirements.txt -C /home/zomorod2 mojplaywin.com/store
-  chmod 600 "$tmp"
-  mv -n "$tmp" "$store"
-  test ! -e "$tmp" || rm -f "$tmp"
-fi
-if [ ! -s "$email" ]; then
-  tmp="$email.part.$$"
-  tar --ignore-failed-read -czf "$tmp" -C /home/zomorod2 mail
-  chmod 600 "$tmp"
-  mv -n "$tmp" "$email"
-  test ! -e "$tmp" || rm -f "$tmp"
-fi
-tar -tzf "$store" >/dev/null
-tar -tzf "$email" >/dev/null
-test -n "$(tar -tzf "$email" | grep -E '^mail/(mojplaywin\.com|zomorodmelal\.ir)/' | head -1)"
-printf '%s\n' 'BACKUP_COMPLETE' > "$dest/BACKUP_STATUS.txt"
-printf '%s\n' 'STORE_ARCHIVE='"$store" >> "$dest/BACKUP_STATUS.txt"
-printf '%s\n' 'EMAIL_ARCHIVE='"$email" >> "$dest/BACKUP_STATUS.txt"
-printf '%s\n' 'STORE_SIZE_BYTES='"$(stat -c '%s' "$store")" >> "$dest/BACKUP_STATUS.txt"
-printf '%s\n' 'EMAIL_SIZE_BYTES='"$(stat -c '%s' "$email")" >> "$dest/BACKUP_STATUS.txt"
-sha256sum "$store" "$email" > "$dest/SHA256SUMS.txt"
-chmod 600 "$dest"/BACKUP_STATUS.txt "$dest"/SHA256SUMS.txt
-cat "$dest/BACKUP_STATUS.txt"
-cat "$dest/SHA256SUMS.txt"
-REMOTE_SCRIPT
+          set -euo pipefail
+          umask 077
+          dest=/home/zomorod2/separated-backups/20261119
+          mkdir -p "$dest"
+          chmod 700 "$dest"
+          store="$dest/mojplaywin-store-code-20261119.tar.gz"
+          email="$dest/mojplaywin-email-mailboxes-20261119.tar.gz"
+          if [ ! -s "$store" ]; then
+            tmp="$store.part.$$"
+            tar --exclude='*.env' --exclude='.env' --exclude='*.sqlite3' --exclude='db.sqlite3' --exclude='*.log' --exclude='backups' -czf "$tmp" -C /home/zomorod2/Saeit-staging config core services templates mpw_commerce mpw_native_checkout passenger_wsgi.py requirements.txt -C /home/zomorod2 mojplaywin.com/store
+            chmod 600 "$tmp"
+            mv -n "$tmp" "$store"
+            test ! -e "$tmp" || rm -f "$tmp"
+          fi
+          if [ ! -s "$email" ]; then
+            tmp="$email.part.$$"
+            tar --ignore-failed-read -czf "$tmp" -C /home/zomorod2 mail
+            chmod 600 "$tmp"
+            mv -n "$tmp" "$email"
+            test ! -e "$tmp" || rm -f "$tmp"
+          fi
+          tar -tzf "$store" >/dev/null
+          tar -tzf "$email" >/dev/null
+          test -n "$(tar -tzf "$email" | grep -E '^mail/(mojplaywin\.com|zomorodmelal\.ir)/' | head -1)"
+          printf '%s\n' 'BACKUP_COMPLETE' > "$dest/BACKUP_STATUS.txt"
+          printf '%s\n' 'STORE_ARCHIVE='"$store" >> "$dest/BACKUP_STATUS.txt"
+          printf '%s\n' 'EMAIL_ARCHIVE='"$email" >> "$dest/BACKUP_STATUS.txt"
+          printf '%s\n' 'STORE_SIZE_BYTES='"$(stat -c '%s' "$store")" >> "$dest/BACKUP_STATUS.txt"
+          printf '%s\n' 'EMAIL_SIZE_BYTES='"$(stat -c '%s' "$email")" >> "$dest/BACKUP_STATUS.txt"
+          sha256sum "$store" "$email" > "$dest/SHA256SUMS.txt"
+          chmod 600 "$dest"/BACKUP_STATUS.txt "$dest"/SHA256SUMS.txt
+          cat "$dest/BACKUP_STATUS.txt"
+          cat "$dest/SHA256SUMS.txt"
+          REMOTE_SCRIPT
       - name: Confirm backup-only scope
         shell: bash
         run: |
