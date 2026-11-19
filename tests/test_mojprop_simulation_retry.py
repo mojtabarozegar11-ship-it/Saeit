@@ -91,3 +91,49 @@ class SimulationRetryTests(TestCase):
             page=self.client.get(reverse("moj_prop_dashboard"),{"retry":self.account.pk},secure=True,HTTP_HOST="mojplaywin.com")
             self.assertNotContains(page,"Create or reopen my 18 TRX retry invoice")
             self.assertEqual(PropPlan1Invoice.objects.count(),1)
+
+    def test_retry_payment_page_exact_amount_and_fail_closed_on_drift(self):
+        from unittest.mock import patch
+        from django.urls import reverse
+        from dataclasses import replace
+        self.fail_challenge()
+        invoice=self.issue()
+        self.client.force_login(self.owner)
+        url=reverse("moj_prop_simulation_invoice",kwargs={"order_ref":invoice.order_ref})
+        ctx={"simulation_contract":self.first}
+        with override_settings(ALLOWED_HOSTS=["mojplaywin.com"],MPW_SIMULATION_RECONCILIATION_ENABLED=True,
+                MPW_SIMULATION_EMAIL_VERIFIER=lambda user: user.is_authenticated):
+            with patch("prop_firm.simulation_payment_views.checkout_context",return_value=ctx):
+                response=self.client.get(url,secure=True,HTTP_HOST="mojplaywin.com")
+                self.assertContains(response,"Amount: 18 TRX (18000000 SUN)")
+                self.assertNotContains(response,"Amount: 30 TRX")
+                self.assertContains(response,invoice.order_ref)
+                self.assertTrue(response.context["show_payment_instructions"])
+            with patch("prop_firm.simulation_payment_views.checkout_context",
+                       return_value={"simulation_contract":replace(self.first,terms_digest="d"*64)}):
+                response=self.client.get(url,secure=True,HTTP_HOST="mojplaywin.com")
+                self.assertFalse(response.context["show_payment_instructions"])
+                self.assertContains(response,"Do not send funds")
+            with patch("prop_firm.simulation_payment_views.checkout_context",return_value={}):
+                response=self.client.get(url,secure=True,HTTP_HOST="mojplaywin.com")
+                self.assertFalse(response.context["show_payment_instructions"])
+            self.client.force_login(get_user_model().objects.create_user(username="retry-unowned",email=self.owner.email))
+            self.assertEqual(self.client.get(url,secure=True,HTTP_HOST="mojplaywin.com").status_code,404)
+
+    def test_retry_settlement_creates_one_account_and_exact_reserve(self):
+        from prop_firm.models import PropRewardReserveAllocation, PropSimulationAccount
+        self.fail_challenge()
+        invoice=self.issue()
+        params=dict(invoice_id=invoice.pk,owner=self.owner,tx_hash="d"*64,
+            observed_network="tron-mainnet",observed_asset="TRX",observed_recipient=invoice.recipient,
+            observed_amount_sun=18_000_000,independently_finalized=True,evidence_digest="e"*64,
+            verified_owner_email=self.owner.email)
+        with self.assertRaises(ValidationError):
+            settle_and_provision(**{**params,"observed_amount_sun":30_000_000})
+        receipt,account=settle_and_provision(**params)
+        receipt2,account2=settle_and_provision(**params)
+        self.assertEqual((receipt.pk,account.pk),(receipt2.pk,account2.pk))
+        self.assertEqual(PropSimulationAccount.objects.count(),2)
+        allocation=PropRewardReserveAllocation.objects.get(invoice=invoice)
+        self.assertEqual((allocation.reward_reserve_sun,allocation.refund_reserve_sun,
+                          allocation.operating_buffer_sun),(14_400_000,1_800_000,1_800_000))
