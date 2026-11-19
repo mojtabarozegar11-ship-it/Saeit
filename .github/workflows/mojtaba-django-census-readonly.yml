@@ -1,0 +1,79 @@
+name: Mojtaba.bot.ai manual read-only Django census
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtaba-django-readonly-census
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' }}"
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read only database registry and queue counts via proven pinned endpoints
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$(mktemp -d "$RUNNER_TEMP/mojtaba-db.XXXXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          python3 -m py_compile deploy/mojtaba_django_census_readonly.py
+          collect() {
+            local role="$1" key="$2" host="$3" port="$4" type="$5" pin="$6" account="$7" cmd="$8"
+            [[ -n "$key" ]] || return 1
+            printf '%s' "$key" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/$role.key"
+            chmod 600 "$d/$role.key"
+            ssh-keygen -y -P '' -f "$d/$role.key" >/dev/null 2>&1 || return 1
+            timeout 15s ssh-keyscan -T 8 -p "$port" -t "$type" "$host" > "$d/$role.known" 2>/dev/null || return 1
+            [[ "$(ssh-keygen -lf "$d/$role.known" -E sha256 | awk '{print $2}' | sort -u)" == "$pin" ]] || return 1
+            timeout 90s ssh -T -i "$d/$role.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/$role.known" -o ConnectTimeout=12 -o ForwardAgent=no -p "$port" "$account@$host" "$cmd" < deploy/mojtaba_django_census_readonly.py > "$d/$role.out" 2>"$d/$role.err"
+          }
+          collect vps "$VPS_KEY" 178.239.147.150 22 rsa 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' githubops 'cd "$HOME/factory-runtime/django-app" && exec "$HOME/factory-runtime/.venv/bin/python" -B - --role vps' || echo MOJTABA_DB_VPS=unavailable
+          collect cpanel "$HOST_KEY" 178.239.147.125 1396 ed25519 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' zomorod2 'cd "$HOME/Saeit" && exec "$HOME/Saeit/.venv/bin/python" -B - --role cpanel' || echo MOJTABA_DB_CPANEL=unavailable
+          python3 - "$d" <<'SUMMARY'
+          import json, re, sys
+          from pathlib import Path
+          from deploy.mojtaba_django_census_readonly import KNOWN, SCHEMA, STATUS
+          def count(n):
+              return type(n) is int and n >= 0
+          for role in ("vps", "cpanel"):
+              try:
+                  path = Path(sys.argv[1]) / (role + ".out")
+                  if path.stat().st_size > 4000000:
+                      raise ValueError()
+                  line = path.read_text().splitlines()
+                  if len(line) != 1 or not line[0].startswith("MOJTABA_DJANGO_CENSUS="):
+                      raise ValueError()
+                  r = json.loads(line[0].split("=", 1)[1])
+                  if r.get("schema") != SCHEMA or r.get("host") != role or r.get("retirement_authorized") is not False:
+                      raise ValueError()
+                  if r.get("state") != "registry_snapshot_only" or r.get("read_only_database_transaction") is not True:
+                      raise ValueError()
+                  agents = []
+                  for a in r["agents"]:
+                      code = a["code"]
+                      if code not in KNOWN and not re.fullmatch(r"unknown:[0-9a-f]{16}",code):
+                          raise ValueError()
+                      if type(a["enabled_registry_record"]) is not bool or not count(a["nonterminal_tasks"]):
+                          raise ValueError()
+                      if any(k not in STATUS | {"unknown_nonterminal"} or not count(v) for k,v in a["tasks"].items()):
+                          raise ValueError()
+                      agents.append({k:a[k] for k in ("code","enabled_registry_record","tasks","nonterminal_tasks")})
+                  if len(agents)!=r["registry_records"] or any(not count(r[k]) for k in ("registry_records","enabled_registry_records","nonterminal_tasks","orphan_task_records")):
+                      raise ValueError()
+                  print("MOJTABA_DB_" + role.upper() + "=" + json.dumps({"state":"registry_snapshot_only", "agents":agents, "registry_records":len(agents), "enabled_registry_records":sum(a["enabled_registry_record"] for a in agents), "nonterminal_tasks":sum(a["nonterminal_tasks"] for a in agents), "orphan_task_records":r["orphan_task_records"], "verified_live_agents":None,"retirement_authorized":False}))
+              except Exception:
+                  print("MOJTABA_DB_" + role.upper() + "=unknown_no_valid_snapshot")
+          SUMMARY
