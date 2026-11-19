@@ -9,7 +9,7 @@ from prop_firm.simulation_invoice_contract import SimulationInvoiceContract, REQ
 from prop_firm.simulation_invoice_persistence import persist_simulation_invoice
 from prop_firm.simulation_settlement import settle_and_provision
 from prop_firm.simulation_engine import MarketQuote, OrderRequest
-from prop_firm.simulation_event_service import record_command, account_snapshot
+from prop_firm.simulation_event_service import record_command, account_snapshot, advance_account_quotes
 
 def quote_provider(*, account_id, symbol):
     return MarketQuote(symbol, D("100"), D("101"), "2026-11-19T00:00:01Z", 1)
@@ -65,3 +65,21 @@ class SimulationEventTests(TestCase):
             with self.assertRaises(ValidationError):
                 self.submit()
         self.assertFalse(PropSimulationEvent.objects.exists())
+
+    def test_removed_tail_detected_against_persisted_head(self):
+        self.submit()
+        PropSimulationEvent.objects.all().delete()
+        with self.assertRaises(ValidationError):
+            account_snapshot(account_id=self.account.pk, owner=self.owner)
+
+    def test_internal_quote_processing_closes_stop_and_persists_result(self):
+        self.submit()
+        def next_quote(*, account_id, symbol):
+            return MarketQuote(symbol, D("97"), D("98"), "2026-11-19T00:00:02Z", 2)
+        with override_settings(MPW_SIMULATION_QUOTE_PROVIDER=next_quote):
+            result = advance_account_quotes(account_id=self.account.pk)
+        self.assertEqual(result.position_count, 0)
+        self.assertEqual(result.realized_pnl, D("-4"))
+        self.assertEqual(account_snapshot(account_id=self.account.pk, owner=self.owner), result)
+        self.account.refresh_from_db()
+        self.assertEqual(self.account.event_head_sequence, 2)
