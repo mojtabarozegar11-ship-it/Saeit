@@ -144,3 +144,6 @@ urlpatterns += [
     path("moj-signal-free-confirm/<str:token>/", signal_free_confirm, name="moj_signal_free_confirm"),
     path("moj-signal-free-unsubscribe/<str:token>/", signal_free_unsubscribe, name="moj_signal_free_unsubscribe"),
 ]
+
+# Explicit merchant URLs; handlers retain host, ownership and release checks.
+urlpatterns += [path("", include("config.mpw_commerce_urls"))]

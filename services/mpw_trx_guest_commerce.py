@@ -255,6 +255,7 @@ def patch_public(namespace):
                 '<p>If you already paid, do not pay again. Contact purchase support '
                 'with your invoice reference and transaction hash. '
                 'Never share a wallet recovery phrase or private key.</p>'
+                '<p><a href="/commerce/trx-easy/recover/">Recover with purchase email</a></p>'
                 '<p><a href="/store/">Return to store</a> | '
                 '<a href="mailto:support@mojplaywin.com">Purchase support</a></p>'
                 '</main></body></html>',
@@ -298,7 +299,13 @@ def patch_commercial(namespace):
                     from django.conf import settings
                     if not _new_trx_merchant_canary_is_true(settings):
                         raise Http404("New TRX invoices unavailable")
-                response = _dispatch(request, view, args, kwargs, create=make_claim)
+                if view_name == "start_order":
+                    from services.mpw_trx_email_recovery import bound_checkout
+                    response = bound_checkout(
+                        request, view, _identity, _install_cookie, args, kwargs,
+                    )
+                else:
+                    response = _dispatch(request, view, args, kwargs, create=make_claim)
                 if view_name == "start_order":
                     # Django responses expose status_code; the fallback keeps the
                     # isolated adapter contract testable without faking a response.
