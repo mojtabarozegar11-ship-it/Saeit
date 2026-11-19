@@ -17,6 +17,9 @@ jobs:
       HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
       FACTORY_VPS_RUNNER: '1'
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Prepare pinned cPanel relay
         shell: bash
         run: |
