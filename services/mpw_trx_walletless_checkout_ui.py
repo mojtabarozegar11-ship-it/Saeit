@@ -48,19 +48,32 @@ async function copy(which){
 }
 document.getElementById("copy-recipient").addEventListener("click",()=>copy("recipient"));
 document.getElementById("copy-amount").addEventListener("click",()=>copy("amount"));
-let stopped=false,started=Date.now();
-function schedule(delay){if(!stopped)window.setTimeout(check,delay);}
+let stopped=false,started=Date.now(),busy=false,timer=null,lastReconcile=0;
+function schedule(delay){if(!stopped){window.clearTimeout(timer);timer=window.setTimeout(check,delay);}}
 async function check(){
-  if(stopped)return;
+  if(stopped||busy)return;
   if(Date.now()-started>35*60*1000){stopped=true;status.textContent="Automatic status checks paused. Contact support; do not send a second payment.";return;}
   if(document.hidden){schedule(10000);return;}
+  busy=true;
   try{
     const url=frame.getAttribute("data-status-url");
     if(!/^\\/commerce\\/trx-easy\\/status\\/[1-9][0-9]*\\/$/.test(url))throw new Error("Invalid status endpoint");
     const r=await fetch(url,{credentials:"same-origin",cache:"no-store",redirect:"error",
       headers:{"Accept":"application/json"}});
     if(!r.ok)throw new Error("Payment check temporarily unavailable");
-    const data=await r.json();
+    let data=await r.json();
+    const reconcile=frame.dataset.reconcileUrl, token=frame.dataset.csrfToken;
+    if(data.status==="awaiting" && reconcile && token && Date.now()-lastReconcile>=30000 &&
+       reconcile===url.replace("/status/","/reconcile/")){
+      lastReconcile=Date.now();
+      const controller=new AbortController();
+      const deadline=window.setTimeout(()=>controller.abort(),60000);
+      try{
+        const result=await fetch(reconcile,{method:"POST",credentials:"same-origin",cache:"no-store",redirect:"error",
+          signal:controller.signal,headers:{"Accept":"application/json","X-CSRFToken":token}});
+        if(result.ok)data=await result.json();
+      }finally{window.clearTimeout(deadline);}
+    }
     if(data.status==="paid" && data.can_download===true
       && typeof data.download_path==="string"
       && /^\\/commerce\\/trx-easy\\/download\\/[1-9][0-9]*\\/$/.test(data.download_path)){
@@ -72,7 +85,7 @@ async function check(){
       ?"Invoice expired. Do not pay this invoice."
       :"Waiting for independent TRON payment confirmation. Do not pay twice.";
     if(data.status==="expired"){stopped=true;return;}
-  }catch(e){status.textContent="Unable to verify payment right now. Do not pay twice.";}
+  }catch(e){status.textContent="Unable to verify payment right now. Do not pay twice.";}finally{busy=false;}
   schedule(12000);
 }
 document.addEventListener("visibilitychange",()=>{if(!document.hidden && !stopped)check();});

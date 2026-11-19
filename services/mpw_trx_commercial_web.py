@@ -180,10 +180,15 @@ def _reconcile_invoice(request, invoice_id):
     from django.http import JsonResponse
     from services.mpw_walletless_commercial_intent import reconcile_commercial_intent_from_candidates
     from services.mpw_tron_readonly_deposit_candidates import find_candidate_hashes
-    from services.mpw_trx_commercial_chain import read_only_independent_pair
+    from django.core.cache import cache
     _ensure_live(request,for_paid_read=True)
-    _get_owner_invoice(request,invoice_id)
+    intent = _get_owner_invoice(request,invoice_id)
+    if intent.status != WAITING or not cache.add(
+        f"mpw-trx-reconcile:{invoice_id}", 1, timeout=90
+    ):
+        return _nocache(JsonResponse(commercial_buyer_status(invoice_id,request.user.pk)))
     try:
+        from services.mpw_trx_commercial_chain import read_only_independent_pair
         reconcile_commercial_intent_from_candidates(
             invoice_id, request.user.pk, server_lookup=find_candidate_hashes,
             pair=read_only_independent_pair(),
