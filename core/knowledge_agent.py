@@ -1,4 +1,6 @@
 from django.utils import timezone
+from django.db import transaction
+from .canonical_agent_handoff import specialist_owner
 from .models import Agent, AgentTask
 from .knowledge_agent_models import KnowledgeAgentPlan, KnowledgeDomain, KnowledgeBook, KnowledgeAgentRun
 from .knowledge_quality import quality_contract
@@ -46,6 +48,7 @@ def seed_library():
             book.save(update_fields=["outline", "updated_at"])
     return plan
 
+@transaction.atomic
 def queue_cycle():
     plan = seed_library()
     now = timezone.now()
@@ -68,7 +71,9 @@ def queue_cycle():
         objective=f"تولید بخش بعدی برای {book.title}؛ مبنا از {START.isoformat()}؛ با منابع قابل ردیابی.",
         approval_required=True,  # paid model calls always require explicit authorization
     )
-    agent, _ = Agent.objects.get_or_create(code="knowledge-content-director", defaults={"name":"Knowledge Content Director","mission":plan.mission,"risk_level":"low","active":True})
+    agent = specialist_owner("knowledge-content-director", defaults={"name":"Knowledge Content Director","mission":plan.mission,"risk_level":"low","active":True})
+    if not agent.active:
+        raise RuntimeError("KNOWLEDGE_OWNER_INACTIVE")
     # An unattended, API-backed generation can incur a charge even when its
     # draft is private. Route it through the high-risk owner approval path.
     AgentTask.objects.create(

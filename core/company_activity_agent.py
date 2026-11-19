@@ -6,6 +6,7 @@ No fabricated activities, projects, outcomes or financial claims.
 from datetime import timedelta
 from django.utils import timezone
 from .models import Agent, NewsletterStory
+from .canonical_agent_handoff import specialist_owner, BOT_CODE
 
 AGENT_CODE = "company-activity-intelligence"
 REPORT_TYPES = ("DAILY_DIGEST", "ACTIVITY_ANALYSIS", "TREND_ANALYSIS", "UNIT_ANALYSIS", "PROJECT_ANALYSIS", "EXECUTIVE_BRIEF")
@@ -41,8 +42,10 @@ def report_contract():
 
 
 def ensure_agent():
-    agent, _ = Agent.objects.get_or_create(code=AGENT_CODE, defaults={"name": "Company Activity Intelligence Agent", "mission": "تولید گزارش و تحلیل روزانه از فعالیت‌های واقعی صفحه شرکت؛ بدون جعل فعالیت.", "risk_level": "low", "active": True})
+    agent = specialist_owner(AGENT_CODE, defaults={"name": "Company Activity Intelligence Agent", "mission": "تولید گزارش و تحلیل روزانه از فعالیت‌های واقعی صفحه شرکت؛ بدون جعل فعالیت.", "risk_level": "low", "active": True})
     if not agent.active:
+        if Agent.objects.filter(code=BOT_CODE).exists():
+            raise RuntimeError("SPECIALIST_HANDOFF_REQUIRED")
         agent.active = True
         agent.save(update_fields=["active", "updated_at"])
     return agent
