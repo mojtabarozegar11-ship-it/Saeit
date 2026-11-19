@@ -182,3 +182,10 @@ for _simulation_gate in (
 def MPW_SIMULATION_EMAIL_VERIFIER(user):
     from prop_firm.simulation_identity import is_verified_simulation_user
     return is_verified_simulation_user(user)
+
+
+# Event replay requires a protected, stable signing key and an independently
+# approved quote adapter. Merely enabling this flag never creates an adapter.
+MPW_SIMULATION_TRADING_ENABLED = env.bool("MPW_SIMULATION_TRADING_ENABLED", default=False)
+MPW_SIMULATION_EVENT_KEY = env("MPW_SIMULATION_EVENT_KEY", default="")
+MPW_SIMULATION_QUOTE_PROVIDER = None
