@@ -23,6 +23,14 @@
 <article class="mp-rule-card"><span>Aggregate open risk</span><strong>4%</strong></article>
 </div>
 <p>Eligible unsuccessful participants may qualify for a future 18 TRX retry. Retry purchasing is not available yet. Rewards are subject to published eligibility, reserve and payout terms; no return is guaranteed.</p>
+{% if simulation_identity_available %}
+{% if simulation_identity_verified %}
+<a href="{% url 'moj_prop_dashboard' %}">My challenge account</a>
+<form method="post" action="{% url 'moj_prop_simulation_logout' %}">{% csrf_token %}<button type="submit">Sign out</button></form>
+{% else %}
+<a href="{% url 'moj_prop_simulation_login' %}">Sign in or create an account</a>
+{% endif %}
+{% endif %}
 {% if simulation_checkout_ready %}
 <form method="post" action="{% url 'moj_prop_simulation_checkout' %}">
 {% csrf_token %}
