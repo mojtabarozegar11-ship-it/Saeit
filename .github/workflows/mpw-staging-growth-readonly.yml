@@ -5,6 +5,8 @@ on:
       - ".github/workflows/mpw-staging-growth-readonly.yml"
       - "scripts/mpw_staging_growth_metadata_20261119.py"
       - "tests/test_mpw_staging_growth_metadata_20261119.py"
+      - "scripts/mpw_exact_large_dump_readonly_20261119.py"
+      - "tests/test_mpw_exact_large_dump_readonly_20261119.py"
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,6 +37,11 @@ jobs:
           test "$(git hash-object -- scripts/mpw_staging_growth_metadata_20261119.py)" = "248e16843393287e3ef798bdb372dc9a8cab2315"
           test "$(git hash-object -- tests/test_mpw_staging_growth_metadata_20261119.py)" = "691fc0fc378cd40374801301139187e5e3396430"
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mpw_staging_growth_metadata_20261119 -v
+          test ! -L scripts/mpw_exact_large_dump_readonly_20261119.py
+          test ! -L tests/test_mpw_exact_large_dump_readonly_20261119.py
+          test "$(git hash-object -- scripts/mpw_exact_large_dump_readonly_20261119.py)" = "3144ab6c55736adba7bf6edb7b2ab324f9b31f68"
+          test "$(git hash-object -- tests/test_mpw_exact_large_dump_readonly_20261119.py)" = "1304febce376d8079e3803a9d38e131825dd501b"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mpw_exact_large_dump_readonly_20261119 -v
       - name: Connect only through pinned factory runner to the existing cPanel
         shell: bash
         env:
@@ -53,12 +60,12 @@ jobs:
           printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
           chmod 600 "$work/config"
           timeout 40s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
-      - name: Classify owner staging growth by file metadata only
+      - name: Identify exact large dump and structural markers only
         shell: bash
         run: |
           set -euo pipefail
           work="$RUNNER_TEMP/mpw-staging-growth-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          timeout 90s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < scripts/mpw_staging_growth_metadata_20261119.py | python3 -c 'import json,sys; p="MPW_STAGING_GROWTH_READONLY="; raw=sys.stdin.read(24001); assert len(raw)<=24000; rows=[x for x in raw.splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["schema"]=="mpw.staging_growth.metadata.readonly.v1" and d["read_only"] is True and d["contents_read"] is False and d["files_deleted"] is False and d["safe_to_delete"] is False and d["release_authorized"] is False; print(rows[0])'
+          timeout 90s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < scripts/mpw_exact_large_dump_readonly_20261119.py | python3 -c 'import json,sys; p="MPW_EXACT_DUMP_READONLY="; raw=sys.stdin.read(12001); assert len(raw)<=12000; rows=[x for x in raw.splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["schema"]=="mpw.exact_dump.readonly.v1" and d["read_only"] is True and d["raw_sql_disclosed"] is False and d["safe_to_delete"] is False and d["release_authorized"] is False; print(rows[0])'
       - name: Remove ephemeral relay authentication material
         if: always()
         shell: bash
