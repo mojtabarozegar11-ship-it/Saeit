@@ -64,7 +64,7 @@ def start_simulation_checkout(request):
                 raise ValueError()
         else:
             raise ValueError()
-        if not hasattr(data, "get") or data.get("accept_terms") not in (True, "yes"):
+        if not hasattr(data, "get") or (data.get("accept_terms") is not True if request.content_type == "application/json" else data.get("accept_terms") != "yes"):
             raise ValueError()
         contract = ctx["simulation_contract"]
         if data.get("terms_digest") != contract.terms_digest:
@@ -73,7 +73,7 @@ def start_simulation_checkout(request):
         if token.get("owner") != str(request.user.pk) or token.get("contract") != contract.digest():
             raise ValueError()
         invoice = persist_simulation_invoice(order_ref=token["order_ref"],
-                    buyer_email=request.user.email, contract=contract, gates=ctx["simulation_gates"],
+                    owner=request.user, buyer_email=request.user.email, contract=contract, gates=ctx["simulation_gates"],
                     buyer_terms_acceptance=True)
     except (ValueError, ValidationError, UnicodeError, signing.BadSignature, TypeError, KeyError):
         return JsonResponse({"error": "Checkout unavailable or invalid request"}, status=400)
