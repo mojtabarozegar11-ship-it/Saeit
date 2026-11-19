@@ -92,3 +92,31 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s\n' 'BACKUP_ONLY=1' 'DEPLOYMENT=0' 'DELETION=0' 'DATABASE_DUMP_NOT_TOUCHED=1'
+
+
+      - name: Run read-only recovery inventory on the same pinned relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(cat "$RUNNER_TEMP/mpw-separated-backup-path")"
+          stage="/home/zomorod2/.local/share/mpw-live-preflight-$GITHUB_RUN_ID"
+          timeout 30s ssh -T -F "$work/config" saeit-cpanel "umask 077; rm -rf -- '$stage'; mkdir -p -- '$stage'"
+          tar -C "$GITHUB_WORKSPACE" -czf - scripts/mpw_live_email_recovery_capability_readonly_20261105.py scripts/mpw_live_guest_email_linkage_readonly_20261105.py | timeout 45s ssh -T -F "$work/config" saeit-cpanel "tar -xzf - -C '$stage'"
+          timeout 180s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_live_email_recovery_capability_readonly_20261105.py'"
+          timeout 180s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_live_guest_email_linkage_readonly_20261105.py'"
+          timeout 60s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - <<'PY'
+          import json, os
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from django.conf import settings
+          print('MPW_LIVE_FLAGS=' + json.dumps({
+              'recovery_enabled': getattr(settings,'MPW_GUEST_RECOVERY_ENABLED',False) is True,
+              'recovery_email_approved': getattr(settings,'MPW_GUEST_RECOVERY_EMAIL_APPROVED',False) is True,
+              'email_send_approved': getattr(settings,'MPW_GUEST_EMAIL_SEND_APPROVED',False) is True,
+              'merchant_canary': getattr(settings,'MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED',False) is True,
+              'email_backend': str(getattr(settings,'EMAIL_BACKEND',''))[:120],
+              'default_from_configured': bool(str(getattr(settings,'DEFAULT_FROM_EMAIL','')).strip()),
+          }, sort_keys=True))
+          PY"
+          timeout 30s ssh -T -F "$work/config" saeit-cpanel "rm -rf -- '$stage'"
