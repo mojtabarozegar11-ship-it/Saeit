@@ -41,6 +41,11 @@ class SyntheticSaleOffer:
     def public_disclosure(self):
         return {
             "account_mode": "simulated",
+            "data_mode": self.data_mode,
+            "challenge_days": self.challenge_days,
+            "entry_fee_trx": self.entry_fee_trx,
+            "retry_fee_trx": self.retry_fee_trx,
+            "retry_discount_pct": self.retry_discount_pct,
             "simulated_balance_usd": self.simulated_balance_usd,
             "virtual_principal_withdrawable": self.virtual_principal_withdrawable,
             "customer_deposit_required": self.customer_deposit_required,
