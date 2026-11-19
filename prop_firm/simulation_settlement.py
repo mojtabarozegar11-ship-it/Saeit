@@ -1,9 +1,9 @@
 """Internal settlement boundary; caller must be an independently authenticated reconciler."""
 import re
 from django.core.exceptions import ValidationError
-from django.db import transaction
-from .models import PropPlan1Invoice
-from .plan1_persistence import record_verified_settlement
+from django.db import transaction, IntegrityError
+from .models import PropPlan1Invoice, PropPlan1Receipt, TronSettlementLedger
+from .reward_reserve_persistence import allocate_reward_reserve_after_settlement
 from .simulation_fulfillment import provision_simulation_account
 from .simulation_invoice_contract import PRODUCT_CODE, CONTRACT_VERSION, NETWORK
 
@@ -30,7 +30,18 @@ def settle_and_provision(*, invoice_id, owner, tx_hash, observed_network,
         if receipt.ledger.tx_hash != tx_hash or receipt.ledger.evidence_digest != evidence_digest:
             raise ValidationError("Existing settlement mismatch")
     else:
-        receipt = record_verified_settlement(invoice_id=invoice.pk, tx_hash=tx_hash,
+        if invoice.status != "pending":
+            raise ValidationError("Invoice is not pending")
+        try:
+            with transaction.atomic():
+                ledger = TronSettlementLedger.objects.create(
+                    network=NETWORK, tx_hash=tx_hash, amount_sun=observed_amount_sun,
                     evidence_digest=evidence_digest, trusted_reconciler_attestation=True)
+        except IntegrityError as exc:
+            raise ValidationError("Transaction already settled") from exc
+        invoice.status = "paid"
+        invoice.save(update_fields=["status"])
+        receipt = PropPlan1Receipt.objects.create(invoice=invoice, ledger=ledger)
+        allocate_reward_reserve_after_settlement(invoice_id=invoice.pk)
     account = provision_simulation_account(invoice_id=invoice.pk, owner=owner)
     return receipt, account
