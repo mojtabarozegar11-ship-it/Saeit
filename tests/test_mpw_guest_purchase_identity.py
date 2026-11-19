@@ -98,8 +98,10 @@ class GuestPurchaseIdentityTests(SimpleTestCase):
             product_id=x.product_id, buyer_email_digest=x.buyer_email_digest,
             status="paid", network="tron-mainnet", asset="TRX",
             chain_finality_verified=True, provider_tx_id="a" * 64,
-            settled_sun=2500000, delivery_rights_verified=True,
+            expected_sun=2500000, settled_sun=2500000, refunded_sun=0,
+            delivery_rights_verified=True, refunded=False,
             refund_pending=False, charge_disputed=False,
+            settlement_reversed=False, entitlement_revoked=False,
         )
         record.update(changes)
         return record
@@ -144,7 +146,11 @@ class GuestPurchaseIdentityTests(SimpleTestCase):
             {"asset": "USDT"}, {"chain_finality_verified": "yes"},
             {"chain_finality_verified": False}, {"provider_tx_id": "x" * 64},
             {"provider_tx_id": "A" * 64}, {"settled_sun": 0},
-            {"settled_sun": True},
+            {"settled_sun": True}, {"settled_sun": 1},
+            {"expected_sun": 0}, {"expected_sun": True},
+            {"expected_sun": 2500001}, {"settled_sun": 2499999},
+            {"settled_sun": 2500001}, {"refunded_sun": True},
+            {"refunded_sun": -1}, {"refunded_sun": 1},
         ):
             with self.subTest(wrong=wrong):
                 self.assertEqual(
@@ -155,13 +161,100 @@ class GuestPurchaseIdentityTests(SimpleTestCase):
     def test_refund_dispute_or_rights_change_stops_delivery(self):
         for wrong in (
             {"refund_pending": True}, {"charge_disputed": True},
-            {"delivery_rights_verified": False},
+            {"delivery_rights_verified": False}, {"refunded": True},
+            {"settlement_reversed": True}, {"entitlement_revoked": True},
         ):
             with self.subTest(wrong=wrong):
                 self.assertEqual(
                     self.delivery(trusted_paid_invoice=self.paid_record(**wrong))["reason"],
                     "rights_or_dispute_hold",
                 )
+
+    def test_guest_checkout_dust_payment_cannot_unlock_download(self):
+        for paid in (1, 2499999, 2500001, 2600000):
+            with self.subTest(sun=paid):
+                decision = self.delivery(trusted_paid_invoice=self.paid_record(
+                    settled_sun=paid,
+                ))
+                self.assertEqual(decision["reason"], "independent_tron_payment_unverified")
+
+    def test_invoice_quote_amount_must_exist_and_be_positive_int(self):
+        record = self.paid_record()
+        for missing_or_bad in (None, True, False, 0, -1, "2500000", 2500001):
+            with self.subTest(quote=repr(missing_or_bad)):
+                candidate = dict(record)
+                if missing_or_bad is None:
+                    candidate.pop("expected_sun")
+                else:
+                    candidate["expected_sun"] = missing_or_bad
+                self.assertEqual(
+                    self.delivery(trusted_paid_invoice=candidate)["reason"],
+                    "independent_tron_payment_unverified",
+                )
+
+    def test_refund_total_must_be_explicit_zero_int(self):
+        record = self.paid_record()
+        for invalid in (None, True, False, -1, 1, 2500000, "0"):
+            with self.subTest(refunded_sun=repr(invalid)):
+                candidate = dict(record)
+                if invalid is None:
+                    candidate.pop("refunded_sun")
+                else:
+                    candidate["refunded_sun"] = invalid
+                self.assertEqual(
+                    self.delivery(trusted_paid_invoice=candidate)["reason"],
+                    "independent_tron_payment_unverified",
+                )
+
+    def test_partially_refunded_purchase_cannot_still_be_delivered(self):
+        ledger = self.paid_record(
+            settled_sun=2500000, expected_sun=2500000,
+            refunded_sun=1, refunded=False, refund_pending=False,
+        )
+        self.assertFalse(self.delivery(
+            trusted_paid_invoice=ledger,
+        )["eligible_for_private_delivery"])
+
+    def test_completed_refund_or_reversal_revokes_after_pending_clears(self):
+        self.assertTrue(self.delivery()["eligible_for_private_delivery"])
+        for changed_flag in ("refunded", "settlement_reversed", "entitlement_revoked"):
+            with self.subTest(status=changed_flag):
+                candidate = self.paid_record(**{
+                    changed_flag: True, "refund_pending": False,
+                    "charge_disputed": False, "refunded_sun": 0,
+                })
+                self.assertEqual(
+                    self.delivery(trusted_paid_invoice=candidate)["reason"],
+                    "rights_or_dispute_hold",
+                )
+
+    def test_refund_revocation_fields_must_explicitly_be_false(self):
+        for field in ("refunded", "settlement_reversed", "entitlement_revoked"):
+            for bad in (None, 0, "false", [], {}):
+                with self.subTest(field=field, value=repr(bad)):
+                    candidate = self.paid_record(**{field: bad})
+                    if bad is None:
+                        candidate.pop(field)
+                    self.assertEqual(
+                        self.delivery(trusted_paid_invoice=candidate)["reason"],
+                        "rights_or_dispute_hold",
+                    )
+
+    def test_unpaid_document_cannot_be_unlocked_by_email_hmac_alone(self):
+        proof = self.proof()
+        record = self.paid_record(proof=proof)
+        record.pop("expected_sun")
+        record.pop("refunded")
+        self.assertFalse(self.delivery(
+            proof=proof, trusted_paid_invoice=record,
+        )["eligible_for_private_delivery"])
+
+    def test_zero_side_effects_even_when_proven_guest_can_read(self):
+        decision = self.delivery()
+        self.assertTrue(decision["eligible_for_private_delivery"])
+        self.assertFalse(decision["email_sent"])
+        self.assertFalse(decision["file_delivered"])
+        self.assertFalse(decision["payment_changed"])
 
     def test_email_and_invoice_identity_do_not_approve_payment(self):
         proof = self.proof()

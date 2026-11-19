@@ -152,18 +152,30 @@ def paid_guest_delivery_preflight(*, proof, buyer_email, invoice_id,
             or trusted_paid_invoice.get("buyer_email_digest") != proof.buyer_email_digest):
         return deny("invoice_owner_product_mismatch")
     txid = trusted_paid_invoice.get("provider_tx_id")
+    expected_sun = trusted_paid_invoice.get("expected_sun")
+    settled_sun = trusted_paid_invoice.get("settled_sun")
+    refunded_sun = trusted_paid_invoice.get("refunded_sun")
     if (trusted_paid_invoice.get("status") != "paid"
             or trusted_paid_invoice.get("asset") != "TRX"
             or trusted_paid_invoice.get("network") != "tron-mainnet"
             or trusted_paid_invoice.get("chain_finality_verified") is not True
             or type(txid) is not str
             or re.fullmatch(r"[0-9a-f]{64}", txid) is None
-            or type(trusted_paid_invoice.get("settled_sun")) is not int
-            or trusted_paid_invoice["settled_sun"] <= 0):
+            # A 1-SUN dust transfer must not unlock a full-price download.
+            # Require an immutable merchant invoice amount, exact SUN
+            # settlement, and independently reconciled zero refunded SUN.
+            or type(expected_sun) is not int or expected_sun <= 0
+            or type(settled_sun) is not int or settled_sun != expected_sun
+            or type(refunded_sun) is not int or refunded_sun != 0):
         return deny("independent_tron_payment_unverified")
     if (trusted_paid_invoice.get("delivery_rights_verified") is not True
             or trusted_paid_invoice.get("refund_pending") is not False
-            or trusted_paid_invoice.get("charge_disputed") is not False):
+            or trusted_paid_invoice.get("charge_disputed") is not False
+            # Pending can become false AFTER the refund completes.
+            # Explicit false is required; no stale/false-like backend claims.
+            or trusted_paid_invoice.get("refunded") is not False
+            or trusted_paid_invoice.get("settlement_reversed") is not False
+            or trusted_paid_invoice.get("entitlement_revoked") is not False):
         return deny("rights_or_dispute_hold")
     return {
         "eligible_for_private_delivery": True,

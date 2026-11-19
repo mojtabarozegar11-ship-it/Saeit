@@ -45,8 +45,11 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
             "settled_sun": 12000000,
             "finality_verified": True,
             "refunded": False,
+            "refunded_sun": 0,
             "refund_pending": False,
             "charge_disputed": False,
+            "settlement_reversed": False,
+            "entitlement_revoked": False,
         }
         record.update(changes)
         return {lease.invoice_id: record}
@@ -131,6 +134,150 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
         self.assertFalse(self.access(independently_reconciled_invoices=["mpw:trx:invoice:10001"]))
         self.assertFalse(self.access(independently_reconciled_invoices={"proof": True}))
 
+    def test_missing_reversal_and_revocation_fields_deny_old_ledger(self):
+        lease = self.lease()
+        base = self.paid_invoice_record(lease)[lease.invoice_id]
+        for missing in ("refunded", "settlement_reversed", "entitlement_revoked"):
+            with self.subTest(field=missing):
+                record = dict(base)
+                del record[missing]
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices={lease.invoice_id: record},
+                ))
+
+    def test_completed_refund_or_reversed_settlement_immediately_revokes(self):
+        lease = self.lease()
+        active = self.paid_invoice_record(lease)
+        self.assertTrue(self.access(
+            lease=lease, independently_reconciled_invoices=active,
+        ))
+        for flag in ("refunded", "settlement_reversed", "entitlement_revoked"):
+            with self.subTest(flag=flag):
+                revoked = self.paid_invoice_record(lease, **{
+                    flag: True,
+                    "refund_pending": False,
+                    "charge_disputed": False,
+                    "finality_verified": True,
+                })
+                self.assertFalse(self.access(
+                    lease=lease, independently_reconciled_invoices=revoked,
+                ))
+
+    def test_revocation_requires_real_boolean_false_not_false_like_value(self):
+        lease = self.lease()
+        for flag in ("refunded", "settlement_reversed", "entitlement_revoked"):
+            for bad in ("false", 0, None, [], {}):
+                with self.subTest(flag=flag, bad=repr(bad)):
+                    self.assertFalse(self.access(
+                        lease=lease, independently_reconciled_invoices=(
+                            self.paid_invoice_record(lease, **{flag: bad})
+                        ),
+                    ))
+
+    def test_exact_tron_invoice_amount_remains_required_after_refund_fix(self):
+        lease = self.lease()
+        for bad_paid in (1, 11999999, 12000001, 13000000, True, "12000000"):
+            with self.subTest(amount=repr(bad_paid)):
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices=self.paid_invoice_record(
+                        lease, settled_sun=bad_paid,
+                    ),
+                ))
+        self.assertTrue(self.access(
+            lease=lease, independently_reconciled_invoices=(
+                self.paid_invoice_record(lease, settled_sun=12000000)
+            ),
+        ))
+
+    def test_missing_or_invalid_expected_amount_cannot_unlock_signal(self):
+        lease = self.lease()
+        original = self.paid_invoice_record(lease)[lease.invoice_id]
+        for bad in (None, True, False, 0, -1, "12000000", 12000001):
+            with self.subTest(value=repr(bad)):
+                record = dict(original)
+                if bad is None:
+                    record.pop("expected_sun")
+                else:
+                    record["expected_sun"] = bad
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices={lease.invoice_id: record},
+                ))
+
+    def test_reversed_entitlement_denied_across_all_brand_mirrors(self):
+        lease = self.lease()
+        for brand in ("saman", "zahra", "taniya"):
+            with self.subTest(brand=brand):
+                self.assertFalse(self.access(
+                    lease=lease, mirror_brand=brand,
+                    independently_reconciled_invoices=self.paid_invoice_record(
+                        lease, settlement_reversed=True,
+                    ),
+                ))
+                self.assertFalse(self.access(
+                    lease=lease, mirror_brand=brand,
+                    independently_reconciled_invoices=self.paid_invoice_record(
+                        lease, entitlement_revoked=True,
+                    ),
+                ))
+
+    def test_partial_tron_refund_blocks_paid_signal_even_if_old_flag_false(self):
+        lease = self.lease()
+        self.assertTrue(self.access(lease=lease))
+        for refunded in (1, 11999999, 12000000):
+            with self.subTest(refunded_sun=refunded):
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices=self.paid_invoice_record(
+                        lease, refunded_sun=refunded, refunded=False,
+                        refund_pending=False, settlement_reversed=False,
+                    ),
+                ))
+
+    def test_refund_sun_missing_false_like_and_negative_never_grants_access(self):
+        lease = self.lease()
+        original = self.paid_invoice_record(lease)[lease.invoice_id]
+        for invalid in (None, True, False, -1, "0", "1", 0.0):
+            with self.subTest(refund_amount=repr(invalid)):
+                candidate = dict(original)
+                if invalid is None:
+                    candidate.pop("refunded_sun")
+                else:
+                    candidate["refunded_sun"] = invalid
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices={lease.invoice_id: candidate},
+                ))
+
+    def test_zero_refunded_sun_does_not_override_revoked_invoice_state(self):
+        lease = self.lease()
+        for flag in ("refunded", "settlement_reversed", "entitlement_revoked"):
+            with self.subTest(flag=flag):
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices=self.paid_invoice_record(
+                        lease, refunded_sun=0, **{flag: True},
+                    ),
+                ))
+
+    def test_refund_sun_zero_without_valid_invoice_never_grants_access(self):
+        lease = self.lease()
+        for invalid in (
+            {"settled_sun": 1},
+            {"expected_sun": 0},
+            {"tx_id": "x" * 64},
+            {"finality_verified": False},
+        ):
+            with self.subTest(invalid=invalid):
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices=self.paid_invoice_record(
+                        lease, refunded_sun=0, **invalid,
+                    ),
+                ))
+
     def test_paid_invoice_must_match_exact_tenant_sku_buyer_and_finality(self):
         variations = (
             {"merchant_tenant_id": "signal_other"},
@@ -142,6 +289,10 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
             {"tx_id": "z" * 64}, {"tx_id": "A" * 64},
             {"invoice_id": "mpw:trx:invoice:10002"},
             {"refunded": True},
+            {"settlement_reversed": True},
+            {"entitlement_revoked": True},
+            {"settlement_reversed": "false"},
+            {"entitlement_revoked": 0},
             {"asset": "USDT"}, {"network": "tron-testnet"},
             {"finality_verified": "yes"}, {"finality_verified": False},
             {"refund_pending": True}, {"charge_disputed": True},

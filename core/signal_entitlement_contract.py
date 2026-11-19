@@ -187,8 +187,18 @@ def _reconciled_invoice_matches(lease, independently_reconciled_invoices):
         and record["settled_sun"] == record["expected_sun"]
         and record.get("finality_verified") is True
         and record.get("refunded") is False
+        # A stale completed-refund flag must not make a partially refunded
+        # invoice valid. This native-SUN aggregate comes from the protected
+        # independent merchant ledger, never from client-supplied JSON.
+        and type(record.get("refunded_sun")) is int
+        and record["refunded_sun"] == 0
         and record.get("refund_pending") is False
         and record.get("charge_disputed") is False
+        # The invoice may cease to be payable AFTER a completed reversal or
+        # staff revocation, even though refund_pending is already False.
+        # Missing/untyped claims in the protected ledger fail closed.
+        and record.get("settlement_reversed") is False
+        and record.get("entitlement_revoked") is False
     )
 
 
