@@ -1,8 +1,8 @@
-"""Moj Prop 28-day single-post evidence policy, prospective v1.2 only.
+"""Moj Prop social-evidence policy for the simulation-v1 contract.
 
 Exactly one original Instagram and one original Facebook post for the *entire*
 challenge enrollment (two phases combined), not per trade or per phase.
-The four-week trading window begins at an independently confirmed paid invoice,
+The 28-day social-retention window begins at an independently confirmed paid invoice,
 not at a user-supplied browser timestamp. Posts must remain visible for at
 least 28 x 24 hours. A completed trading window never substitutes for confirmed
 28-day post visibility. All checks are offline; no Meta API writes.
@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 
 PLATFORMS = ("instagram", "facebook")
 LEGACY_CONTRACT_VERSION = "2026-11-14/v1.1"
-NEW_CONTRACT_VERSION = "2026-11-15/v1.2"
+NEW_CONTRACT_VERSION = "2026-11-19/simulation-v1"
 DURATION_DAYS = 28
 POST_START_GRACE_HOURS = 24
 BLOCKED_OWNER_PROFILE = "dr.mojtaba.rozegar"
