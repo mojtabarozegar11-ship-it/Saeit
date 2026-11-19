@@ -9,6 +9,13 @@ class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise HTTPError(req.full_url, code, "Redirect refused", headers, fp)
 from django.core.exceptions import ValidationError
+from django.conf import settings
+from datetime import datetime, timezone
+from services.mpw_tron_independent_solidified_rpc import (
+    RpcProvider, verify_distinct_provider_config, parse_solidified_native_trx,
+    solidified_head_height, _post,
+)
+from services.mpw_trx_walletless_core import PaymentHold
 from .simulation_invoice_contract import valid_tron_recipient, BASE58
 from .models import PropPlan1Invoice
 from .simulation_settlement import settle_and_provision
@@ -144,13 +151,61 @@ def verify_invoice_transaction(invoice, tx_hash, body):
                 "timestamp_ms": signed_timestamp, "result": "SUCCESS"}
     return hashlib.sha256(json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
+
+def configured_providers():
+    """Settings are server-owned; absence or unreviewed independence fails closed."""
+    providers = getattr(settings, "MPW_SIMULATION_TRON_PROVIDERS", ())
+    if (getattr(settings, "MPW_SIMULATION_TRON_OPERATOR_INDEPENDENCE_ATTESTED", False) is not True
+            or not isinstance(providers, (list, tuple)) or len(providers) != 2
+            or not all(isinstance(provider, RpcProvider) for provider in providers)):
+        raise ValidationError("Two independently reviewed TRON providers required")
+    try:
+        verify_distinct_provider_config(*providers)
+    except (PaymentHold, ValueError, TypeError) as exc:
+        raise ValidationError("Invalid independent TRON provider configuration") from exc
+    return tuple(providers)
+
+
+def dual_solidified_evidence(invoice, tx_hash, *, transport=None, now=None):
+    """Bind two separately operated solidity nodes to the same native payment.
+
+    Payment remains pending on timeout, stale heads, or any disagreement.
+    The canonical evidence digest stays independent of provider metadata.
+    """
+    if not isinstance(tx_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", tx_hash):
+        raise ValidationError("Invalid transaction ID")
+    providers = configured_providers()
+    current = now if now is not None else datetime.now(timezone.utc)
+    observations = []
+    try:
+        for provider in providers:
+            head = solidified_head_height(provider, current, transport=transport)
+            body = _post(provider, "/walletsolidity/gettransactionbyid", tx_hash, transport)
+            info = _post(provider, "/walletsolidity/gettransactioninfobyid", tx_hash, transport)
+            transfer = parse_solidified_native_trx(tx_hash, body, info, source_id=provider.source_id)
+            digest = verify_invoice_transaction(invoice, tx_hash, body)
+            block = info["blockNumber"]
+            stamp = info["blockTimeStamp"]
+            if (block > head or transfer.recipient != invoice.recipient
+                    or transfer.amount_sun != invoice.amount_sun
+                    or transfer.block_time < invoice.created_at
+                    or transfer.block_time > current
+                    or body["raw_data"]["timestamp"] > stamp):
+                raise ValidationError("Finalized payment does not match invoice or chain head")
+            observations.append((digest, block, stamp))
+    except (PaymentHold, ValueError, TypeError, KeyError, OverflowError, OSError) as exc:
+        raise ValidationError("Independent payment confirmation unavailable") from exc
+    if observations[0] != observations[1]:
+        raise ValidationError("Independent TRON providers disagree")
+    return observations[0][0]
+
+
 def reconcile_simulation_invoice(*, invoice_id, owner, tx_hash, verified_owner_email):
     # Caller must supply verified identity from an authenticated server-side service.
     invoice = PropPlan1Invoice.objects.get(pk=invoice_id)
     if not owner.is_authenticated or not owner.is_active or owner.email != invoice.buyer_email or verified_owner_email != owner.email:
         raise ValidationError("Verified owner required")
-    body = read_solidified_transaction(tx_hash)
-    evidence = verify_invoice_transaction(invoice, tx_hash, body)
+    evidence = dual_solidified_evidence(invoice, tx_hash)
     return settle_and_provision(invoice_id=invoice_id, owner=owner, tx_hash=tx_hash,
         observed_network="tron-mainnet", observed_asset="TRX", observed_recipient=invoice.recipient,
         observed_amount_sun=invoice.amount_sun, independently_finalized=True,
