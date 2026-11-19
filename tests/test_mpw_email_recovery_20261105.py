@@ -201,9 +201,8 @@ class RecoveryIsolationTests(TransactionTestCase):
                     token_digest=hashlib.sha256(code.encode("ascii")).hexdigest(),
                     email_digest="a" * 64,
                     expires_at=timezone.now() + timedelta(minutes=15))
-                response = module.recovery_verify(self._verification_request(code))
-                self.assertEqual(response.status_code, 503)
-                self.assertNotIn(module.SESSION_COOKIE, response.cookies)
+                with self.assertRaises(Http404):
+                    module.recovery_verify(self._verification_request(code))
                 token.refresh_from_db()
                 self.assertIsNone(token.consumed_at)
                 self.assertFalse(GuestRecoveryRate.objects.exists())
@@ -295,21 +294,18 @@ class RecoveryIsolationTests(TransactionTestCase):
             _meta=SimpleNamespace(fields=[fake_field, state_field]),
             objects=MagicMock(),
         )
-        ready = fulfillment.objects.filter.return_value
-        ready.count.return_value = 1
-        ready.values.return_value.distinct.return_value.count.return_value = 1
+        ready = fulfillment.objects.filter.return_value.filter.return_value
+        ready_ids = ready.values_list.return_value
         fake_items = MagicMock()
-        fake_items.objects.filter.return_value.count.return_value = 2
+        item_ids = fake_items.objects.filter.return_value.values_list.return_value
+        item_ids.__getitem__.return_value = [11, 12]
         with patch.object(module.apps, "get_model", return_value=fulfillment), \
              patch.object(module, "OrderItem", fake_items):
-            # Partial delivery remains ineligible.
+            ready_ids.__getitem__.return_value = [11]
             self.assertFalse(module._ready(SimpleNamespace(pk=123)))
-            # Duplicate ready rows for a single item must not mask
-            # a different item that has never been fulfilled.
-            ready.count.return_value = 2
+            ready_ids.__getitem__.return_value = [11, 11]
             self.assertFalse(module._ready(SimpleNamespace(pk=123)))
-            # Two different ready order items are eligible.
-            ready.values.return_value.distinct.return_value.count.return_value = 2
+            ready_ids.__getitem__.return_value = [11, 12]
             self.assertTrue(module._ready(SimpleNamespace(pk=123)))
 
     def test_prune_removes_no_persistent_order_claims(self):
