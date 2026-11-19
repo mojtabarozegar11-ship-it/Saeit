@@ -1,16 +1,17 @@
 import uuid
+from datetime import timedelta
 from urllib.parse import urlencode
 from decimal import Decimal as D
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.utils import timezone
-from prop_firm.models import PropSimulationIdentity, PropSimulationEvent
+from prop_firm.models import PropSimulationIdentity, PropSimulationEvent, PropSimulationAccount
 from prop_firm.simulation_invoice_contract import SimulationInvoiceContract, REQUIRED_GATES
 from prop_firm.simulation_invoice_persistence import persist_simulation_invoice
 from prop_firm.simulation_settlement import settle_and_provision
 from prop_firm.simulation_engine import MarketQuote, OrderRequest
-from prop_firm.simulation_event_service import record_command, account_snapshot, advance_account_quotes
+from prop_firm.simulation_event_service import record_command, account_snapshot, advance_account_quotes, terminal_state, mark_expired_for_review, _append_event, LEGACY_VERSION, ROOT
 
 def quote_provider(*, account_id, symbol):
     return MarketQuote(symbol, D("100"), D("101"), "2026-11-19T00:00:01Z", 1)
@@ -106,3 +107,33 @@ class SimulationEventTests(TestCase):
         PropSimulationIdentity.objects.create(owner=outsider, email=outsider.email, verified_at=timezone.now())
         self.client.force_login(outsider)
         self.assertEqual(self.client.get(path, secure=True, HTTP_HOST="mojplaywin.com").status_code, 404)
+
+    def test_expiry_requires_review_and_never_creates_reward_or_pass(self):
+        with self.assertRaises(ValidationError):
+            mark_expired_for_review(account_id=self.account.pk)
+        PropSimulationAccount.objects.filter(pk=self.account.pk).update(
+            created_at=timezone.now()-timedelta(days=61))
+        self.assertEqual(mark_expired_for_review(account_id=self.account.pk), "expired_review")
+        self.assertEqual(mark_expired_for_review(account_id=self.account.pk), "expired_review")
+        state = terminal_state(account_id=self.account.pk, owner=self.owner)
+        self.assertFalse(state["active"])
+        self.assertEqual(state["review_status"], "expired_review")
+        with self.assertRaises(ValidationError):
+            self.submit()
+        self.assertFalse(PropSimulationEvent.objects.exists())
+
+    def test_historical_signed_engine_version_is_replayed_but_not_reinterpreted(self):
+        payload = {"version": LEGACY_VERSION, "operation": "submit",
+            "order": {"order_id":"old-order", "symbol":"EURUSD", "side":"buy", "quantity":"1",
+                      "order_type":"market", "limit_price":None, "stop_price":None,
+                      "stop_loss":"99", "take_profit":None},
+            "quote":{"symbol":"EURUSD", "bid":"100", "ask":"101",
+                     "timestamp":"2026-11-19T00:00:01Z", "sequence":1}}
+        _append_event(self.account, 1, uuid.uuid4(), ROOT, payload)
+        state = terminal_state(account_id=self.account.pk, owner=self.owner)
+        self.assertEqual(state["summary"].position_count, 1)
+        self.assertEqual(state["execution_version"], LEGACY_VERSION)
+        self.assertFalse(state["active"])
+        self.assertIsNone(state["trading_days"])
+        with self.assertRaises(ValidationError):
+            self.submit()
