@@ -14,7 +14,8 @@ from .simulation_engine import SimulationEngine, MarketQuote, OrderRequest
 from .simulation_identity import is_verified_simulation_user
 from .simulation_fulfillment import verified_simulation_purchase
 
-VERSION = "simulation-engine-v1"
+VERSION = "simulation-engine-v2"
+LEGACY_VERSION = "simulation-engine-v1"
 ROOT = "0" * 64
 
 def _signing_key():
@@ -45,7 +46,7 @@ def _order_payload(order):
     return data
 
 def _apply(engine, payload):
-    if payload.get("version") != VERSION:
+    if payload.get("version") not in (VERSION, LEGACY_VERSION):
         raise ValidationError("Unsupported historical execution version")
     q = MarketQuote(**(payload["quote"] | {"bid": Decimal(payload["quote"]["bid"]),
                                           "ask": Decimal(payload["quote"]["ask"])}))
@@ -75,12 +76,21 @@ def _locked_account(account_id, owner):
     return account
 
 def _replay(account):
-    engine = SimulationEngine(starting_balance=account.starting_balance_usd)
+    first = account.execution_events.order_by("sequence").first()
+    version = first.payload.get("version") if first else VERSION
+    if version == LEGACY_VERSION:
+        from .simulation_engine_v1 import SimulationEngine as HistoricalEngine
+        engine = HistoricalEngine(starting_balance=account.starting_balance_usd)
+    elif version == VERSION:
+        engine = SimulationEngine(starting_balance=account.starting_balance_usd)
+    else:
+        raise ValidationError("Unsupported execution version")
+    engine.execution_version = version
     prior = ROOT
     sequence = 0
     for event in account.execution_events.order_by("sequence").iterator(chunk_size=500):
         sequence += 1
-        if (event.sequence != sequence or event.prior_digest != prior
+        if (event.payload.get("version") != version or event.sequence != sequence or event.prior_digest != prior
                 or not constant_time_compare(event.digest, _digest(account.pk, sequence,
                     event.command_id, prior, event.payload))):
             raise ValidationError("Simulation execution ledger integrity failure")
@@ -114,6 +124,8 @@ def record_command(*, account_id, owner, command_id, operation, order=None, orde
             or timezone.now() >= account.created_at + timedelta(days=account.challenge_days)):
         raise ValidationError("Challenge is closed or expired")
     engine, sequence, prior = _replay(account)
+    if engine.execution_version != VERSION:
+        raise ValidationError("Historical ledger requires reviewed migration before new execution")
     action = {"operation": operation, "version": VERSION}
     if operation == "submit":
         action["order"] = _order_payload(order)
@@ -168,6 +180,8 @@ def advance_account_quotes(*, account_id):
     if account.status != "active" or timezone.now() >= account.created_at + timedelta(days=account.challenge_days):
         raise ValidationError("Challenge closed or expired")
     engine, sequence, prior = _replay(account)
+    if engine.execution_version != VERSION:
+        raise ValidationError("Historical ledger requires reviewed migration before new execution")
     symbols = sorted({item.symbol for item in engine.positions.values()} |
                      {item.symbol for item in engine.pending.values()})
     for symbol in symbols:
@@ -190,10 +204,38 @@ def terminal_state(*, account_id, owner):
     engine, _, _ = _replay(account)
     return {
         "summary": engine.snapshot(),
+        "execution_version": engine.execution_version,
+        "review_status": account.status,
+        "trading_days": len(getattr(engine, "realized_by_day", {})) if engine.execution_version == VERSION else None,
+        "best_day_share": _best_day_share(engine),
         "positions": list(engine.positions.values()),
         "pending": list(engine.pending.values()),
         "recent_closed": list(engine.closed[-20:][::-1]),
         "expires_at": account.created_at + timedelta(days=account.challenge_days),
-        "active": account.status == "active" and not engine.blocked and
+        "active": account.status == "active" and engine.execution_version == VERSION and not engine.blocked and
                   timezone.now() < account.created_at + timedelta(days=account.challenge_days),
     }
+
+
+def _best_day_share(engine):
+    if engine.execution_version != VERSION or engine.realized_pnl <= 0:
+        return None
+    best = max([Decimal("0"), *engine.realized_by_day.values()])
+    return best * Decimal("100") / engine.realized_pnl
+
+
+@transaction.atomic
+def mark_expired_for_review(*, account_id):
+    """Record expiry without fabricating a pass, loss or reward."""
+    account = PropSimulationAccount.objects.select_for_update().select_related("owner").get(pk=account_id)
+    _locked_account(account.pk, account.owner)
+    if timezone.now() < account.created_at + timedelta(days=account.challenge_days):
+        raise ValidationError("Challenge has not expired")
+    if account.status == "expired_review":
+        return account.status
+    if account.status != "active":
+        return account.status
+    _replay(account)
+    account.status = "expired_review"
+    account.save(update_fields=["status"])
+    return account.status
