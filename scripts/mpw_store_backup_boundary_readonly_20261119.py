@@ -3,7 +3,8 @@ Run as the existing cPanel account with the existing Python interpreter and -B.
 No dump, migration, mail, restart, or backup creation; no identifiers in output.
 """
 import json
-import math
+import re
+from decimal import Decimal, InvalidOperation
 import os
 from pathlib import Path
 import pwd
@@ -65,30 +66,56 @@ def quota_fields(document):
             "local_inode_headroom": max(0, data["inode_limit"]-data["inodes_used"]) if data["inode_limit"] else None,
             "account_total_quota_proven": False}
 
+def canonical_number(value):
+    if type(value) not in (str,int,float):
+        raise ValueError("invalid numeric type")
+    s = str(value)
+    if not re.fullmatch(r"[0-9]{1,18}(?:\.[0-9]{1,12})?", s):
+        raise ValueError("invalid numeric syntax")
+    try:
+        return Decimal(s)
+    except InvalidOperation as exc:
+        raise ValueError("invalid number") from exc
+
 def account_quota_fields(document):
-    """Validate account-wide quota separately; never infer it from statvfs."""
-    if document.get("module") != "Quota" or document.get("func") != "get_quota_info":
+    """Follow prior owner-proven C113 numeric contract; partial fields stay unknown."""
+    if document.get("module", "Quota") != "Quota" or document.get("func", "get_quota_info") != "get_quota_info":
         raise ValueError("unexpected account quota response")
     result = document["result"]
-    if type(result.get("status")) is not int or result["status"] != 1 or result.get("errors") or result.get("warnings"):
-        raise ValueError("account quota unavailable or ambiguous")
+    if type(result.get("status")) is not int or result["status"] != 1 or result.get("errors"):
+        raise ValueError("account quota unavailable")
     data = result["data"]
+    if type(data) is not dict:
+        raise ValueError("invalid quota data")
     disk = ("megabyte_limit", "megabytes_used", "megabytes_remain")
     inode = ("inode_limit", "inodes_used", "inodes_remain")
     flags = ("under_megabyte_limit", "under_inode_limit", "under_quota_overall")
-    if any(type(data.get(k)) not in (int,float) or not math.isfinite(data[k]) or data[k] < 0 for k in disk):
-        raise ValueError("invalid account disk counters")
-    if any(type(data.get(k)) is not int or data[k] < 0 for k in inode):
-        raise ValueError("invalid account inode counters")
-    if any(type(data.get(k)) is not int or data[k] not in (0,1) for k in flags):
-        raise ValueError("invalid account quota status")
-    # Zero means unlimited/disabled, not known usable capacity.
-    disk_remaining = min(data["megabytes_remain"], max(0, data["megabyte_limit"] - data["megabytes_used"])) if data["megabyte_limit"] else None
-    inode_remaining = min(data["inodes_remain"], max(0, data["inode_limit"] - data["inodes_used"])) if data["inode_limit"] else None
-    return {**{k: data[k] for k in disk + inode + flags},
-            "account_disk_headroom_reported_mb": disk_remaining,
-            "account_inode_headroom_reported": inode_remaining,
+    values = {k: canonical_number(data[k]) for k in disk}
+    parsed_flags = {}
+    for k in flags:
+        v = data.get(k)
+        if (type(v) is int and v in (0,1)) or (type(v) is str and v in ("0","1")):
+            parsed_flags[k] = int(v)
+        elif v is None:
+            parsed_flags[k] = None
+        else:
+            raise ValueError("invalid quota flag")
+    iv = {}
+    for k in inode:
+        if k not in data or data[k] is None:
+            iv[k] = None
+        else:
+            x = canonical_number(data[k])
+            if x != int(x):
+                raise ValueError("fractional inode count")
+            iv[k] = int(x)
+    remaining = min(values["megabytes_remain"], max(Decimal(0), values["megabyte_limit"]-values["megabytes_used"])) if values["megabyte_limit"] else None
+    ir = min(iv["inodes_remain"], max(0, iv["inode_limit"]-iv["inodes_used"])) if all(iv[k] is not None for k in inode) and iv["inode_limit"] else None
+    return {**{k: float(v) for k,v in values.items()}, **iv, **parsed_flags,
+            "account_disk_headroom_reported_mb": float(remaining) if remaining is not None else None,
+            "account_inode_headroom_reported": ir,
             "account_total_quota_observed": True,
+            "quota_warnings_present": bool(result.get("warnings")),
             "backup_capacity_proven": False}
 
 def quota(function="get_local_quota_info"):
@@ -107,7 +134,8 @@ def quota(function="get_local_quota_info"):
         for user_arg in (["--user=" + OWNER], []):
             try:
                 p = subprocess.run([str(binary), "--output=json", *user_arg, "Quota", function],
-                                   capture_output=True, timeout=8, check=False)
+                                   capture_output=True, timeout=8, check=False,
+                                   env={"LC_ALL":"C","PATH":"/usr/bin:/bin:/usr/local/bin","HOME":"/home/zomorod2","USER":OWNER,"LOGNAME":OWNER})
                 if p.returncode != 0:
                     attempts.append("nonzero_exit_" + str(p.returncode))
                     continue
@@ -121,7 +149,7 @@ def quota(function="get_local_quota_info"):
 
 
 def inspect():
-    out = {"schema": "mpw.store_backup_boundary.readonly.v3", "read_only": True,
+    out = {"schema": "mpw.store_backup_boundary.readonly.v4", "read_only": True,
            "customer_rows_read": False, "dump_executed": False,
            "restore_verified": False, "release_authorized": False}
     if pwd.getpwuid(os.getuid()).pw_name != OWNER or ROOT.resolve() != ROOT:
