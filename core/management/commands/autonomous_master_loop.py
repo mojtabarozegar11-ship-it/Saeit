@@ -1,8 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.core.management import call_command
 from django.db.models import F
-from core.autonomous_brain import AutonomousBrain
-from core.models import AgentTask
+from core.economic_replan import reconcile_economic_precondition
 from core.economic_owner import economic_queue
 from core.economic_tool_pack import build_economic_gateway
 from core.worker_runner import WorkerRunner
@@ -14,7 +13,6 @@ class Command(BaseCommand):
         parser.add_argument("--max-steps", type=int, default=20)
 
     def handle(self,*args,**opts):
-        brain=AutonomousBrain()
         gateway = build_economic_gateway()
         supported = frozenset(
             code for code, spec in gateway.describe().items()
@@ -58,24 +56,17 @@ class Command(BaseCommand):
                     f"revenue_not_assessed=true"
                 ))
             except Exception as exc:
-                prereq=brain.prerequisite_from_error(exc)
-                self.stdout.write(f"AUTO_REPLAN failed_task={active.pk} reason={exc} prerequisite={prereq or 'unknown'}")
-                if not prereq:
+                disposition = reconcile_economic_precondition(
+                    task_id=active.pk, agent_id=active.agent_id,
+                    previous_attempt_count=active.attempt_count,
+                    error=exc, tool_specs=gateway.describe(),
+                )
+                self.stdout.write(
+                    f"AUTO_REPLAN task={active.pk} disposition={disposition} "
+                    f"reason_type={type(exc).__name__}"
+                )
+                if disposition != "prerequisite_ready":
                     return
-                # Failed task is already safely requeued by WorkerRunner when retries remain.
-                # Cancel it as superseded so the inferred prerequisite can run first.
-                active.refresh_from_db()
-                if active.status=="queued":
-                    active.status="cancelled"
-                    active.output_data={**(active.output_data or {}),"replanned_to":prereq,"blocker":str(exc)[:1000]}
-                    active.save(update_fields=["status","output_data","updated_at"])
-                agent=active.agent
-                cap=agent.capabilities.filter(code=prereq,active=True).first()
-                if not cap:
-                    self.stdout.write(f"AUTO_BLOCKED missing_capability={prereq}"); return
-                AgentTask.objects.create(agent=agent,action_type=prereq,capability_code=prereq,
-                    risk_snapshot=cap.risk_level,input_data={"objective":agent.mission,"replanned_from":active.pk,
-                    "reason":str(exc)[:1000]},status="queued")
                 continue
 
             # Stop when progress reaches an external-world boundary rather than
