@@ -643,3 +643,12 @@ class PropSimulationAccount(models.Model):
     challenge_days = models.PositiveSmallIntegerField(default=60)
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=16, default="active")
+
+
+class PropSimulationInvoiceOwner(models.Model):
+    """Persistent owner identity for a simulation invoice, independent of email changes."""
+    invoice = models.OneToOneField(PropPlan1Invoice, on_delete=models.PROTECT,
+                                  related_name="simulation_owner")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+                              related_name="prop_simulation_invoices")
+    created_at = models.DateTimeField(auto_now_add=True)
