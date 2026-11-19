@@ -86,6 +86,12 @@ def moj_prop_dashboard(request, lang="en"):
         response["Cache-Control"] = "private, no-store"
         return response
 
+    if lang == "en":
+        from prop_firm.simulation_identity import is_verified_simulation_user
+        if is_verified_simulation_user(request.user):
+            from prop_firm.simulation_dashboard_views import simulation_dashboard
+            return simulation_dashboard(request)
+
     profile = PropTrader.objects.filter(user=request.user).first()
     accounts = [] if profile is None else list(
         PropAccount.objects.filter(trader=profile)
