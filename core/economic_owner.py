@@ -20,7 +20,7 @@ ECONOMIC_CODES = frozenset({
 def economic_owner_code():
     old = Agent.objects.filter(code=LEGACY).first()
     bot = Agent.objects.filter(code=BOT_CODE, active=True).first()
-    if old is None or bot is None:
+    if old is None:
         return LEGACY
     receipt = AuditLog.objects.filter(
         action=CUTOVER, target_type="Agent", target_id=str(old.pk)
@@ -28,7 +28,7 @@ def economic_owner_code():
     if receipt is None:
         return LEGACY
     state = receipt.after_state
-    if (old.active or not isinstance(state, dict)
+    if (bot is None or old.active or not isinstance(state, dict)
             or state.get("legacy_code") != LEGACY
             or state.get("canonical_code") != BOT_CODE
             or state.get("canonical_agent_id") != bot.pk
