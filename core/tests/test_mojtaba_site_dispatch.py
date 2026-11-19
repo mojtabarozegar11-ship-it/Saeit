@@ -3,6 +3,7 @@ import json
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
+from django.db import transaction
 from core.models import Agent, AuditLog
 from core.mojtaba_site_dispatch import CLAIM, execute_site_cycle
 from core.mojtaba_site_fleet import SiteFleetError
@@ -67,3 +68,10 @@ class CanonicalSiteDispatchTests(TestCase):
     def test_cli_cycle_id_requires_observation(self):
         with self.assertRaises(CommandError):
             call_command("mojtaba_site_fleet_cycle", "--cycle-id", "e"*32)
+
+    def test_nested_transaction_cannot_run_external_observation(self):
+        with transaction.atomic():
+            with self.assertRaises(RuntimeError):
+                execute_site_cycle("f"*32, transport=self.transport)
+        self.assertEqual(self.urls, [])
+        self.assertFalse(AuditLog.objects.filter(action=CLAIM).exists())

@@ -16,7 +16,7 @@ CLAIM = "mojtaba_site_cycle_claimed"
 def execute_site_cycle(cycle_id, *, transport=None):
     if not isinstance(cycle_id, str) or not CYCLE_ID.fullmatch(cycle_id):
         raise SiteFleetError("INVALID_CANONICAL_CYCLE_ID")
-    with transaction.atomic():
+    with transaction.atomic(durable=True):
         agent = Agent.objects.select_for_update().filter(code=ACTOR, active=True).first()
         if agent is None:
             raise SiteFleetError("CANONICAL_AGENT_NOT_PROVISIONED")
