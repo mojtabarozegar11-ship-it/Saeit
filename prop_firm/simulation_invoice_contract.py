@@ -18,6 +18,8 @@ def valid_tron_recipient(value):
 
 PRODUCT_CODE = "MOJ-PROP-SIM-01"
 CONTRACT_VERSION = "2026-11-19/sim-v2"
+COMMERCIAL_CONTRACT_VERSION = "2026-11-19/sim-v3"
+SUPPORTED_CONTRACT_VERSIONS = (CONTRACT_VERSION, COMMERCIAL_CONTRACT_VERSION)
 NETWORK = "tron-mainnet"
 FEES_SUN = {"first": 30_000_000, "retry": 18_000_000}
 REQUIRED_GATES = (
@@ -32,6 +34,7 @@ class SimulationInvoiceContract:
     recipient: str
     terms_digest: str
     purchase_kind: str = "first"
+    version: str = CONTRACT_VERSION
 
     def snapshot(self):
         if not valid_tron_recipient(self.recipient):
@@ -40,11 +43,13 @@ class SimulationInvoiceContract:
             raise ValueError("Terms SHA256 required")
         if self.purchase_kind not in FEES_SUN:
             raise ValueError("Unsupported purchase kind")
-        return dict(product_code=PRODUCT_CODE, contract_version=CONTRACT_VERSION,
+        if self.version not in SUPPORTED_CONTRACT_VERSIONS:
+            raise ValueError("Unsupported contract version")
+        return dict(product_code=PRODUCT_CODE, contract_version=self.version,
                     network=NETWORK, recipient=self.recipient, terms_digest=self.terms_digest,
                     purchase_kind=self.purchase_kind, amount_sun=FEES_SUN[self.purchase_kind],
                     virtual_balance_usd=1000, challenge_days=60,
-                    account_mode="simulated", data_mode="synthetic_replay",
+                    account_mode="simulated", data_mode=("licensed_market_data" if self.version == COMMERCIAL_CONTRACT_VERSION else "synthetic_replay"),
                     virtual_principal_withdrawable=False)
 
     def digest(self):
