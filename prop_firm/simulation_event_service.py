@@ -86,6 +86,8 @@ def _replay(account):
             raise ValidationError("Simulation execution ledger integrity failure")
         _apply(engine, event.payload)
         prior = event.digest
+    if account.event_head_sequence != sequence or not constant_time_compare(account.event_head_digest, prior):
+        raise ValidationError("Simulation execution ledger head mismatch")
     return engine, sequence, prior
 
 @transaction.atomic
@@ -140,7 +142,43 @@ def record_command(*, account_id, owner, command_id, operation, order=None, orde
     payload = action | {"quote": _quote_payload(quote)}
     _apply(engine, payload)
     sequence += 1
+    _append_event(account, sequence, command_id, prior, payload)
+    return engine.snapshot()
+
+
+def _append_event(account, sequence, command_id, prior, payload):
+    digest = _digest(account.pk, sequence, command_id, prior, payload)
     PropSimulationEvent.objects.create(account=account, sequence=sequence,
-        command_id=command_id, prior_digest=prior, payload=payload,
-        digest=_digest(account.pk, sequence, command_id, prior, payload))
+        command_id=command_id, prior_digest=prior, payload=payload, digest=digest)
+    account.event_head_sequence = sequence
+    account.event_head_digest = digest
+    account.save(update_fields=["event_head_sequence", "event_head_digest"])
+
+
+@transaction.atomic
+def advance_account_quotes(*, account_id):
+    """Internal scheduled processor; caller cannot supply market prices."""
+    if getattr(settings, "MPW_SIMULATION_TRADING_ENABLED", False) is not True:
+        raise ValidationError("Trading service unavailable")
+    resolver = getattr(settings, "MPW_SIMULATION_QUOTE_PROVIDER", None)
+    if not callable(resolver):
+        raise ValidationError("Approved quote provider required")
+    account = PropSimulationAccount.objects.select_for_update().select_related("owner").get(pk=account_id)
+    _locked_account(account.pk, account.owner)
+    if account.status != "active" or timezone.now() >= account.created_at + timedelta(days=account.challenge_days):
+        raise ValidationError("Challenge closed or expired")
+    engine, sequence, prior = _replay(account)
+    symbols = sorted({item.symbol for item in engine.positions.values()} |
+                     {item.symbol for item in engine.pending.values()})
+    for symbol in symbols:
+        quote = resolver(account_id=account.pk, symbol=symbol)
+        if not isinstance(quote, MarketQuote) or quote.symbol != symbol:
+            raise ValidationError("Authoritative quote unavailable")
+        if quote.sequence <= engine.last_quote_sequence:
+            continue
+        payload = {"operation": "quote", "version": VERSION, "quote": _quote_payload(quote)}
+        _apply(engine, payload)
+        sequence += 1
+        _append_event(account, sequence, uuid.uuid4(), prior, payload)
+        prior = account.event_head_digest
     return engine.snapshot()
