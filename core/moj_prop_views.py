@@ -41,6 +41,9 @@ def moj_prop_landing(request, lang="en"):
     except ValueError as error:
         raise Http404("Unsupported language") from error
     data["interest_copy"] = INTEREST_COPY.get(lang, INTEREST_COPY["en"])
+    if lang == "en":
+        from prop_firm.simulation_checkout_views import checkout_page_context
+        data.update(checkout_page_context(request))
     template = "mojplaywin/moj_prop_simulation.html" if lang == "en" else "mojplaywin/moj_prop.html"
     response = render(request, template, data)
     # The CSRF token is per browser; shared caching can leak or break it.
