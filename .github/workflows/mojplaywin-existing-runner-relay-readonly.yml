@@ -1,0 +1,60 @@
+name: MojPlayWin existing runner relay read-only preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 3
+    steps:
+      - name: Inspect existing local relay capability without secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          sock="\${SSH_AUTH_SOCK:-}"
+          if [[ -n "$sock" && -S "$sock" ]]; then
+            echo "RUNNER_SSH_AUTH_SOCK_PRESENT=1"
+            if ssh-add -l >/dev/null 2>&1; then
+              echo "RUNNER_AGENT_KEYS_AVAILABLE=1"
+            else
+              echo "RUNNER_AGENT_KEYS_AVAILABLE=0"
+            fi
+          else
+            echo "RUNNER_SSH_AUTH_SOCK_PRESENT=0"
+            echo "RUNNER_AGENT_KEYS_AVAILABLE=0"
+          fi
+
+          config="$HOME/.ssh/config"
+          if [[ -f "$config" && ! -L "$config" ]]; then
+            echo "RUNNER_SSH_CONFIG_PRESENT=1"
+          else
+            echo "RUNNER_SSH_CONFIG_PRESENT=0"
+          fi
+
+          alias_cpanel=0
+          alias_host=0
+          if [[ -f "$config" && ! -L "$config" ]]; then
+            if awk 'tolower($1)=="host" { for (i=2;i<=NF;i++) if ($i=="saeit-cpanel" || $i=="saeit-host") found=1 } END { exit(found ? 0 : 1) }' "$config"; then alias_cpanel=1; fi
+            if awk 'tolower($1)=="host" { for (i=2;i<=NF;i++) if ($i=="zohal.pws-dns.net" || $i=="178.239.147.125") found=1 } END { exit(found ? 0 : 1) }' "$config"; then alias_host=1; fi
+          fi
+          echo "RUNNER_CPANEL_ALIAS_PRESENT=$alias_cpanel"
+          echo "RUNNER_HOST_ALIAS_PRESENT=$alias_host"
+
+          sock_present=0
+          agent_keys=0
+          if [[ -n "$sock" && -S "$sock" ]]; then sock_present=1; fi
+          if [[ "$sock_present" == "1" ]] && ssh-add -l >/dev/null 2>&1; then agent_keys=1; fi
+
+          if [[ "$alias_cpanel" == "1" && "$alias_host" == "1" && "$sock_present" == "1" && "$agent_keys" == "1" ]]; then
+            echo "EXISTING_RELAY_ATTEMPTED=1"
+            timeout 35s ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o RequestTTY=no saeit-cpanel 'printf "EXISTING_CPANEL_RELAY=READY\n"; id -un; hostname'
+          else
+            echo "EXISTING_RELAY_ATTEMPTED=0"
+            echo "EXISTING_RELAY_RESULT=NOT_CONFIGURED"
+          fi
+          echo "DESTRUCTIVE_ACTIONS=0"
+          echo "KEY_VALUES_DISCLOSED=0"
