@@ -53,7 +53,7 @@ jobs:
           work="$(cat "$RUNNER_TEMP/mpw-live-preflight-path")"
           stage="/home/zomorod2/.local/share/mpw-live-preflight-$GITHUB_RUN_ID"
           timeout 30s ssh -T -F "$work/config" saeit-cpanel "umask 077; rm -rf -- '$stage'; mkdir -p -- '$stage'"
-          tar -C "$GITHUB_WORKSPACE" -czf -             scripts/mpw_live_email_recovery_capability_readonly_20261105.py             scripts/mpw_live_guest_email_linkage_readonly_20261105.py           | timeout 45s ssh -T -F "$work/config" saeit-cpanel "tar -xzf - -C '$stage'"
+          tar -C "$GITHUB_WORKSPACE" -czf - scripts/mpw_live_email_recovery_capability_readonly_20261105.py scripts/mpw_live_guest_email_linkage_readonly_20261105.py | timeout 45s ssh -T -F "$work/config" saeit-cpanel "tar -xzf - -C '$stage'"
           timeout 180s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_live_email_recovery_capability_readonly_20261105.py'"
           timeout 180s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_live_guest_email_linkage_readonly_20261105.py'"
           timeout 60s ssh -T -F "$work/config" saeit-cpanel "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - <<'PY'
@@ -69,7 +69,7 @@ jobs:
               'merchant_canary': getattr(settings,'MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED',False) is True,
               'email_backend': str(getattr(settings,'EMAIL_BACKEND',''))[:120],
               'default_from_configured': bool(str(getattr(settings,'DEFAULT_FROM_EMAIL','')).strip()),
-          }, sort_keys=True)) 
+          }, sort_keys=True))
           PY"
         if: always()
         run: |
