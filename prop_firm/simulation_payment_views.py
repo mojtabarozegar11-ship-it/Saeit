@@ -22,7 +22,7 @@ def owned_invoice(request, order_ref):
     if not callable(verifier) or verifier(request.user) is not True:
         raise Http404
     return get_object_or_404(PropPlan1Invoice, order_ref=order_ref,
-                             buyer_email=request.user.email, product_code=PRODUCT_CODE,
+                             simulation_owner__owner=request.user, buyer_email=request.user.email, product_code=PRODUCT_CODE,
                              contract_version=CONTRACT_VERSION)
 
 @never_cache
