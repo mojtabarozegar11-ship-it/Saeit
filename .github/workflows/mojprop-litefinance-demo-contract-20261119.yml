@@ -1,0 +1,33 @@
+name: MOJ PROP LiteFinance demo evidence contract
+on:
+  push:
+    branches: [feature/mojprop-litefinance-demo-contract-20261119]
+    paths:
+      - 'prop_firm/plan1_litefinance_demo_contract.py'
+      - 'tests/test_prop_plan1_litefinance_demo_contract.py'
+      - '.github/workflows/mojprop-litefinance-demo-contract-20261119.yml'
+  pull_request:
+    branches: [feature/mojprop-panel-reservation-contract-20261119]
+    paths:
+      - 'prop_firm/plan1_litefinance_demo_contract.py'
+      - 'tests/test_prop_plan1_litefinance_demo_contract.py'
+      - '.github/workflows/mojprop-litefinance-demo-contract-20261119.yml'
+permissions:
+  contents: read
+jobs:
+  demo-contract:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/feature/mojprop-litefinance-demo-contract-20261119' || github.base_ref == 'feature/mojprop-panel-reservation-contract-20261119')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Run read-only evidence tests
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_prop_plan1_litefinance_demo_contract.py' -v
+      - name: Compile demo contract
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile prop_firm/plan1_litefinance_demo_contract.py tests/test_prop_plan1_litefinance_demo_contract.py
