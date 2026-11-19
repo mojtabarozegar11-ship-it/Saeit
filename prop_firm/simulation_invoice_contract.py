@@ -3,6 +3,18 @@ from dataclasses import dataclass
 from hashlib import sha256
 import json
 import re
+from hmac import compare_digest
+
+BASE58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+def valid_tron_recipient(value):
+    if not isinstance(value, str) or not re.fullmatch(r'T[1-9A-HJ-NP-Za-km-z]{33}', value):
+        return False
+    number = 0
+    for char in value:
+        number = number * 58 + BASE58.index(char)
+    raw = number.to_bytes((number.bit_length() + 7) // 8, 'big')
+    return len(raw) == 25 and raw[0] == 0x41 and compare_digest(raw[-4:], sha256(sha256(raw[:-4]).digest()).digest()[:4])
 
 PRODUCT_CODE = "MOJ-PROP-SIM-01"
 CONTRACT_VERSION = "2026-11-19/sim-v2"
@@ -22,7 +34,7 @@ class SimulationInvoiceContract:
     purchase_kind: str = "first"
 
     def snapshot(self):
-        if not isinstance(self.recipient, str) or not re.fullmatch(r"T[1-9A-HJ-NP-Za-km-z]{33}", self.recipient):
+        if not valid_tron_recipient(self.recipient):
             raise ValueError("TRON recipient format invalid")
         if not isinstance(self.terms_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", self.terms_digest):
             raise ValueError("Terms SHA256 required")
