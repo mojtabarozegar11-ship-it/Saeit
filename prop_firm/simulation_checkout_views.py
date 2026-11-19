@@ -1,5 +1,7 @@
 """English MojPlayWin checkout; disabled unless all trusted gates pass."""
 import json
+from dataclasses import replace
+from django.db import transaction
 from hashlib import sha256
 from uuid import uuid4
 from django.conf import settings
@@ -15,6 +17,7 @@ from .simulation_invoice_persistence import persist_simulation_invoice
 from .simulation_runtime import trading_runtime_ready
 from .simulation_tron_reconcile import configured_providers
 from .simulation_feed import commercial_feed_configured
+from .simulation_retry import locked_retry_reference
 
 SALT = "mojprop.sim.checkout.v2"
 
@@ -66,6 +69,22 @@ def checkout_page_context(request):
     return {key: ctx[key] for key in ("simulation_checkout_ready", "simulation_terms",
                                      "simulation_terms_digest")} | {"simulation_checkout_token": token}
 
+@transaction.atomic
+def retry_checkout_page_context(request, account_id):
+    ctx = checkout_context(request)
+    if not ctx:
+        return {}
+    try:
+        order_ref = locked_retry_reference(account_id=account_id, owner=request.user)
+        contract = replace(ctx["simulation_contract"], purchase_kind="retry")
+        contract.release(ctx["simulation_gates"], retry_eligibility_verified=True)
+        token = signing.dumps({"owner": str(request.user.pk), "contract": contract.digest(),
+                               "order_ref": order_ref, "retry_account_id": account_id}, salt=SALT)
+    except (ValidationError, ValueError, TypeError):
+        return {}
+    return {"terms": ctx["simulation_terms"], "terms_digest": ctx["simulation_terms_digest"],
+            "checkout_token": token, "account_id": account_id}
+
 @never_cache
 @require_POST
 @csrf_protect
@@ -96,11 +115,18 @@ def start_simulation_checkout(request):
         if data.get("terms_digest") != contract.terms_digest:
             raise ValueError()
         token = signing.loads(data.get("checkout_token", ""), salt=SALT, max_age=1800)
-        if token.get("owner") != str(request.user.pk) or token.get("contract") != contract.digest():
+        if type(token) is not dict or token.get("owner") != str(request.user.pk):
+            raise ValueError()
+        retry_account_id = token.get("retry_account_id")
+        if "retry_account_id" in token:
+            if type(retry_account_id) is not int or retry_account_id <= 0:
+                raise ValueError()
+            contract = replace(contract, purchase_kind="retry")
+        if token.get("contract") != contract.digest():
             raise ValueError()
         invoice = persist_simulation_invoice(order_ref=token["order_ref"],
                     owner=request.user, buyer_email=request.user.email, contract=contract, gates=ctx["simulation_gates"],
-                    buyer_terms_acceptance=True)
+                    buyer_terms_acceptance=True, retry_account_id=retry_account_id)
     except (ValueError, ValidationError, UnicodeError, signing.BadSignature, TypeError, KeyError):
         return JsonResponse({"error": "Checkout unavailable or invalid request"}, status=400)
     result = {"order_ref": invoice.order_ref, "network": invoice.network,
