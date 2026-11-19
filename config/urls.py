@@ -23,6 +23,8 @@ from core.zomorod_public_views import agriculture_index, agriculture_guide, zomo
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
 from core.faremah_views import faremah_home
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
+from services.mpw_trx_email_recovery import recovery_request, recovery_verify, recovery_orders, recovery_download
+from services.mpw_trx_public_pages import purchases as mpw_trx_purchases
 
 urlpatterns = [
     path("", services, name="home"),
@@ -60,6 +62,12 @@ urlpatterns = [
     path("store/", store_home, name="store"),
     path("store/product/<int:product_id>/", brand_product_detail, name="store_product_detail"),
     path("store/crown/<int:product_id>/checkout/", crown_cosmetic_checkout, name="crown_cosmetic_checkout"),
+    # Guarded guest-email recovery routes; flags and outbound email remain fail-closed.
+    path("commerce/trx-easy/recover/", recovery_request, name="mpw_recovery_request"),
+    path("commerce/trx-easy/recover/verify/", recovery_verify, name="mpw_recovery_verify"),
+    path("commerce/trx-easy/recover/orders/", recovery_orders, name="mpw_recovery_orders"),
+    path("commerce/trx-easy/recover/download/<int:invoice_id>/", recovery_download, name="mpw_recovery_download"),
+    path("commerce/trx-easy/purchases/", mpw_trx_purchases, name="mpw_trx_purchases"),
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),
