@@ -137,3 +137,19 @@ class SimulationRetryTests(TestCase):
         allocation=PropRewardReserveAllocation.objects.get(invoice=invoice)
         self.assertEqual((allocation.reward_reserve_sun,allocation.refund_reserve_sun,
                           allocation.operating_buffer_sun),(14_400_000,1_800_000,1_800_000))
+
+    def test_expired_empty_paid_challenge_qualifies_once(self):
+        from datetime import timedelta
+        from prop_firm.models import PropSimulationAccount
+        from prop_firm.simulation_event_service import mark_expired_for_review
+        PropSimulationAccount.objects.filter(pk=self.account.pk).update(created_at=timezone.now()-timedelta(days=61))
+        self.assertEqual(mark_expired_for_review(account_id=self.account.pk),"failed")
+        self.assertEqual(mark_expired_for_review(account_id=self.account.pk),"failed")
+        invoice=self.issue()
+        self.assertEqual(invoice.amount_sun,18_000_000)
+        self.assertEqual(self.issue().pk,invoice.pk)
+
+    def test_status_alone_cannot_grant_early_retry(self):
+        self.account.status="failed"
+        self.account.save(update_fields=["status"])
+        with self.assertRaises(ValidationError):self.issue()
