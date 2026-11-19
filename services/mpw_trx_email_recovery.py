@@ -2,7 +2,7 @@
 
 Install only after core migration 0040 and the corresponding URL/checkout
 adapter release have passed preflight.  Outbound mail is independently gated
-by MPW_GUEST_RECOVERY_EMAIL_APPROVED, which defaults to False.
+by recovery and explicit send-approval gates, all of which default to False.
 
 Legacy orders without a per-order email claim are deliberately excluded.
 No request changes a payment, payment ledger, fulfillment, or old order owner.
@@ -68,6 +68,14 @@ def _recovery_enabled():
     return (
         getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True and
         getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True
+    )
+
+
+def _email_send_enabled():
+    """Outbound mail requires a separate explicit owner-approved gate."""
+    return (
+        _recovery_enabled() and
+        getattr(settings, "MPW_GUEST_EMAIL_SEND_APPROVED", False) is True
     )
 
 
@@ -250,6 +258,12 @@ def _allowed(request, email=None, *, verify=False):
 
 
 def _issue(email, email_digest):
+    # Recovery may be visible only when all independent gates are approved.
+    # This guard is repeated at the send boundary so a stale request cannot
+    # send mail after an owner revokes outbound delivery.
+    if not _email_send_enabled():
+        LOG.info("mpw_recovery_email_send_blocked")
+        return False
     # No plaintext token is placed in a table, query string or URL path.
     code = secrets.token_urlsafe(32)
     row = GuestRecoveryToken.objects.create(
@@ -280,7 +294,7 @@ def _issue(email, email_digest):
 def recovery_request(request):
     if not _host(request):
         raise Http404
-    if not _recovery_enabled():
+    if not _email_send_enabled():
         return _page("Email recovery is not yet available",
                      '<p>Do not make another payment. If you already paid, '
                      'contact <a href="mailto:support@mojplaywin.com">purchase support</a> '
