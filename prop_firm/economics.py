@@ -9,6 +9,7 @@ from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
 from .rules import LEVELS, POLICY, dec
 from .plans import DEFAULT_PLAN_CODE, plan_for_code
+from .simulation_policy import estimate_reward_reserve
 
 
 def nonnegative(value, field):
@@ -180,3 +181,61 @@ def conservative_realization_gate(*, treasury_verified, legal_approved,
         "live_trading_enabled": False,
         "payment_collection_enabled": False,
     }
+
+
+@dataclass(frozen=True)
+class SimulatedCohortEconomics:
+    applicants: int
+    retry_applicants: int
+    gross_revenue_usd: Decimal
+    reward_reserve_usd: Decimal
+    operating_cost_usd: Decimal
+    refund_reserve_usd: Decimal
+    net_after_reserves_usd: Decimal
+    virtual_principal_requirement_usd: Decimal
+    assumptions_are_projections: bool = True
+
+
+def simulated_cohort_economics(
+    *,
+    applicants,
+    retry_applicants,
+    trx_usd_assumption,
+    pass_rate_percent,
+    reward_claim_rate_percent,
+    average_reward_usd,
+    operating_cost_usd=0,
+    refund_reserve_usd=0,
+):
+    """Project simulation revenue and real reward obligations.
+
+    Virtual balances are deliberately excluded from cash requirements. The
+    reward reserve is included as a real obligation and must be independently
+    evidenced before paid admissions are enabled.
+    """
+    count = valid_count(applicants, "applicants")
+    retries = valid_count(retry_applicants, "retry_applicants")
+    trx = nonnegative(trx_usd_assumption, "trx_usd_assumption")
+    if trx == 0:
+        raise ValueError("trx_usd_assumption must be positive")
+    operating = nonnegative(operating_cost_usd, "operating_cost_usd")
+    refund = nonnegative(refund_reserve_usd, "refund_reserve_usd")
+    reserve = estimate_reward_reserve(
+        applicants=count,
+        pass_rate_pct=pass_rate_percent,
+        reward_claim_rate_pct=reward_claim_rate_percent,
+        average_reward_usd=average_reward_usd,
+        retry_applicants=retries,
+    )
+    gross = (reserve.total_revenue_trx * trx).quantize(Decimal("0.01"))
+    net = gross - reserve.reward_reserve_usd - operating - refund
+    return SimulatedCohortEconomics(
+        applicants=count,
+        retry_applicants=retries,
+        gross_revenue_usd=gross,
+        reward_reserve_usd=reserve.reward_reserve_usd,
+        operating_cost_usd=operating,
+        refund_reserve_usd=refund,
+        net_after_reserves_usd=net,
+        virtual_principal_requirement_usd=Decimal("0"),
+    )
