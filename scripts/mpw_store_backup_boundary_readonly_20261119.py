@@ -13,7 +13,7 @@ import sys
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
 DEST = Path("/home/zomorod2/separated-backups/20261119")
-UAPI = Path("/usr/local/cpanel/bin/uapi")
+UAPI_PATHS = (Path("/usr/bin/uapi"), Path("/usr/local/cpanel/bin/uapi"))
 OWNER = "zomorod2"
 SEEDS = ("core.PaymentIntent", "core.PaymentWebhookEvent", "core.LedgerEntry",
          "core.Order", "core.OrderItem", "core.Product", "core.GuestOrderEmail",
@@ -94,17 +94,34 @@ def account_quota_fields(document):
 def quota(function="get_local_quota_info"):
     if function not in ("get_local_quota_info", "get_quota_info"):
         raise ValueError("unsupported read-only quota function")
-    st = UAPI.stat()
-    if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022:
-        raise ValueError("unsafe UAPI executable")
-    p = subprocess.run([str(UAPI), "--output=json", "Quota", function],
-                       capture_output=True, timeout=20, check=True)
-    if len(p.stdout) > 65536:
-        raise ValueError("quota response too large")
-    return (quota_fields if function == "get_local_quota_info" else account_quota_fields)(json.loads(p.stdout))
+    parser = quota_fields if function == "get_local_quota_info" else account_quota_fields
+    attempts = []
+    for binary in UAPI_PATHS:
+        try:
+            st = binary.stat()
+            if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022:
+                raise ValueError("unsafe UAPI executable")
+        except (OSError, ValueError) as exc:
+            attempts.append(type(exc).__name__)
+            continue
+        for user_arg in (["--user=" + OWNER], []):
+            try:
+                p = subprocess.run([str(binary), "--output=json", *user_arg, "Quota", function],
+                                   capture_output=True, timeout=8, check=False)
+                if p.returncode != 0:
+                    attempts.append("nonzero_exit_" + str(p.returncode))
+                    continue
+                if len(p.stdout) > 65536:
+                    raise ValueError("quota response too large")
+                data = parser(json.loads(p.stdout))
+                return {"success": True, "data": data, "prior_attempts": attempts}
+            except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as exc:
+                attempts.append(type(exc).__name__)
+    return {"success": False, "attempts": attempts}
+
 
 def inspect():
-    out = {"schema": "mpw.store_backup_boundary.readonly.v2", "read_only": True,
+    out = {"schema": "mpw.store_backup_boundary.readonly.v3", "read_only": True,
            "customer_rows_read": False, "dump_executed": False,
            "restore_verified": False, "release_authorized": False}
     if pwd.getpwuid(os.getuid()).pw_name != OWNER or ROOT.resolve() != ROOT:
