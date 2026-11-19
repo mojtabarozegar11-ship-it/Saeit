@@ -631,3 +631,15 @@ class PropRewardCommitment(models.Model):
         indexes = [
             models.Index(fields=["allocation", "-created_at"], name="mp_reward_alloc_created"),
         ]
+
+
+class PropSimulationAccount(models.Model):
+    """Simulation-only entitlement; never a brokerage balance."""
+    invoice = models.OneToOneField(PropPlan1Invoice, on_delete=models.PROTECT,
+                                   related_name="simulation_account")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+                              related_name="prop_simulation_accounts")
+    starting_balance_usd = models.PositiveIntegerField(default=1000)
+    challenge_days = models.PositiveSmallIntegerField(default=60)
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=16, default="active")
