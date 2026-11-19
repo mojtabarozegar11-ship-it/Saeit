@@ -7,15 +7,16 @@ from decimal import Decimal as D
 from prop_firm.economics import simulated_cohort_economics
 from prop_firm.plans import (
     CHALLENGE_PLANS,
-    DEFAULT_PLAN_CODE,
-    plan_public_summary,
 )
-from prop_firm.rules import LEVELS, POLICY, authorize_order
+from prop_firm.rules import POLICY
+from prop_firm.simulation_order_policy import authorize_simulation_order as authorize_order
+from prop_firm.simulation_invoice_contract import SimulationInvoiceContract, PRODUCT_CODE
 from prop_firm.simulation_policy import (
     SIMULATION_POLICY,
+    SIMULATION_LEVELS as LEVELS,
     estimate_reward_reserve,
 )
-from prop_firm.trade_count import count_challenge_trades
+from prop_firm.trade_count import count_simulation_trades as count_challenge_trades
 
 
 class SimulationPolicyTests(unittest.TestCase):
@@ -39,13 +40,13 @@ class SimulationPolicyTests(unittest.TestCase):
         self.assertEqual(len(LEVELS), 14)
 
     def test_plan_one_has_retry_price_and_simulation_metadata(self):
-        plan = CHALLENGE_PLANS[0]
-        self.assertEqual(plan.code, DEFAULT_PLAN_CODE)
+        plan = SIMULATION_POLICY
+        self.assertEqual(PRODUCT_CODE, "MOJ-PROP-SIM-01")
         self.assertEqual(plan.entry_fee_trx, D("30"))
         self.assertEqual(plan.retry_fee_trx, D("18"))
         self.assertEqual(plan.retry_discount_pct, D("40"))
-        self.assertEqual(plan.starting_capital_usd, D("1000"))
-        self.assertEqual(plan.duration_days, 60)
+        self.assertEqual(plan.starting_balance_usd, D("1000"))
+        self.assertEqual(plan.challenge_window_days, 60)
         self.assertEqual(plan.account_mode, "simulated")
         self.assertFalse(plan.virtual_principal_withdrawable)
 
@@ -53,11 +54,13 @@ class SimulationPolicyTests(unittest.TestCase):
         self.assertTrue(all(plan.temporary_owner_hold for plan in CHALLENGE_PLANS[1:]))
 
     def test_public_summary_discloses_virtual_principal(self):
-        summary = plan_public_summary(CHALLENGE_PLANS[0])
+        summary = SimulationInvoiceContract("T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb", "a"*64).snapshot()
         self.assertEqual(summary["account_mode"], "simulated")
-        self.assertEqual(summary["retry_fee_trx"], "18")
+        self.assertEqual(summary["amount_sun"], 30_000_000)
         self.assertFalse(summary["virtual_principal_withdrawable"])
-        self.assertFalse(summary["real_funding_guaranteed"])
+        self.assertFalse(SIMULATION_POLICY.real_orders_enabled)
+        self.assertEqual(POLICY.version, "2026-11-15/v1.2")
+        self.assertEqual(POLICY.completion_deadline_days, 28)
 
     def test_reward_reserve_rounds_claimants_up(self):
         result = estimate_reward_reserve(
