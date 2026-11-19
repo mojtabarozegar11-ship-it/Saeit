@@ -3,6 +3,7 @@ from django.core.management import call_command
 from django.db.models import F
 from core.autonomous_brain import AutonomousBrain
 from core.models import AgentTask
+from core.economic_owner import economic_queue
 from core.economic_tool_pack import build_economic_gateway
 from core.worker_runner import WorkerRunner
 
@@ -34,8 +35,8 @@ class Command(BaseCommand):
                 call_command("online_income_cycle")
                 active=self._next_eligible_task(supported)
             if not active:
-                unsupported = AgentTask.objects.filter(
-                    agent__code="economic-master-agent", agent__active=True, status="queued",
+                unsupported = economic_queue().filter(
+                    status="queued",
                 ).exclude(
                     capability_code__in=supported,
                     action_type=F("capability_code"),
@@ -91,8 +92,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _next_eligible_task(supported):
-        return AgentTask.objects.filter(
-            agent__code="economic-master-agent", agent__active=True, status="queued",
+        return economic_queue().filter(
+                    status="queued",
             capability_code__in=supported,
             action_type=F("capability_code"),
         ).order_by("created_at", "pk").first()
