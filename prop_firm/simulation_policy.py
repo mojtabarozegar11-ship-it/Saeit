@@ -36,6 +36,8 @@ class SimulationPolicy:
 
 
 SIMULATION_POLICY = SimulationPolicy()
+# Indicative simulation progression only; no real funded entitlement.
+SIMULATION_LEVELS = tuple(map(D, ('1000','1500','2000','3000','5000','7500','10000','15000','20000','35000','50000','70000','85000','100000')))
 
 
 @dataclass(frozen=True)
