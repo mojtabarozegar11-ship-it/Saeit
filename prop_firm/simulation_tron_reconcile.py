@@ -2,7 +2,12 @@
 import hashlib
 import json
 import re
-import requests
+from urllib.request import Request, build_opener, HTTPRedirectHandler
+from urllib.error import URLError, HTTPError
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise HTTPError(req.full_url, code, "Redirect refused", headers, fp)
 from django.core.exceptions import ValidationError
 from .simulation_invoice_contract import valid_tron_recipient, BASE58
 from .models import PropPlan1Invoice
@@ -22,13 +27,16 @@ def read_solidified_transaction(tx_hash):
     if not isinstance(tx_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", tx_hash):
         raise ValidationError("Invalid transaction ID")
     try:
-        response = requests.post(BASE_URL + "/walletsolidity/gettransactionbyid",
-                                 json={"value": tx_hash, "visible": False},
-                                 timeout=(5, 10), allow_redirects=False)
-        if response.status_code != 200:
-            raise ValidationError("Verification temporarily unavailable")
-        return response.json()
-    except (requests.RequestException, ValueError) as exc:
+        request = Request(BASE_URL + "/walletsolidity/gettransactionbyid",
+                          data=json.dumps({"value": tx_hash, "visible": False}).encode("utf-8"),
+                          headers={"Content-Type": "application/json", "Accept": "application/json"},
+                          method="POST")
+        with build_opener(NoRedirect()).open(request, timeout=10) as response:
+            payload = response.read(262145)
+            if response.status != 200 or len(payload) > 262144:
+                raise ValidationError("Verification temporarily unavailable")
+            return json.loads(payload)
+    except (URLError, OSError, ValueError) as exc:
         raise ValidationError("Verification temporarily unavailable") from exc
 
 def verify_invoice_transaction(invoice, tx_hash, body):
