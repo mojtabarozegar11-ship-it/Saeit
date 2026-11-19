@@ -12,7 +12,11 @@
 <dt>Open risk</dt><dd>{{ summary.open_risk|floatformat:2 }} USD</dd>
 <dt>Daily loss</dt><dd>{{ summary.daily_loss|floatformat:2 }} USD</dd>
 <dt>Closed trades</dt><dd>{{ summary.closed_trade_count }}</dd>
-<dt>Challenge ends</dt><dd>{{ expires_at }}</dd></dl>
+<dt>Challenge ends</dt><dd>{{ expires_at }}</dd>
+<dt>Account status</dt><dd>{{ review_status }}</dd>
+<dt>Trading days with closed positions</dt><dd>{{ trading_days|default_if_none:'Review required' }}</dd>
+<dt>Best day share of net profit</dt><dd>{% if best_day_share != None %}{{ best_day_share|floatformat:2 }}%{% else %}Not applicable{% endif %}</dd></dl>
+{% if review_status == 'expired_review' %}<p>Challenge period ended. Results require review; no reward or pass is implied.</p>{% endif %}
 {% if summary.blocked %}<p role="alert">Risk limit reached. New positions are blocked.</p>{% endif %}
 {% if runtime_ready and active %}
 <h2>New simulated market order</h2>
