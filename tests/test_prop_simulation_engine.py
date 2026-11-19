@@ -89,6 +89,53 @@ class SimulationEngineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             OrderRequest("a", "EURUSD", "buy", D("1"))
 
+    def test_gap_through_stop_uses_executable_bid(self):
+        e = SimulationEngine()
+        e.submit(order("a", stop="99"), q(1))
+        result = e.process_quote(q(2, bid="97", ask="98"))
+        self.assertEqual(result[0].reason, "stop_loss")
+        self.assertEqual(result[0].price, D("97"))
+        self.assertEqual(e.snapshot().realized_pnl, D("-4"))
+        self.assertEqual(e.snapshot().position_count, 0)
+
+    def test_take_profit_uses_executable_price(self):
+        e = SimulationEngine()
+        e.submit(OrderRequest("a", "EURUSD", "buy", D("1"), stop_loss=D("99"),
+                              take_profit=D("103")), q(1))
+        result = e.process_quote(q(2, bid="104", ask="105"))
+        self.assertEqual(result[0].reason, "take_profit")
+        self.assertEqual(e.snapshot().realized_pnl, D("3"))
+
+    def test_sell_stop_uses_ask(self):
+        e = SimulationEngine()
+        e.submit(order("a", side="sell", stop="102"), q(1))
+        result = e.process_quote(q(2, bid="102", ask="103"))
+        self.assertEqual(result[0].reason, "stop_loss")
+        self.assertEqual(e.snapshot().realized_pnl, D("-3"))
+
+    def test_closed_order_id_cannot_reopen(self):
+        e = SimulationEngine()
+        e.submit(order("a"), q(1))
+        e.close("a", q(2, bid="103", ask="104"))
+        self.assertEqual(e.submit(order("a"), q(3)).reason, "duplicate_order_id")
+
+    def test_drawdown_blocks_pending_fill(self):
+        e = SimulationEngine()
+        e.submit(order("a", stop="99", quantity="10"), q(1))
+        e.submit(order("b", kind="limit", limit="99", stop="80"), q(2))
+        result = e.process_quote(q(3, bid="90", ask="91"))
+        self.assertTrue(e.snapshot().blocked)
+        self.assertEqual(e.snapshot().position_count, 0)
+        self.assertEqual(e.snapshot().pending_count, 0)
+        self.assertEqual(result[-1].reason, "account_blocked")
+
+    def test_pending_gap_past_protective_stop_is_rejected(self):
+        e = SimulationEngine()
+        e.submit(order("a", kind="limit", limit="99", stop="98"), q(1))
+        result = e.process_quote(q(2, bid="96", ask="97"))
+        self.assertEqual(result[0].reason, "invalid_protective_stop_at_fill")
+        self.assertEqual(e.snapshot().position_count, 0)
+
     def test_real_side_effects_are_impossible(self):
         e = SimulationEngine()
         self.assertFalse(hasattr(e, "broker_client"))
