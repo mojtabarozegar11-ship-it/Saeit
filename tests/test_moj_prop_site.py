@@ -153,8 +153,11 @@ class MojPropCatalogTests(unittest.TestCase):
     def test_templates_contain_no_checkout_or_order_form(self):
         base = Path(__file__).resolve().parents[1]
         page = (base / "core/templates/mojplaywin/moj_prop.html").read_text(encoding="utf-8").lower()
-        for forbidden in ('<form', 'walletconnect', 'sendtransaction', 'order/submit', 'claim-profit'):
+        for forbidden in ('walletconnect', 'sendtransaction', 'order/submit', 'claim-profit', 'moj_prop_simulation_checkout'):
             self.assertNotIn(forbidden, page)
+        self.assertEqual(page.count('<form'), 1)
+        self.assertIn('action="/moj-prop-interest/"', page)
+        self.assertIn('name="contact_consent"', page)
         self.assertIn('noindex,nofollow', page)
         self.assertIn('hreflang="{{ item.code }}"', page)
         self.assertIn('data-availability="preview-only"', page)
@@ -180,12 +183,16 @@ else:
             self.assertContains(result, "MOJ PROP")
             self.assertContains(result, 'lang="en"')
 
-        def test_web_landing_shows_all_ten_nonpayable_plan_ids(self):
+        def test_web_landing_shows_only_new_simulation_offer(self):
             response=self.client.get("/moj-prop/",HTTP_HOST="mojplaywin.com")
             self.assertEqual(response.status_code,200)
+            for text in ("60-day simulated trading challenge", "$1,000", "30 TRX", "18 TRX", "Do not send any funds"):
+                self.assertContains(response, text)
+            self.assertNotContains(response,"Create 30 TRX invoice")
+            self.assertNotContains(response,"MOJ-PROP-01")
+            legacy=self.client.get("/moj-prop/fa/",HTTP_HOST="mojplaywin.com")
             for number in range(1,11):
-                self.assertContains(response,f"MOJ-PROP-{number:02d}")
-            self.assertNotContains(response,"Continue to checkout")
+                self.assertContains(legacy,f"MOJ-PROP-{number:02d}")
 
         def test_farsi_route_is_rtl_and_same_brand(self):
             result = self.client.get("/moj-prop/fa/", HTTP_HOST="www.mojplaywin.com")
