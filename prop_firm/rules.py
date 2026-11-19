@@ -6,10 +6,12 @@ Amounts use Decimal; source verification and atomic persistence live OUTSIDE thi
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_DOWN
 
+from .simulation_policy import SIMULATION_POLICY
+
 D = Decimal
 CENT = D("0.01")
 LEVELS = tuple(map(D, (
-    "100", "200", "400", "800", "1500", "3000", "5000", "10000",
+    "1000", "1500", "2000", "3000", "5000", "7500", "10000", "15000",
     "20000", "35000", "50000", "70000", "85000", "100000",
 )))
 
@@ -30,21 +32,24 @@ def percent(amount, rate):
 
 @dataclass(frozen=True)
 class Policy:
-    version: str = "2026-11-15/v1.2"
+    version: str = SIMULATION_POLICY.contract_version
     canonical_bot: str = "mojtaba.bot.ai"
-    entry_trx: Decimal = D("30")
+    entry_trx: Decimal = SIMULATION_POLICY.entry_fee_trx
+    retry_trx: Decimal = SIMULATION_POLICY.retry_fee_trx
+    retry_discount_pct: Decimal = SIMULATION_POLICY.retry_discount_pct
     phase_one_goal_pct: Decimal = D("9.6")
     phase_two_goal_pct: Decimal = D("6")
     min_challenge_days: int = 6
-    min_closed_trades_per_challenge: int = 50
+    min_closed_trades_per_challenge: int = SIMULATION_POLICY.minimum_closed_positions
     trader_bots_allowed: bool = True
     social_posts_per_platform_per_challenge: int = 1
     social_posting_platforms: tuple[str, str] = ("instagram", "facebook")
-    max_daily_loss_pct: Decimal = D("4")
-    max_total_loss_pct: Decimal = D("8")
-    best_day_share_pct: Decimal = D("32")
-    order_risk_pct: Decimal = D("0.8")
-    aggregate_risk_pct: Decimal = D("1.6")
+    max_daily_loss_pct: Decimal = SIMULATION_POLICY.daily_loss_limit_pct
+    max_total_loss_pct: Decimal = SIMULATION_POLICY.total_loss_limit_pct
+    best_day_share_pct: Decimal = SIMULATION_POLICY.canonical_best_day_share_pct
+    proposed_best_day_share_pct: Decimal = SIMULATION_POLICY.proposed_best_day_share_pct
+    order_risk_pct: Decimal = SIMULATION_POLICY.max_risk_per_trade_pct
+    aggregate_risk_pct: Decimal = SIMULATION_POLICY.max_open_risk_pct
     promotion_goal_pct: Decimal = D("3.6")
     promotion_min_days: int = 12
     promotion_cycle_days: int = 30
@@ -52,8 +57,14 @@ class Policy:
     company_profit_share_pct: Decimal = D("30")
     inactivity_notice_days: int = 14
     inactivity_grace_days: int = 14
-    completion_deadline_days: int = 28
-    real_orders_enabled: bool = False
+    completion_deadline_days: int = SIMULATION_POLICY.challenge_window_days
+    challenge_window_days: int = SIMULATION_POLICY.challenge_window_days
+    post_visibility_days: int = SIMULATION_POLICY.post_visibility_days
+    account_mode: str = SIMULATION_POLICY.account_mode
+    payout_mode: str = SIMULATION_POLICY.payout_mode
+    virtual_principal_withdrawable: bool = SIMULATION_POLICY.virtual_principal_withdrawable
+    customer_deposit_required: bool = SIMULATION_POLICY.customer_deposit_required
+    real_orders_enabled: bool = SIMULATION_POLICY.real_orders_enabled
     trx_checkout_enabled: bool = False
 
 POLICY = Policy()
