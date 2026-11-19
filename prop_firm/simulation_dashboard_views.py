@@ -6,6 +6,7 @@ from django.views.decorators.http import require_safe
 from .simulation_identity import is_verified_simulation_user
 from .models import PropSimulationAccount, PropPlan1Invoice
 from .simulation_invoice_contract import PRODUCT_CODE, SUPPORTED_CONTRACT_VERSIONS
+from .simulation_checkout_views import checkout_context, retry_checkout_page_context
 
 @never_cache
 @require_safe
@@ -22,8 +23,21 @@ def simulation_dashboard(request):
         invoice__buyer_email=request.user.email, invoice__product_code=PRODUCT_CODE,
         invoice__contract_version__in=SUPPORTED_CONTRACT_VERSIONS, invoice__status="paid",
     ).order_by("-created_at")[:50]
+    # Only the explicitly selected, owned account is replayed. Never scan every
+    # customer's event ledger to render a dashboard.
+    requested = request.GET.getlist("retry")
+    retry_available = bool(checkout_context(request))
+    retry = {}
+    if retry_available and len(requested) == 1:
+        raw = requested[0]
+        if raw.isascii() and raw.isdecimal() and 1 <= len(raw) <= 19:
+            account_id = int(raw)
+            if 0 < account_id <= 9223372036854775807 and str(account_id) == raw:
+                retry = retry_checkout_page_context(request, account_id)
     response = render(request, "mojplaywin/moj_prop_simulation_dashboard.html",
-                      {"invoices": invoices, "accounts": accounts})
+                      {"invoices": invoices, "accounts": accounts,
+                       "retry_available": retry_available, "retry_checkout": retry,
+                       "retry_requested": bool(requested)})
     response["X-Robots-Tag"] = "noindex, nofollow"
     response["X-Frame-Options"] = "DENY"
     return response
