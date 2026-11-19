@@ -25,3 +25,16 @@ def verified_simulation_purchase(*, invoice_id, buyer_email):
     return {"invoice_id": invoice.pk, "order_ref": invoice.order_ref,
             "account_mode": "simulated", "starting_balance_usd": 1000,
             "challenge_days": 60, "data_mode": "synthetic_replay"}
+
+
+@transaction.atomic
+def provision_simulation_account(*, invoice_id, owner):
+    from .models import PropSimulationAccount
+    if not owner.is_authenticated or not owner.is_active or not owner.email:
+        raise ValidationError("Active authenticated owner required")
+    verified_simulation_purchase(invoice_id=invoice_id, buyer_email=owner.email)
+    account, _ = PropSimulationAccount.objects.get_or_create(
+        invoice_id=invoice_id, defaults={"owner": owner})
+    if account.owner_id != owner.pk:
+        raise ValidationError("Invoice already bound to another owner")
+    return account
