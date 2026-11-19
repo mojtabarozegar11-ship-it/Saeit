@@ -114,3 +114,47 @@ class FeedBoundary:
     def reset(self):
         self.last_sequence = -1
         self.last_envelope_digest = None
+
+
+def commercial_feed_configured():
+    """A server-owned verifier and reviewed provider/license identity are mandatory."""
+    from django.conf import settings
+    provider = getattr(settings, "MPW_SIMULATION_LICENSED_PROVIDER_ID", "")
+    license_ref = getattr(settings, "MPW_SIMULATION_LICENSE_REFERENCE", "")
+    age = getattr(settings, "MPW_SIMULATION_QUOTE_MAX_AGE_SECONDS", 15)
+    return (getattr(settings, "MPW_SIMULATION_SIMULATION_DATA_RIGHTS_VERIFIED", False) is True
+            and callable(getattr(settings, "MPW_SIMULATION_QUOTE_ATTESTATION_VERIFIER", None))
+            and isinstance(provider, str) and bool(provider.strip())
+            and isinstance(license_ref, str) and bool(license_ref.strip())
+            and type(age) is int and 1 <= age <= 60)
+
+
+def verified_commercial_quote(envelope, *, symbol, now):
+    """Validate an attested live quote without modifying historical replay."""
+    from django.conf import settings
+    from django.core.exceptions import ValidationError
+    if not commercial_feed_configured() or not isinstance(envelope, QuoteEnvelope):
+        raise ValidationError("Licensed quote envelope required")
+    att = envelope.attestation
+    try:
+        if (att.provider_id != settings.MPW_SIMULATION_LICENSED_PROVIDER_ID
+                or att.license_reference != settings.MPW_SIMULATION_LICENSE_REFERENCE
+                or envelope.quote.symbol != symbol
+                or symbol not in getattr(settings, "MPW_SIMULATION_ALLOWED_SYMBOLS", ())
+                or att.signature_verified is not True or att.license_verified is not True):
+            raise ValueError("Wrong quote provenance")
+        current = FeedBoundary._parse(now.isoformat())
+        quoted = FeedBoundary._parse(envelope.quote.timestamp)
+        issued = FeedBoundary._parse(att.issued_at)
+        expires = FeedBoundary._parse(att.expires_at)
+        age = (current - quoted).total_seconds()
+        if (not 0 <= age <= getattr(settings, "MPW_SIMULATION_QUOTE_MAX_AGE_SECONDS", 15)
+                or not quoted <= issued <= current < expires
+                or symbol not in att.symbols
+                or att.payload_digest != envelope.envelope_digest
+                or settings.MPW_SIMULATION_QUOTE_ATTESTATION_VERIFIER(envelope) is not True):
+            raise ValueError("Unverified or stale quote")
+    except Exception as exc:
+        raise ValidationError("Licensed quote verification failed") from exc
+    return envelope.quote, {"provider_id": att.provider_id, "license_reference": att.license_reference,
+                           "envelope_digest": envelope.envelope_digest}
