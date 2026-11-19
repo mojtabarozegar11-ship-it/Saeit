@@ -60,6 +60,14 @@ def _host(request):
     )
 
 
+def _email_send_enabled():
+    """Allow outbound recovery mail only after both recovery gates and explicit send approval."""
+    return (
+        _recovery_enabled()
+        and getattr(settings, "MPW_GUEST_EMAIL_SEND_APPROVED", False) is True
+    )
+
+
 def _recovery_enabled():
     """Existing paid purchases remain valid, but recovery access itself may
     be revoked immediately without affecting payment records or buyer claims.
@@ -252,6 +260,9 @@ def _allowed(request, email=None, *, verify=False):
 def _issue(email, email_digest):
     # No plaintext token is placed in a table, query string or URL path.
     code = secrets.token_urlsafe(32)
+    if not _email_send_enabled():
+        LOG.info("mpw_recovery_email_send_blocked")
+        return
     row = GuestRecoveryToken.objects.create(
         token_digest=hashlib.sha256(code.encode("ascii")).hexdigest(),
         email_digest=email_digest,
@@ -280,7 +291,7 @@ def _issue(email, email_digest):
 def recovery_request(request):
     if not _host(request):
         raise Http404
-    if not _recovery_enabled():
+    if not _email_send_enabled():
         return _page("Email recovery is not yet available",
                      '<p>Do not make another payment. If you already paid, '
                      'contact <a href="mailto:support@mojplaywin.com">purchase support</a> '
