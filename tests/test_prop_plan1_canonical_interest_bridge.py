@@ -9,7 +9,7 @@ import unittest
 
 from prop_firm.buyer_order_review import Plan1OrderGateClosed
 from prop_firm.plan1_canonical_interest_bridge import bind_canonical_interest_to_private_inquiry
-from test_prop_buyer_precontract_chain import new_inquiry, REF
+from tests.test_prop_buyer_precontract_chain import new_inquiry, REF
 
 KEY=b"synthetic-consent-registry-key-NEVER-USE-PRODUCTION-000000"
 CONSENT_DIGEST="a"*64
