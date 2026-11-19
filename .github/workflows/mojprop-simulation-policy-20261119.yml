@@ -1,0 +1,34 @@
+name: MOJ PROP simulation policy
+
+on:
+  push:
+    branches:
+      - feature/mojprop-simulation-policy-v2-20261119
+  pull_request:
+    branches:
+      - feature/mojprop-demo-reconciliation-20261119
+
+permissions:
+  contents: read
+
+jobs:
+  simulation-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile simulation source
+        run: |
+          python -m py_compile \
+            prop_firm/simulation_policy.py \
+            prop_firm/rules.py \
+            prop_firm/plans.py \
+            prop_firm/challenge_commerce.py \
+            prop_firm/economics.py \
+            prop_firm/trade_count.py \
+            prop_firm/social_policy.py \
+            tests/test_prop_simulation_policy.py
+      - name: Run simulation policy tests
+        run: python -m unittest tests/test_prop_simulation_policy.py -v
