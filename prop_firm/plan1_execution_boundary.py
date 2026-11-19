@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Any, Callable
 
 from .plan1_shared_owner_risk import RiskPreview
+from .rules import POLICY
 from .plan1_owner_reservations import Reservation, ReservationLedger
 
 
@@ -68,10 +69,10 @@ class OwnerAccountExecutionBoundary:
         if review.review_allowed is not True:
             raise ReviewDenied("risk review is not approved")
         trader_capital = (
-            review.trader_aggregate_limit_usd / Decimal("0.016")
+            review.trader_aggregate_limit_usd / POLICY.aggregate_risk_pct
         )
         account_capital = (
-            review.account_aggregate_limit_usd / Decimal("0.016")
+            review.account_aggregate_limit_usd / POLICY.aggregate_risk_pct
         )
         reservation = self.ledger.reserve(
             reservation_id=reservation_id,
