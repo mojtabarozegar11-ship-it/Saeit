@@ -130,7 +130,7 @@ def audit():
             return result
         try:
             header = second_stream.read(4096)
-            result["second_gzip_magic"] = header.startswith(b"\\x1f\\x8b")
+            result["second_gzip_magic"] = header.startswith(b"\x1f\x8b")
             result["second_plain_sql_marker"] = b"-- MySQL dump" in header or b"-- MariaDB dump" in header
             if not result["second_gzip_magic"]:
                 result["error_category"] = "SECOND_NOT_GZIP"
