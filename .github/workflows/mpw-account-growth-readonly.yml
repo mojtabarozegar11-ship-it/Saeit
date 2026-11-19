@@ -1,0 +1,80 @@
+name: MPW account growth and VPS destination capacity — read only
+on:
+  pull_request:
+    branches: [mpw/staging-growth-metadata-20261119]
+    paths:
+      - ".github/workflows/mpw-account-growth-readonly.yml"
+      - "scripts/mpw_account_growth_metadata_20261119.py"
+permissions:
+  contents: read
+jobs:
+  read_only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'ops/mpw-account-growth-rootcause-20261119'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify exact audit source and bounded fixture
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mpw_account_growth_metadata_20261119.py
+          test "$(git hash-object -- scripts/mpw_account_growth_metadata_20261119.py)" = "3278157a853a229eada657a51a5feaff6070a905"
+          python3 -B - <<'PY'
+          import tempfile
+          from pathlib import Path
+          from scripts.mpw_account_growth_metadata_20261119 import census
+          with tempfile.TemporaryDirectory() as tmp:
+              root = Path(tmp).resolve()
+              (root / "Saeit-staging").mkdir()
+              (root / "Saeit-staging" / "test.sql").write_bytes(b"x"*4096)
+              (root / "private-customer-name").mkdir()
+              (root / "private-customer-name" / "abc.txt").write_bytes(b"test")
+              a=census(root)
+              assert a["complete"] and a["contents_read"] is False and a["safe_to_delete"] is False
+              assert a["types"]["sql_dump"]["logical_bytes"]==4096
+              assert "private-customer-name" not in str(a)
+              assert a["recently_modified_allocated_bytes"] if "recently_modified_allocated_bytes" in a else a["types"]["sql_dump"]["recently_modified_allocated_bytes"]>0
+          PY
+      - name: Check VPS destination filesystem availability without creating files
+        run: |
+          python3 -B -c 'import json,os; p="/home/githubops"; s=os.statvfs(p); print("MPW_VPS_FREE_READONLY="+json.dumps({"free_bytes":s.f_bavail*s.f_frsize,"capacity_proven_for_backup":False,"read_only":True}))'
+      - name: Connect only through pinned factory runner to the existing cPanel
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/mpw-account-growth-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 40s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
+
+      - name: Read owner home allocation metadata only
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mpw-account-growth-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 90s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < scripts/mpw_account_growth_metadata_20261119.py | python3 -c 'import json,sys; p="MPW_ACCOUNT_GROWTH_READONLY="; raw=sys.stdin.read(30001); assert len(raw)<=30000; rows=[x for x in raw.splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["schema"]=="mpw.account_growth.metadata.readonly.v1" and d["read_only"] is True and d["contents_read"] is False and d["files_deleted"] is False and d["safe_to_delete"] is False; print(rows[0])'
+      - name: Remove ephemeral relay authentication material
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/mpw-account-growth-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if test -d "$work"; then rm -f "$work/host.key" "$work/known" "$work/config"; rmdir "$work"; fi
