@@ -4,6 +4,7 @@ from ava_core import MojtabaBot
 from ava_core.capabilities import ActionRequest
 from core.mojtaba_site_adapter import site_capability
 from mojtaba_identity import BOT_ID
+from core.mojtaba_site_fleet import PUBLIC_ROUTE_COUNT
 
 class SiteAdapterTests(unittest.TestCase):
     def setUp(self):
@@ -33,10 +34,11 @@ class SiteAdapterTests(unittest.TestCase):
             self.bot().execute_action(self.req("observe_public"))
         self.assertEqual(self.urls, [])
 
-    def test_authorized_monitor_runs_fourteen_fixed_routes(self):
+    def test_authorized_monitor_runs_allowlisted_routes(self):
         bot = self.bot(lambda owner, request, op: op.effect == "read")
         receipt = bot.execute_action(self.req("observe_public"))
-        self.assertEqual(len(self.urls), 14)
+        self.assertEqual(len(self.urls), PUBLIC_ROUTE_COUNT)
+        self.assertIn("https://mojplaywin.com/moj-prop/", self.urls)
         self.assertTrue(receipt.result.success)
         self.assertFalse(receipt.independently_verified)
         self.assertFalse(json.loads(receipt.result.detail)["automatic_site_cleanup"])

@@ -4,7 +4,7 @@ Host applications must explicitly supply the capability to the existing runtime.
 """
 import json
 from ava_core.capabilities import AdapterResult, CapabilitySpec, OperationSpec
-from core.mojtaba_site_fleet import CANONICAL_BOT, inventory, run_one_bot_public_cycle
+from core.mojtaba_site_fleet import CANONICAL_BOT, PUBLIC_ROUTE_COUNT, inventory, run_one_bot_public_cycle
 from mojtaba_identity import BOT_ID
 
 SITE_CAPABILITY = CapabilitySpec("site_observability", (
@@ -24,7 +24,7 @@ def site_capability(*, transport=None):
             success = True
         elif request.operation == "observe_public":
             report = run_one_bot_public_cycle(transport=transport)
-            success = report["http_ok_count"] == report["public_checks_count"] == 14
+            success = report["http_ok_count"] == report["public_checks_count"] == PUBLIC_ROUTE_COUNT
         else:
             raise ValueError("Unsupported site operation")
         if report.get("canonical_bot") != BOT_ID:

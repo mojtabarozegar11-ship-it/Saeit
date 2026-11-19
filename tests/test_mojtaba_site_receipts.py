@@ -145,9 +145,17 @@ class ReceiptTests(TestCase):
         self.assertFalse(row["all_public_routes_ok"])
         self.assertFalse(row["legacy_agent_retirement_authorized"])
         mpw = AuditLog.objects.get(action=ACTION, target_id="mojplaywin").after_state
-        self.assertEqual(len(mpw["role_health_results"]), 3)
+        self.assertEqual(len(mpw["role_health_results"]), len(ROUTES["mojplaywin"]))
         self.assertEqual(mpw["unhealthy_public_roles"], [])
         self.assertIsNone(mpw["site_master_health"])
+
+    def test_old_route_set_cannot_certify_moj_prop_observation(self):
+        payload = report()
+        payload["observations"] = [x for x in payload["observations"]
+                                   if x["role"] != "public_moj_prop"]
+        payload["public_checks_count"] = len(payload["observations"])
+        with self.assertRaisesRegex(SiteFleetError, "INCOMPLETE"):
+            summarize_public_cycle(payload)
 
     def test_master_home_failure_is_unverified_not_healthy(self):
         payload = report()

@@ -26,8 +26,10 @@ ZM_ROUTES = {
     "media": "/news/", "security": "/business/",
 }
 # Only routes independently named in the site's existing published documents.
-MPW_ROUTES = {"public_home": "/", "public_store": "/store/", "public_games": "/games/"}
+MPW_ROUTES = {"public_moj_prop": "/moj-prop/", "public_home": "/",
+              "public_store": "/store/", "public_games": "/games/"}
 ROUTES = {"zomorodmelal": ZM_ROUTES, "mojplaywin": MPW_ROUTES}
+PUBLIC_ROUTE_COUNT = sum(len(roles) for roles in ROUTES.values())
 MPW_NAMED_ROBOTS = (
     "main_route_observer", "editorial_integrity", "draft_fingerprint",
     "editorial_review_queue", "agent_runtime_watch", "seo_metadata",
@@ -189,7 +191,7 @@ def retirement_decision(attestations, *, now=None):
 
 
 def run_one_bot_public_cycle(*, transport=None):
-    """Observe the 14 known public routes in ONE process, no site workers.
+    """Observe all allowlisted public routes in ONE process, no site workers.
 
     Site-local PHP/cron can be considered for retirement only after a separate
     verified cutover; this never replaces private editorial/quality workers.

@@ -18,7 +18,7 @@ def public_report():
             obs.append({"bot": CANONICAL_BOT, "tenant": tenant, "role": role,
                         "state": "http_probe_ok", "http_status": 200,
                         "response_sha256": "a" * 64})
-    return {"canonical_bot": CANONICAL_BOT, "public_checks_count": 14,
+    return {"canonical_bot": CANONICAL_BOT, "public_checks_count": len(obs),
             "observations": obs}
 
 

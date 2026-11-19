@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.db import transaction
 from core.models import Agent, AuditLog
 from core.mojtaba_site_dispatch import CLAIM, execute_site_cycle
-from core.mojtaba_site_fleet import SiteFleetError
+from core.mojtaba_site_fleet import SiteFleetError, PUBLIC_ROUTE_COUNT
 from core.mojtaba_site_receipts import ACTION
 
 class CanonicalSiteDispatchTests(TestCase):
@@ -22,7 +22,7 @@ class CanonicalSiteDispatchTests(TestCase):
 
     def test_claim_precedes_network_and_records_two_tenants(self):
         report = execute_site_cycle("a"*32, transport=self.transport)
-        self.assertEqual(len(self.urls), 14)
+        self.assertEqual(len(self.urls), PUBLIC_ROUTE_COUNT)
         self.assertEqual(report["site_receipts"], 2)
         self.assertEqual(AuditLog.objects.filter(action=ACTION).count(), 2)
         self.assertFalse(report["legacy_retirement_authorized"])
@@ -31,7 +31,7 @@ class CanonicalSiteDispatchTests(TestCase):
         execute_site_cycle("b"*32, transport=self.transport)
         with self.assertRaisesRegex(SiteFleetError, "ALREADY_ATTEMPTED"):
             execute_site_cycle("b"*32, transport=self.transport)
-        self.assertEqual(len(self.urls), 14)
+        self.assertEqual(len(self.urls), PUBLIC_ROUTE_COUNT)
 
     def test_ambiguous_failure_is_never_automatically_retried(self):
         def broken(url):

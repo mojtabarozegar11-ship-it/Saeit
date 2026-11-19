@@ -38,11 +38,25 @@ class SiteFleetTests(unittest.TestCase):
         report = fleet.run_one_bot_public_cycle(transport=safe)
         self.assertEqual(report["canonical_bot"], "mojtaba.bot.ai")
         self.assertTrue(report["single_process_route_monitor"])
-        self.assertEqual(report["public_checks_count"], 14)
-        self.assertEqual(report["http_ok_count"], 14)
+        self.assertEqual(report["public_checks_count"], fleet.PUBLIC_ROUTE_COUNT)
+        self.assertEqual(report["http_ok_count"], fleet.PUBLIC_ROUTE_COUNT)
         self.assertEqual(report["private_robots_or_modules_executed"], 0)
         self.assertEqual(report["payments_collected"], 0)
         self.assertFalse(report["automatic_site_cleanup"])
+
+    def test_moj_prop_is_observed_and_its_failure_is_visible(self):
+        calls = []
+        def transport(url):
+            calls.append(url)
+            return (503 if url.endswith("/moj-prop/") else 200), "text/html", b"<html>" + b"x"*100 + b"</html>"
+        report = fleet.run_one_bot_public_cycle(transport=transport)
+        self.assertIn("https://mojplaywin.com/moj-prop/", calls)
+        self.assertEqual(len(calls), 15)
+        self.assertEqual(report["http_ok_count"], 14)
+        row = next(x for x in report["observations"] if x["role"] == "public_moj_prop")
+        self.assertEqual(row["state"], "unverified")
+        self.assertFalse(row["payment_verified"])
+        self.assertEqual(report["payments_collected"], 0)
 
     def test_reject_arbitrary_ssrf_targets(self):
         for tenant, role in (
