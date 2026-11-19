@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from .simulation_policy import SIMULATION_POLICY
@@ -165,18 +166,39 @@ class SimulationEngine:
         self.closed_trade_count = 0
         self.realized_pnl = D("0")
         self.last_quote_sequence = -1
+        self.last_quote_time = None
+        self.realized_by_day = {}
         self.blocked = False
         self.closed = []
 
     @property
     def daily_floor(self) -> Decimal:
-        return self.day_open_equity * (
-            D("1") - D(str(SIMULATION_POLICY.daily_loss_limit_pct)) / 100)
+        return self.day_open_equity - self.starting_balance * SIMULATION_POLICY.daily_loss_limit_pct / D("100")
 
     @property
     def total_floor(self) -> Decimal:
         return self.starting_balance * (
             D("1") - D(str(SIMULATION_POLICY.total_loss_limit_pct)) / 100)
+
+    def _accept_quote_clock(self, quote):
+        if type(quote.sequence) is not int or quote.sequence <= self.last_quote_sequence:
+            raise ValueError("quote sequence must increase")
+        try:
+            instant = datetime.fromisoformat(quote.timestamp.replace("Z", "+00:00"))
+            if instant.utcoffset() is None:
+                raise ValueError("quote time must be timezone aware")
+            instant = instant.astimezone(timezone.utc)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError("Invalid quote clock") from exc
+        if self.last_quote_time is not None:
+            if instant < self.last_quote_time:
+                raise ValueError("quote time cannot move backwards")
+            if instant.date() != self.last_quote_time.date():
+                # Carry the last observed equity forward; the first new quote
+                # must account for any overnight gap, not erase the loss.
+                self.day_open_equity = self._current_equity()
+        self.last_quote_time = instant
+        self.last_quote_sequence = quote.sequence
 
     def _execution_price(self, order: OrderRequest, quote: MarketQuote) -> Decimal:
         raw = quote.ask if order.side == "buy" else quote.bid
@@ -227,7 +249,7 @@ class SimulationEngine:
         if quote.sequence <= self.last_quote_sequence:
             return Execution(order.order_id, "rejected", order.symbol,
                              order.side, order.quantity, None, "stale_quote")
-        self.last_quote_sequence = quote.sequence
+        self._accept_quote_clock(quote)
         entry = self._execution_price(order, quote)
         if order.order_type == "market":
             reason = self._risk_gate(order, entry)
@@ -242,7 +264,7 @@ class SimulationEngine:
     def process_quote(self, quote: MarketQuote) -> List[Execution]:
         if quote.sequence <= self.last_quote_sequence:
             raise ValueError("quote sequence must increase")
-        self.last_quote_sequence = quote.sequence
+        self._accept_quote_clock(quote)
         for position in self.positions.values():
             if position.symbol == quote.symbol:
                 position.current_bid = quote.bid
@@ -313,7 +335,7 @@ class SimulationEngine:
             raise KeyError(order_id)
         if quote.symbol != position.symbol or quote.sequence <= self.last_quote_sequence:
             raise ValueError("invalid or stale close quote")
-        self.last_quote_sequence = quote.sequence
+        self._accept_quote_clock(quote)
         for item in self.positions.values():
             if item.symbol == quote.symbol:
                 item.current_bid, item.current_ask = quote.bid, quote.ask
@@ -328,6 +350,8 @@ class SimulationEngine:
         net = gross - fees
         self.balance += net
         self.realized_pnl += net
+        day = self.last_quote_time.date().isoformat()
+        self.realized_by_day[day] = self.realized_by_day.get(day, D("0")) + net
         self.closed_trade_count += 1
         self.closed.append((order_id, net, reason))
         self.positions.pop(order_id)
