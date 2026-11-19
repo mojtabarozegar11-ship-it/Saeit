@@ -1,0 +1,32 @@
+{% extends "mojplaywin/site_base.html" %}
+{% block title %}MOJ PROP | Challenge invoice{% endblock %}
+{% block page_head %}<meta name="robots" content="noindex,nofollow">{% endblock %}
+{% block content %}
+<main lang="en">
+<h1>MOJ PROP challenge invoice</h1>
+<p>Order: {{ order_ref }}</p>
+<p>Status: {{ status }}</p>
+{% if verification_error %}<p role="alert">{{ verification_error }}</p>{% endif %}
+{% if status == "pending" and show_payment_instructions %}
+<p>Amount: 30 TRX ({{ amount_sun }} SUN). Network: {{ network }}.</p>
+<p>Recipient: <code>{{ recipient }}</code></p>
+<p>Required transaction memo: <code>{{ order_ref }}</code></p>
+<p>Only use a wallet that supports a TRON transaction memo. If your wallet cannot attach this exact memo, do not pay.</p>
+<p>Use native TRX only. Do not make repeat payments. An invoice is not proof of settlement. Access requires independently reconciled payment.</p>
+{% elif status == "pending" %}
+<p>Payment instructions are temporarily unavailable. Do not send funds.</p>
+{% else %}
+<p>Do not send another payment for this invoice.</p>
+{% endif %}
+{% if reconciliation_enabled and status == "pending" %}
+<form method="post" action="{% url 'moj_prop_simulation_invoice' order_ref=order_ref %}">
+{% csrf_token %}
+<label for="tx_hash">TRON transaction ID</label>
+<input name="tx_hash" id="tx_hash" required minlength="64" maxlength="64" pattern="[0-9a-fA-F]{64}" autocomplete="off">
+<button type="submit">Verify payment</button>
+</form>
+{% endif %}
+{% if status == "paid" %}<a href="/moj-prop/dashboard/">Open dashboard</a>{% endif %}
+<a href="/moj-prop/">Return to MOJ PROP</a>
+</main>
+{% endblock %}

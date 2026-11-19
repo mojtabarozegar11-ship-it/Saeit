@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "command_center",
     # Accounting ledger is part of the production management desk.
     "accounting.apps.AccountingConfig",
+    "prop_firm.apps.MojPropConfig",
 ]
 
 MIDDLEWARE = [
@@ -164,3 +165,63 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+# MOJ-PROP-01 effective-app gates. All remain disabled until independently
+# evidenced capital, jurisdiction, broker, KYC, settlement and owner-canary gates.
+MPW_MOJPROP_PLAN1_ROUTE_ENABLED = env.bool(
+    "MPW_MOJPROP_PLAN1_ROUTE_ENABLED", default=False
+)
+MPW_MOJPROP_PLAN1_LIVE_INVOICE_ENABLED = env.bool(
+    "MPW_MOJPROP_PLAN1_LIVE_INVOICE_ENABLED", default=False
+)
+MPW_MOJPROP_PLAN1_RECIPIENT = env(
+    "MPW_MOJPROP_PLAN1_RECIPIENT", default=""
+)
+MPW_MOJPROP_PLAN1_TRUSTED_CONTRACT_SHA256 = env(
+    "MPW_MOJPROP_PLAN1_TRUSTED_CONTRACT_SHA256", default=""
+)
+for _mojprop_gate in (
+    "INDEPENDENT_CAPITAL_PROOF",
+    "JURISDICTION_APPROVAL",
+    "BROKER_CONTRACT",
+    "MERCHANT_SETTLEMENT_READY",
+    "KYC_ELIGIBILITY_READY",
+    "OWNER_CANARY_COMPLETE",
+):
+    globals()["MPW_MOJPROP_PLAN1_" + _mojprop_gate] = env.bool(
+        "MPW_MOJPROP_PLAN1_" + _mojprop_gate, default=False
+    )
+
+
+# Dedicated simulation product: default-off until deployment evidence is approved.
+MPW_SIMULATION_IDENTITY_ENABLED = env.bool("MPW_SIMULATION_IDENTITY_ENABLED", default=False)
+MPW_SIMULATION_FROM_EMAIL = env("MPW_SIMULATION_FROM_EMAIL", default="")
+MPW_SIMULATION_CHECKOUT_ENABLED = env.bool("MPW_SIMULATION_CHECKOUT_ENABLED", default=False)
+MPW_SIMULATION_RECONCILIATION_ENABLED = env.bool("MPW_SIMULATION_RECONCILIATION_ENABLED", default=False)
+MPW_SIMULATION_RECIPIENT = env("MPW_SIMULATION_RECIPIENT", default="")
+MPW_SIMULATION_TERMS_TEXT = env("MPW_SIMULATION_TERMS_TEXT", default="")
+MPW_SIMULATION_TERMS_DIGEST = env("MPW_SIMULATION_TERMS_DIGEST", default="")
+for _simulation_gate in (
+    "JURISDICTION_APPROVAL", "TERMS_APPROVAL", "MERCHANT_SETTLEMENT_READY",
+    "IDENTITY_ELIGIBILITY_READY", "SIMULATION_DATA_RIGHTS_VERIFIED",
+    "REWARD_RESERVE_VERIFIED", "DISPUTE_REFUND_READY", "ANTI_TAMPER_READY",
+    "FULFILLMENT_VERIFIED", "OWNER_RELEASE_APPROVAL",
+):
+    globals()["MPW_SIMULATION_" + _simulation_gate] = env.bool(
+        "MPW_SIMULATION_" + _simulation_gate, default=False
+    )
+
+def MPW_SIMULATION_EMAIL_VERIFIER(user):
+    from prop_firm.simulation_identity import is_verified_simulation_user
+    return is_verified_simulation_user(user)
+
+
+# Event replay requires a protected, stable signing key and an independently
+# approved quote adapter. Merely enabling this flag never creates an adapter.
+MPW_SIMULATION_TRADING_ENABLED = env.bool("MPW_SIMULATION_TRADING_ENABLED", default=False)
+MPW_SIMULATION_EVENT_KEY = env("MPW_SIMULATION_EVENT_KEY", default="")
+MPW_SIMULATION_QUOTE_PROVIDER = None
+
+# Symbol availability and worker attestation are not inferred from checkout.
+MPW_SIMULATION_ALLOWED_SYMBOLS = tuple(env.list("MPW_SIMULATION_ALLOWED_SYMBOLS", default=[]))
+MPW_SIMULATION_WORKER_READY = env.bool("MPW_SIMULATION_WORKER_READY", default=False)
