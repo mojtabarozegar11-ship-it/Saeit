@@ -8,6 +8,7 @@ on:
       - "tests/test_mojprop_migration_quota_readonly.py"
       - "scripts/mojprop_migration_protection_readonly_20261120.py"
       - "scripts/mojprop_integrated_source_readonly_20261120.py"
+      - "scripts/mojprop_db_identity_pair_readonly_20261120.py"
 permissions:
   contents: read
 jobs:
@@ -92,6 +93,22 @@ jobs:
           PY
           work="$RUNNER_TEMP/mojprop-migration-quota-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           timeout 45s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mojprop_integrated_source_readonly_20261120.py | python3 -c 'import json,sys; p="MOJPROP_INTEGRATED_SOURCE_READONLY="; rows=[x for x in sys.stdin.read(10000).splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["read_only"] is True and d["database_accessed"] is False and d["raw_source_emitted"] is False and d["release_authorized"] is False and d["effective_worker_proven"] is False; print(rows[0])'
+      - name: Compare selected database identities without emitting identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_db_identity_pair_readonly_20261120.py
+          test "$(git hash-object -- scripts/mojprop_db_identity_pair_readonly_20261120.py)" = "a0bed6ef5945e71b245fd7851ad2f620c6ed9fa5"
+          python3 -B - <<'PY'
+          from scripts.mojprop_db_identity_pair_readonly_20261120 import compare,safe_summary
+          a={"verified":True,"identity":["private","host",3306],"principal":"owner","history":["0010_fixture"],"present":[]}
+          assert compare(a,a)["selected_database_identity_equal"]
+          assert not compare(a,dict(a,identity=["other","host",3306]))["selected_database_identity_equal"]
+          assert not compare(a,{})["both_cli_connections_verified"]
+          assert "identity" not in safe_summary(a) and "principal" not in safe_summary(a)
+          PY
+          work="$RUNNER_TEMP/mojprop-migration-quota-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 65s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mojprop_db_identity_pair_readonly_20261120.py | python3 -c 'import json,sys; p="MOJPROP_DB_IDENTITY_PAIR_READONLY="; rows=[x for x in sys.stdin.read(10000).splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["read_only"] is True and d["identity_values_emitted"] is False and d["business_rows_read"] is False and d["migration_executed"] is False and d["release_authorized"] is False; print(rows[0])'
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
