@@ -1,0 +1,151 @@
+name: MOJ PROP focused migration and quota read-only
+on:
+  pull_request:
+    branches: [feature/mojprop-english-main-integration-20261119]
+    paths:
+      - ".github/workflows/mojprop-migration-quota-readonly-20261119.yml"
+      - "scripts/mojprop_migration_quota_readonly_20261119.py"
+      - "tests/test_mojprop_migration_quota_readonly.py"
+      - "scripts/mojprop_migration_protection_readonly_20261120.py"
+      - "scripts/mojprop_integrated_source_readonly_20261120.py"
+      - "scripts/mojprop_db_identity_pair_readonly_20261120.py"
+      - "scripts/mpw_db_partition_readonly_20261120.py"
+      - "scripts/mojprop_dedicated_db_readonly_20261120.py"
+permissions:
+  contents: read
+jobs:
+  focused:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'audit/mojprop-migration-quota-20261119'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Check exact audit source and run privacy regressions
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_migration_quota_readonly_20261119.py
+          test "$(git hash-object -- scripts/mojprop_migration_quota_readonly_20261119.py)" = "c5b370afefd5d11aac7fe32cc1a2ec6fa3a1dcef"
+          python3 -B -m unittest tests.test_mojprop_migration_quota_readonly -q
+      - name: Connect only through pinned factory runner to the existing cPanel
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/mojprop-migration-quota-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 40s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
+
+      - name: Read only known migration metadata and account quota
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-migration-quota-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 90s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mojprop_migration_quota_readonly_20261119.py | python3 -c 'import json,sys; p="MOJPROP_MIGRATION_QUOTA_READONLY="; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["read_only"] is True and d["business_rows_read"] is False and d["migration_executed"] is False and d["release_authorized"] is False; print(rows[0])'
+      - name: Verify and observe migration-specific protection scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_migration_protection_readonly_20261120.py
+          test "$(git hash-object -- scripts/mojprop_migration_protection_readonly_20261120.py)" = "0a8f764ac4f584ca458a567b1e7529f2e962fe4d"
+          python3 -B - <<'PY'
+          from scripts.mojprop_migration_protection_readonly_20261120 import classify, LEGACY, FINANCIAL
+          meta=[(n,"InnoDB",10) for n in FINANCIAL|{LEGACY,"auth_user","django_migrations","extra"}]
+          a=classify(meta,{(LEGACY,"extra",True),("outside","auth_user",True)},"auth_user")
+          assert a["missing_existing_roots"]==0 and a["closure_tables"]==9
+          assert a["estimated_closure_bytes"]==90 and a["incoming_dependencies"]==1
+          assert not a["scope_backup_approved"] and not a["full_database_restore_proven"]
+          PY
+          work="$RUNNER_TEMP/mojprop-migration-quota-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 90s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mojprop_migration_protection_readonly_20261120.py | python3 -c 'import json,sys; p="MOJPROP_MIGRATION_PROTECTION_READONLY="; rows=[x for x in sys.stdin.read(10000).splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["read_only"] is True and d["business_rows_read"] is False and d["migration_executed"] is False and d["release_authorized"] is False; print(rows[0])'
+      - name: Compare exact integrated source without app import or DB access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_integrated_source_readonly_20261120.py
+          test "$(git hash-object -- scripts/mojprop_integrated_source_readonly_20261120.py)" = "ae310b80333619dfe1195c1595dc11811fce8331"
+          python3 -B - <<'PY'
+          import hashlib
+          from scripts.mojprop_integrated_source_readonly_20261120 import classify,wsgi_summary,ROOTS
+          data=b"fixture"
+          sha=hashlib.sha1(b"blob 7\0"+data).hexdigest()
+          assert classify(data,sha)=="matches_candidate"
+          assert classify(data,"0"*40)=="different"
+          assert classify(None,sha)=="unavailable"
+          result=wsgi_summary(("root="+repr(str(ROOTS["integrated"]))+"\n").encode())
+          assert result["exact_root_literals"]["integrated"] and not result["exact_root_literals"]["staging"]
+          PY
+          work="$RUNNER_TEMP/mojprop-migration-quota-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 45s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mojprop_integrated_source_readonly_20261120.py | python3 -c 'import json,sys; p="MOJPROP_INTEGRATED_SOURCE_READONLY="; rows=[x for x in sys.stdin.read(10000).splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["read_only"] is True and d["database_accessed"] is False and d["raw_source_emitted"] is False and d["release_authorized"] is False and d["effective_worker_proven"] is False; print(rows[0])'
+      - name: Compare selected database identities without emitting identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_db_identity_pair_readonly_20261120.py
+          test "$(git hash-object -- scripts/mojprop_db_identity_pair_readonly_20261120.py)" = "a0bed6ef5945e71b245fd7851ad2f620c6ed9fa5"
+          python3 -B - <<'PY'
+          from scripts.mojprop_db_identity_pair_readonly_20261120 import compare,safe_summary
+          a={"verified":True,"identity":["private","host",3306],"principal":"owner","history":["0010_fixture"],"present":[]}
+          assert compare(a,a)["selected_database_identity_equal"]
+          assert not compare(a,dict(a,identity=["other","host",3306]))["selected_database_identity_equal"]
+          assert not compare(a,{})["both_cli_connections_verified"]
+          assert "identity" not in safe_summary(a) and "principal" not in safe_summary(a)
+          PY
+          work="$RUNNER_TEMP/mojprop-migration-quota-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 65s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mojprop_db_identity_pair_readonly_20261120.py | python3 -c 'import json,sys; p="MOJPROP_DB_IDENTITY_PAIR_READONLY="; rows=[x for x in sys.stdin.read(10000).splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["read_only"] is True and d["identity_values_emitted"] is False and d["business_rows_read"] is False and d["migration_executed"] is False and d["release_authorized"] is False; print(rows[0])'
+      - name: Map actual database partition foreign key boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mpw_db_partition_readonly_20261120.py
+          test "$(git hash-object -- scripts/mpw_db_partition_readonly_20261120.py)" = "4e773fa771269559979a9c90d70ec5241c139441"
+          python3 -B - <<'PY'
+          from scripts.mpw_db_partition_readonly_20261120 import plan
+          result=plan([("core_agenttask",700),("core_factoryevidence",300),("auth_user",10),("prop_firm_propplan1invoice",5),("private_unknown",20)],[("core_agenttask","auth_user",True),("private_unknown","core_agenttask",True),("prop_firm_propplan1invoice","auth_user",True)])
+          assert result["factory_parent_closure_bytes"]==1010
+          assert result["factory_closure_incoming_pairs"]==2
+          assert "private_unknown" not in str(result)
+          assert not result["candidate_partition_is_write_allowlist"]
+          PY
+          work="$RUNNER_TEMP/mojprop-migration-quota-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 45s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mpw_db_partition_readonly_20261120.py | python3 -c 'import json,sys; p="MPW_DB_PARTITION_READONLY="; rows=[x for x in sys.stdin.read(24000).splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["read_only"] is True and d["business_rows_read"] is False and d["database_changed"] is False and d["split_executed"] is False and d["metadata_complete"] is True; print(rows[0])'
+      - name: Verify the independently provisioned MOJ PROP database
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/mojprop_dedicated_db_readonly_20261120.py
+          test "$(git hash-object -- scripts/mojprop_dedicated_db_readonly_20261120.py)" = "55286d1a7f79deb5e7297892cf39e1b180232fb0"
+          python3 -B - <<'PY'
+          from scripts.mojprop_dedicated_db_readonly_20261120 import classify,LEGACY,AUTH,BASELINE
+          a=classify(LEGACY|AUTH,BASELINE)
+          assert a["legacy_prop_tables"]==15 and a["exact_prop_0010_history"]
+          assert not a["session_table_present"] and a["unknown_table_count"]==0
+          assert classify(LEGACY|AUTH|{"core_agenttask"},BASELINE)["unknown_table_count"]==1
+          assert not classify(LEGACY|AUTH,BASELINE[:-1])["exact_prop_0010_history"]
+          PY
+          work="$RUNNER_TEMP/mojprop-migration-quota-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 45s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mojprop_dedicated_db_readonly_20261120.py | python3 -c 'import json,sys; p="MOJPROP_DEDICATED_DB_READONLY="; rows=[x for x in sys.stdin.read(10000).splitlines() if x.startswith(p)]; assert len(rows)==1; d=json.loads(rows[0][len(p):]); assert d["read_only"] is True and d["row_contents_read"] is False and d["database_changed"] is False and d["release_authorized"] is False; print(rows[0])'
+      - name: Remove ephemeral SSH authentication material
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/mojprop-migration-quota-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if test -d "$work"; then rm -f "$work/host.key" "$work/known" "$work/config"; rmdir "$work"; fi
