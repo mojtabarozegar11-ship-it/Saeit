@@ -15,16 +15,18 @@ operational values:
 | Entry fee indication | 30 TRX |
 | Retry discount | 40% |
 | Retry fee indication | 18 TRX |
+| Best trading day share cap | 50% of total net profit counted at evaluation |
 | Customer funds held by company | No |
 | Trading environment | Simulation |
 | Performance rewards | Real rewards may be paid under approved terms |
 | Profit guarantee | None |
 
-## Deliberate blocker
+## Consistency rule
 
-The consistency rule is not marked final in code. It must be confirmed in the
-commercial terms before a paid route can be opened. The profile therefore
-reports the consistency-rule blocker and does not alter the readiness gate.
+To keep the offer attractive while preventing a single-day result from dominating
+the evaluation, the best trading day may contribute no more than 50% of total net
+profit counted at evaluation. The rule is now encoded and tested as an internal
+product rule.
 
 This file is not legal advice. It does not define jurisdiction, eligibility,
 KYC/age verification, refunds, support, invoices, reconciliation or settlement.

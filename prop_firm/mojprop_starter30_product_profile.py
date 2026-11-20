@@ -21,6 +21,7 @@ class MojPropStarter30Profile:
     entry_fee_trx: int
     retry_discount_pct: Decimal
     retry_fee_trx: int
+    best_day_profit_share_cap_pct: Decimal
     simulation_only: bool
     customer_funds_custodied: bool
     profit_guarantee: bool
@@ -38,12 +39,14 @@ DEFAULT_STARTER30_PROFILE = MojPropStarter30Profile(
     entry_fee_trx=30,
     retry_discount_pct=Decimal("40"),
     retry_fee_trx=18,
+    # The best trading day may contribute at most 50% of total net profit
+    # counted at evaluation; this is an internal product rule.
+    best_day_profit_share_cap_pct=Decimal("50"),
     simulation_only=True,
     customer_funds_custodied=False,
     profit_guarantee=False,
     performance_rewards_real=True,
-    # The public consistency rule still requires business/legal confirmation.
-    consistency_rule_finalized=False,
+    consistency_rule_finalized=True,
 )
 
 
@@ -74,6 +77,8 @@ def validate_starter30_profile(
         errors.append("retry_discount_must_equal_40_percent")
     if profile.retry_fee_trx != 18:
         errors.append("retry_fee_must_equal_18_trx")
+    if profile.best_day_profit_share_cap_pct != Decimal("50"):
+        errors.append("best_day_profit_cap_must_equal_50_percent")
     if profile.consistency_rule_finalized is not True:
         errors.append("consistency_rule_not_finalized")
     return tuple(errors)
