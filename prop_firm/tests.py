@@ -68,3 +68,18 @@ def test_isolated_relations_cannot_cross_into_auth_database():
         assert router.allow_relation(obj, user) is False
         assert router.allow_relation(user, obj) is False
         assert router.allow_relation(obj, PropSimulationIdentity()) is True
+
+
+def test_simulation_policy_contains_canonical_commercial_contract():
+    from .simulation_policy import SIMULATION_POLICY
+
+    assert SIMULATION_POLICY.account_mode == "simulated"
+    assert SIMULATION_POLICY.real_orders_enabled is False
+    assert SIMULATION_POLICY.starting_balance_usd == 1000
+    assert SIMULATION_POLICY.challenge_window_days == 60
+    assert SIMULATION_POLICY.daily_loss_limit_pct == 6
+    assert SIMULATION_POLICY.max_risk_per_trade_pct == 3
+    assert SIMULATION_POLICY.max_open_risk_pct == 4
+    assert SIMULATION_POLICY.entry_fee_trx == 30
+    assert SIMULATION_POLICY.retry_fee_trx == 18
+    assert SIMULATION_POLICY.retry_discount_pct == 40
