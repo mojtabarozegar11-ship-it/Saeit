@@ -11,6 +11,7 @@ from scripts.mojprop_starter30 import InvalidJournal
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = ROOT / "templates/moj-prop-v4/starter-30-trx/index.html"
 RUNBOOK = ROOT / "docs/mojprop/starter30-first-product-release.md"
+HISTORICAL = ROOT / "docs/mojprop/historical-static-evidence/9a979b820ac6477b35ab772cf4f6f33ad4c3b035.html"
 
 
 def journal():
@@ -25,19 +26,19 @@ class Starter30PublicOfferTests(unittest.TestCase):
         self.assertIn("<!doctype html>", html.lower())
         self.assertIn('lang="en" dir="ltr"', html)
 
-    def test_exact_indicative_30_trx(self):
-        text = PUBLIC.read_text("utf-8")
+    def test_historical_exact_indicative_30_trx(self):
+        text = HISTORICAL.read_text("utf-8")
         self.assertIn("30 TRX", text)
         self.assertIn("indicative one-time price", text)
 
-    def test_paid_checkout_explicitly_disabled(self):
-        page = PUBLIC.read_text("utf-8")
+    def test_historical_paid_checkout_explicitly_disabled(self):
+        page = HISTORICAL.read_text("utf-8")
         self.assertIn("Payment not enabled", page)
         self.assertIn("Do not send TRX", page)
         self.assertNotIn('type="submit"', page)
 
-    def test_no_funded_account_claim(self):
-        page = PUBLIC.read_text("utf-8")
+    def test_historical_no_funded_account_claim(self):
+        page = HISTORICAL.read_text("utf-8")
         for required in ("No funded account is included", "no live brokerage account",
                          "$1,000", "imaginary", "index,follow"):
             self.assertIn(required.lower(), page.lower())
@@ -50,8 +51,8 @@ class Starter30PublicOfferTests(unittest.TestCase):
         self.assertNotIn("walletconnect", page.lower())
         self.assertNotIn("window.location=", page)
 
-    def test_manual_inquiry_is_product_specific(self):
-        page = PUBLIC.read_text("utf-8")
+    def test_historical_manual_inquiry_is_product_specific(self):
+        page = HISTORICAL.read_text("utf-8")
         self.assertIn("MOJPROP-STARTER30", page)
         self.assertIn("/moj-prop/?service=blueprint&amp;package=starter-30-trx#request", page)
         self.assertNotIn("mailto:", page)
@@ -60,6 +61,35 @@ class Starter30PublicOfferTests(unittest.TestCase):
         self.assertIn("does not create an order or a paid agreement", page.lower())
         self.assertIn("cancellation and refund rules", page.lower())
         self.assertIn("Current status:", page)
+
+    def test_current_exact_price_and_invoice_boundary(self):
+        page = PUBLIC.read_text("utf-8")
+        for required in ("30 TRX", "one-time simulated access",
+                         'href="/mojprop-starter30-checkout/"',
+                         "server-issued 30 TRX invoice",
+                         "two independent TRON SolidityNode proofs agree"):
+            self.assertIn(required, page)
+        self.assertNotIn("<form", page.lower())
+        self.assertNotIn('type="submit"', page.lower())
+
+    def test_current_simulation_and_reward_disclosure(self):
+        page = PUBLIC.read_text("utf-8")
+        for required in ("No real funded account or customer capital is involved",
+                         "$1,000", "60 days", "100%", "after verification",
+                         "does not guarantee that the trader will generate profit or pass",
+                         "no real brokerage account or live trade execution",
+                         "index,follow"):
+            self.assertIn(required, page)
+
+    def test_current_manual_inquiry_remains_distinct_from_checkout(self):
+        page = PUBLIC.read_text("utf-8")
+        for required in ("MOJPROP-STARTER30",
+                         "?service=blueprint&amp;package=starter-30-trx#request",
+                         "not a CRM request ID, order, invoice, receipt or authorization",
+                         "does not create an order or a paid agreement",
+                         "Cancellation and refund:", "Current status:"):
+            self.assertIn(required, page)
+        self.assertNotIn("mailto:", page)
 
     def test_product_not_misrouted_to_149_usd_blueprint(self):
         page = PUBLIC.read_text("utf-8")
