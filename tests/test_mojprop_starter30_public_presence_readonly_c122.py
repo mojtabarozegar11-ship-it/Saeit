@@ -139,11 +139,40 @@ class Starter30PublicStaticOwnerEvidenceTests(unittest.TestCase):
             self.assertIs(out[key], False)
 
     def test_12_exact_source_reviewed_blobs_have_not_been_fabricated(self):
+        archive = Path(__file__).resolve().parents[1] / "docs/mojprop/historical-static-evidence"
+        # Original C122 test reference: retained as actual Git bytes, not
+        # replaced by the later checkout-enabled product source.
+        historical = {
+            "9a979b820ac6477b35ab772cf4f6f33ad4c3b035.html": "9a979b820ac6477b35ab772cf4f6f33ad4c3b035",
+            "2d732321f1c1f431685e514789cf26bf2a977d84.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
+            "1e02213de4bed3fc9211e388b3f8b135ef2c0f0a.txt": "1e02213de4bed3fc9211e388b3f8b135ef2c0f0a",
+        }
+        for name, expected in historical.items():
+            with self.subTest(name=name):
+                self.assertEqual(mod.git_blob_sha((archive / name).read_bytes()), expected)
+
+    def test_13_historical_auditor_pin_profile_remains_exact(self):
+        archive = Path(__file__).resolve().parents[1] / "docs/mojprop/historical-static-evidence"
+        expected = {
+            "index.html": "c4185051020aa66405da8a9d8aaae3b22b90f7f6",
+            "journal-template.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
+            "journal-guide.txt": "7a8978ca6f3db31064552a41b2bdfb6c7de56036",
+        }
+        self.assertEqual(mod.REVIEWED_BLOBS, expected)
+        for name, blob in expected.items():
+            with self.subTest(name=name):
+                self.assertEqual(mod.git_blob_sha((archive / (blob + Path(name).suffix)).read_bytes()), blob)
+
+    def test_14_current_release_source_is_pinned_separately(self):
+        from scripts import mojprop_starter30_static_release as release
         root = Path(__file__).resolve().parents[1] / "templates/moj-prop-v4/starter-30-trx"
-        for name, expected in {
-            "index.html": "9a979b820ac6477b35ab772cf4f6f33ad4c3b035",
+        expected = {
+            "index.html": "bc7015c259687f313daa33e9eff1d9780e7f58fe",
             "journal-template.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
             "journal-guide.txt": "1e02213de4bed3fc9211e388b3f8b135ef2c0f0a",
-        }.items():
+        }
+        self.assertEqual(release.REVIEWED_GIT_BLOBS, expected)
+        for name, blob in expected.items():
             with self.subTest(name=name):
-                self.assertEqual(mod.git_blob_sha((root / name).read_bytes()), expected)
+                self.assertEqual(mod.git_blob_sha((root / name).read_bytes()), blob)
+        self.assertNotEqual(expected["index.html"], mod.REVIEWED_BLOBS["index.html"])
