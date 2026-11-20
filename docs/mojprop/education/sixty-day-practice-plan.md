@@ -18,6 +18,8 @@ Reconcile the complete journal with the applicable rulebook. Distinguish arithme
 
 A daily checklist can be short: reference balance; planned loss; aggregate exposure; reason for entering or not entering; realized outcome; rule compliance; one improvement.
 
+Free learning aids: [download the public CSV practice journal](https://mojplaywin.com/moj-prop/starter-30-trx/journal-template.csv?utm_source=github&utm_medium=organic_referral&utm_campaign=practice_plan) and [read its plain-text guide](https://mojplaywin.com/moj-prop/starter-30-trx/journal-guide.txt?utm_source=github&utm_medium=organic_referral&utm_campaign=practice_plan). They are practice materials, not evidence of challenge completion.
+
 Use the [Starter 30 free journal and product information](https://mojplaywin.com/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=practice_plan) and check the [published rules](https://mojplaywin.com/moj-prop/rules/?utm_source=github&utm_medium=organic_referral&utm_campaign=practice_plan). Confirm current rules before applying. Educational material, not investment advice or guaranteed outcomes.
 
 ---
