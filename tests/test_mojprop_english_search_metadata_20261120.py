@@ -44,10 +44,20 @@ class HeadParser(HTMLParser):
 
 
 def test_public_search_and_share_metadata():
+    check_pages(ROOT, PAGES)
+
+
+def test_v4_catalog_release_search_metadata():
+    check_pages(ROOT.with_name("moj-prop-v4"), ("", "catalog/",
+        "samples/prop-blueprint/", "samples/gold-market-brief/",
+        "samples/educational-signal/", "samples/commercial-gate-audit/"))
+
+
+def check_pages(root, pages):
     titles, descriptions = set(), set()
-    for slug in PAGES:
+    for slug in pages:
         parser = HeadParser()
-        page = (ROOT / slug / "index.html").read_text(encoding="utf-8")
+        page = (root / slug / "index.html").read_text(encoding="utf-8")
         parser.feed(page.split("</head>", 1)[0])
         url = "https://mojplaywin.com/moj-prop/" + slug
         assert parser.canonical == [url]
