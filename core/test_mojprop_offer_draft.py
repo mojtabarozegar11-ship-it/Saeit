@@ -43,7 +43,7 @@ class MojPropOfferDraftTests(TestCase):
             "Requested canonical product: MOJPROP-STARTER30 (one-time "
             "indicative 30 native TRX; written terms and verified lawful invoice "
             "required; NOT paid)\n"
-            "Please send the individual educational ten-session journal and scorecard."
+            "Please send the 60-day simulated challenge journal and scorecard."
         )
         draft = build_offer_draft(self.lead)
         self.assertIn("Moj Prop Starter 30", draft)
