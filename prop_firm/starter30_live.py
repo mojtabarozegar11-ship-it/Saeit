@@ -110,12 +110,12 @@ class IssuedStarter30Invoice:
     expires_at: object
 
 
-def issue_invoice(*, email: str, payer_address: str, terms_accepted: bool) -> IssuedStarter30Invoice:
+def issue_invoice(*, email: str, payer_address: str | None = None, terms_accepted: bool) -> IssuedStarter30Invoice:
     require_release()
     if terms_accepted is not True:
         raise Starter30PaymentRejected("simulation disclosure must be accepted")
     normalized = normalize_email(email)
-    payer_hex41 = _payer_hex(payer_address)
+    payer_hex41 = _payer_hex(payer_address) if payer_address and payer_address.strip() else None
     subject_key, email_digest = _identity_keys(normalized)
     now = timezone.now()
     expires_at = now + timedelta(hours=24)
@@ -197,9 +197,10 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
             raise Starter30PaymentRejected("invoice has expired")
         if transfer_a.block_time < payment.issued_at or transfer_a.block_time >= payment.expires_at:
             raise Starter30PaymentRejected("payment is outside the invoice window")
-        expected_sender = hex_to_tron_address(payment.payer_hex41)
-        if transfer_a.sender != expected_sender:
-            raise Starter30PaymentRejected("sender does not match the wallet bound to this invoice")
+        if payment.payer_hex41:
+            expected_sender = hex_to_tron_address(payment.payer_hex41)
+            if transfer_a.sender != expected_sender:
+                raise Starter30PaymentRejected("sender does not match the wallet bound to this invoice")
         if PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS).filter(txid=transfer_a.tx_hash).exists():
             raise Starter30PaymentRejected("transaction is already assigned")
         owner = payment.invoice_owner
@@ -222,7 +223,7 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
         account.save(using=MOJPROP_DB_ALIAS)
         payment.status = PropSimulationPayment.Status.PAID
         payment.txid = transfer_a.tx_hash
-        payment.sender_hex41 = payment.payer_hex41
+        payment.sender_hex41 = transfer_a.sender
         payment.settled_at = now
         payment.save(using=MOJPROP_DB_ALIAS)
         return {
