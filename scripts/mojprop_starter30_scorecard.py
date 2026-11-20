@@ -50,7 +50,7 @@ h1{{font-size:2rem}}.data{{border:1px solid #999;padding:15px;border-radius:7px}
 <p>Case reference: <strong>{escape(case_reference)}</strong></p>
 <div class="data"><p>Result: <strong>{escape(result["status"])}</strong></p>
 <p>Sessions documented: {result["documented_sessions"]} of {result["sessions_recorded"]} received;
-completion requires 10 consecutive sessions.</p>
+completion requires 10 consecutive journal entries within the 60-day window.</p>
 <p>Closing simulated equity: {escape(result["closing_simulated_equity_usd"])} reference USD
 (not owned, funded or withdrawable).</p>
 <p>Risk-rule observations: {escape(by_rule)}</p></div>
