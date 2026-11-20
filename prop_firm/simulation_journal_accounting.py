@@ -8,6 +8,7 @@ reconciliation before accepting more commands.
 """
 from collections import defaultdict
 from decimal import Decimal, Context, localcontext
+from fractions import Fraction
 from zoneinfo import ZoneInfo
 from datetime import datetime
 
@@ -25,19 +26,35 @@ def flush_engine_closures(*, account_ref, engine):
     """Append complete current in-memory closure batch atomically.
 
     Repeating an identical flush returns the same journal sequence numbers.
-    Refuse oversized history rather than partially persisting a batch.
+    Chunk into bounded journal batches under one outer transaction. The
+    entire history commits or rolls back together. A 10,000-record safety
+    ceiling remains; longer sessions need a durable incremental checkpoint.
     """
     if type(engine) is not SimulationEngine:
         raise JournalConflict("internal simulation engine required")
     records=engine.closed_execution_records
     if len(records)!=engine.closed_trade_count:
         raise JournalConflict("engine closure count mismatch")
-    with localcontext(Context(prec=100)):
-        if sum((r.net_pnl for r in records),Decimal("0"))!=engine.realized_pnl:
-            raise JournalConflict("engine net profit mismatch")
+    if len(records)>10000:
+        raise JournalConflict("bounded engine history exceeded")
+    if any(type(r.net_pnl) is not Decimal or not r.net_pnl.is_finite()
+           or len(r.net_pnl.as_tuple().digits)>38
+           or abs(r.net_pnl.as_tuple().exponent)>30 for r in records):
+        raise JournalConflict("invalid closure net profit")
+    if type(engine.realized_pnl) is not Decimal or not engine.realized_pnl.is_finite():
+        raise JournalConflict("invalid engine net profit")
+    if sum((Fraction(r.net_pnl) for r in records),Fraction(0))!=engine.realized_pnl:
+        raise JournalConflict("engine net profit mismatch")
+    if len({r.order_id for r in records})!=len(records):
+        raise JournalConflict("duplicate engine closure")
     if not records:
         return ()
-    return persist_closed_executions(account_ref=account_ref,records=records)
+    with transaction.atomic(using=MOJPROP_DB_ALIAS):
+        result=[]
+        for start in range(0,len(records),500):
+            result.extend(persist_closed_executions(
+                account_ref=account_ref,records=records[start:start+500]))
+        return tuple(result)
 
 
 def observed_daily_accounting(*, account_ref, day_timezone):
