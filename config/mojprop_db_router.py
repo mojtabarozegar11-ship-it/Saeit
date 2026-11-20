@@ -9,6 +9,7 @@ ISOLATED_MODEL_LABELS = frozenset({
     "prop_firm.propsimulationloginchallenge",
     "prop_firm.propsimulationevent",
     "prop_firm.propsimulationpayment",
+    "prop_firm.propsimulationpayoutcommitment",
 })
 
 
