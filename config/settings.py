@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "command_center",
     # Accounting ledger is part of the production management desk.
     "accounting.apps.AccountingConfig",
+    "prop_firm.apps.MojPropConfig",
 ]
 
 MIDDLEWARE = [
@@ -73,6 +74,44 @@ TEMPLATES = [
 DATABASES = {
     "default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
 }
+
+# Isolated English MOJ PROP runtime. The alias is inert unless staging opts in
+# explicitly; the factory/default database is never replaced.
+MPW_MOJPROP_IDENTITY_DIGEST_SECRET = env(
+    "MPW_MOJPROP_IDENTITY_DIGEST_SECRET", default=""
+)
+MPW_MOJPROP_LOGIN_CHALLENGE_TTL_SECONDS = env.int(
+    "MPW_MOJPROP_LOGIN_CHALLENGE_TTL_SECONDS", default=600
+)
+MPW_MOJPROP_LOGIN_MAX_ATTEMPTS = env.int(
+    "MPW_MOJPROP_LOGIN_MAX_ATTEMPTS", default=5
+)
+MPW_MOJPROP_RECONCILIATION_SOURCE_ALIAS = env(
+    "MPW_MOJPROP_RECONCILIATION_SOURCE_ALIAS", default=""
+)
+MPW_MOJPROP_DB_ALIAS_ENABLED = env.bool(
+    "MPW_MOJPROP_DB_ALIAS_ENABLED", default=False
+)
+MPW_MOJPROP_DEPLOYMENT_ENV = env(
+    "MPW_MOJPROP_DEPLOYMENT_ENV", default=""
+)
+if MPW_MOJPROP_DB_ALIAS_ENABLED:
+    if MPW_MOJPROP_DEPLOYMENT_ENV != "staging":
+        raise RuntimeError("MOJ PROP database alias can only be enabled in staging")
+    _mojprop_database_url = env("MPW_MOJPROP_DATABASE_URL", default="")
+    if not _mojprop_database_url:
+        raise RuntimeError("MPW_MOJPROP_DATABASE_URL is required when enabled")
+    if not MPW_MOJPROP_IDENTITY_DIGEST_SECRET:
+        raise RuntimeError("MOJ PROP identity digest secret is required when enabled")
+    if (
+        not MPW_MOJPROP_RECONCILIATION_SOURCE_ALIAS
+        or MPW_MOJPROP_RECONCILIATION_SOURCE_ALIAS == "mojprop"
+    ):
+        raise RuntimeError("MOJ PROP source alias must be explicit and distinct")
+    DATABASES["mojprop"] = environ.Env.db_url_config(_mojprop_database_url)
+    DATABASE_ROUTERS = ("config.mojprop_db_router.MojPropDatabaseRouter",)
+else:
+    DATABASE_ROUTERS = ()
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
