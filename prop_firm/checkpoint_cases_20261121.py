@@ -144,3 +144,23 @@ class CheckpointRecoveryTests(TestCase):
         PropSimulationEvent.objects.using(DB).filter(pk=rec.pk).update(payload=p)
         with self.assertRaises(JournalConflict):
             self.restore()
+
+
+    def test_quarantined_engine_rejects_feed_updates_and_closure(self):
+        self.capture(self.engine_open_pending())
+        recovered=self.restore().engine
+        before=recovered.snapshot()
+        with self.assertRaisesRegex(ValueError,"quarantined_checkpoint"):
+            recovered.process_quote(self.q("A","80","81",3,self.t2))
+        with self.assertRaisesRegex(ValueError,"quarantined_checkpoint"):
+            recovered.close("open-1",self.q("A","80","81",3,self.t2))
+        self.assertEqual(recovered.snapshot(),before)
+        self.assertEqual(recovered.last_quote_sequence,2)
+
+    def test_quarantined_state_cannot_be_captured_again(self):
+        self.capture(self.engine_open_pending())
+        recovered=self.restore().engine
+        with self.assertRaises(JournalConflict):
+            self.capture(recovered)
+        self.assertEqual(PropSimulationEvent.objects.using(DB).filter(
+            account=self.account,source=SOURCE).count(),1)
