@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="{{ form_language }}" dir="{{ form_direction }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>MOJ PROP — {{ interest_copy.0 }}</title>
+</head>
+<body>
+  <main>
+    <h1>{{ interest_copy.0 }}</h1>
+    <p><strong>MOJ-PROP-01</strong> — two-stage challenge, proposed entry fee <strong>30 native TRX</strong>.</p>
+    <p>Prelaunch interest only. No invoice, wallet address, payment, purchase, enrollment or trading account is created.</p>
+    <p>Any real USD 100 funded tier is conditional on both simulated evaluation stages, identity eligibility,
+       independently verified corporate capital and reserves, lawful signed broker terms, and contract approval.</p>
+    <form method="post" action="/moj-prop-interest/" accept-charset="utf-8">
+      {% csrf_token %}
+      <input type="hidden" name="plan_code" value="MOJ-PROP-01">
+      <input type="hidden" name="consent_version" value="moj-prop-interest-v1">
+      <input type="hidden" name="source_language" value="{{ form_language }}">
+      <p><label for="email">{{ interest_copy.1 }}</label>
+      <input id="email" name="email" type="email" autocomplete="email"
+             maxlength="254" required></p>
+      <p><label for="consent">
+        <input id="consent" type="checkbox" name="contact_consent" value="yes" required>
+        {{ interest_copy.2 }}
+      </label></p>
+      <p>{{ interest_copy.4 }}</p>
+      <button type="submit">{{ interest_copy.3 }}</button>
+    </form>
+    <p>No payment is attempted by this form. No unsolicited marketing emails are sent.</p>
+    <p><a href="/moj-prop/">MOJ PROP — prelaunch overview</a></p>
+  </main>
+</body>
+</html>

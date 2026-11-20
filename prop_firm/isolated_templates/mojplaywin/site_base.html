@@ -1,0 +1,22 @@
+{% load static %}<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080807">
+<title>{% block title %}MOJ PROP | MojPlayWin{% endblock %}</title>
+<meta name="description" content="{% block meta_description %}MOJ PROP simulated trading evaluation.{% endblock %}">
+<meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="{% static 'site/mojplaywin.css' %}">
+<link rel="stylesheet" href="{% static 'site/moj_prop.css' %}">
+{% block page_head %}{% endblock %}
+</head>
+<body class="site-standard-v2 mojplaywin-site">
+<a class="mpw-skip" href="#main-content">Skip to content</a>
+<header class="mp-section"><a href="{% url 'moj_prop_landing' %}">MOJ PROP</a>
+<nav aria-label="Navigation"><a href="https://mojplaywin.com/">MojPlayWin</a> |
+<a href="{% url 'moj_prop_dashboard' %}">My challenges</a></nav></header>
+<div id="main-content" tabindex="-1">{% block content %}{% endblock %}</div>
+<footer class="mp-section"><p>MOJ PROP by MojPlayWin. Simulated capital is not withdrawable.</p>
+<a href="https://mojplaywin.com/">Return to MojPlayWin</a></footer>
+</body></html>

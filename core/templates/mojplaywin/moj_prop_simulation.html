@@ -1,0 +1,50 @@
+{% extends "mojplaywin/site_base.html" %}
+{% load static %}
+{% block html_lang %}en{% endblock %}
+{% block title %}MOJ PROP | Simulated Trading Challenge{% endblock %}
+{% block meta_description %}A 60-day simulated trading challenge with a virtual USD 1,000 balance.{% endblock %}
+{% block page_head %}
+<meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="{% static 'site/moj_prop.css' %}">
+{% endblock %}
+{% block content %}
+<main class="mp-prop" lang="en">
+<section class="mp-section">
+<p class="mp-index">MOJ PROP · BY MOJPLAYWIN</p>
+<h1>60-day simulated trading challenge</h1>
+<p>The challenge uses a virtual USD 1,000 starting balance. Commercial checkout requires verified licensed market data; synthetic replay is for internal testing only. No real brokerage account or withdrawable principal is provided. The entry fee is a service fee, not an investment deposit.</p>
+<div class="mp-rule-grid">
+<article class="mp-rule-card"><span>Entry fee</span><strong>30 TRX</strong></article>
+<article class="mp-rule-card"><span>Virtual starting balance</span><strong>$1,000</strong></article>
+<article class="mp-rule-card"><span>Challenge duration</span><strong>60 days</strong></article>
+<article class="mp-rule-card"><span>Daily loss limit</span><strong>6%</strong></article>
+<article class="mp-rule-card"><span>Total loss limit</span><strong>8%</strong></article>
+<article class="mp-rule-card"><span>Risk per trade</span><strong>3%</strong></article>
+<article class="mp-rule-card"><span>Aggregate open risk</span><strong>4%</strong></article>
+</div>
+<p>Eligible unsuccessful participants can check their 18 TRX retry eligibility in their private dashboard when checkout is available. A retry is offered only after verified failure; do not send funds without an issued invoice. Rewards are subject to published eligibility, reserve and payout terms; no return is guaranteed.</p>
+{% if simulation_identity_available %}
+{% if simulation_identity_verified %}
+<a href="{% url 'moj_prop_dashboard' %}">My challenge account</a>
+<form method="post" action="{% url 'moj_prop_simulation_logout' %}">{% csrf_token %}<button type="submit">Sign out</button></form>
+{% else %}
+<a href="{% url 'moj_prop_simulation_login' %}">Sign in or create an account</a>
+{% endif %}
+{% endif %}
+{% if simulation_checkout_ready %}
+<form method="post" action="{% url 'moj_prop_simulation_checkout' %}">
+{% csrf_token %}
+<input type="hidden" name="terms_digest" value="{{ simulation_terms_digest }}">
+<input type="hidden" name="checkout_token" value="{{ simulation_checkout_token }}">
+<h2>Challenge terms</h2>
+<div style="white-space:pre-wrap">{{ simulation_terms }}</div>
+<label><input type="checkbox" name="accept_terms" value="yes" required> I accept the displayed challenge terms and understand that the balance is simulated.</label>
+<button type="submit" class="mp-button mp-button-gold">Create 30 TRX invoice</button>
+</form>
+{% else %}
+<p role="status">Checkout is not available for this session. Do not send any funds.</p>
+{% endif %}
+<a class="mp-button mp-button-quiet" href="/moj-prop-interest/form/?lang=en">Request information (no payment)</a>
+</section>
+</main>
+{% endblock %}

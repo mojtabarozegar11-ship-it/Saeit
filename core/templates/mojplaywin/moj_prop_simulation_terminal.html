@@ -1,0 +1,47 @@
+{% extends "mojplaywin/site_base.html" %}
+{% block title %}MOJ PROP | Simulation terminal{% endblock %}
+{% block page_head %}<meta name="robots" content="noindex,nofollow">{% endblock %}
+{% block content %}
+<main lang="en" class="mp-prop">
+<h1>Simulation terminal — challenge {{ account_id }}</h1>
+<p>Virtual capital only. Orders are evaluated using the configured server-side simulation feed. No real broker order is placed.</p>
+{% if error %}<p role="alert">{{ error }}</p>{% endif %}
+<dl><dt>Virtual balance</dt><dd>{{ summary.balance|floatformat:2 }} USD</dd>
+<dt>Equity</dt><dd>{{ summary.equity|floatformat:2 }} USD</dd>
+<dt>Realized P&amp;L</dt><dd>{{ summary.realized_pnl|floatformat:2 }} USD</dd>
+<dt>Open risk</dt><dd>{{ summary.open_risk|floatformat:2 }} USD</dd>
+<dt>Daily loss</dt><dd>{{ summary.daily_loss|floatformat:2 }} USD</dd>
+<dt>Closed trades</dt><dd>{{ summary.closed_trade_count }}</dd>
+<dt>Challenge ends</dt><dd>{{ expires_at }}</dd>
+<dt>Account status</dt><dd>{{ review_status }}</dd>
+<dt>Trading days with closed positions</dt><dd>{{ trading_days|default_if_none:'Review required' }}</dd>
+<dt>Best day share of net profit</dt><dd>{% if best_day_share != None %}{{ best_day_share|floatformat:2 }}%{% else %}Not applicable{% endif %}</dd></dl>
+{% if completion_review.state == 'failed' %}<p role="status">The verified challenge record did not meet one or more required conditions. Check retry eligibility in My challenges. No reward is implied.</p>
+{% elif completion_review.state == 'review_required' or review_status == 'expired_review' %}<p>Challenge period ended. Results require review; no reward or pass is implied.</p>{% endif %}
+{% if summary.blocked %}<p role="alert">Risk limit reached. New positions are blocked.</p>{% endif %}
+{% if runtime_ready and active %}
+<h2>New simulated market order</h2>
+<form method="post">{% csrf_token %}
+<input type="hidden" name="command_id" value="{{ command_id }}">
+<input type="hidden" name="operation" value="submit">
+<label>Instrument <select name="symbol" required>{% for symbol in symbols %}<option>{{ symbol }}</option>{% endfor %}</select></label>
+<label>Side <select name="side"><option value="buy">Buy</option><option value="sell">Sell</option></select></label>
+<label>Quantity (units) <input name="quantity" inputmode="decimal" required></label>
+<label>Stop loss <input name="stop_loss" inputmode="decimal" required></label>
+<label>Take profit (optional) <input name="take_profit" inputmode="decimal"></label>
+<button type="submit">Submit simulated order</button>
+</form>
+{% else %}<p>New orders are unavailable.</p>{% endif %}
+<h2>Open positions</h2>
+{% for p, close_id in close_rows %}
+<article><strong>{{ p.symbol }} / {{ p.side }}</strong> — {{ p.quantity }} units at {{ p.entry_price }}
+<p>Stop loss: {{ p.stop_loss }} | Take profit: {{ p.take_profit|default_if_none:"—" }}</p>
+{% if runtime_ready %}<form method="post">{% csrf_token %}
+<input type="hidden" name="operation" value="close"><input type="hidden" name="command_id" value="{{ close_id }}">
+<input type="hidden" name="order_id" value="{{ p.order_id }}"><button type="submit">Request close</button>
+</form>{% endif %}</article>
+{% empty %}<p>No open positions.</p>{% endfor %}
+<h2>Pending orders</h2>{% for p in pending %}<p>{{ p.symbol }} / {{ p.side }} / {{ p.quantity }}</p>{% empty %}<p>No pending orders.</p>{% endfor %}
+<h2>Recent closed trades</h2>{% for ref, pnl, reason in recent_closed %}<p>{{ ref }} — {{ pnl|floatformat:2 }} USD ({{ reason }})</p>{% empty %}<p>No closed trades.</p>{% endfor %}
+<p><a href="{% url 'moj_prop_simulation_terminal' account_id=account_id %}">Refresh account</a> | <a href="{% url 'moj_prop_dashboard' %}">My challenges</a></p>
+</main>{% endblock %}

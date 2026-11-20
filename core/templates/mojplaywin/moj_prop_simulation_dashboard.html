@@ -1,0 +1,42 @@
+{% extends "mojplaywin/site_base.html" %}
+{% block title %}MOJ PROP | My challenges{% endblock %}
+{% block page_head %}<meta name="robots" content="noindex,nofollow">{% endblock %}
+{% block content %}
+<main lang="en" class="mp-prop">
+<section class="mp-section">
+<h1>My MOJ PROP challenges</h1>
+{% if retry_checkout %}
+<section aria-labelledby="retry-heading">
+<h2 id="retry-heading">Retry challenge {{ retry_checkout.account_id }} — 18 TRX</h2>
+<p>Your previous challenge qualifies for a 40% discount. This is a new 60-day simulated challenge, not a deposit or a real brokerage account.</p>
+<form method="post" action="{% url 'moj_prop_simulation_checkout' %}">
+{% csrf_token %}
+<input type="hidden" name="terms_digest" value="{{ retry_checkout.terms_digest }}">
+<input type="hidden" name="checkout_token" value="{{ retry_checkout.checkout_token }}">
+<div style="white-space:pre-wrap">{{ retry_checkout.terms }}</div>
+<label><input type="checkbox" name="accept_terms" value="yes" required> I accept the displayed terms and understand the simulated nature of this service.</label>
+<button type="submit">Create or reopen my 18 TRX retry invoice</button>
+</form>
+</section>
+{% elif retry_requested %}
+<p role="status">Retry is not available for the selected challenge. No funds are requested.</p>
+{% endif %}
+<h2>Simulation accounts</h2>
+{% for account in accounts %}
+<article>
+<h3>Challenge {{ account.pk }}</h3>
+<p>Starting virtual balance: USD {{ account.starting_balance_usd }}. Duration: {{ account.challenge_days }} days.</p>
+<p>Entitlement status: {{ account.status }}. Virtual capital cannot be withdrawn.</p>
+<p><a href="{% url 'moj_prop_simulation_terminal' account_id=account.pk %}">Open simulation terminal</a>. Trading availability is checked independently. This account cannot trade real funds.</p>
+{% if retry_available %}<p><a href="?retry={{ account.pk }}">Check 40% retry discount eligibility</a></p>{% endif %}
+</article>
+{% empty %}<p>No purchased challenge accounts.</p>{% endfor %}
+<h2>My invoices</h2>
+{% for invoice in invoices %}
+<p><a href="{% url 'moj_prop_simulation_invoice' order_ref=invoice.order_ref %}">{{ invoice.order_ref }}</a> — {{ invoice.status }}</p>
+{% empty %}<p>No invoices.</p>{% endfor %}
+<a href="/moj-prop/">Return to MOJ PROP</a>
+<form method="post" action="{% url 'moj_prop_simulation_logout' %}">{% csrf_token %}<button type="submit">Sign out</button></form>
+</section>
+</main>
+{% endblock %}
