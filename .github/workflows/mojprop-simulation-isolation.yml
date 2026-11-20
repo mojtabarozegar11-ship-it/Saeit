@@ -63,6 +63,4 @@ jobs:
 
       - name: Validate private identity adapter contract
         run: |
-          python -m unittest discover \\
-            -s source-sync/20261120/prop_firm/tests \\
-            -p 'test_simulation_identity_adapter_contract.py'
+          python -m unittest discover -s source-sync/20261120/prop_firm/tests -p 'test_simulation_identity_adapter_contract.py'
