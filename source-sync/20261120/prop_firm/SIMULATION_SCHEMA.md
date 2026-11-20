@@ -37,7 +37,7 @@ The target database must be usable without the 16.67 GB factory database. Five t
 
 ## Router status
 
-The fail-closed router is now present at source-sync/20261120/config/mojprop_db_router.py. It routes only these five model labels to the mojprop alias and rejects every other model on that alias. It is not wired into live settings yet.
+The fail-closed router is now present at source-sync/20261120/config/mojprop_db_router.py. It routes only these five model labels to the mojprop alias and rejects every other model on that alias. It is not wired into live settings yet. The private identity/login adapter is present at source-sync/20261120/prop_firm/simulation_identity_adapter.py; it stores only scoped digests, locks challenge rows during verification, and remains closed until a staging-only secret is supplied.
 
 ## Next implementation order
 
