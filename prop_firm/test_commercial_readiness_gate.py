@@ -9,7 +9,7 @@ def complete_gates():
     return {name: True for name in REQUIRED_GATES}
 
 
-class CommercialReadinessTests:
+class TestCommercialReadiness:
     def test_current_closed_controls_never_become_release(self):
         result = evaluate_commercial_readiness(
             gates=complete_gates(),
