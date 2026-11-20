@@ -233,8 +233,8 @@ class SignalPlanInquiryTests(unittest.TestCase):
             self.assertIn("TRX", page)
             self.assertIn("starter-30-trx#request", page)
             self.assertNotIn("two-page risk-readiness", page.lower())
-        self.assertIn("10 self-reported simulated sessions", catalog)
-        self.assertIn("ten-session", home)
+        self.assertIn("a 60-day simulated challenge", catalog)
+        self.assertIn("bounded 60-day simulated challenge journal", home)
         self.assertIn("MOJPROP-STARTER30", detail)
 
     def test_canonical_starter_prefills_real_crm_and_private_receipt(self):
