@@ -63,7 +63,7 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertIn("NOT FOR BUYER OFFER OR FULFILMENT", self.archived)
         self.assertIn("**not** the unique sellable 30 TRX Starter30", self.archived)
         self.assertIn("as historical research", self.archived)
-        self.assertIn("10-session simulated trading journal", self.archived)
+        self.assertIn("60-day simulated challenge journal", self.archived)
 
     def test_existing_free_signals_remain_separate_not_starter_or_paid(self):
         self.assertIn("freeTierRequested", self.home)
