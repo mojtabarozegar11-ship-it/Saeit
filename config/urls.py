@@ -156,6 +156,7 @@ if getattr(_mojprop_settings, "MPW_MOJPROP_STAGING_IDENTITY_ROUTE_ENABLED", Fals
         staging_identity_challenge,
         staging_identity_consume,
         staging_identity_register,
+        staging_commerce_preview,
     )
 
     urlpatterns += [
@@ -178,5 +179,10 @@ if getattr(_mojprop_settings, "MPW_MOJPROP_STAGING_IDENTITY_ROUTE_ENABLED", Fals
             "internal/mojprop/staging/identity/consume/",
             staging_identity_consume,
             name="mojprop_staging_identity_consume",
+        ),
+        path(
+            "internal/mojprop/staging/commerce/preview/",
+            staging_commerce_preview,
+            name="mojprop_staging_commerce_preview",
         ),
     ]
