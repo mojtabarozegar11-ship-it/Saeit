@@ -45,7 +45,7 @@ def _form(request, invoice_ref: str | None = None) -> str:
     token = escape(get_token(request))
     if invoice_ref:
         return (
-            f"<form method='post' action='/moj-prop/starter-30-trx/checkout/'>"
+            f"<form method='post' action='/mojprop-starter30-checkout/'>"
             f"<input type='hidden' name='csrfmiddlewaretoken' value='{token}'>"
             f"<input type='hidden' name='action' value='settle'>"
             f"<input type='hidden' name='invoice_ref' value='{escape(invoice_ref)}'>"
@@ -54,7 +54,7 @@ def _form(request, invoice_ref: str | None = None) -> str:
             "<button type='submit'>Verify 30 TRX payment</button></form>"
         )
     return (
-        "<form method='post' action='/moj-prop/starter-30-trx/checkout/'>"
+        "<form method='post' action='/mojprop-starter30-checkout/'>"
         f"<input type='hidden' name='csrfmiddlewaretoken' value='{token}'>"
         "<input type='hidden' name='action' value='issue'>"
         "<label for='email'>Email for the isolated simulation identity</label>"
