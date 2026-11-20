@@ -11,8 +11,7 @@ from dataclasses import dataclass
 import re
 
 from django.conf import settings
-from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import transaction
 
 from config.mojprop_db_router import MOJPROP_DB_ALIAS
 from .models import (
