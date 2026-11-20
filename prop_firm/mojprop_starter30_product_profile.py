@@ -7,7 +7,9 @@ customer funds.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Context, Decimal
+from datetime import date, timedelta
+from collections.abc import Mapping
 
 
 @dataclass(frozen=True)
@@ -82,3 +84,84 @@ def validate_starter30_profile(
     if profile.consistency_rule_finalized is not True:
         errors.append("consistency_rule_not_finalized")
     return tuple(errors)
+
+
+@dataclass(frozen=True)
+class Starter30ConsistencyDecision:
+    allowed: bool
+    reasons: tuple[str, ...]
+    net_profit_usd: Decimal
+    best_day_net_profit_usd: Decimal
+    cap_pct: Decimal
+
+
+def _exact_usd_cents(value: Decimal) -> int:
+    """Strict finite USD cents within the isolated account money-field range."""
+    if type(value) is not Decimal or not value.is_finite():
+        raise ValueError("USD amounts must be finite Decimal values")
+    if value.copy_abs() > Decimal("9999999999999999.99"):
+        raise ValueError("USD amount exceeds the supported range")
+    fixed = value.quantize(Decimal("0.01"), context=Context(prec=32))
+    if fixed != value:
+        raise ValueError("USD amount must be exact cents")
+    sign, digits, exponent = fixed.as_tuple()
+    assert exponent == -2
+    cents = int("".join(map(str, digits)))
+    return -cents if sign else cents
+
+
+def assess_starter30_consistency(
+    *,
+    daily_realized_net_usd: Mapping[date, Decimal],
+    reconciled_realized_net_usd: Decimal,
+    challenge_start_day: date,
+    evaluated_through_day: date,
+) -> Starter30ConsistencyDecision:
+    """Apply only Starter30's finalized 50% best-day rule.
+
+    Inputs are daily net realized P&L after applicable costs, bucketed using
+    the applicable challenge day definition. Every calendar bucket in the
+    inclusive evaluation window must be supplied, including explicit zeroes
+    for verified days with no realized P&L. The window boundaries must be
+    independently derived by the caller, not accepted from a customer.
+    They must be derived from a
+    trusted reconciled execution ledger by the caller. This pure arithmetic
+    does not authenticate that ledger, authorize a challenge pass, persist an
+    account state, create a reward commitment or transfer money. It is not
+    the legacy multi-plan consistency rule.
+    """
+    profile = DEFAULT_STARTER30_PROFILE
+    if validate_starter30_profile(profile):
+        raise ValueError("Starter30 profile invalid")
+    if not isinstance(daily_realized_net_usd, Mapping):
+        raise ValueError("daily realized results must be a dated mapping")
+    if type(challenge_start_day) is not date or type(evaluated_through_day) is not date:
+        raise ValueError("evaluation boundaries must be calendar dates")
+    elapsed = (evaluated_through_day - challenge_start_day).days + 1
+    if not 1 <= elapsed <= profile.challenge_duration_days:
+        raise ValueError("evaluation window must be within 60 calendar buckets")
+    expected_days = {challenge_start_day + timedelta(days=i) for i in range(elapsed)}
+    if len(daily_realized_net_usd) > elapsed:
+        raise ValueError("daily result count exceeds the evaluation window")
+    total = _exact_usd_cents(reconciled_realized_net_usd)
+    daily = []
+    for trading_day, pnl in daily_realized_net_usd.items():
+        if type(trading_day) is not date:
+            raise ValueError("each daily bucket must be a calendar date")
+        if trading_day not in expected_days:
+            raise ValueError("daily result outside the evaluation window")
+        daily.append(_exact_usd_cents(pnl))
+    best = max([0] + daily)
+    reasons = []
+    if set(daily_realized_net_usd) != expected_days:
+        reasons.append("daily_evidence_missing")
+    if sum(daily) != total:
+        reasons.append("daily_net_profit_reconciliation_mismatch")
+    if total <= 0:
+        reasons.append("positive_net_profit_required")
+    elif best * 100 > total * int(profile.best_day_profit_share_cap_pct):
+        reasons.append("starter30_profit_consistency_not_met")
+    return Starter30ConsistencyDecision(
+        not reasons, tuple(reasons), reconciled_realized_net_usd,
+        Decimal(f'{best // 100}.{best % 100:02d}'), profile.best_day_profit_share_cap_pct,
+    )
