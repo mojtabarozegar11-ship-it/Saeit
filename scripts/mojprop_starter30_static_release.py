@@ -170,7 +170,7 @@ def _stage_bytes(run_id: str) -> dict[str, bytes]:
     if (not all(mark in page for mark in (
             "MOJPROP-STARTER30", "Checkout available · 30 TRX",
             "server-issued 30 TRX invoice", "never send to another address",
-            "100% of every profit earned", "not a funded account"))
+            "100% of every profit earned", "No real funded account"))
             or 'index,follow' not in page
             or b"session,closing_equity_usd,risk_plan_recorded,reflection_recorded" not in out["journal-template.csv"]):
         raise RuntimeError("staged product does not meet the static commercial scope")
