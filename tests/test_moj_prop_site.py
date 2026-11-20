@@ -150,10 +150,25 @@ class MojPropCatalogTests(unittest.TestCase):
             with self.subTest(code=code), self.assertRaises(ValueError):
                 page_context(code)
 
-    def test_templates_contain_no_checkout_or_order_form(self):
+    def test_public_interest_form_is_not_checkout_or_order_form(self):
         base = Path(__file__).resolve().parents[1]
         page = (base / "core/templates/mojplaywin/moj_prop.html").read_text(encoding="utf-8").lower()
-        for forbidden in ('<form', 'walletconnect', 'sendtransaction', 'order/submit', 'claim-profit'):
+        # A private prelaunch lead MUST allow an opt-in form.  The previous
+        # `<form` blanket ban contradicted the POST-only, consent-gated
+        # route and made the main prop CI fail after first-interest activation.
+        self.assertEqual(page.count("<form "), 1)
+        self.assertIn('<form method="post" action="/moj-prop-interest/"', page)
+        self.assertIn("{% csrf_token %}", page)
+        self.assertIn('name="plan_code" value="moj-prop-01"', page)
+        self.assertIn('name="consent_version" value="moj-prop-interest-v1"', page)
+        self.assertIn('name="contact_consent" value="yes" required', page)
+        self.assertIn('name="email" type="email"', page)
+        for forbidden in (
+            'walletconnect', 'sendtransaction', 'order/submit',
+            'claim-profit', 'name="txid"', 'name="private_key"',
+            'name="bank_card"', 'name="amount_sun"',
+            '<form method="get" action="/moj-prop-interest/"',
+        ):
             self.assertNotIn(forbidden, page)
         self.assertIn('noindex,nofollow', page)
         self.assertIn('hreflang="{{ item.code }}"', page)
@@ -171,7 +186,13 @@ try:
 except ImportError:
     TestCase = None
 else:
-    @override_settings(ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir"])
+    @override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir"],
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        },
+    )
     class MojPropDjangoViews(TestCase):
         def test_english_route_and_noindex(self):
             result = self.client.get("/moj-prop/", HTTP_HOST="mojplaywin.com")
@@ -201,3 +222,40 @@ else:
         def test_unknown_language_404(self):
             result = self.client.get("/moj-prop/xx/", HTTP_HOST="mojplaywin.com")
             self.assertEqual(result.status_code, 404)
+
+        def test_root_wsgi_first_lead_form_is_reachable_without_payment(self):
+            result = self.client.get(
+                "/moj-prop-interest/form/",
+                HTTP_HOST="mojplaywin.com", secure=True,
+            )
+            self.assertEqual(result.status_code, 200)
+            self.assertContains(result, 'action="/moj-prop-interest/"')
+            self.assertContains(result, 'name="contact_consent" value="yes" required')
+            self.assertContains(result, 'name="plan_code" value="MOJ-PROP-01"')
+            self.assertContains(result, 'name="email" type="email"')
+            self.assertContains(result, "csrfmiddlewaretoken")
+            self.assertEqual(result["X-Robots-Tag"], "noindex, nofollow")
+            self.assertIn("no-store", result["Cache-Control"])
+            self.assertIn("form-action 'self'", result["Content-Security-Policy"])
+            self.assertNotContains(result, 'name="txid"')
+
+        def test_root_interest_form_is_limited_to_secure_brand_origin(self):
+            plain = self.client.get(
+                "/moj-prop-interest/form/",
+                HTTP_HOST="mojplaywin.com", secure=False,
+            )
+            self.assertEqual(plain.status_code, 404)
+            other = self.client.get(
+                "/moj-prop-interest/form/",
+                HTTP_HOST="zomorodmelal.ir", secure=True,
+            )
+            self.assertEqual(other.status_code, 404)
+
+        def test_root_interest_form_never_accepts_purchase_post(self):
+            result = self.client.post(
+                "/moj-prop-interest/form/",
+                data={"plan_code": "MOJ-PROP-01", "payment": "yes"},
+                HTTP_HOST="mojplaywin.com", secure=True,
+            )
+            self.assertEqual(result.status_code, 405)
+            self.assertIn("GET", result["Allow"])
