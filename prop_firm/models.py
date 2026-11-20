@@ -180,3 +180,62 @@ class PropSimulationEvent(models.Model):
             models.Index(fields=["account", "-occurred_at"], name="mp_sim_event_account_time"),
             models.Index(fields=["event_type", "-created_at"], name="mp_sim_event_type_created"),
         ]
+
+
+class PropSimulationPayment(models.Model):
+    """Dedicated fixed-amount TRX payment ledger on the isolated MOJ PROP DB."""
+
+    class Status(models.TextChoices):
+        AWAITING = "awaiting", "Awaiting payment"
+        PAID = "paid", "Paid"
+        REVIEW = "review", "Manual review"
+        EXPIRED = "expired", "Expired"
+
+    invoice_owner = models.OneToOneField(
+        PropSimulationInvoiceOwner,
+        on_delete=models.PROTECT,
+        related_name="payment",
+    )
+    payment_ref = models.CharField(max_length=96, unique=True)
+    product = models.CharField(max_length=48, default="MOJPROP-STARTER30")
+    network = models.CharField(max_length=32, default="tron-mainnet")
+    recipient = models.CharField(max_length=64)
+    amount_sun = models.PositiveBigIntegerField(default=30_000_000)
+    payer_hex41 = models.CharField(max_length=42)
+    issued_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    terms_acceptance_ref = models.CharField(max_length=128)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.AWAITING)
+    txid = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    sender_hex41 = models.CharField(max_length=42, null=True, blank=True)
+    solidified_block = models.PositiveBigIntegerField(null=True, blank=True)
+    settled_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount_sun=30_000_000),
+                name="mp_sim_payment_exact_30_trx",
+            ),
+            models.CheckConstraint(
+                condition=Q(expires_at__gt=models.F("issued_at")),
+                name="mp_sim_payment_expiry_after_issue",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["status", "-created_at"], name="mp_sim_payment_status"),
+            models.Index(fields=["payer_hex41", "status"], name="mp_sim_payment_payer"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.amount_sun != 30_000_000:
+            raise ValidationError("Starter30 payment must be exactly 30 TRX")
+        if self.invoice_owner_id and self.invoice_owner.settlement_verified and self.status != self.Status.PAID:
+            raise ValidationError("Settled owner requires paid payment status")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
