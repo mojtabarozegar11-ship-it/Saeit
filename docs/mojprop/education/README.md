@@ -4,6 +4,7 @@
 
 ## Start here
 
+- [**Starter 30 buyer's guide: 30 TRX simulated challenge**](./starter30-buyer-guide.md) — detailed FAQ on the virtual balance, 60-day rules, qualifying reward terms, invoice safety and free practice downloads.
 1. [Position sizing and drawdown](./position-sizing-and-drawdown.md) — planned loss, aggregate open exposure and daily drawdown on a virtual $1,000 example.
 2. [Best-day consistency rules](./consistency-rule-explained.md) — calculate gain concentration and understand why an extra loss can increase the ratio.
 3. [Simulated versus live trading](./simulated-vs-live-trading.md) — compare virtual balance accounting with real execution and liquidity.
