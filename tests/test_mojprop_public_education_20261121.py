@@ -13,6 +13,11 @@ GUIDES=(
 )
 
 class MojPropEducationPublicationTests(unittest.TestCase):
+    def test_root_readme_links_to_public_education_hub(self):
+        repo_readme=(ROOT.parents[2]/"README.md").read_text(encoding="utf-8")
+        self.assertEqual(repo_readme.count("docs/mojprop/education/README.md"),1)
+        self.assertIn("five free guides to simulated trading",repo_readme.lower())
+
     def test_public_guide_catalog_is_complete(self):
         self.assertEqual({p.name for p in ROOT.glob("*.md")},set(GUIDES)|{"README.md"})
         index=(ROOT/"README.md").read_text(encoding="utf-8")
