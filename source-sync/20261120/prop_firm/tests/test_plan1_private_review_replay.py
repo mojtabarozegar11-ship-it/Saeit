@@ -1,5 +1,7 @@
 """Regression coverage for the private, fail-closed replay registry."""
+import os
 import sqlite3
+import tempfile
 import unittest
 
 from prop_firm.plan1_private_review_replay import (
@@ -16,11 +18,14 @@ D = "d" * 64
 
 class ReviewReplayTests(unittest.TestCase):
     def setUp(self):
-        self.db = sqlite3.connect(":memory:")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db_path = os.path.join(self.tmp.name, "review-registry.sqlite3")
+        self.db = sqlite3.connect(self.db_path)
         self.db.executescript(SCHEMA_SQL)
 
     def tearDown(self):
         self.db.close()
+        self.tmp.cleanup()
 
     def claim(self, ref=R1, acceptance=A, attestation=B, db=None):
         return claim_review_once(
