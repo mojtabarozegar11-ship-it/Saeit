@@ -90,8 +90,9 @@ class PlanOneSignedBuyerOrderTests(unittest.TestCase):
     def test_contract_version_v12_pinned(self):
         self.assertEqual(call().contract_version,"2026-11-15/v1.2")
 
-    def test_twenty_independent_guards_required(self):
-        self.assertEqual(call().verified_fact_count,20)
+    def test_all_versioned_contract_guards_required(self):
+        self.assertEqual(len(REQUIRED), 24)
+        self.assertEqual(call().verified_fact_count,len(REQUIRED))
         for gate in REQUIRED:
             p=packet()
             p["facts"][gate]=False
