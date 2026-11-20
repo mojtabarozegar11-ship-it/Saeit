@@ -1,4 +1,5 @@
 from django.db import migrations, models
+import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
@@ -25,16 +26,13 @@ class Migration(migrations.Migration):
                 ("network", models.CharField(blank=True, max_length=32)),
                 ("tx_hash", models.CharField(blank=True, max_length=80)),
                 ("source", models.CharField(blank=True, max_length=32)),
-                (
-                    "verified_at",
-                    models.DateTimeField(blank=True, null=True),
-                ),
+                ("verified_at", models.DateTimeField(blank=True, null=True)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "order",
                     models.OneToOneField(
-                        on_delete=models.deletion.PROTECT,
+                        on_delete=django.db.models.deletion.PROTECT,
                         related_name="buyer_identity",
                         to="core.order",
                     ),
