@@ -17,17 +17,21 @@ def test_default_profile_encodes_owner_operational_constraints():
     assert profile.entry_fee_trx == 30
     assert profile.retry_discount_pct == Decimal("40")
     assert profile.retry_fee_trx == 18
+    assert profile.best_day_profit_share_cap_pct == Decimal("50")
     assert profile.simulation_only is True
     assert profile.customer_funds_custodied is False
     assert profile.profit_guarantee is False
-    assert validate_starter30_profile(profile) == (
-        "consistency_rule_not_finalized",
-    )
-
-
-def test_profile_can_only_report_complete_after_explicit_consistency_confirmation():
-    profile = replace(DEFAULT_STARTER30_PROFILE, consistency_rule_finalized=True)
     assert validate_starter30_profile(profile) == ()
+
+
+def test_profile_rejects_another_consistency_cap():
+    profile = replace(
+        DEFAULT_STARTER30_PROFILE,
+        best_day_profit_share_cap_pct=Decimal("75"),
+    )
+    assert validate_starter30_profile(profile) == (
+        "best_day_profit_cap_must_equal_50_percent",
+    )
 
 
 def test_profile_is_fail_closed_for_customer_funds_and_profit_promises():
