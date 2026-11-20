@@ -67,9 +67,31 @@ def site_search(request):
 
 @require_GET
 def robots_txt(request):
-    body = "User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\nDisallow: /__zm_\nDisallow: /site-heritage/\nDisallow: /zm-agriculture-guides/\nSitemap: https://zomorodmelal.ir/sitemap.xml\nSitemap: https://zomorodmelal.ir/topics/sitemap.xml\nSitemap: https://zomorodmelal.ir/ghanadi/sitemap.xml\n"
+    host = request.get_host().split(":")[0].lower()
+    if host in {"mojplaywin.com", "www.mojplaywin.com"}:
+        body = (
+            "User-agent: *\n"
+            "Allow: /\n"
+            "Disallow: /admin/\n"
+            "Disallow: /api/\n"
+            "Disallow: /mojprop-starter30-checkout/\n"
+            "Disallow: /mojprop-starter30-status/\n"
+            "Sitemap: https://mojplaywin.com/sitemap.xml\n"
+        )
+    else:
+        body = (
+            "User-agent: *\n"
+            "Allow: /\n"
+            "Disallow: /admin/\n"
+            "Disallow: /api/\n"
+            "Disallow: /__zm_\n"
+            "Disallow: /site-heritage/\n"
+            "Disallow: /zm-agriculture-guides/\n"
+            "Sitemap: https://zomorodmelal.ir/sitemap.xml\n"
+            "Sitemap: https://zomorodmelal.ir/topics/sitemap.xml\n"
+            "Sitemap: https://zomorodmelal.ir/ghanadi/sitemap.xml\n"
+        )
     return HttpResponse(body, content_type="text/plain; charset=utf-8")
-
 
 @require_GET
 def indexnow_key(request, key):
@@ -82,23 +104,31 @@ def indexnow_key(request, key):
 
 @require_GET
 def sitemap_xml(request):
-    urls = ["/", "/company/", "/company/executive/", "/about/", "/services/", "/contact/", "/research/", "/research/projects/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/weather/", "/economy/", "/business/", "/studio/", "/newsletter/", "/blog/", "/store/", "/agriculture/free-tools/20261025/", "/auctions/", "/ghanadi/", "/ghanadi/cafe-shiraz/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]
-    urls += [f"/blog/{quote(str(code), safe='')}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]
-    company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 55, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
-    for kind, count in company_ranges.items():
-        urls.extend(f"/company/{kind}-{i}/" for i in range(1, count + 1))
-    stories = NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()).values_list("slug", flat=True)
-    urls += [f"/newsletter/{slug}/" for slug in stories]
-    articles = KnowledgeArticle.objects.filter(published=True).values_list("slug", flat=True)
-    urls += [f"/knowledge/article/{slug}/" for slug in articles]
-    books = KnowledgeBook.objects.values_list("code", flat=True)
-    urls += [f"/knowledge/book/{code}/" for code in books]
-    domains = KnowledgeDomain.objects.filter(active=True).values_list("code", flat=True)
-    urls += [f"/knowledge/domain/{code}/" for code in domains]
-    urls += [f"/store/product/{pk}/" for pk in Product.objects.filter(active=True).values_list("pk",flat=True)]
-    items = "".join(f"<url><loc>{xml_escape('https://zomorodmelal.ir' + u)}</loc></url>" for u in dict.fromkeys(urls))
-    return HttpResponse(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{items}</urlset>', content_type="application/xml")
-
+    host = request.get_host().split(":")[0].lower()
+    if host in {"mojplaywin.com", "www.mojplaywin.com"}:
+        urls = ["/", "/store/", "/moj-prop/", "/moj-prop/starter-30-trx/"]
+        origin = "https://mojplaywin.com"
+    else:
+        urls = ["/", "/company/", "/company/executive/", "/about/", "/services/", "/contact/", "/research/", "/research/projects/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/weather/", "/economy/", "/business/", "/studio/", "/newsletter/", "/blog/", "/store/", "/agriculture/free-tools/20261025/", "/auctions/", "/ghanadi/", "/ghanadi/cafe-shiraz/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]
+        urls += [f"/blog/{quote(str(code), safe='')}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]
+        company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 55, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
+        for kind, count in company_ranges.items():
+            urls.extend(f"/company/{kind}-{i}/" for i in range(1, count + 1))
+        stories = NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()).values_list("slug", flat=True)
+        urls += [f"/newsletter/{slug}/" for slug in stories]
+        articles = KnowledgeArticle.objects.filter(published=True).values_list("slug", flat=True)
+        urls += [f"/knowledge/article/{slug}/" for slug in articles]
+        books = KnowledgeBook.objects.values_list("code", flat=True)
+        urls += [f"/knowledge/book/{code}/" for code in books]
+        domains = KnowledgeDomain.objects.filter(active=True).values_list("code", flat=True)
+        urls += [f"/knowledge/domain/{code}/" for code in domains]
+        urls += [f"/store/product/{pk}/" for pk in Product.objects.filter(active=True).values_list("pk", flat=True)]
+        origin = "https://zomorodmelal.ir"
+    items = "".join(f"<url><loc>{xml_escape(origin + u)}</loc></url>" for u in dict.fromkeys(urls))
+    return HttpResponse(
+        f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{items}</urlset>',
+        content_type="application/xml",
+    )
 
 def organization_jsonld():
     return json.dumps({
