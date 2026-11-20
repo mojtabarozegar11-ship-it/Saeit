@@ -79,9 +79,10 @@ def _safe_service_prefill(request):
             "Requested canonical product: MOJPROP-STARTER30 "
             "(one-time indicative 30 native TRX; written terms and verified "
             "lawful invoice required; NOT paid)\n"
-            "Please send written terms for the ten-session simulated journal "
-            "assessment and individual educational feedback. This is not a "
-            "funded account, live trade, payment or profit guarantee."
+            "Please send written terms for the 60-day simulated challenge "
+            "journal and individual educational feedback. The approved profile "
+            "uses a virtual $1,000 reference balance, not a funded account, "
+            "live trade, payment or profit guarantee."
         )
     return service, ""
 
