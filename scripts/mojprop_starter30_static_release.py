@@ -26,7 +26,7 @@ FILES = ("index.html", "journal-template.csv", "journal-guide.txt")
 REVIEWED_GIT_BLOBS = {
     "index.html": "eb597ad13312001e1506206e70bc173195558758",
     "journal-template.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
-    "journal-guide.txt": "7a8978ca6f3db31064552a41b2bdfb6c7de56036",
+    "journal-guide.txt": "1e02213de4bed3fc9211e388b3f8b135ef2c0f0a",
 }
 MAX_STAGE_FILE_BYTES = 90_000
 RUN_ID_RE = re.compile(r"[1-9][0-9]{0,18}\Z")
