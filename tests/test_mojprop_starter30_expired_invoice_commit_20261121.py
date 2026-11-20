@@ -172,6 +172,9 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
             "prop_firm.starter30_live.hex_to_tron_address",
             return_value=self.transfer.sender,
         ), patch(
+            "prop_firm.starter30_live._hex_recipient",
+            return_value="41" + "0" * 40,
+        ), patch(
             "prop_firm.starter30_live._token",
             return_value="MOJPROP30-ACC-valid",
         ):
@@ -182,6 +185,7 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         self.assertEqual(result["txid"], self.txid)
         self.assertEqual(self.payment.status, m.PropSimulationPayment.Status.PAID)
         self.assertEqual(self.payment.txid, self.txid)
+        self.assertEqual(self.payment.sender_hex41, "41" + "0" * 40)
         self.assertTrue(owner.settlement_verified)
         self.assertEqual(owner.settlement_reference, self.txid)
         self.mock_accounts.assert_called_once()
@@ -210,13 +214,24 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         self.mock_manager.using.return_value.filter.return_value.exists.return_value = False
         self.mock_accounts.return_value.account_ref = "MOJPROP30-ACC-walletless"
         with patch("prop_firm.starter30_live.hex_to_tron_address") as decoder, patch(
+            "prop_firm.starter30_live._hex_recipient",
+            return_value="41" + "1" * 40,
+        ) as encoder, patch(
             "prop_firm.starter30_live._token",
             return_value="MOJPROP30-ACC-walletless",
         ):
             result = self._settle()
         decoder.assert_not_called()
         self.assertEqual(result["status"], "paid")
-        self.assertEqual(self.payment.sender_hex41, self.transfer.sender)
+        encoder.assert_called_once_with(self.transfer.sender)
+        self.assertEqual(self.payment.sender_hex41, "41" + "1" * 40)
         self.assertEqual(self.payment.status, m.PropSimulationPayment.Status.PAID)
         self.assertIn("commit", self.events)
         self.mock_accounts.return_value.save.assert_called_once()
+
+    def test_real_base58_to_hex41_converter_round_trips_valid_network_address(self):
+        from services.mpw_tron_independent_solidified_rpc import hex_to_tron_address
+        raw = "41" + "0" * 40
+        address = hex_to_tron_address(raw)
+        from services.mojprop_starter30_tron_settlement import _hex_recipient
+        self.assertEqual(_hex_recipient(address), raw)
