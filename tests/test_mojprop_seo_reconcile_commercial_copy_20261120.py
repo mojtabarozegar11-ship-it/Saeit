@@ -40,3 +40,14 @@ class CopyReconciliationTests(unittest.TestCase):
                 result, receipt = mod.reconcile_candidate(path,b"fixture")
                 self.assertEqual(result,b"<head></head><body>original</body>")
                 self.assertEqual(receipt["copy_patch_count"],0)
+
+    def test_protected_markup_mutation_is_rejected(self):
+        for tag in ("script", "form", "style"):
+            old = "protected-original"
+            new = "protected-changed"
+            source = f"<head></head><body><{tag} id='x'>{old}</{tag}></body>".encode()
+            with self.subTest(tag=tag), patch.object(mod, "build_candidate",
+                    return_value=(source, {})), patch.dict(mod.PATCHES,
+                    {"index.html": ((old, new),)}):
+                with self.assertRaisesRegex(ValueError, "functional markup changed"):
+                    mod.reconcile_candidate("index.html", b"fixture")
