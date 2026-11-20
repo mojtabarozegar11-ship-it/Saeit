@@ -11,6 +11,7 @@ STORE_MODELS = (
     "core.PaymentIntent", "core.PaymentWebhookEvent", "core.LedgerEntry",
     "core.Order", "core.OrderItem", "core.Product",
     "core.GuestOrderEmail", "core.GuestRecoveryToken", "core.GuestRecoveryRate",
+    "mpw_commerce.CommerceBuyerIdentity",
 )
 
 
