@@ -200,7 +200,17 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
         raise Starter30PaymentRejected("two provider proofs disagree")
     if transfer_a.recipient != approved_recipient() or transfer_a.amount_sun != NATIVE_AMOUNT_SUN:
         raise Starter30PaymentRejected("exact 30 TRX transfer to the approved receiver is required")
-    now = timezone.now()
+    outcome = _settle_verified_invoice(invoice_ref=invoice_ref, transfer_a=transfer_a)
+    if outcome is _EXPIRED_INVOICE:
+        raise Starter30PaymentRejected("invoice has expired")
+    return outcome
+
+
+_EXPIRED_INVOICE = object()
+
+
+def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
+    """Commit expiry before error; keep all other settlement work atomic."""
     with transaction.atomic(using=MOJPROP_DB_ALIAS):
         payment = (
             PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS)
@@ -208,17 +218,21 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
             .select_related("invoice_owner", "invoice_owner__identity")
             .get(invoice_owner__invoice_ref=invoice_ref)
         )
+        now = timezone.now()  # sample clock only AFTER the locked row is acquired
         if payment.status == PropSimulationPayment.Status.PAID:
             if payment.txid == transfer_a.tx_hash:
                 return _paid_result(payment)
             raise Starter30PaymentRejected("invoice is already settled")
         if payment.status != PropSimulationPayment.Status.AWAITING:
             raise Starter30PaymentRejected("invoice is not awaiting payment")
-        if now >= payment.expires_at:
+        # Transfer timestamp controls whether a transfer was on time; provider
+        # confirmation may arrive after expiry without penalizing the buyer.
+        transfer_in_window = payment.issued_at <= transfer_a.block_time < payment.expires_at
+        if now >= payment.expires_at and not transfer_in_window:
             payment.status = PropSimulationPayment.Status.EXPIRED
             payment.save(using=MOJPROP_DB_ALIAS, update_fields=["status", "updated_at"])
-            raise Starter30PaymentRejected("invoice has expired")
-        if transfer_a.block_time < payment.issued_at or transfer_a.block_time >= payment.expires_at:
+            return _EXPIRED_INVOICE
+        if not transfer_in_window:
             raise Starter30PaymentRejected("payment is outside the invoice window")
         if payment.payer_hex41:
             expected_sender = hex_to_tron_address(payment.payer_hex41)
@@ -246,7 +260,9 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
         account.save(using=MOJPROP_DB_ALIAS)
         payment.status = PropSimulationPayment.Status.PAID
         payment.txid = transfer_a.tx_hash
-        payment.sender_hex41 = transfer_a.sender
+        # Persist the verified on-chain sender in canonical 0x41-prefixed hex,
+        # not its Base58Check display form, for consistent future reconciliation.
+        payment.sender_hex41 = _hex_recipient(transfer_a.sender)
         payment.settled_at = now
         payment.save(using=MOJPROP_DB_ALIAS)
         return {
