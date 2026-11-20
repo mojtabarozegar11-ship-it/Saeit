@@ -49,6 +49,11 @@ def evaluate_staging_preflight(
     checks: list[str] = []
     blockers: list[str] = []
 
+    if not bool(config.get("MPW_MOJPROP_DB_ALIAS_ENABLED", False)):
+        blockers.append("MOJ PROP database alias switch is not enabled for staging")
+    else:
+        checks.append("MOJ PROP database alias switch is explicitly enabled")
+
     databases = config.get("DATABASES") or {}
     if MOJPROP_DB_ALIAS not in databases:
         blockers.append("DATABASES[mojprop] is not configured")
