@@ -104,9 +104,34 @@ MPW_MOJPROP_STAGING_ROUTE_TOKEN = env(
 MPW_MOJPROP_STAGING_INTERNAL_IPS = tuple(
     env.list("MPW_MOJPROP_STAGING_INTERNAL_IPS", default=["127.0.0.1", "::1"])
 )
+
+# Dedicated live Starter30 release switches. All default closed; these are
+# separate from the generic store gateway and never authorize the factory DB.
+MPW_MOJPROP_PRODUCTION_RELEASE_APPROVED = env.bool(
+    "MPW_MOJPROP_PRODUCTION_RELEASE_APPROVED", default=False
+)
+MPW_MOJPROP_TRX_RELEASE_ENABLED = env.bool(
+    "MPW_MOJPROP_TRX_RELEASE_ENABLED", default=False
+)
+MPW_MOJPROP_TRX_RPC_ATTESTED = env.bool(
+    "MPW_MOJPROP_TRX_RPC_ATTESTED", default=False
+)
+MPW_MOJPROP_RPC_A_SOURCE_ID = env("MPW_MOJPROP_RPC_A_SOURCE_ID", default="")
+MPW_MOJPROP_RPC_A_OPERATOR_ID = env("MPW_MOJPROP_RPC_A_OPERATOR_ID", default="")
+MPW_MOJPROP_RPC_A_ENDPOINT = env("MPW_MOJPROP_RPC_A_ENDPOINT", default="")
+MPW_MOJPROP_RPC_A_API_KEY = env("MPW_MOJPROP_RPC_A_API_KEY", default="")
+MPW_MOJPROP_RPC_B_SOURCE_ID = env("MPW_MOJPROP_RPC_B_SOURCE_ID", default="")
+MPW_MOJPROP_RPC_B_OPERATOR_ID = env("MPW_MOJPROP_RPC_B_OPERATOR_ID", default="")
+MPW_MOJPROP_RPC_B_ENDPOINT = env("MPW_MOJPROP_RPC_B_ENDPOINT", default="")
+MPW_MOJPROP_RPC_B_API_KEY = env("MPW_MOJPROP_RPC_B_API_KEY", default="")
 if MPW_MOJPROP_DB_ALIAS_ENABLED:
-    if MPW_MOJPROP_DEPLOYMENT_ENV != "staging":
-        raise RuntimeError("MOJ PROP database alias can only be enabled in staging")
+    if MPW_MOJPROP_DEPLOYMENT_ENV not in ("staging", "production"):
+        raise RuntimeError("MOJ PROP database alias requires staging or production")
+    if (
+        MPW_MOJPROP_DEPLOYMENT_ENV == "production"
+        and MPW_MOJPROP_PRODUCTION_RELEASE_APPROVED is not True
+    ):
+        raise RuntimeError("MOJ PROP production alias requires explicit release approval")
     _mojprop_database_url = env("MPW_MOJPROP_DATABASE_URL", default="")
     if not _mojprop_database_url:
         raise RuntimeError("MPW_MOJPROP_DATABASE_URL is required when enabled")
