@@ -241,7 +241,7 @@ def rollback(run_id: str, commit: str) -> None:
     if (manifest.get("schema") != "mojprop.starter30.static.v1"
             or manifest.get("run_id") != run_id or manifest.get("commit") != commit
             or set(manifest.get("files", {})) != set(FILES)
-            or manifest.get("scope") != "static-no-payment-no-backend"):
+            or manifest.get("scope") != "static-page-no-payment-execution-no-backend"):
         raise RuntimeError("manifest cannot authorize rollback")
     for name, expected in manifest["files"].items():
         path = TARGET / name
