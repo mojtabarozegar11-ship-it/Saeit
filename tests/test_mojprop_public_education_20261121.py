@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]/"docs/mojprop/education"
 GUIDES=(
+    "starter30-buyer-guide.md",
     "position-sizing-and-drawdown.md",
     "consistency-rule-explained.md",
     "simulated-vs-live-trading.md",
@@ -17,6 +18,8 @@ class MojPropEducationPublicationTests(unittest.TestCase):
         repo_readme=(ROOT.parents[2]/"README.md").read_text(encoding="utf-8")
         self.assertEqual(repo_readme.count("docs/mojprop/education/README.md"),1)
         self.assertIn("five free guides to simulated trading",repo_readme.lower())
+        self.assertIn("starter30-buyer-guide.md",repo_readme)
+        self.assertIn("30 TRX simulated challenge",repo_readme)
 
     def test_public_guide_catalog_is_complete(self):
         self.assertEqual({p.name for p in ROOT.glob("*.md")},set(GUIDES)|{"README.md"})
