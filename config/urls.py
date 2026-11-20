@@ -135,6 +135,7 @@ from core.signal_free_views import signal_free_subscribe, signal_free_confirm, s
 # The public /moj-prop/ directory is served as a static product surface by Apache.
 # Keep the intake API at a root-level WSGI path so GET and POST reach Passenger.
 urlpatterns += [
+    path("moj-prop/starter-30-trx/", TemplateView.as_view(template_name="moj-prop-v4/starter-30-trx/index.html"), name="mojprop_starter30_public"),
     path("moj-prop-intake/", mojprop_intake, name="mojprop_intake"),
     path("moj-prop-status/", mojprop_receipt_status, name="mojprop_receipt_status"),
     path("moj-prop-quote/<str:token>/", customer_quote, name="mojprop_quote_public"),
