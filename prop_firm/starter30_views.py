@@ -62,7 +62,7 @@ def _form(request, invoice_ref: str | None = None) -> str:
         "<label for='payer_address'>Your sending TRON wallet address</label>"
         "<input id='payer_address' name='payer_address' required autocomplete='off'>"
         "<label><input type='checkbox' name='terms' value='yes' required> "
-        "I understand this is an educational simulation: no customer capital, live broker, funded account, payout or profit guarantee is provided.</label>"
+        "I understand this is simulated trading: no customer capital or real broker account is involved, and a successful pass may qualify me for a 100% performance reward payout under the published rules; no result is guaranteed.</label>"
         "<button type='submit'>Create 30 TRX invoice</button></form>"
     )
 
@@ -78,7 +78,7 @@ def starter30_checkout(request):
                 request,
                 "Starter30 checkout",
                 "<h1>Moj Prop Starter30</h1><p>Exact price: <strong>30 TRX</strong>. "
-                "This remains a simulated challenge with a virtual 1,000 USD balance.</p>"
+                "This remains a simulated challenge with a virtual 1,000 USD balance. A successful pass qualifies the trader for a 100% performance reward payout under the published rules.</p>"
                 "<div class='warn'>Send only after this server issues your unique invoice. "
                 "The receiver is owner-approved and the transaction must come from the wallet bound below.</div>"
                 "<p><strong>Cancellation and refund:</strong> before transaction verification, no payment is credited. "
@@ -119,7 +119,7 @@ def starter30_checkout(request):
                 f"<p>Account: <code>{escape(result['account_ref'])}</code></p>"
                 f"<p>Virtual balance: <strong>USD {escape(result['simulation_balance_usd'])}</strong></p>"
                 f"<p>Transaction: <code>{escape(result['txid'])}</code></p>"
-                "</div><p>This account is simulated only; no real capital or broker account was created.</p>",
+                "</div><p>This account is simulated only; no customer capital or real broker account was created. After a successful pass, the trader is eligible for a 100% performance reward payout under the published rules and verification process.</p>",
             )
         raise Starter30PaymentRejected("unsupported checkout action")
     except (Starter30PaymentRejected, Starter30ReleaseClosed, LookupError, ValueError) as error:
