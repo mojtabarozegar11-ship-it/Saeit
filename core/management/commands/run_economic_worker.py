@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import F
 
 from core.economic_tool_pack import build_economic_gateway
-from core.models import AgentTask
+from core.economic_owner import economic_queue, economic_owner_code
 from core.worker_runner import WorkerRunner
 
 
@@ -35,14 +35,13 @@ class Command(BaseCommand):
             if spec.get("enabled", True)
             and (code.startswith("income_") or code == "master_self_improvement")
         )
+        owner_code = economic_owner_code()
         runner = None
         for _ in range(limit):
             # Never retry the same queued identity within this invocation.
             # A failed or re-queued task is left for the normal retry policy.
             task_query = (
-                AgentTask.objects.filter(
-                    agent__code="economic-master-agent",
-                    agent__active=True,
+                economic_queue(owner_code).filter(
                     status="queued",
                     capability_code__in=supported,
                     action_type=F("capability_code"),
@@ -56,8 +55,8 @@ class Command(BaseCommand):
                 if options["task_id"] is not None:
                     raise CommandError("Explicit task is not queued with a matching registered economic tool")
                 if executed == 0:
-                    unknown = AgentTask.objects.filter(
-                        agent__code="economic-master-agent", agent__active=True, status="queued",
+                    unknown = economic_queue(owner_code).filter(
+                    status="queued",
                     ).exclude(
                         capability_code__in=supported, action_type=F("capability_code"),
                     ).order_by("created_at", "pk").first()

@@ -1,6 +1,7 @@
 """Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
 from core.models import AgentTask, Product, Order, LedgerEntry
+from core.economic_owner import economic_owner_code, economic_queue, economic_history, LEGACY
 
 @dataclass(frozen=True)
 class Candidate:
@@ -17,7 +18,9 @@ class Candidate:
 class AutonomousBrain:
     def observe(self):
         products = Product.objects.all()
-        economic_tasks = AgentTask.objects.filter(agent__code="economic-master-agent")
+        owner_code = economic_owner_code()
+        economic_tasks = economic_history(owner_code)
+        current_tasks = economic_queue(owner_code) if owner_code != LEGACY else economic_tasks
         latest_offer = economic_tasks.filter(
             capability_code="income_offer_design"
         ).order_by("-created_at", "-pk").first()
@@ -77,8 +80,8 @@ class AutonomousBrain:
             for seen_at in (latest_paid_order_at, latest_payment_entry_at)
         )
         return {
-            "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
-            "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
+            "unfinished_tasks": current_tasks.filter(status__in=("queued","running","blocked")).count(),
+            "failed_tasks": economic_tasks.filter(status="failed").count(),
             "market_research_complete": market_research_complete,
             "market_inventory_measured": latest_inventory is not None,
             "opportunity_scored": opportunity_scored,

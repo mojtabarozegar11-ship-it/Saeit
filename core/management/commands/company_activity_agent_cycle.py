@@ -1,6 +1,7 @@
 from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+from django.db import transaction
 from core.company_activity_agent import REPORT_TYPES, REPORT_TITLES, build_report_inputs, build_report_content, ensure_agent, source_activities
 from core.company_activity_models import CompanyActivityAgentPlan, CompanyActivityReport
 
@@ -8,7 +9,9 @@ from core.company_activity_models import CompanyActivityAgentPlan, CompanyActivi
 class Command(BaseCommand):
     help = "Queue a daily Company Activity Intelligence Agent report set."
 
+    @transaction.atomic
     def handle(self, *args, **options):
+        owner = ensure_agent()
         now = timezone.now()
         plan, _ = CompanyActivityAgentPlan.objects.get_or_create(
             code="company-activity-intelligence",
@@ -22,7 +25,6 @@ class Command(BaseCommand):
                 "next_run_at": now,
             },
         )
-        ensure_agent()
         if not plan.active or (plan.next_run_at and plan.next_run_at > now):
             self.stdout.write("COMPANY_ACTIVITY_AGENT=WAIT")
             return
@@ -62,4 +64,4 @@ class Command(BaseCommand):
         plan.last_run_at = now
         plan.next_run_at = now + timedelta(hours=plan.cadence_hours)
         plan.save(update_fields=["last_run_at", "next_run_at", "updated_at"])
-        self.stdout.write(f"COMPANY_ACTIVITY_AGENT=QUEUED REPORTS={created} SOURCES={inputs['activity_count']}")
+        self.stdout.write(f"COMPANY_ACTIVITY_AGENT=QUEUED REPORTS={created} SOURCES={inputs['activity_count']} OWNER={owner.code}")

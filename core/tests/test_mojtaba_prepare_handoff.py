@@ -1,0 +1,104 @@
+import io
+import json
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.test import TestCase
+from core.models import Agent, AgentTask, AgentCapability
+from core.unified_bot_identity import BOT_CODE
+
+class PrepareHandoffTests(TestCase):
+    def setUp(self):
+        self.old = Agent.objects.create(code="economic-master-agent",
+            name="Legacy", mission="Preserve", active=True)
+        self.before_active = Agent.objects.filter(active=True).count()
+        self.before_caps = list(AgentCapability.objects.order_by("pk").values())
+        self.before_agents = list(Agent.objects.exclude(code=BOT_CODE).order_by("pk").values())
+        self.task = AgentTask.objects.create(agent=self.old, action_type="legacy",
+            status="queued")
+
+    def run_prepare(self, *args):
+        out = io.StringIO()
+        call_command("mojtaba_prepare_handoff", *args, stdout=out)
+        return json.loads(out.getvalue())
+
+    def test_default_preview_creates_no_identity(self):
+        report = self.run_prepare()
+        self.assertFalse(report["canonical_active"])
+        self.assertIsNone(report["live_worker_count"])
+        self.assertEqual(report["other_active_records"], self.before_active)
+        self.assertEqual(next(row for row in report["registered_agents"] if row["code"] == self.old.code)["unreconciled_tasks"], 1)
+        self.assertFalse(Agent.objects.filter(code=BOT_CODE).exists())
+
+    def test_provision_requires_both_flags(self):
+        for flag in ("--provision-site-only", "--confirm-maintenance-window"):
+            with self.assertRaises(CommandError):
+                self.run_prepare(flag)
+        self.assertFalse(Agent.objects.filter(code=BOT_CODE).exists())
+
+    def test_provision_preserves_all_legacy_and_grants_nothing(self):
+        flags = ("--provision-site-only", "--confirm-maintenance-window")
+        result = self.run_prepare(*flags)
+        bot = Agent.objects.get(code=BOT_CODE)
+        self.assertTrue(result["canonical_record_created"])
+        self.assertTrue(bot.active)
+        self.assertEqual(bot.capabilities.count(), 0)
+        self.assertEqual(list(AgentCapability.objects.order_by("pk").values()), self.before_caps)
+        self.old.refresh_from_db()
+        self.task.refresh_from_db()
+        self.assertTrue(self.old.active)
+        self.assertEqual(self.task.agent_id, self.old.pk)
+        self.assertFalse(result["factory_started"])
+        self.assertFalse(self.run_prepare(*flags)["canonical_record_created"])
+
+    def test_inactive_canonical_never_reactivated(self):
+        Agent.objects.create(code=BOT_CODE, name="Canonical", mission="Hold", active=False)
+        with self.assertRaises(CommandError):
+            self.run_prepare("--provision-site-only", "--confirm-maintenance-window")
+        self.assertFalse(Agent.objects.get(code=BOT_CODE).active)
+
+    def test_old_seeder_cannot_recreate_legacy_after_canonical_provision(self):
+        self.run_prepare("--provision-site-only", "--confirm-maintenance-window")
+        with self.assertRaisesRegex(CommandError, "LEGACY_SEED_DISABLED"):
+            call_command("seed_online_income_agents")
+        self.assertEqual(list(Agent.objects.exclude(code=BOT_CODE).order_by("pk").values()), self.before_agents)
+        self.assertEqual(list(AgentCapability.objects.order_by("pk").values()), self.before_caps)
+
+    def test_unknown_status_is_unreconciled(self):
+        self.task.status = "unrecognized"
+        self.task.save(update_fields=["status"])
+        result = self.run_prepare()
+        self.assertEqual(next(row for row in result["registered_agents"] if row["code"] == self.old.code)["unreconciled_tasks"], 1)
+        self.assertFalse(result["retirement_authorized"])
+
+    def test_pending_groups_preserve_exact_status_risk_and_claim_counts(self):
+        self.task.action_type = "legacy_research"
+        self.task.capability_code = "legacy_research"
+        self.task.risk_snapshot = "high"
+        self.task.execution_id = "private-claim-must-not-leak"
+        self.task.attempt_count = 1
+        self.task.input_data = {"secret": "private-payload-must-not-leak"}
+        self.task.save()
+        AgentTask.objects.create(agent=self.old, action_type="legacy_research",
+            capability_code="legacy_research", risk_snapshot="high", status="queued")
+        AgentTask.objects.create(agent=self.old, action_type="legacy_research",
+            capability_code="legacy_research", risk_snapshot="high", status="unrecognized")
+        AgentTask.objects.create(agent=self.old, action_type="legacy_research", status="completed")
+        cap = AgentCapability.objects.create(code="legacy_research", name="Research", active=True)
+        bot = Agent.objects.create(code=BOT_CODE, name="Canonical", mission="Preserve", active=True)
+        bot.capabilities.add(cap)
+        before = list(AgentTask.objects.order_by("pk").values())
+        report = self.run_prepare()
+        row = next(r for r in report["registered_agents"] if r["code"] == self.old.code)
+        groups = {g["status"]: g for g in row["pending_task_groups"]}
+        self.assertEqual(row["unreconciled_tasks"], 3)
+        self.assertEqual(set(groups), {"queued", "unrecognized"})
+        self.assertEqual(groups["queued"]["total"], 2)
+        self.assertEqual(groups["queued"]["with_execution_id"], 1)
+        self.assertEqual(groups["queued"]["previously_attempted"], 1)
+        self.assertEqual(groups["queued"]["risk_snapshot"], "high")
+        self.assertTrue(groups["queued"]["canonical_capability_registered"])
+        self.assertFalse(groups["queued"]["transfer_authorized"])
+        self.assertFalse(report["task_transfer_authorized"])
+        self.assertNotIn("private-claim-must-not-leak", json.dumps(report))
+        self.assertNotIn("private-payload-must-not-leak", json.dumps(report))
+        self.assertEqual(list(AgentTask.objects.order_by("pk").values()), before)

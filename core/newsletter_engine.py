@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils.text import slugify
 
 from .models import Agent, NewsletterSchedule, NewsletterSource, NewsletterStory
+from .canonical_agent_handoff import specialist_owner, SPECIALIST_CODES
 
 ANALYSIS_HEADING = "توضیح، تفسیر و تحلیل تخصصی مجتبی روزگار، پژوهشگر و محقق و مدیر عامل شرکت کشت و صنعت زمرد ملل"
 MIN_AUTO_PUBLISH_SCORE = 90
@@ -52,7 +53,10 @@ def newsletter_quality_score(*, story_type, title, summary, body, source=None, e
 
 
 def create_draft(*, agent_code, story_type, title, summary, body, source=None, event_date=None, keywords=None, publish_at=None):
-    agent = Agent.objects.get(code=agent_code, active=True)
+    agent = (specialist_owner(agent_code) if agent_code in SPECIALIST_CODES
+             else Agent.objects.get(code=agent_code, active=True))
+    if not agent.active:
+        raise RuntimeError("EDITORIAL_OWNER_INACTIVE")
     source_fingerprint = fingerprint(source.url) if source else ""
     fp = fingerprint(story_type, title, source_fingerprint, event_date or "")
     if NewsletterStory.objects.filter(fingerprint=fp).exists():
@@ -103,8 +107,8 @@ def process_submission(submission):
 
     # An administrative submission is actual work: provision its single owner
     # once, without creating placeholder roles or requiring a GitHub runner.
-    agent, _ = Agent.objects.get_or_create(
-        code="content-director",
+    agent = specialist_owner(
+        "content-director",
         defaults={
             "name": "Content Director",
             "mission": "Turn approved owner submissions into traceable editorial drafts.",
@@ -128,7 +132,7 @@ def process_submission(submission):
         else None
     )
     story, reason = create_draft(
-        agent_code="content-director", story_type="company", title=submission.subject,
+        agent_code=agent.code, story_type="company", title=submission.subject,
         summary=submission.body[:500], body=submission.body,
         keywords=[submission.subject, "شرکت کشت و صنعت زمرد ملل", "مجتبی روزگار", "محقق و پژوهشگر"],
         event_date=timezone.localdate(), publish_at=publish_at,

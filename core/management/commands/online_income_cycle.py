@@ -4,7 +4,9 @@ from core.autonomous_brain import AutonomousBrain
 from core.models import Agent, AgentTask
 from core.task_runtime import TaskExecutionError, TaskRuntime
 
-MASTER_AGENT_CODE = "economic-master-agent"
+from core.economic_owner import economic_owner_code, economic_queue, LEGACY
+
+MASTER_AGENT_CODE = LEGACY
 
 class Command(BaseCommand):
     help = "Let the master agent observe state and autonomously choose its next work."
@@ -17,19 +19,20 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["stale_after_seconds"] < 300:
             raise CommandError("stale-after-seconds must be at least 300")
-        agent = Agent.objects.filter(code=MASTER_AGENT_CODE, active=True).first()
+        owner_code = economic_owner_code()
+        agent = Agent.objects.filter(code=owner_code, active=True).first()
         if not agent:
-            self.stderr.write("Missing active economic-master-agent.")
+            self.stderr.write("Missing active economic execution owner.")
             return
 
-        queued = AgentTask.objects.filter(agent=agent, status="queued").order_by("created_at").first()
+        queued = economic_queue(owner_code).filter(agent=agent, status="queued").order_by("created_at").first()
         if queued:
             self.stdout.write(
                 f"BRAIN_CONTINUE task={queued.pk} action={queued.action_type} status={queued.status}"
             )
             return
 
-        running = AgentTask.objects.filter(agent=agent, status="running").order_by("updated_at").first()
+        running = economic_queue(owner_code).filter(agent=agent, status="running").order_by("updated_at").first()
         if running:
             if options["dry_run"]:
                 self.stdout.write(f"BRAIN_RUNNING task={running.pk} dry_run=true")
@@ -44,7 +47,7 @@ class Command(BaseCommand):
             self.stdout.write(f"BRAIN_RECOVERED task={recovered.pk} status={recovered.status}")
             return
 
-        blocked = AgentTask.objects.filter(agent=agent, status="blocked").order_by("created_at").first()
+        blocked = economic_queue(owner_code).filter(agent=agent, status="blocked").order_by("created_at").first()
         if blocked:
             # A blocked task may be awaiting owner authorization. Never silently
             # retry it, spawn duplicates, or report a successful autonomous step.
@@ -59,7 +62,7 @@ class Command(BaseCommand):
             if agent is None:
                 self.stderr.write("Economic master agent was deactivated during planning.")
                 return
-            if AgentTask.objects.filter(
+            if economic_queue(owner_code).filter(
                 agent=agent, status__in=("queued", "running", "blocked")
             ).exists():
                 self.stdout.write("BRAIN_RECHECK pending_task_created_concurrently")

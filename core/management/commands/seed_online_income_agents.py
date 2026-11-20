@@ -1,7 +1,8 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from core.models import Agent, AgentCapability
+from core.unified_bot_identity import BOT_CODE
 
 
 CAPABILITIES = [
@@ -34,6 +35,10 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        # Once the canonical runtime is provisioned, the old seeder must
+        # never silently recreate or reactivate the two legacy identities.
+        if Agent.objects.select_for_update().filter(code=BOT_CODE, active=True).exists():
+            raise CommandError("CANONICAL_BOT_PRESENT_LEGACY_SEED_DISABLED")
         capabilities = {}
         for code, name, description, risk in CAPABILITIES:
             obj, _ = AgentCapability.objects.update_or_create(
