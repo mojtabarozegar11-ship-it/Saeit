@@ -147,3 +147,36 @@ urlpatterns += [
 
 # Explicit merchant URLs; handlers retain host, ownership and release checks.
 urlpatterns += [path("", include("config.mpw_commerce_urls"))]
+
+from django.conf import settings as _mojprop_settings
+
+if getattr(_mojprop_settings, "MPW_MOJPROP_STAGING_IDENTITY_ROUTE_ENABLED", False):
+    from prop_firm.staging_identity_views import (
+        staging_identity_activate,
+        staging_identity_challenge,
+        staging_identity_consume,
+        staging_identity_register,
+    )
+
+    urlpatterns += [
+        path(
+            "internal/mojprop/staging/identity/register/",
+            staging_identity_register,
+            name="mojprop_staging_identity_register",
+        ),
+        path(
+            "internal/mojprop/staging/identity/activate/",
+            staging_identity_activate,
+            name="mojprop_staging_identity_activate",
+        ),
+        path(
+            "internal/mojprop/staging/identity/challenge/",
+            staging_identity_challenge,
+            name="mojprop_staging_identity_challenge",
+        ),
+        path(
+            "internal/mojprop/staging/identity/consume/",
+            staging_identity_consume,
+            name="mojprop_staging_identity_consume",
+        ),
+    ]
