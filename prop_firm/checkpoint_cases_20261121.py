@@ -75,7 +75,7 @@ class CheckpointRecoveryTests(TestCase):
         self.assertEqual(recovered.engine.last_quote_time,e.last_quote_time)
         self.assertEqual(recovered.engine.snapshot().equity,e.snapshot().equity)
         self.assertEqual(recovered.engine.submit(self.buy("new-1"),
-                          self.q("A","100","101",3)).reason,"account_blocked")
+                          self.q("A","100","101",3)).reason,"quarantined_checkpoint")
 
     def test_recover_closed_execution_and_idempotent_capture(self):
         e=SimulationEngine()
