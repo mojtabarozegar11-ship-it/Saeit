@@ -227,11 +227,15 @@ def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
             raise Starter30PaymentRejected("invoice is already settled")
         if payment.status != PropSimulationPayment.Status.AWAITING:
             raise Starter30PaymentRejected("invoice is not awaiting payment")
-        if now >= payment.expires_at:
+        # The blockchain transfer timestamp governs whether payment was on time.
+        # Delayed provider confirmation or late user reconciliation must not
+        # erase an on-time transfer merely because the invoice has since expired.
+        transfer_in_window = payment.issued_at <= transfer_a.block_time < payment.expires_at
+        if now >= payment.expires_at and not transfer_in_window:
             payment.status = PropSimulationPayment.Status.EXPIRED
             payment.save(using=MOJPROP_DB_ALIAS, update_fields=["status", "updated_at"])
             return _EXPIRED_INVOICE
-        if transfer_a.block_time < payment.issued_at or transfer_a.block_time >= payment.expires_at:
+        if not transfer_in_window:
             raise Starter30PaymentRejected("payment is outside the invoice window")
         expected_sender = hex_to_tron_address(payment.payer_hex41)
         if transfer_a.sender != expected_sender:
