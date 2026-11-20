@@ -184,3 +184,16 @@ MPW_COMMERCE_REAL_RPC_ENABLED = True
 MPW_COMMERCE_AUTORECONCILE_ENABLED = True
 MPW_COMMERCE_BUYER_SIGNATURE_ENABLED = True
 MPW_COMMERCE_CUSTOMER_HTTP_ENABLED = True
+
+# Isolated MOJ PROP identity/login adapter remains closed unless staging
+# supplies a dedicated secret. These values do not enable routing, commerce,
+# email delivery, or the English route.
+MPW_MOJPROP_IDENTITY_DIGEST_SECRET = env(
+    "MPW_MOJPROP_IDENTITY_DIGEST_SECRET", default=""
+)
+MPW_MOJPROP_LOGIN_CHALLENGE_TTL_SECONDS = env.int(
+    "MPW_MOJPROP_LOGIN_CHALLENGE_TTL_SECONDS", default=600
+)
+MPW_MOJPROP_LOGIN_MAX_ATTEMPTS = env.int(
+    "MPW_MOJPROP_LOGIN_MAX_ATTEMPTS", default=5
+)
