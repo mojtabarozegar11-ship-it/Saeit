@@ -36,7 +36,7 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
             sender="test-sender",
             recipient=self.receiver,
             amount_sun=m.NATIVE_AMOUNT_SUN,
-            block_time=self.now - timedelta(minutes=5),
+            block_time=self.now,  # strictly outside the expired invoice window
             solidified=True,
         )
         self.events = []
@@ -153,4 +153,46 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         paid.assert_called_once_with(self.payment)
         self.payment.save.assert_not_called()
         self.assertIn("commit", self.events)
+        self.mock_accounts.assert_not_called()
+
+    def test_on_time_trx_is_credited_even_if_reconciled_after_expiry(self):
+        # The customer's transfer landed before the deadline; the proof may
+        # arrive after expiry. Do not confiscate or silently expire that payment.
+        self.transfer.block_time = self.now - timedelta(minutes=5)
+        self.payment.payer_hex41 = "41" + "0" * 40
+        self.payment.payment_ref = "PAY-test"
+        owner = MagicMock()
+        owner.invoice_ref = "invoice-1"
+        owner.identity = MagicMock()
+        self.payment.invoice_owner = owner
+        self.mock_manager.using.return_value.filter.return_value.exists.return_value = False
+        with patch(
+            "prop_firm.starter30_live.hex_to_tron_address",
+            return_value=self.transfer.sender,
+        ), patch(
+            "prop_firm.starter30_live._token",
+            return_value="MOJPROP30-ACC-valid",
+        ):
+            result = self._settle()
+        self.assertEqual(result["status"], "paid")
+        self.assertEqual(result["invoice_ref"], "invoice-1")
+        self.assertEqual(result["account_ref"], "MOJPROP30-ACC-valid")
+        self.assertEqual(result["txid"], self.txid)
+        self.assertEqual(self.payment.status, m.PropSimulationPayment.Status.PAID)
+        self.assertEqual(self.payment.txid, self.txid)
+        self.assertTrue(owner.settlement_verified)
+        self.assertEqual(owner.settlement_reference, self.txid)
+        self.mock_accounts.assert_called_once()
+        self.mock_accounts.return_value.save.assert_called_once_with(
+            using=MOJPROP_DB_ALIAS
+        )
+        self.assertIn("commit", self.events)
+        self.assertNotIn("rollback", self.events)
+
+    def test_future_or_post_expiry_transfer_is_never_credited(self):
+        self.transfer.block_time = self.now + timedelta(seconds=10)
+        with self.assertRaisesRegex(m.Starter30PaymentRejected, "invoice has expired"):
+            self._settle()
+        self.payment.save.assert_called_once()
+        self.assertEqual(self.payment.status, m.PropSimulationPayment.Status.EXPIRED)
         self.mock_accounts.assert_not_called()
