@@ -75,6 +75,46 @@ DATABASES = {
     "default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
 }
 
+# The isolated database and router are opt-in and staging-only. Defaults remain
+# completely inert so the factory database cannot be affected by configuration
+# drift or an incomplete deployment.
+MPW_MOJPROP_DB_ALIAS_ENABLED = env.bool(
+    "MPW_MOJPROP_DB_ALIAS_ENABLED", default=False
+)
+MPW_MOJPROP_DEPLOYMENT_ENV = env(
+    "MPW_MOJPROP_DEPLOYMENT_ENV", default=""
+)
+if MPW_MOJPROP_DB_ALIAS_ENABLED:
+    if MPW_MOJPROP_DEPLOYMENT_ENV != "staging":
+        raise RuntimeError(
+            "MOJ PROP database alias can only be enabled in staging"
+        )
+    _mojprop_database_url = env("MPW_MOJPROP_DATABASE_URL", default="")
+    _mojprop_identity_secret = env(
+        "MPW_MOJPROP_IDENTITY_DIGEST_SECRET", default=""
+    )
+    _mojprop_source_alias = env(
+        "MPW_MOJPROP_RECONCILIATION_SOURCE_ALIAS", default=""
+    )
+    if not _mojprop_database_url:
+        raise RuntimeError(
+            "MPW_MOJPROP_DATABASE_URL is required when the alias is enabled"
+        )
+    if not _mojprop_identity_secret:
+        raise RuntimeError(
+            "MPW_MOJPROP_IDENTITY_DIGEST_SECRET is required when the alias is enabled"
+        )
+    if not _mojprop_source_alias or _mojprop_source_alias == "mojprop":
+        raise RuntimeError(
+            "MOJ PROP reconciliation source must be explicit and distinct"
+        )
+    DATABASES["mojprop"] = env.db(_mojprop_database_url)
+    DATABASE_ROUTERS = (
+        "config.mojprop_db_router.MojPropDatabaseRouter",
+    )
+else:
+    DATABASE_ROUTERS = ()
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
