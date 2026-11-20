@@ -24,6 +24,7 @@ from core.company_content_views import company_gallery, company_content_feed, co
 from core.faremah_views import faremah_home
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
 from prop_firm.starter30_views import starter30_checkout, starter30_status
+from services.mpw_trx_public_pages import support_page, terms_page, privacy_page, cookies_page
 
 urlpatterns = [
     path("", services, name="home"),
@@ -72,6 +73,10 @@ urlpatterns = [
     path("company/<slug:slug>/", lambda request, slug: platform_page(request, "company"), name="company_detail"),
     path("about/", RedirectView.as_view(pattern_name="company", permanent=True), name="about"),
     path("contact/", RedirectView.as_view(url="/ask-master/index.php?service=1", permanent=False), name="contact"),
+    path("support/", support_page, name="mpw_support"),
+    path("terms/", terms_page, name="mpw_terms"),
+    path("privacy/", privacy_page, name="mpw_privacy"),
+    path("cookies/", cookies_page, name="mpw_cookies"),
     path("weather/", weather, name="weather"),
     # Canonical education platform under the requested company path.
     path("amozeshgah/", education, name="education"),
