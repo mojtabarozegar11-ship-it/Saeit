@@ -24,7 +24,7 @@ if __name__ != "__main__":
             )
             output = process.stdout + "\n" + process.stderr
             self.assertEqual(process.returncode, 0, output)
-            self.assertIn("Ran 23 tests", output)
+            self.assertIn("Ran 25 tests", output)
             self.assertIn("OK", output)
 else:
     from django.conf import settings
