@@ -95,6 +95,15 @@ MPW_MOJPROP_DB_ALIAS_ENABLED = env.bool(
 MPW_MOJPROP_DEPLOYMENT_ENV = env(
     "MPW_MOJPROP_DEPLOYMENT_ENV", default=""
 )
+MPW_MOJPROP_STAGING_IDENTITY_ROUTE_ENABLED = env.bool(
+    "MPW_MOJPROP_STAGING_IDENTITY_ROUTE_ENABLED", default=False
+)
+MPW_MOJPROP_STAGING_ROUTE_TOKEN = env(
+    "MPW_MOJPROP_STAGING_ROUTE_TOKEN", default=""
+)
+MPW_MOJPROP_STAGING_INTERNAL_IPS = tuple(
+    env.list("MPW_MOJPROP_STAGING_INTERNAL_IPS", default=["127.0.0.1", "::1"])
+)
 if MPW_MOJPROP_DB_ALIAS_ENABLED:
     if MPW_MOJPROP_DEPLOYMENT_ENV != "staging":
         raise RuntimeError("MOJ PROP database alias can only be enabled in staging")
@@ -112,6 +121,16 @@ if MPW_MOJPROP_DB_ALIAS_ENABLED:
     DATABASE_ROUTERS = ("config.mojprop_db_router.MojPropDatabaseRouter",)
 else:
     DATABASE_ROUTERS = ()
+
+if MPW_MOJPROP_STAGING_IDENTITY_ROUTE_ENABLED:
+    if not MPW_MOJPROP_DB_ALIAS_ENABLED or MPW_MOJPROP_DEPLOYMENT_ENV != "staging":
+        raise RuntimeError(
+            "MOJ PROP staging identity route requires the staging database alias"
+        )
+    if len(MPW_MOJPROP_STAGING_ROUTE_TOKEN) < 32:
+        raise RuntimeError(
+            "MOJ PROP staging identity route token must be at least 32 characters"
+        )
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
