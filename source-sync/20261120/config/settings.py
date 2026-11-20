@@ -197,3 +197,9 @@ MPW_MOJPROP_LOGIN_CHALLENGE_TTL_SECONDS = env.int(
 MPW_MOJPROP_LOGIN_MAX_ATTEMPTS = env.int(
     "MPW_MOJPROP_LOGIN_MAX_ATTEMPTS", default=5
 )
+
+# Payment reconciliation remains closed until a private worker explicitly
+# supplies the verified source database alias. This does not enable checkout.
+MPW_MOJPROP_RECONCILIATION_SOURCE_ALIAS = env(
+    "MPW_MOJPROP_RECONCILIATION_SOURCE_ALIAS", default=""
+)
