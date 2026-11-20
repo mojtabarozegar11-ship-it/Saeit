@@ -1,0 +1,37 @@
+Moj Prop Starter 30 | 60-day simulated educational journal
+===========================================================
+Virtual reference only: 1,000 simulated USD, not funded and not withdrawable.
+
+Do not transmit real trading account credentials or personal financial records.
+Copy journal-template.csv into your own private file. Complete all 10 bounded
+journal entries during the 60-day challenge window.
+
+Columns (exact spelling and order):
+  session: integers 1 through 10 in sequence
+  closing_equity_usd: string decimal with 0-2 fractional digits; numeric simulation only
+  risk_plan_recorded: yes or no (lowercase)
+  reflection_recorded: yes or no (lowercase)
+
+Approved simulated product rules:
+  Challenge window: 60 days.
+  Maximum daily simulated drawdown: 6% of the previous session's closing equity.
+  Maximum risk per trade: 3%.
+  Maximum open-position risk: 4%.
+  Best trading day: no more than 50% of counted net profit at evaluation.
+  A missing plan or reflection generates a coaching alert.
+
+The CSV records session-level equity and declarations only. It does not
+independently verify per-trade risk, open-position risk, profitability or a
+broker statement. Those controls must remain in the written terms before any
+paid delivery. Exactly 10 valid journal entries are required for a completed
+educational review.
+
+A completed journal does not earn a real-money account, investment return,
+share of profits, withdrawal rights, prizes or any future funded placement.
+The personalized scorecard is a learning artifact, not a broker statement.
+
+Payment is not available through this file. The indicative service price
+of 30 native TRX must be confirmed through a lawful written contract,
+customer-specific invoice and verified settlement before paid delivery.
+
+Product: MOJPROP-STARTER30 | Operator identity: mojtaba.bot.ai
