@@ -6,7 +6,8 @@ Authoritative market-data ingestion and licensing remain separate release gates.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Dict, List, Optional
 
@@ -14,6 +15,18 @@ from .simulation_policy import SIMULATION_POLICY
 
 
 D = Decimal
+
+
+def _quote_time(value: str) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError('quote timestamp must be text')
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if parsed.utcoffset() is None:
+            raise ValueError('timezone required')
+        return parsed.astimezone(timezone.utc)
+    except (ValueError, OverflowError) as exc:
+        raise ValueError('quote timestamp must be timezone-aware ISO-8601') from exc
 
 
 def _dec(value, name: str) -> Decimal:
@@ -53,8 +66,13 @@ class MarketQuote:
             raise ValueError("quote symbol and prices are required")
         if self.ask < self.bid:
             raise ValueError("ask cannot be below bid")
-        if self.sequence < 0 or not self.timestamp:
-            raise ValueError("quote timestamp and sequence are required")
+        if type(self.sequence) is not int or self.sequence < 0:
+            raise ValueError("quote sequence must be a nonnegative integer")
+        _quote_time(self.timestamp)
+
+    @property
+    def observed_at(self) -> datetime:
+        return _quote_time(self.timestamp)
 
     @property
     def spread(self) -> Decimal:
@@ -104,6 +122,7 @@ class Position:
     stop_loss: Decimal
     take_profit: Optional[Decimal]
     opened_sequence: int
+    opened_at: datetime
     current_bid: Decimal
     current_ask: Decimal
 
@@ -126,6 +145,25 @@ class Execution:
     quantity: Decimal
     price: Optional[Decimal]
     reason: str = ""
+
+
+@dataclass(frozen=True)
+class ClosedExecutionRecord:
+    """Immutable in-memory accounting evidence, NOT authenticated market data."""
+    order_id: str
+    symbol: str
+    side: str
+    quantity: Decimal
+    entry_price: Decimal
+    exit_price: Decimal
+    opened_sequence: int
+    closed_sequence: int
+    opened_at: datetime
+    closed_at: datetime
+    gross_pnl: Decimal
+    commission: Decimal
+    net_pnl: Decimal
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -167,8 +205,23 @@ class SimulationEngine:
         self.closed_trade_count = 0
         self.realized_pnl = D("0")
         self.last_quote_sequence = -1
+        self.last_quote_time: Optional[datetime] = None
+        self._closed_execution_records: List[ClosedExecutionRecord] = []
         self.blocked = False
         self.closed = []
+
+    @property
+    def closed_execution_records(self) -> tuple[ClosedExecutionRecord, ...]:
+        return tuple(self._closed_execution_records)
+
+    def _accept_quote(self, quote: MarketQuote) -> None:
+        observed_at = quote.observed_at
+        if quote.sequence <= self.last_quote_sequence:
+            raise ValueError("quote sequence must increase")
+        if self.last_quote_time is not None and observed_at < self.last_quote_time:
+            raise ValueError("quote timestamp regressed")
+        self.last_quote_sequence = quote.sequence
+        self.last_quote_time = observed_at
 
     @property
     def daily_floor(self) -> Decimal:
@@ -236,7 +289,7 @@ class SimulationEngine:
         if quote.sequence <= self.last_quote_sequence:
             return Execution(order.order_id, "rejected", order.symbol,
                              order.side, order.quantity, None, "stale_quote")
-        self.last_quote_sequence = quote.sequence
+        self._accept_quote(quote)
         self._mark_quote(quote)
         self._enforce_drawdown()
         self._protect_positions(quote)
@@ -286,7 +339,7 @@ class SimulationEngine:
     def process_quote(self, quote: MarketQuote) -> List[Execution]:
         if quote.sequence <= self.last_quote_sequence:
             raise ValueError("quote sequence must increase")
-        self.last_quote_sequence = quote.sequence
+        self._accept_quote(quote)
         self._mark_quote(quote)
         self._enforce_drawdown()
         executions = self._protect_positions(quote)
@@ -330,7 +383,7 @@ class SimulationEngine:
             quantity=order.quantity, entry_price=entry,
             stop_loss=_positive(order.stop_loss, "stop_loss"),
             take_profit=None if order.take_profit is None else _positive(order.take_profit, "take_profit"),
-            opened_sequence=quote.sequence,
+            opened_sequence=quote.sequence, opened_at=quote.observed_at,
             current_bid=quote.bid, current_ask=quote.ask,
         )
         return Execution(order.order_id, "filled", order.symbol, order.side,
@@ -343,7 +396,7 @@ class SimulationEngine:
             raise KeyError(order_id)
         if quote.symbol != position.symbol or quote.sequence <= self.last_quote_sequence:
             raise ValueError("invalid or stale close quote")
-        self.last_quote_sequence = quote.sequence
+        self._accept_quote(quote)
         self._mark_quote(quote)
         self._enforce_drawdown()
         for execution in self._protect_positions(quote):
@@ -358,10 +411,19 @@ class SimulationEngine:
         gross = (exit_price - position.entry_price) * position.quantity * direction
         fees = self.commission_per_unit * position.quantity
         net = gross - fees
+        record = ClosedExecutionRecord(
+            order_id=order_id, symbol=position.symbol, side=position.side,
+            quantity=position.quantity, entry_price=position.entry_price,
+            exit_price=exit_price, opened_sequence=position.opened_sequence,
+            closed_sequence=quote.sequence, opened_at=position.opened_at,
+            closed_at=quote.observed_at, gross_pnl=gross, commission=fees,
+            net_pnl=net, reason=reason,
+        )
         self.balance += net
         self.realized_pnl += net
         self.closed_trade_count += 1
         self.closed.append((order_id, net, reason))
+        self._closed_execution_records.append(record)
         self.positions.pop(order_id)
         self._enforce_drawdown()
         return Execution(order_id, "closed", position.symbol, position.side,
