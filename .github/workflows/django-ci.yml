@@ -41,13 +41,15 @@ jobs:
           DEBUG: "False"
           ALLOWED_HOSTS: localhost,127.0.0.1
         run: python manage.py collectstatic --noinput
-      - name: Run tests
+      - name: Run tests with isolated CI settings
         env:
+          DJANGO_SETTINGS_MODULE: config.test_settings
           PYTHONPATH: ${{ runner.temp }}/mpw-pdf-parser
           SECRET_KEY: ci-secret-key
           DEBUG: "False"
-          ALLOWED_HOSTS: localhost,127.0.0.1
-        run: pytest -q
+          ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+          SECURE_SSL_REDIRECT: "False"
+        run: python -m pytest -q
       - name: Apply migrations to CI database
         env:
           SECRET_KEY: ci-secret-key
