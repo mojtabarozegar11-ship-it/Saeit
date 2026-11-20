@@ -131,7 +131,7 @@ def source_root(run_id: str) -> Path:
     if (not all(mark in starter for mark in (
             "MOJPROP-STARTER30", "Checkout available · 30 TRX",
             "./journal-template.csv", "./journal-guide.txt",
-            "30 TRX", "not a funded account",
+            "30 TRX", "No real funded account",
             "server-issued 30 TRX invoice",
             "100% of every profit earned"))):
         raise RuntimeError("Starter30 page is missing its ethical sales and delivery boundary")
