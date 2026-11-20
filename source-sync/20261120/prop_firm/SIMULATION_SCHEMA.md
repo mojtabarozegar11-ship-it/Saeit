@@ -35,11 +35,14 @@ The target database must be usable without the 16.67 GB factory database. Five t
 - English route connection: not implemented
 - live invoice route: disabled
 
+## Router status
+
+The fail-closed router is now present at source-sync/20261120/config/mojprop_db_router.py. It routes only these five model labels to the mojprop alias and rejects every other model on that alias. It is not wired into live settings yet.
+
 ## Next implementation order
 
-1. Review this schema and migration in CI.
-2. Add a database router with fail-closed read/write rules.
-3. Add private identity/login and payment-reconciliation adapters.
+1. Review this schema, migration, and router in CI.
+2. Add private identity/login and payment-reconciliation adapters.
 4. Run migration 0011_simulation_isolation only with the migration administrator.
 5. Point only the English MOJ PROP runtime to the dedicated database.
 6. Run a staging canary, then reassess release gates.
