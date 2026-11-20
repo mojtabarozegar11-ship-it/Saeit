@@ -129,6 +129,8 @@ def _load_position(p, last_sequence, last_time):
 def export_checkpoint(engine):
     if type(engine) is not SimulationEngine:
         raise JournalConflict("internal simulation engine required")
+    if getattr(engine,"quarantined",False):
+        raise JournalConflict("quarantined engine cannot be checkpointed")
     if (len(engine.positions)>LIMIT or len(engine.pending)>LIMIT
             or engine.closed_trade_count>LIMIT
             or len(engine.closed_execution_records)!=engine.closed_trade_count):
@@ -225,4 +227,5 @@ def recover_quarantined_engine(state, *, closed_records):
     # Quarantine applies even to an originally unblocked checkpoint.
     # Resuming requires an authenticated feed and explicitly validated account.
     engine.blocked=True
+    engine.quarantined=True
     return engine
