@@ -37,16 +37,19 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertNotIn("two-page", self.catalog.lower())
         self.assertNotIn("two-page", self.detail.lower())
 
-    def test_public_catalog_exactly_one_starter30_card_with_unpayable_amount(self):
+    def test_public_catalog_exactly_one_starter30_card_with_conditional_checkout(self):
         marker = '<article class="card" id="starter-30">'
         self.assertEqual(self.catalog.count(marker), 1)
         starter = self.catalog.split(marker, 1)[1].split("</article>", 1)[0]
         self.assertIn("30 native TRX", starter)
-        self.assertIn("Not payable yet", starter)
+        self.assertIn("Check secure checkout availability", starter)
+        self.assertIn('href="/mojprop-starter30-checkout/"', starter)
+        self.assertIn("Pay only after the secure server issues an invoice", starter)
         self.assertNotIn("US$149", starter)
         self.assertIn("package=starter-30-trx#request", starter)
         self.assertIn("30 TRX", self.detail)
-        self.assertIn("Payment not enabled", self.detail)
+        self.assertIn("server-issued 30 TRX invoice", self.detail)
+        self.assertIn('href="/mojprop-starter30-checkout/"', self.detail)
 
     def test_single_consent_based_crm_route_and_no_unmarked_149_dollar_quote(self):
         for page in (self.home, self.catalog, self.detail):
@@ -76,8 +79,9 @@ class Starter30SingleSkuTests(unittest.TestCase):
         lower = self.detail.lower()
         for blocked in ("<script", "tronweb", "walletconnect", "private key", "send trx now"):
             self.assertNotIn(blocked, lower)
-        self.assertIn("Do not send TRX", self.detail)
-        self.assertIn("No funded account is included", self.detail)
+        self.assertIn("Pay only through the server-issued 30 TRX invoice", self.detail)
+        self.assertNotIn("<form", lower)
+        self.assertIn("No real funded account or customer capital is involved", self.detail)
 
 
 if __name__ == "__main__":

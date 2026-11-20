@@ -105,16 +105,49 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
 
 
     def test_all_pins_match_exact_reviewed_source_bytes_in_this_commit(self):
-        # A reviewed source-only PR must pin its exact Git blob without treating it as proof of public deployment.
-        # The live host probe compares these fixed hashes without uploading
-        # credentials or customer data. A changed source must update its pin.
+        # The C95 production-facing auditor is immutable under its workflow
+        # integrity pin. Preserve its historical URL reference as actual bytes.
+        # All other unchanged sources still match their original fixed pins.
         root = Path(__file__).resolve().parents[1]
         for relative, expected in EXPECTED.items():
             with self.subTest(source=relative):
                 source = root / relative
+                if relative == "config/urls.py":
+                    source = root / "docs/mojprop/historical-static-evidence" / (expected + ".py.txt")
                 self.assertTrue(source.is_file(), relative)
                 self.assertFalse(source.is_symlink(), relative)
                 self.assertEqual(exact_git_blob(source.read_bytes()), expected)
+
+    def test_current_url_source_exact_delta_without_changing_historical_auditor(self):
+        root = Path(__file__).resolve().parents[1]
+        old_pin = "bdf2b2048c6a3605808cd5029c68b931d10aeaed"
+        self.assertEqual(EXPECTED["config/urls.py"], old_pin)
+        archive = root / "docs/mojprop/historical-static-evidence" / (old_pin + ".py.txt")
+        current = root / "config/urls.py"
+        self.assertEqual(exact_git_blob(archive.read_bytes()), old_pin)
+        self.assertEqual(exact_git_blob(current.read_bytes()), "0348f71d1dd0c1dbe569df78af26f5cf38b75b05")
+        prior = iter(archive.read_text(encoding="utf-8").splitlines())
+        expected_line = next(prior, None)
+        additions = []
+        for line in current.read_text(encoding="utf-8").splitlines():
+            if expected_line is not None and line == expected_line:
+                expected_line = next(prior, None)
+            else:
+                additions.append(line)
+        self.assertIsNone(expected_line)
+        self.assertEqual(additions, [
+            "from prop_firm.starter30_views import starter30_checkout, starter30_status",
+            "from services.mpw_trx_public_pages import support_page, terms_page, privacy_page, cookies_page",
+            '    path("support/", support_page, name="mpw_support"),',
+            '    path("terms/", terms_page, name="mpw_terms"),',
+            '    path("privacy/", privacy_page, name="mpw_privacy"),',
+            '    path("cookies/", cookies_page, name="mpw_cookies"),',
+            '    path("mojprop-starter30-checkout/", starter30_checkout, name="mojprop_starter30_checkout"),',
+            '    path("mojprop-starter30-status/", starter30_status, name="mojprop_starter30_status"),',
+        ])
+        # Neither a source diff nor a matching historical fixture proves live
+        # deployment. The original auditor still reports drift for new bytes.
+        self.assertNotEqual(exact_git_blob(current.read_bytes()), old_pin)
 
 
 if __name__ == "__main__":

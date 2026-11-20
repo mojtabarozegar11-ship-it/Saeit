@@ -106,7 +106,12 @@ def indexnow_key(request, key):
 def sitemap_xml(request):
     host = request.get_host().split(":")[0].lower()
     if host in {"mojplaywin.com", "www.mojplaywin.com"}:
-        urls = ["/", "/store/", "/moj-prop/", "/moj-prop/starter-30-trx/"]
+        urls = [
+            "/", "/store/",
+            "/moj-prop/", "/moj-prop/starter-30-trx/",
+            "/moj-prop/rules/", "/moj-prop/signals/",
+            "/moj-prop/payment/", "/moj-prop/contact/", "/moj-prop/catalog/",
+        ]
         origin = "https://mojplaywin.com"
     else:
         urls = ["/", "/company/", "/company/executive/", "/about/", "/services/", "/contact/", "/research/", "/research/projects/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/weather/", "/economy/", "/business/", "/studio/", "/newsletter/", "/blog/", "/store/", "/agriculture/free-tools/20261025/", "/auctions/", "/ghanadi/", "/ghanadi/cafe-shiraz/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]

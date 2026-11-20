@@ -1,0 +1,28 @@
+Moj Prop Starter 30 | Ten-session educational journal
+====================================================
+Reference only: 100 simulated USD, not funded and not withdrawable.
+
+Do not transmit real trading account credentials or personal financial records.
+Copy journal-template.csv into your own private file. Complete all 10 sessions.
+
+Columns (exact spelling and order):
+  session: integers 1 through 10 in sequence
+  closing_equity_usd: string decimal with 0-2 fractional digits; numeric simulation only
+  risk_plan_recorded: yes or no (lowercase)
+  reflection_recorded: yes or no (lowercase)
+
+Rules:
+  Simulated daily loss: 3% maximum of the previous session's closing equity.
+  Simulated overall drawdown: 6% maximum from the peak simulated equity.
+  A missing plan or reflection generates a coaching alert.
+  Exactly 10 valid sessions are required for a completed educational review.
+
+A completed journal does not earn a real-money account, investment return,
+share of profits, withdrawal rights, prizes or any future funded placement.
+The personalized scorecard is a learning artifact, not a broker statement.
+
+Payment is not available through this file. The indicative service price
+of 30 native TRX must be confirmed through a lawful written contract,
+customer-specific invoice and verified settlement before paid delivery.
+
+Product: MOJPROP-STARTER30 | Operator identity: mojtaba.bot.ai
