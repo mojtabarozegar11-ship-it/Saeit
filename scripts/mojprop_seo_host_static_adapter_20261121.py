@@ -103,6 +103,11 @@ class ExactStaticHost:
         self.root=Path(root)
         self.private=Path(private)
         self.stage=Path(stage)
+        # Host identity: never accept a substituted account home or sibling
+        # vhost via an ancestor symlink (temporary test roots are isolated).
+        if self.root == WEB_ROOT:
+            _safe_directory(Path("/home/zomorod2"),owner=owner)
+            _safe_directory(WEB_ROOT.parent,owner=owner)
         _safe_directory(self.root,owner=owner)
         _safe_directory(self.private,owner=owner,private=True)
         _safe_directory(self.stage,owner=owner,private=True)
