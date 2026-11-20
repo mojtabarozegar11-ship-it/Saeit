@@ -23,6 +23,7 @@ from core.zomorod_public_views import agriculture_index, agriculture_guide, zomo
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
 from core.faremah_views import faremah_home
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
+from prop_firm.starter30_views import starter30_checkout, starter30_status
 
 urlpatterns = [
     path("", services, name="home"),
@@ -136,6 +137,8 @@ from core.signal_free_views import signal_free_subscribe, signal_free_confirm, s
 # Keep the intake API at a root-level WSGI path so GET and POST reach Passenger.
 urlpatterns += [
     path("moj-prop/starter-30-trx/", TemplateView.as_view(template_name="moj-prop-v4/starter-30-trx/index.html"), name="mojprop_starter30_public"),
+    path("moj-prop/starter-30-trx/checkout/", starter30_checkout, name="mojprop_starter30_checkout"),
+    path("moj-prop/starter-30-trx/status/", starter30_status, name="mojprop_starter30_status"),
     path("moj-prop-intake/", mojprop_intake, name="mojprop_intake"),
     path("moj-prop-status/", mojprop_receipt_status, name="mojprop_receipt_status"),
     path("moj-prop-quote/<str:token>/", customer_quote, name="mojprop_quote_public"),

@@ -1,0 +1,145 @@
+"""English-only public Starter30 checkout views."""
+from __future__ import annotations
+
+from html import escape
+
+from django.http import Http404, HttpResponse
+from django.middleware.csrf import get_token
+from django.views.decorators.http import require_http_methods
+
+from .starter30_live import (
+    Starter30PaymentRejected,
+    Starter30ReleaseClosed,
+    invoice_status,
+    issue_invoice,
+    settle_invoice,
+)
+
+
+def _page(request, title: str, body: str) -> HttpResponse:
+    token = escape(get_token(request))
+    return HttpResponse(
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{escape(title)} | Moj Prop</title>"
+        "<style>body{background:#080d13;color:#f7f3e9;font:16px/1.6 system-ui;max-width:820px;margin:40px auto;padding:0 20px}"
+        "main{background:#131c27;border:1px solid #344251;border-radius:16px;padding:28px}"
+        "label{display:block;margin:14px 0 6px}input{width:100%;padding:11px;border-radius:8px;border:1px solid #667;background:#0d141d;color:#fff;box-sizing:border-box}"
+        "button{margin-top:18px;padding:12px 18px;border:0;border-radius:24px;background:#e9c57b;font-weight:800}"
+        ".warn{background:#352621;padding:14px;border-left:4px solid #f7c3aa}.ok{background:#173b2c;padding:14px;border-left:4px solid #7de2a8}"
+        "code{word-break:break-all}</style></head><body><main>"
+        + body
+        + "</main></body></html>"
+    )
+
+
+def _closed(request):
+    return _page(
+        request,
+        "Starter30 unavailable",
+        "<h1>Starter30 checkout</h1><div class='warn'>Payment is not available at this moment. No transfer should be sent.</div>",
+    )
+
+
+def _form(request, invoice_ref: str | None = None) -> str:
+    token = escape(get_token(request))
+    if invoice_ref:
+        return (
+            f"<form method='post' action='/moj-prop/starter-30-trx/checkout/'>"
+            f"<input type='hidden' name='csrfmiddlewaretoken' value='{token}'>"
+            f"<input type='hidden' name='action' value='settle'>"
+            f"<input type='hidden' name='invoice_ref' value='{escape(invoice_ref)}'>"
+            "<label for='txid'>TRON transaction ID</label>"
+            "<input id='txid' name='txid' required pattern='[A-Fa-f0-9]{64}' autocomplete='off'>"
+            "<button type='submit'>Verify 30 TRX payment</button></form>"
+        )
+    return (
+        "<form method='post' action='/moj-prop/starter-30-trx/checkout/'>"
+        f"<input type='hidden' name='csrfmiddlewaretoken' value='{token}'>"
+        "<input type='hidden' name='action' value='issue'>"
+        "<label for='email'>Email for the isolated simulation identity</label>"
+        "<input id='email' name='email' type='email' required autocomplete='email'>"
+        "<label for='payer_address'>Your sending TRON wallet address</label>"
+        "<input id='payer_address' name='payer_address' required autocomplete='off'>"
+        "<label><input type='checkbox' name='terms' value='yes' required> "
+        "I understand this is an educational simulation: no customer capital, live broker, funded account, payout or profit guarantee is provided.</label>"
+        "<button type='submit'>Create 30 TRX invoice</button></form>"
+    )
+
+
+@require_http_methods(["GET", "POST"])
+def starter30_checkout(request):
+    if request.method == "GET":
+        try:
+            from .starter30_live import release_is_open
+            if not release_is_open():
+                return _closed(request)
+            return _page(
+                request,
+                "Starter30 checkout",
+                "<h1>Moj Prop Starter30</h1><p>Exact price: <strong>30 TRX</strong>. "
+                "This remains a simulated challenge with a virtual 1,000 USD balance.</p>"
+                "<div class='warn'>Send only after this server issues your unique invoice. "
+                "The receiver is owner-approved and the transaction must come from the wallet bound below.</div>"
+                + _form(request)
+            )
+        except Exception:
+            return _closed(request)
+    try:
+        action = request.POST.get("action")
+        if action == "issue":
+            issued = issue_invoice(
+                email=request.POST.get("email", ""),
+                payer_address=request.POST.get("payer_address", ""),
+                terms_accepted=request.POST.get("terms") == "yes",
+            )
+            return _page(
+                request,
+                "Starter30 invoice",
+                "<h1>Invoice issued</h1><div class='ok'><p>Exact amount: <strong>30 TRX</strong></p>"
+                f"<p>Send to: <code>{escape(issued.recipient)}</code></p>"
+                f"<p>Invoice: <code>{escape(issued.invoice_ref)}</code></p>"
+                f"<p>Expires: <code>{escape(issued.expires_at.isoformat())}</code></p></div>"
+                "<p>After the transfer is solidified, submit its transaction ID below. "
+                "The account is created only after two independent provider proofs agree.</p>"
+                + _form(request, issued.invoice_ref)
+            )
+        if action == "settle":
+            result = settle_invoice(
+                invoice_ref=request.POST.get("invoice_ref", ""),
+                txid=request.POST.get("txid", ""),
+            )
+            return _page(
+                request,
+                "Starter30 activated",
+                "<h1>Simulation activated</h1><div class='ok'>"
+                f"<p>Account: <code>{escape(result['account_ref'])}</code></p>"
+                f"<p>Virtual balance: <strong>USD {escape(result['simulation_balance_usd'])}</strong></p>"
+                f"<p>Transaction: <code>{escape(result['txid'])}</code></p>"
+                "</div><p>This account is simulated only; no real capital or broker account was created.</p>",
+            )
+        raise Starter30PaymentRejected("unsupported checkout action")
+    except (Starter30PaymentRejected, Starter30ReleaseClosed, LookupError, ValueError) as error:
+        return _page(
+            request,
+            "Starter30 payment review",
+            f"<h1>Payment not credited</h1><div class='warn'>{escape(str(error))}</div>"
+            "<p>No simulation account was created. Check the invoice, wallet and transaction ID.</p>",
+        )
+
+
+@require_http_methods(["GET"])
+def starter30_status(request):
+    invoice_ref = request.GET.get("invoice", "")
+    try:
+        result = invoice_status(invoice_ref)
+    except Exception:
+        raise Http404
+    return _page(
+        request,
+        "Starter30 payment status",
+        f"<h1>Payment status</h1><p>Invoice: <code>{escape(result['invoice_ref'])}</code></p>"
+        f"<p>Status: <strong>{escape(result['status'])}</strong></p>"
+        f"<p>Amount: <strong>{result['amount_sun'] / 1000000:g} TRX</strong></p>"
+        + (f"<p>Transaction: <code>{escape(result['txid'])}</code></p>" if result["txid"] else ""),
+    )
