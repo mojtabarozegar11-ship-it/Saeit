@@ -6,7 +6,9 @@ from django.test import TestCase
 from django.utils import timezone
 
 from prop_firm.models import PropSimulationAccount, PropSimulationEvent, PropSimulationIdentity, PropSimulationInvoiceOwner
-from prop_firm.simulation_engine import ClosedExecutionRecord
+from prop_firm.simulation_engine import ClosedExecutionRecord, MarketQuote, OrderRequest, SimulationEngine
+from prop_firm.simulation_journal_accounting import flush_engine_closures, observed_daily_accounting
+from zoneinfo import ZoneInfo
 from prop_firm.simulation_execution_journal import JournalConflict, persist_closed_executions, read_closed_execution_payloads
 
 DB="mojprop"
@@ -79,3 +81,43 @@ class ExecutionJournalTests(TestCase):
         with self.assertRaises(JournalConflict):
             self.append(replace(self.record,opened_at=self.account.opened_at-timedelta(seconds=1)))
         self.assertEqual(self.rows().count(),0)
+
+
+    def test_engine_flush_and_observed_accounting(self):
+        e=SimulationEngine(commission_per_unit=D("0.25"))
+        opened=self.record.opened_at.isoformat()
+        closed=self.record.closed_at.isoformat()
+        e.submit(OrderRequest("engine-a","A","buy",D("1"),stop_loss=D("90")),
+                 MarketQuote("A",D("99"),D("100"),opened,1))
+        e.close("engine-a",MarketQuote("A",D("105"),D("106"),closed,2))
+        self.assertEqual(flush_engine_closures(account_ref=self.account.account_ref,engine=e),(1,))
+        self.assertEqual(flush_engine_closures(account_ref=self.account.account_ref,engine=e),(1,))
+        self.assertEqual(self.rows().count(),1)
+        for zone in ("UTC","Asia/Tokyo"):
+            result=observed_daily_accounting(account_ref=self.account.account_ref,day_timezone=zone)
+            day=self.record.closed_at.astimezone(ZoneInfo(zone)).date()
+            self.assertEqual(result["observed_daily_net_usd"],{day:D("4.75")})
+            self.assertEqual(result["observed_net_usd"],D("4.75"))
+            self.assertEqual(result["observed_closures"],1)
+            self.assertFalse(result["complete_history_verified"])
+            self.assertFalse(result["eligible_for_pass"])
+
+    def test_engine_flush_mismatch_fails_closed(self):
+        e=SimulationEngine()
+        e.realized_pnl=D("1")
+        with self.assertRaises(JournalConflict):
+            flush_engine_closures(account_ref=self.account.account_ref,engine=e)
+        self.assertEqual(self.rows().count(),0)
+
+    def test_empty_history_does_not_imply_verified_zero_days(self):
+        result=observed_daily_accounting(account_ref=self.account.account_ref,day_timezone="UTC")
+        self.assertEqual(result["observed_daily_net_usd"],{})
+        self.assertEqual(result["observed_closures"],0)
+        self.assertFalse(result["complete_history_verified"])
+        self.assertFalse(result["eligible_for_pass"])
+
+    def test_accounting_rejects_modified_digest(self):
+        self.append(self.record)
+        self.rows().update(payload_digest="0"*64)
+        with self.assertRaises(JournalConflict):
+            observed_daily_accounting(account_ref=self.account.account_ref,day_timezone="UTC")
