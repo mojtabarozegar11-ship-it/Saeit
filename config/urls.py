@@ -136,6 +136,8 @@ from core.signal_free_views import signal_free_subscribe, signal_free_confirm, s
 # Keep the intake API at a root-level WSGI path so GET and POST reach Passenger.
 urlpatterns += [
     path("moj-prop/starter-30-trx/", TemplateView.as_view(template_name="moj-prop-v4/starter-30-trx/index.html"), name="mojprop_starter30_public"),
+    path("moj-prop/starter-30-trx/checkout/", starter30_checkout, name="mojprop_starter30_checkout"),
+    path("moj-prop/starter-30-trx/status/", starter30_status, name="mojprop_starter30_status"),
     path("moj-prop-intake/", mojprop_intake, name="mojprop_intake"),
     path("moj-prop-status/", mojprop_receipt_status, name="mojprop_receipt_status"),
     path("moj-prop-quote/<str:token>/", customer_quote, name="mojprop_quote_public"),
@@ -150,6 +152,7 @@ urlpatterns += [
 urlpatterns += [path("", include("config.mpw_commerce_urls"))]
 
 from django.conf import settings as _mojprop_settings
+from prop_firm.starter30_views import starter30_checkout, starter30_status
 
 if getattr(_mojprop_settings, "MPW_MOJPROP_STAGING_IDENTITY_ROUTE_ENABLED", False):
     from prop_firm.staging_identity_views import (
