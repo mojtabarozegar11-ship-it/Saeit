@@ -1,4 +1,7 @@
 import json
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.http import Http404
 from django.test import RequestFactory, SimpleTestCase, override_settings
@@ -64,8 +67,16 @@ class StagingIdentityRouteTests(SimpleTestCase):
         self.assertEqual(json.loads(response.content)["ok"], False)
 
     def test_challenge_code_is_never_returned(self):
-        response = self.request(staging_identity_challenge, {"identity_id": 999999})
-        self.assertEqual(response.status_code, 400)
+        issued = SimpleNamespace(
+            challenge_ref="opaque-ref",
+            expires_at=datetime.now(timezone.utc),
+        )
+        with patch(
+            "prop_firm.staging_identity_views.issue_login_challenge",
+            return_value=issued,
+        ):
+            response = self.request(staging_identity_challenge, {"identity_id": 999999})
+        self.assertEqual(response.status_code, 200)
         self.assertNotIn(b'"code"', response.content)
 
     def test_consume_rejects_missing_challenge_without_commerce(self):
