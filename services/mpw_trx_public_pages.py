@@ -96,3 +96,43 @@ def purchases(request):
             detail='Awaiting payment verification or invoice expired. If you have paid, do not pay again; contact support with this order number.'
         cards.append(f'<article><h2>Order #{pi.order_id}</h2><p>${escape(str(pi.amount))} USD</p><p>{detail}</p></article>')
     return _page('My TRX purchases',''.join(cards) or '<p>No TRX purchases yet. <a href="/commerce/trx-easy/">Browse products</a>.</p>')
+
+@require_GET
+def support_page(request):
+    return _page(
+        "Purchase support",
+        '<article><h2>Order, invoice and download help</h2>'
+        '<p>For a TRX invoice, first open <a href="/commerce/trx-easy/purchases/">My TRX purchases</a> or use <a href="/commerce/trx-easy/recover/">Purchase recovery</a> with the same purchase email.</p>'
+        '<p>Never send TRX outside the exact invoice shown on the secure checkout page. Do not share a seed phrase or private key.</p>'
+        '<p>For unresolved order questions, email <a href="mailto:support@mojplaywin.com">support@mojplaywin.com</a> and include your order number. Do not include wallet secrets.</p></article>'
+    )
+
+
+@require_GET
+def terms_page(request):
+    return _page(
+        "Terms of digital purchase",
+        '<article><h2>Digital products and TRX checkout</h2>'
+        '<p>Products are digital downloads. The displayed USD price is converted to a quoted TRX amount on the invoice. Payment is considered received only after server-side TRON confirmation.</p>'
+        '<p>Do not pay an expired invoice. If you believe you paid an invoice, use purchase recovery and contact support with the order number.</p>'
+        '<p>No investment, trading, income or performance guarantee is made by a digital product listing.</p></article>'
+    )
+
+
+@require_GET
+def privacy_page(request):
+    return _page(
+        "Privacy",
+        '<article><h2>Purchase data</h2>'
+        '<p>The store uses the purchase email to issue an invoice, reconcile payment and provide recovery of an eligible digital order. Wallet information is used only as needed to validate the submitted payment.</p>'
+        '<p>Do not submit seed phrases or private keys. Requests about access, correction or deletion can be sent to <a href="mailto:support@mojplaywin.com">support@mojplaywin.com</a>.</p></article>'
+    )
+
+
+@require_GET
+def cookies_page(request):
+    return _page(
+        "Cookies",
+        '<article><h2>Minimal session cookies</h2>'
+        '<p>The checkout may use essential session and security cookies. The store does not require an advertising cookie to request a TRX invoice or recover a purchase.</p></article>'
+    )
