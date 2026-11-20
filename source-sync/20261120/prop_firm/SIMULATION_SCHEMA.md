@@ -37,13 +37,13 @@ The target database must be usable without the 16.67 GB factory database. Five t
 
 ## Router status
 
-The fail-closed router is now present at source-sync/20261120/config/mojprop_db_router.py. It routes only these five model labels to the mojprop alias and rejects every other model on that alias. It is not wired into live settings yet. The private identity/login adapter is present at source-sync/20261120/prop_firm/simulation_identity_adapter.py; it stores only scoped digests, locks challenge rows during verification, and remains closed until a staging-only secret is supplied.
+The fail-closed router is now present at source-sync/20261120/config/mojprop_db_router.py. It routes only these five model labels to the mojprop alias and rejects every other model on that alias. It is not wired into live settings yet. The private identity/login adapter is present at source-sync/20261120/prop_firm/simulation_identity_adapter.py; it stores only scoped digests, locks challenge rows during verification, and remains closed until a staging-only secret is supplied. The payment reconciliation adapter is present at source-sync/20261120/prop_firm/payment_reconciliation_adapter.py; it reads only an independently attested source receipt and writes an opaque invoice-owner binding to mojprop.
 
 ## Next implementation order
 
 1. Review this schema, migration, and router in CI.
-2. Identity/login adapter is present; add the separate payment-reconciliation adapter.
-3. Validate the identity adapter contract in CI; do not expose it through public HTTP.
+2. Identity/login and payment-reconciliation adapters are present; keep both private and fail-closed.
+3. Validate both adapter contracts in CI; do not expose them through public HTTP.
 4. Run migration 0011_simulation_isolation only with the migration administrator.
 5. Point only the English MOJ PROP runtime to the dedicated database.
 6. Run a staging canary, then reassess release gates.
