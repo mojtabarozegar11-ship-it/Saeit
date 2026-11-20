@@ -239,3 +239,68 @@ class PropSimulationPayment(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
+
+
+class PropSimulationPayoutCommitment(models.Model):
+    """Immutable 100% profit liability recorded after an independently verified pass."""
+
+    class Status(models.TextChoices):
+        PENDING_SETTLEMENT = "pending_settlement", "Pending treasury settlement"
+        SETTLED = "settled", "Settled"
+        BLOCKED = "blocked", "Blocked"
+        DISPUTED = "disputed", "Disputed"
+
+    account = models.OneToOneField(
+        PropSimulationAccount,
+        on_delete=models.PROTECT,
+        related_name="payout_commitment",
+    )
+    realized_profit_usd = models.DecimalField(max_digits=18, decimal_places=2)
+    trader_payout_usd = models.DecimalField(max_digits=18, decimal_places=2)
+    payout_percent = models.PositiveSmallIntegerField(default=100)
+    verification_ref = models.CharField(max_length=128, unique=True)
+    beneficiary_digest = models.CharField(max_length=64)
+    status = models.CharField(
+        max_length=24,
+        choices=Status.choices,
+        default=Status.PENDING_SETTLEMENT,
+    )
+    settlement_reference = models.CharField(max_length=128, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    settled_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(realized_profit_usd__gt=0),
+                name="mp_sim_payout_profit_positive",
+            ),
+            models.CheckConstraint(
+                condition=Q(trader_payout_usd__gt=0),
+                name="mp_sim_payout_amount_positive",
+            ),
+            models.CheckConstraint(
+                condition=Q(payout_percent=100),
+                name="mp_sim_payout_exactly_full",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["status", "-created_at"], name="mp_sim_payout_status"),
+            models.Index(fields=["account", "-created_at"], name="mp_sim_payout_account"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.payout_percent != 100:
+            raise ValidationError("Starter30 payout commitment must be exactly 100%")
+        if self.realized_profit_usd != self.trader_payout_usd:
+            raise ValidationError("Trader payout must equal 100% of realized profit")
+        if len(self.beneficiary_digest) != 64:
+            raise ValidationError("Beneficiary digest is required")
+        if self.status == self.Status.SETTLED and not self.settlement_reference:
+            raise ValidationError("Settled payout requires settlement reference")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
