@@ -20,6 +20,30 @@ if os.path.exists(env_path):
             if key:
                 os.environ.setdefault(key, value)
 
+# Keep the public host policy consistent across the WSGI bootstrap and Django.
+# This only affects host/CSRF admission; it does not enable payments, invoices,
+# trading, deployment, or any other commercial gate.
+_PUBLIC_HOSTS = (
+    "mojplaywin.com",
+    "www.mojplaywin.com",
+    "mojtaba.bot.ai",
+    "www.mojtaba.bot.ai",
+)
+_PUBLIC_ORIGINS = tuple(f"https://{host}" for host in _PUBLIC_HOSTS)
+
+def _append_csv_env(name, values):
+    current = [item.strip() for item in os.environ.get(name, "").split(",") if item.strip()]
+    for value in values:
+        if value not in current:
+            current.append(value)
+    if current:
+        os.environ[name] = ",".join(current)
+
+_append_csv_env("ALLOWED_HOSTS", _PUBLIC_HOSTS)
+_append_csv_env("DJANGO_ALLOWED_HOSTS", _PUBLIC_HOSTS)
+_append_csv_env("CSRF_TRUSTED_ORIGINS", _PUBLIC_ORIGINS)
+_append_csv_env("DJANGO_CSRF_TRUSTED_ORIGINS", _PUBLIC_ORIGINS)
+
 os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
 
 # Compiled Python wheels may live in CloudLinux's lib64. Never mix 3.10
