@@ -121,3 +121,33 @@ class ExecutionJournalTests(TestCase):
         self.rows().update(payload_digest="0"*64)
         with self.assertRaises(JournalConflict):
             observed_daily_accounting(account_ref=self.account.account_ref,day_timezone="UTC")
+
+
+    def make_large_engine(self):
+        e=SimulationEngine()
+        for i in range(501):
+            e.submit(OrderRequest("bulk-"+str(i),"A","buy",D("1"),stop_loss=D("90")),
+                     MarketQuote("A",D("99"),D("100"),self.record.opened_at.isoformat(),2*i+1))
+            e.close("bulk-"+str(i),MarketQuote("A",D("100"),D("101"),
+                                             self.record.opened_at.isoformat(),2*i+2))
+        self.assertEqual(e.closed_trade_count,501)
+        return e
+
+    def test_flush_more_than_one_batch_and_retry(self):
+        e=self.make_large_engine()
+        expected=tuple(range(1,502))
+        self.assertEqual(flush_engine_closures(account_ref=self.account.account_ref,engine=e),expected)
+        self.assertEqual(flush_engine_closures(account_ref=self.account.account_ref,engine=e),expected)
+        self.assertEqual(self.rows().count(),501)
+        result=observed_daily_accounting(account_ref=self.account.account_ref,day_timezone="UTC")
+        self.assertEqual(result["observed_closures"],501)
+        self.assertFalse(result["eligible_for_pass"])
+
+    def test_second_batch_conflict_rolls_back_first(self):
+        e=self.make_large_engine()
+        conflicting=replace(e.closed_execution_records[-1],reason="conflicting fixture")
+        self.append(conflicting)
+        with self.assertRaises(JournalConflict):
+            flush_engine_closures(account_ref=self.account.account_ref,engine=e)
+        self.assertEqual(self.rows().count(),1)
+        self.assertEqual(self.rows().get().payload["reason"],"conflicting fixture")
