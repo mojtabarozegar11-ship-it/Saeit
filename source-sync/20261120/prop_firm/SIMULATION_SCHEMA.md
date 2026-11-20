@@ -42,7 +42,8 @@ The fail-closed router is now present at source-sync/20261120/config/mojprop_db_
 ## Next implementation order
 
 1. Review this schema, migration, and router in CI.
-2. Add private identity/login and payment-reconciliation adapters.
+2. Identity/login adapter is present; add the separate payment-reconciliation adapter.
+3. Validate the identity adapter contract in CI; do not expose it through public HTTP.
 4. Run migration 0011_simulation_isolation only with the migration administrator.
 5. Point only the English MOJ PROP runtime to the dedicated database.
 6. Run a staging canary, then reassess release gates.
