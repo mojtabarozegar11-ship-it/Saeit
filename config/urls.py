@@ -23,6 +23,7 @@ from core.zomorod_public_views import agriculture_index, agriculture_guide, zomo
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
 from core.faremah_views import faremah_home
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
+from prop_firm.starter30_views import starter30_checkout, starter30_status
 
 urlpatterns = [
     path("", services, name="home"),
@@ -152,7 +153,6 @@ urlpatterns += [
 urlpatterns += [path("", include("config.mpw_commerce_urls"))]
 
 from django.conf import settings as _mojprop_settings
-from prop_firm.starter30_views import starter30_checkout, starter30_status
 
 if getattr(_mojprop_settings, "MPW_MOJPROP_STAGING_IDENTITY_ROUTE_ENABLED", False):
     from prop_firm.staging_identity_views import (
