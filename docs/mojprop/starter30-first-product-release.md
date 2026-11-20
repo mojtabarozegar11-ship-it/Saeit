@@ -69,7 +69,7 @@ from the actual seller, host and payment rail is independently verified.
   mark paid. The receiver, amount, txID, customer order and solidification must
   all be cross-checked; txID cannot be reused across orders.
 - Do not merge this file into a public **checkout** flow merely to hit a deadline.
-- Public landing is marked `noindex` until a reviewed and actually published
+- Public landing is indexable as an informational, request-only English page; payment remains blocked
   commercial release; then recheck SEO, sitemap and canonical.
 - No financial transaction, external message, owner fund transfer or expense
   is authorized by this runbook.
