@@ -36,7 +36,10 @@ class Starter30ReviewedExactBytesC121Tests(unittest.TestCase):
 
     def test_01_all_three_reviewed_assets_are_exact_and_publish_only_no_payment(self):
         report = rel.preflight("123", COMMIT)
-        self.assertEqual(report["scope"], "static-no-payment-no-backend")
+        # Static page describes a commercial offer; this publisher itself cannot
+        # execute payment or migrate the backend. Retain exact asset identity checks.
+        self.assertEqual(report["scope"], "static-page-no-payment-execution-no-backend")
+        self.assertEqual(set(rel.FILES), {"index.html", "journal-template.csv", "journal-guide.txt"})
         self.assertEqual(set(report["reviewed_source_blobs"]), set(rel.FILES))
         for name in rel.FILES:
             body = (SOURCE / name).read_bytes()
