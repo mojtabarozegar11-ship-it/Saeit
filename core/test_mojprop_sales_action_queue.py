@@ -70,7 +70,7 @@ class MojPropSalesQueueTests(TestCase):
         note = notes if notes is not None else (
             "Requested canonical product: MOJPROP-STARTER30 (one-time "
             "indicative 30 native TRX; written terms required; NOT paid)\\n"
-            "Please review my ten-session educational journal and scorecard."
+            "Please review my 60-day simulated challenge journal and scorecard."
         )
         MojPropRequest.objects.filter(pk=row.pk).update(
             notes=note, consent=consent
