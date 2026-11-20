@@ -52,5 +52,11 @@ jobs:
 
           schema_doc = (root / "SIMULATION_SCHEMA.md").read_text(encoding="utf-8")
           assert "live invoice route: disabled" in schema_doc
-          print("MOJ PROP isolated simulation schema gate: PASS")
+
+          router_path = Path("source-sync/20261120/config/mojprop_db_router.py")
+          router_text = router_path.read_text(encoding="utf-8")
+          assert 'MOJPROP_DB_ALIAS = "mojprop"' in router_text
+          assert "return label in ISOLATED_MODEL_LABELS" in router_text
+          assert "return False" in router_text
+          print("MOJ PROP isolated simulation schema and router gate: PASS")
           PY
