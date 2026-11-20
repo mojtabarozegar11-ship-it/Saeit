@@ -101,7 +101,7 @@ class CanonicalMojPropContactFallback(unittest.TestCase):
         detail = PUBLIC[2].read_text("utf-8")
         self.assertIn("MOJPROP-STARTER30", detail)
         self.assertIn("never share keys, identity documents or trading credentials", detail)
-        self.assertIn("Do not send TRX", detail)
+        self.assertIn("never send to another address", detail)
 
     def test_static_release_inventory_includes_all_changed_pages(self):
         script = (ROOT / "scripts/update_mojplaywin_moj_prop_catalog.py").read_text("utf-8")

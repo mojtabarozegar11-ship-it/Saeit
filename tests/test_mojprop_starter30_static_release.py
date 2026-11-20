@@ -43,7 +43,7 @@ class Starter30StaticReleaseTests(unittest.TestCase):
 
     def test_preflight_is_read_only(self):
         report = rel.preflight("123", COMMIT)
-        self.assertEqual(report["scope"], "static-no-payment-no-backend")
+        self.assertEqual(report["scope"], "static-page-no-payment-execution-no-backend")
         self.assertFalse(self.target.exists())
         self.assertFalse(self.backup.exists())
 

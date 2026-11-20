@@ -123,13 +123,17 @@ def source_root(run_id: str) -> Path:
         doc = html[str(sample)]
         if "<title>" not in doc or "Sample" not in doc:
             raise RuntimeError("Staged commercial sample invalid: " + str(sample))
-    # Product content is deliberately open and FREE to inspect. This is
-    # NOT a checkout, invoice, broker account or guarantee of paid delivery.
+    # The page may advertise the exact simulated offer, but this publisher
+    # never executes payment, creates an invoice, or migrates the backend.
+    # Checkout must remain server-issued and all profit language must retain
+    # the simulation/no-custody boundary.
     starter = html["starter-30-trx/index.html"]
     if (not all(mark in starter for mark in (
-            "MOJPROP-STARTER30", "Payment not enabled",
+            "MOJPROP-STARTER30", "Checkout available · 30 TRX",
             "./journal-template.csv", "./journal-guide.txt",
-            "30 TRX", "not a funded account"))):
+            "30 TRX", "No real funded account",
+            "server-issued 30 TRX invoice",
+            "100% of every profit earned"))):
         raise RuntimeError("Starter30 page is missing its ethical sales and delivery boundary")
     guide = (path / STARTER30_FILES[1]).read_text(encoding="utf-8")
     if not all(mark in guide for mark in (
