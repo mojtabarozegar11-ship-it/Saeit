@@ -21,7 +21,7 @@ PAGES = {
         "b0515a1a2f846e79ed330b9c6ef39b5d75ae1f5e487bf3807c051a9bbac7c21e", "catalog/",
         "Moj Prop Catalog | Simulated Challenge & Research Services",
         "Explore the Moj Prop service catalog, Starter 30 simulated challenge, educational market research and risk rulebooks. Review current terms before deciding.",
-        '<a href="/moj-prop/#request">Start a request</a>',
+        '<a href="/moj-prop/rules/">Rulebook</a><a href="/moj-prop/#request">Start a request</a>',
         '<a href="/moj-prop/starter-30-trx/">Starter 30 — 30 TRX</a>',
     ),
     "rules/index.html": (
