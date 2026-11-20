@@ -1,6 +1,6 @@
 # MOJPROP-STARTER30 — single-product launch and release contract
 
-**Status (2026-11-15): SOURCE-ONLY / NO-PAYMENT / NO-LIVE-FUNDING.**
+**Status (2026-11-20): SOURCE-ONLY / NO-PAYMENT / NO-LIVE-FUNDING.**
 This contract creates an independently reviewable English educational product,
 not a funded trading challenge. Public sale, TRX transfer instructions,
 broker/payout claims and customer commitments remain BLOCKED until evidence
@@ -13,16 +13,17 @@ from the actual seller, host and payment rail is independently verified.
   transfer fee, if any, is a separate network expense; it is not a sale receipt.
 - Buyer: an adult customer in a lawful supported jurisdiction after applicable
   consumer and crypto-payment obligations are satisfied.
-- The $100 reference figure is **simulated USD**, NOT client funds, broker
+- The $1,000 reference balance is **virtual simulated USD**, NOT client funds, broker
   equity, a funded account, available cash or a withdrawal entitlement.
-- Ten consecutive self-reported sessions with closing simulation equity,
-  explicit risk-plan and reflection indicators. Daily loss over 3% and
-  peak-to-trough drawdown over 6% are reported as coaching concerns.
+- A bounded 60-day simulated challenge window with closing simulation equity,
+  explicit risk-plan and reflection indicators. Maximum daily simulated drawdown
+  is 6%; maximum risk per trade is 3%; maximum open-position risk is 4%; the
+  best trading day may contribute no more than 50% of counted net profit.
 - Deliverables: (1) journal guidance/template (2) deterministic risk report
   (3) individualized written recommendations based on consented submissions.
 - Manual review of submissions is necessary: the scorer cannot verify any
   simulated results as real trades.
-- The 30 TRX product contains **no** capital allocation, 100 USD funded
+- The 30 TRX product contains **no** capital allocation, $1,000 funded
   account, cash payout, prize, investment service, auto-execution, broker
   connection, guarantee or entitlement to a later account.
 - For a separate *funded* challenge at 30 TRX, retain legal/capital hold under
@@ -100,9 +101,9 @@ independently confirmed settled order is reconciled and delivered.
 ## Actual single-SKU delivery assets (added in current cycle)
 
 - `templates/moj-prop-v4/starter-30-trx/index.html`: English standalone information page with two free download CTAs; it is not currently live and remains `noindex`.
-- `templates/moj-prop-v4/starter-30-trx/journal-template.csv`: ten-session completely blank customer journal. The template intentionally has **no invented profitable entries**.
+- `templates/moj-prop-v4/starter-30-trx/journal-template.csv`: bounded challenge journal template for the 60-day simulation. The template intentionally has **no invented profitable entries**.
 - `templates/moj-prop-v4/starter-30-trx/journal-guide.txt`: explicit fields, legal boundaries, risk and submission instructions.
-- `scripts/mojprop_starter30_journal_csv.py`: bounded UTF-8 CSV import; strict 10-session identifier order, monetary decimal validation, yes/no flags and injection rejection.
+- `scripts/mojprop_starter30_journal_csv.py`: bounded UTF-8 CSV import for the challenge journal; strict identifier order, monetary decimal validation, yes/no flags and injection rejection.
 - `scripts/mojprop_starter30_scorecard.py`: user-independent printable individual feedback. Case ownership must be authenticated by the actual operator before any private delivery.
 - `scripts/mojprop_starter30_static_release.py`: **manual and static-only** three-asset release with tenant identity checks, explicit one-time approval, no overwrite, digest manifest, private permissions and strict rollback. No automatic workflow, migration, wallet or payment integration. Source-only until actual host access and verification.
 

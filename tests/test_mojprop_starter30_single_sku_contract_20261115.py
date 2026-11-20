@@ -25,14 +25,14 @@ class Starter30SingleSkuTests(unittest.TestCase):
         cls.contract = CANONICAL.read_text(encoding="utf-8")
         cls.archived = ARCHIVED.read_text(encoding="utf-8")
 
-    def test_one_educational_ten_session_service_not_funded_prop_challenge(self):
-        self.assertIn("Ten consecutive self-reported sessions", self.contract)
+    def test_one_educational_60_day_service_not_funded_prop_challenge(self):
+        self.assertIn("A bounded 60-day simulated challenge window", self.contract)
         self.assertIn("journal guidance/template", self.contract)
         self.assertIn("deterministic risk report", self.contract)
         self.assertIn("30 native TRX", self.contract)
-        self.assertIn("10 self-reported simulated sessions", self.catalog)
-        self.assertIn("10-session self-reported simulation journal", self.home)
-        self.assertIn("Ten-session journal template", self.detail)
+        self.assertIn("a 60-day simulated challenge", self.catalog)
+        self.assertIn("bounded 60-day simulated challenge journal", self.home)
+        self.assertIn("60-day simulated challenge journal template", self.detail)
         self.assertNotIn("two-page", self.home.lower())
         self.assertNotIn("two-page", self.catalog.lower())
         self.assertNotIn("two-page", self.detail.lower())
@@ -63,7 +63,7 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertIn("NOT FOR BUYER OFFER OR FULFILMENT", self.archived)
         self.assertIn("**not** the unique sellable 30 TRX Starter30", self.archived)
         self.assertIn("as historical research", self.archived)
-        self.assertIn("10-session simulated trading journal", self.archived)
+        self.assertIn("60-day simulated challenge journal", self.archived)
 
     def test_existing_free_signals_remain_separate_not_starter_or_paid(self):
         self.assertIn("freeTierRequested", self.home)

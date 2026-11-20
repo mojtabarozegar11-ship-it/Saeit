@@ -9,6 +9,9 @@ class MojPropStarter30PublicRouteTests(SimpleTestCase):
         self.assertContains(response, "Payment not enabled")
         self.assertContains(response, "No funded account is included")
         self.assertContains(response, "Do not send TRX")
+        self.assertContains(response, "$1,000")
+        self.assertContains(response, "60 days")
+        self.assertContains(response, "50%")
 
     def test_starter30_route_does_not_expose_a_payment_form(self):
         response = self.client.get("/moj-prop/starter-30-trx/")
