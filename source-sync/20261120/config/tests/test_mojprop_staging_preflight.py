@@ -15,6 +15,7 @@ from mojprop_staging_preflight import (  # noqa: E402
 
 def _ready_config():
     return {
+        "MPW_MOJPROP_DB_ALIAS_ENABLED": True,
         "DATABASES": {
             "default": {"NAME": "factory"},
             MOJPROP_DB_ALIAS: {"NAME": "mojprop"},
@@ -31,6 +32,7 @@ def _ready_config():
 def test_closed_defaults_are_not_ready():
     result = evaluate_staging_preflight({})
     assert result.ready is False
+    assert "MOJ PROP database alias switch is not enabled for staging" in result.blockers
     assert "DATABASES[mojprop] is not configured" in result.blockers
     assert "fail-closed MojPropDatabaseRouter is not wired in DATABASE_ROUTERS" in result.blockers
     assert "identity digest secret is not configured for staging" in result.blockers
