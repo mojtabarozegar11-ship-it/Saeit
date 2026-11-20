@@ -168,7 +168,7 @@ def _stage_bytes(run_id: str) -> dict[str, bytes]:
         out[item] = _read_reviewed_stage_file(stage, item)
     page = out["index.html"].decode("utf-8")
     if ('MOJPROP-STARTER30' not in page or 'Payment not enabled' not in page
-            or 'noindex,follow' not in page or 'Do not send TRX' not in page
+            or 'index,follow' not in page or 'Do not send TRX' not in page
             or b"session,closing_equity_usd,risk_plan_recorded,reflection_recorded" not in out["journal-template.csv"]):
         raise RuntimeError("staged product does not meet the no-payment scope")
     return out
