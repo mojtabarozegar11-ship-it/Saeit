@@ -223,7 +223,6 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
         payment.status = PropSimulationPayment.Status.PAID
         payment.txid = transfer_a.tx_hash
         payment.sender_hex41 = payment.payer_hex41
-        payment.solidified_block = getattr(transfer_a, "block_number", None)
         payment.settled_at = now
         payment.save(using=MOJPROP_DB_ALIAS)
         return {
