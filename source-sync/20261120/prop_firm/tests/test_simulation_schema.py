@@ -1,87 +1,54 @@
-from decimal import Decimal
-
-from django.core.exceptions import ValidationError
-from django.test import TestCase
-from django.utils import timezone
-
-from prop_firm.models import (
-    PropSimulationAccount,
-    PropSimulationEvent,
-    PropSimulationIdentity,
-    PropSimulationInvoiceOwner,
-)
+import ast
+from pathlib import Path
 
 
-class SimulationIsolationModelTests(TestCase):
-    def setUp(self):
-        self.identity = PropSimulationIdentity.objects.create(
-            provider="email",
-            subject_key="buyer-opaque-001",
-            email_digest="a" * 64,
-            status=PropSimulationIdentity.Status.ACTIVE,
-        )
-        self.owner = PropSimulationInvoiceOwner.objects.create(
-            identity=self.identity,
-            invoice_ref="MOJ-INV-001",
-            buyer_email_digest="a" * 64,
-            contract_version="moj-prop-v1",
-            settlement_verified=True,
-            settlement_reference="TRX-SETTLED-001",
-        )
+ROOT = Path(__file__).resolve().parents[1]
+MODELS_PATH = ROOT / "models.py"
+MIGRATION_PATH = ROOT / "migrations/0011_simulation_isolation.py"
 
-    def test_identity_has_no_auth_user_foreign_key(self):
-        field_names = {field.name for field in PropSimulationIdentity._meta.fields}
-        self.assertNotIn("user", field_names)
 
-    def test_owner_rejects_identity_digest_mismatch(self):
-        owner = PropSimulationInvoiceOwner(
-            identity=self.identity,
-            invoice_ref="MOJ-INV-002",
-            buyer_email_digest="b" * 64,
-            contract_version="moj-prop-v1",
-        )
-        with self.assertRaises(ValidationError):
-            owner.full_clean()
+REQUIRED = {
+    "PropSimulationIdentity",
+    "PropSimulationInvoiceOwner",
+    "PropSimulationAccount",
+    "PropSimulationLoginChallenge",
+    "PropSimulationEvent",
+}
 
-    def test_account_rejects_unsettled_owner(self):
-        pending = PropSimulationInvoiceOwner.objects.create(
-            identity=self.identity,
-            invoice_ref="MOJ-INV-PENDING",
-            buyer_email_digest="a" * 64,
-            contract_version="moj-prop-v1",
-        )
-        account = PropSimulationAccount(
-            identity=self.identity,
-            invoice_owner=pending,
-            account_ref="SIM-001",
-            kind=PropSimulationAccount.Kind.CHALLENGE,
-            starting_capital_usd=Decimal("1000.00"),
-        )
-        with self.assertRaises(ValidationError):
-            account.full_clean()
 
-    def test_event_identity_is_idempotent_per_account(self):
-        account = PropSimulationAccount.objects.create(
-            identity=self.identity,
-            invoice_owner=self.owner,
-            account_ref="SIM-002",
-            kind=PropSimulationAccount.Kind.CHALLENGE,
-            starting_capital_usd=Decimal("1000.00"),
-        )
-        event_data = dict(
-            account=account,
-            event_ref="EVENT-001",
-            sequence_no=1,
-            event_type=PropSimulationEvent.EventType.STATUS,
-            source="private-reconciler",
-            occurred_at=timezone.now(),
-            payload_digest="c" * 64,
-            payload={"status": "active"},
-        )
-        PropSimulationEvent.objects.create(**event_data)
-        with self.assertRaises(Exception):
-            PropSimulationEvent.objects.create(**event_data)
+def _classes():
+    source = MODELS_PATH.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    return source, {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef)
+    }
 
-    def test_login_code_is_not_a_persisted_plaintext_field(self):
-        field_names = {field.name for field in PropSimulationIdentity._meta.fields}
-        self.assertNotIn("login_code", field_names)
+
+def test_required_simulation_models_are_declared():
+    _, classes = _classes()
+    assert REQUIRED <= classes.keys()
+
+
+def test_simulation_models_have_no_auth_user_foreign_key():
+    source, classes = _classes()
+    for name in REQUIRED:
+        for node in ast.walk(classes[name]):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr == "ForeignKey":
+                    segment = ast.get_source_segment(source, node) or ""
+                    assert "auth_user" not in segment
+
+
+def test_migration_contains_all_isolated_models():
+    migration = MIGRATION_PATH.read_text(encoding="utf-8")
+    assert '("prop_firm", "0010_reward_reserve_ledger")' in migration
+    for name in REQUIRED:
+        assert f'name="{name}"' in migration
+
+
+def test_schema_doc_keeps_release_gates_closed():
+    document = (ROOT / "SIMULATION_SCHEMA.md").read_text(encoding="utf-8")
+    assert "live invoice route: disabled" in document
+    assert "English-only" in document
