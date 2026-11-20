@@ -100,7 +100,7 @@ independently confirmed settled order is reconciled and delivered.
 
 ## Actual single-SKU delivery assets (added in current cycle)
 
-- `templates/moj-prop-v4/starter-30-trx/index.html`: English standalone information page with two free download CTAs; it is not currently live and remains `noindex`.
+- `templates/moj-prop-v4/starter-30-trx/index.html`: public English informational page with two free download CTAs; it is indexable, request-only and not payable.
 - `templates/moj-prop-v4/starter-30-trx/journal-template.csv`: bounded challenge journal template for the 60-day simulation. The template intentionally has **no invented profitable entries**.
 - `templates/moj-prop-v4/starter-30-trx/journal-guide.txt`: explicit fields, legal boundaries, risk and submission instructions.
 - `scripts/mojprop_starter30_journal_csv.py`: bounded UTF-8 CSV import for the challenge journal; strict identifier order, monetary decimal validation, yes/no flags and injection rejection.
