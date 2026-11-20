@@ -36,6 +36,7 @@ from services.mpw_tron_independent_solidified_rpc import (
     query_solidified_transfer,
     verify_distinct_provider_config,
 )
+from services.mpw_trx_walletless_core import PaymentHold
 from services.mojtaba_tron_owner_receiver import approved_recipient
 
 NETWORK = "tron-mainnet"
@@ -110,10 +111,27 @@ class IssuedStarter30Invoice:
     expires_at: object
 
 
+def verify_pre_invoice_configuration() -> None:
+    """Reject invoice creation until two independent RPCs and receiver are configured.
+
+    This is a local configuration preflight, NOT a live RPC connectivity or
+    payout-settlement attestation. No database access or value transfer.
+    """
+    require_release()
+    try:
+        _provider_pair()
+        _hex_recipient(approved_recipient())
+    except (PaymentHold, ValueError, TypeError) as exc:
+        raise Starter30PaymentRejected(
+            "TRON verification configuration is unavailable; no invoice may be issued"
+        ) from exc
+
+
 def issue_invoice(*, email: str, payer_address: str, terms_accepted: bool) -> IssuedStarter30Invoice:
     require_release()
     if terms_accepted is not True:
         raise Starter30PaymentRejected("simulation disclosure must be accepted")
+    verify_pre_invoice_configuration()
     normalized = normalize_email(email)
     payer_hex41 = _payer_hex(payer_address)
     subject_key, email_digest = _identity_keys(normalized)
@@ -157,7 +175,12 @@ def issue_invoice(*, email: str, payer_address: str, terms_accepted: bool) -> Is
 
 def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
     require_release()
-    first, second = _provider_pair()
+    try:
+        first, second = _provider_pair()
+    except (PaymentHold, ValueError, TypeError) as exc:
+        raise Starter30PaymentRejected(
+            "Independent TRON verification configuration is unavailable"
+        ) from exc
     try:
         transfer_a = query_solidified_transfer(first, txid)
         transfer_b = query_solidified_transfer(second, txid)

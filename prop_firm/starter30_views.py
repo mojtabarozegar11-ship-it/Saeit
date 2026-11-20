@@ -13,6 +13,7 @@ from .starter30_live import (
     invoice_status,
     issue_invoice,
     settle_invoice,
+    verify_pre_invoice_configuration,
 )
 
 
@@ -74,6 +75,7 @@ def starter30_checkout(request):
             from .starter30_live import release_is_open
             if not release_is_open():
                 return _closed(request)
+            verify_pre_invoice_configuration()  # no DB write or remote RPC call
             return _page(
                 request,
                 "Starter30 checkout",
