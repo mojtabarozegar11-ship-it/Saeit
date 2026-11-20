@@ -8,6 +8,7 @@ ISOLATED_MODEL_LABELS = frozenset({
     "prop_firm.propsimulationaccount",
     "prop_firm.propsimulationloginchallenge",
     "prop_firm.propsimulationevent",
+    "prop_firm.propsimulationpayment",
 })
 
 
@@ -21,7 +22,7 @@ def _is_isolated(model_or_instance):
 
 
 class MojPropDatabaseRouter:
-    """Keep five simulation models physically separate from all legacy state."""
+    """Keep isolated simulation and payment models separate from all legacy state."""
 
     def db_for_read(self, model, **hints):
         return MOJPROP_DB_ALIAS if _is_isolated(model) else None
