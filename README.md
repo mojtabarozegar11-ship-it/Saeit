@@ -25,7 +25,7 @@ These are external public-facing websites associated with the broader work; thei
 
 Original educational notes, with current official product and company links. These are public resources, not claims of independently verified sales, journal publications or production deployments.
 
-- [Moj Prop: five free guides to simulated trading and TRX invoice safety](docs/mojprop/education/README.md) — virtual-balance risks, best-day consistency, a 60-day practice journal, and safely checking merchant invoices; no profit or payout guarantee.
+- [Moj Prop: five free guides to simulated trading and TRX invoice safety](docs/mojprop/education/README.md) — virtual-balance risks, best-day consistency, a 60-day practice journal, and safely checking merchant invoices; no guaranteed profit or automatic challenge pass.
 - [Chess: an 84-day measurable study companion](docs/marketing/chess-84-day-study-companion-20261024.md) — decision logs, critical-position review and progress measurement.
 - [Taniya: read-aloud and early-years activity guide](docs/marketing/taniya-read-aloud-activity-guide-20261024.md) — rhythm, story sequencing and family activities.
 - [Atelier Interior: a client website launch checklist](docs/marketing/atelier-interior-website-launch-checklist-20261024.md) — licensing, accessibility, SEO and reliable contact forms.
