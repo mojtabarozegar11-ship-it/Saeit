@@ -1,4 +1,4 @@
-using System;
+// LEGACY RETAINED FOR ROLLBACK EVIDENCE ONLY.\n// Do not activate independently; canonical owner is mojtaba.bot.ai.\nusing System;
 using cAlgo.API;
 using cAlgo.API.Indicators;
 using cAlgo.API.Internals;
