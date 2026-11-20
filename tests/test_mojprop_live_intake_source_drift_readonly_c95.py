@@ -101,7 +101,7 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         self.assertEqual(EXPECTED["core/mojprop_receipts.py"],
                          "9fe6eb1ad13857143440517b14b3f2ebcfef6db3")
         self.assertEqual(EXPECTED["core/mojprop_accessible_intake.py"],
-                         "505a1d237e3deb156e7e394e94b1c34ddf1e0071")
+                         "c792eab57e13044dcb20e71a46dd378e8b946675")
 
 
     def test_all_pins_match_exact_reviewed_source_bytes_in_this_commit(self):

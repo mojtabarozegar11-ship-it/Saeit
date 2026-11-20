@@ -25,7 +25,7 @@ EXPECTED = {
     # This is source identity only, not a live Passenger release.
     "core/mojprop_views.py": "12ee5e408f2a50e0571d5e6d91a760644ec210a9",
     "core/mojprop_receipts.py": "9fe6eb1ad13857143440517b14b3f2ebcfef6db3",
-    "core/mojprop_accessible_intake.py": "505a1d237e3deb156e7e394e94b1c34ddf1e0071",
+    "core/mojprop_accessible_intake.py": "c792eab57e13044dcb20e71a46dd378e8b946675",
     "config/urls.py": "bdf2b2048c6a3605808cd5029c68b931d10aeaed",
     "core/management/commands/mojprop_sales_action_queue.py":
         "095dcf51e005694f4cb24df1e39ce8a4f6a0cf08",

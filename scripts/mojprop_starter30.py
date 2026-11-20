@@ -2,7 +2,7 @@
 
 The 30 TRX label is an indicative, one-time future invoice amount. This module
 does not invoice, debit wallets, enrol users, place trades or issue funded accounts.
-A 100 USD reference balance here is simulated bookkeeping only.
+A $1,000 virtual reference balance here is simulated bookkeeping only.
 """
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from decimal import Decimal
 PRODUCT_ID = "MOJPROP-STARTER30"
 PRICE_TRX = 30
 PRICE_SUN = 30_000_000
-REFERENCE_BALANCE_USD = Decimal("100.00")
+REFERENCE_BALANCE_USD = Decimal("1000.00")
 SESSIONS_REQUIRED = 10
-MAX_DAILY_LOSS_PERCENT = Decimal("3.00")
-MAX_PEAK_DRAWDOWN_PERCENT = Decimal("6.00")
+MAX_DAILY_LOSS_PERCENT = Decimal("6.00")
+MAX_PEAK_DRAWDOWN_PERCENT = Decimal("6.00")  # coaching alert, not a published total-loss promise
 _AMOUNT = re.compile(r"(?:0|[1-9][0-9]{0,5})(?:\.[0-9]{1,2})?\Z")
 
 
@@ -30,12 +30,17 @@ def public_product() -> dict:
         "title": "Moj Prop Starter 30 — educational simulator assessment",
         "indicative_price_trx": PRICE_TRX,
         "price_sun": PRICE_SUN,
-        "simulation_reference_usd": "100.00",
+        "simulation_reference_usd": "1000.00",
+        "virtual_capital_usd": "1000.00",
+        "challenge_duration_days": 60,
         "sessions_required": SESSIONS_REQUIRED,
         "daily_loss_limit_percent": str(MAX_DAILY_LOSS_PERCENT),
-        "overall_drawdown_limit_percent": str(MAX_PEAK_DRAWDOWN_PERCENT),
+        "max_risk_per_trade_percent": "3.00",
+        "max_open_position_risk_percent": "4.00",
+        "best_day_profit_cap_percent": "50.00",
+        "journal_peak_drawdown_alert_percent": str(MAX_PEAK_DRAWDOWN_PERCENT),
         "deliverables": [
-            "Ten-session trading journal review",
+            "60-day simulated challenge journal review",
             "Risk-rule adherence scorecard",
             "Individual written learning recommendations",
         ],
@@ -63,14 +68,14 @@ def _money(value: object) -> Decimal:
 
 
 def assess_journal(sessions: object) -> dict:
-    """Score up to ten consecutive, self-reported simulation journal entries.
+    """Score a bounded journal within the 60-day simulated challenge window.
 
     This is educational feedback, NEVER proof of a real trade, eligibility for
     funding, brokerage performance or a paid settlement. Do not upload private
     broker credentials or personal financial records.
     """
     if type(sessions) is not list or not 1 <= len(sessions) <= SESSIONS_REQUIRED:
-        raise InvalidJournal("require 1 through 10 consecutive sessions")
+        raise InvalidJournal("require 1 through 10 consecutive journal entries")
     previous = REFERENCE_BALANCE_USD
     peak = REFERENCE_BALANCE_USD
     breaches: list[dict] = []

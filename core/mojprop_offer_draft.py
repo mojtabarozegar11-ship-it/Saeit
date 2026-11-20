@@ -142,7 +142,7 @@ def build_offer_draft(lead) -> str:
                      "operator must clarify, never substitute the USD 149 blueprint tariff."
                      if starter_selection == "ambiguous"
                      else f"Indicative starting amount: USD {service['indicative_from_usd']}; final quote NOT APPROVED."))),
-        ("Reference material: 10-session simulated journal and scorecard; live publication UNVERIFIED."
+        ("Reference material: 60-day simulated challenge journal and scorecard; live publication UNVERIFIED."
          if starter_selection != "none"
          else "Deliverable sample: " + service["sample_url"]),
         "Jurisdiction, taxes, precise scope, revisions and delivery date: require separate human confirmation.",

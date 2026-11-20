@@ -10,7 +10,7 @@ from scripts.mojprop_starter30 import (
 )
 
 
-def journal(amount="100.00", n=10):
+def journal(amount="1000.00", n=10):
     return [{"session": i, "closing_equity_usd": amount,
              "risk_plan_recorded": True, "reflection_recorded": True}
             for i in range(1, n + 1)]
@@ -39,7 +39,14 @@ class Starter30ContractTests(unittest.TestCase):
                          "request_only_until_legal_payment_and_delivery_proof")
 
     def test_has_concrete_deliverables(self):
-        self.assertEqual(len(public_product()["deliverables"]), 3)
+        product = public_product()
+        self.assertEqual(len(product["deliverables"]), 3)
+        self.assertEqual(product["simulation_reference_usd"], "1000.00")
+        self.assertEqual(product["challenge_duration_days"], 60)
+        self.assertEqual(product["daily_loss_limit_percent"], "6.00")
+        self.assertEqual(product["max_risk_per_trade_percent"], "3.00")
+        self.assertEqual(product["max_open_position_risk_percent"], "4.00")
+        self.assertEqual(product["best_day_profit_cap_percent"], "50.00")
 
     def test_stable_single_agent(self):
         self.assertEqual(public_product()["operator"], "mojtaba.bot.ai")
@@ -133,23 +140,23 @@ class Starter30ContractTests(unittest.TestCase):
 
     def test_exact_daily_loss_limit_is_allowed(self):
         rows = journal()
-        rows[0]["closing_equity_usd"] = "97.00"
+        rows[0]["closing_equity_usd"] = "940.00"
         for row in rows[1:]:
-            row["closing_equity_usd"] = "97.00"
+            row["closing_equity_usd"] = "940.00"
         self.assertEqual(assess_journal(rows)["rule_breaches"], [])
 
     def test_above_daily_loss_limit_is_flagged(self):
         rows = journal()
-        rows[0]["closing_equity_usd"] = "96.99"
+        rows[0]["closing_equity_usd"] = "939.99"
         for row in rows[1:]:
-            row["closing_equity_usd"] = "96.99"
+            row["closing_equity_usd"] = "939.99"
         result = assess_journal(rows)
         self.assertIn({"session": 1, "rule": "daily_loss"}, result["rule_breaches"])
         self.assertEqual(result["status"], "completed_needs_coaching")
 
     def test_peak_drawdown_is_flagged(self):
         rows = journal()
-        for i, amount in enumerate(["99", "98", "97", "96", "95", "94", "93", "93", "93", "93"]):
+        for i, amount in enumerate(["1000", "990", "980", "970", "960", "950", "939", "939", "939", "939"]):
             rows[i]["closing_equity_usd"] = amount
         result = assess_journal(rows)
         self.assertIn({"session": 7, "rule": "overall_peak_drawdown"}, result["rule_breaches"])

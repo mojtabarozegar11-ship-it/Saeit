@@ -133,7 +133,7 @@ def source_root(run_id: str) -> Path:
         raise RuntimeError("Starter30 page is missing its ethical sales and delivery boundary")
     guide = (path / STARTER30_FILES[1]).read_text(encoding="utf-8")
     if not all(mark in guide for mark in (
-            "Ten-session educational journal", "Exactly 10 valid sessions",
+            "60-day simulated educational journal", "Exactly 10 valid journal entries",
             "not funded and not withdrawable", "Payment is not available")):
         raise RuntimeError("Starter30 journal guide is incomplete or unsafe")
     raw_csv = (path / STARTER30_FILES[0]).read_bytes()

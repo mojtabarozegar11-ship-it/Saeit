@@ -8,7 +8,7 @@ from scripts.mojprop_starter30_journal_csv import (
 
 def valid_csv():
     header = ",".join(COLUMNS) + "\n"
-    return (header + "".join(f"{i},100.00,yes,yes\n" for i in range(1, 11))).encode("utf-8")
+    return (header + "".join(f"{i},1000.00,yes,yes\n" for i in range(1, 11))).encode("utf-8")
 
 
 class Starter30JournalCSVTests(unittest.TestCase):
@@ -16,7 +16,7 @@ class Starter30JournalCSVTests(unittest.TestCase):
         data = empty_journal_csv()
         self.assertEqual(len(data.splitlines()), 11)
         self.assertIn("1,,,", data)
-        self.assertNotIn("100.00", data)
+        self.assertNotIn("1000.00", data)
 
     def test_valid_ten_session_csv(self):
         result = assess_csv(valid_csv())
@@ -36,19 +36,19 @@ class Starter30JournalCSVTests(unittest.TestCase):
 
     def test_injection_field_refused(self):
         with self.assertRaises(InvalidJournal):
-            parse_journal_csv(valid_csv().replace(b"100.00", b"=1+1", 1))
+            parse_journal_csv(valid_csv().replace(b"1000.00", b"=1+1", 1))
 
     def test_buyer_email_additional_field_refused(self):
         with self.assertRaises(InvalidJournal):
-            parse_journal_csv(valid_csv().replace(b"1,100.00,yes,yes", b"1,100.00,yes,yes,buyer@example.org", 1))
+            parse_journal_csv(valid_csv().replace(b"1,1000.00,yes,yes", b"1,1000.00,yes,yes,buyer@example.org", 1))
 
     def test_duplicate_session_refused(self):
         with self.assertRaises(InvalidJournal):
-            parse_journal_csv(valid_csv().replace(b"2,100.00,yes,yes", b"1,100.00,yes,yes", 1))
+            parse_journal_csv(valid_csv().replace(b"2,1000.00,yes,yes", b"1,1000.00,yes,yes", 1))
 
     def test_missing_yesno_refused(self):
         with self.assertRaises(InvalidJournal):
-            parse_journal_csv(valid_csv().replace(b"3,100.00,yes,yes", b"3,100.00,,yes", 1))
+            parse_journal_csv(valid_csv().replace(b"3,1000.00,yes,yes", b"3,1000.00,,yes", 1))
 
     def test_empty_document_refused(self):
         with self.assertRaises(InvalidJournal):
@@ -68,11 +68,11 @@ class Starter30JournalCSVTests(unittest.TestCase):
 
     def test_extra_row_refused(self):
         with self.assertRaises(InvalidJournal):
-            parse_journal_csv(valid_csv() + b"11,100.00,yes,yes\n")
+            parse_journal_csv(valid_csv() + b"11,1000.00,yes,yes\n")
 
     def test_blank_line_within_csv_refused(self):
         with self.assertRaises(InvalidJournal):
-            parse_journal_csv(valid_csv().replace(b"5,100.00,yes,yes\n", b"\n5,100.00,yes,yes\n", 1))
+            parse_journal_csv(valid_csv().replace(b"5,1000.00,yes,yes\n", b"\n5,1000.00,yes,yes\n", 1))
 
     def test_string_instead_of_bytes_refused(self):
         with self.assertRaises(InvalidJournal):
@@ -80,7 +80,7 @@ class Starter30JournalCSVTests(unittest.TestCase):
 
     def test_unexpected_carriage_return_refused(self):
         with self.assertRaises(InvalidJournal):
-            parse_journal_csv(valid_csv().replace(b"100.00", b"100.\r00", 1))
+            parse_journal_csv(valid_csv().replace(b"1000.00", b"100.\r00", 1))
 
     def test_incomplete_eight_sessions_are_not_certified(self):
         rows = valid_csv().decode().splitlines()

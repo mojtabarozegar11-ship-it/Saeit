@@ -14,7 +14,7 @@ RUNBOOK = ROOT / "docs/mojprop/starter30-first-product-release.md"
 
 
 def journal():
-    return [{"session": i, "closing_equity_usd": "100.00",
+    return [{"session": i, "closing_equity_usd": "1000.00",
              "risk_plan_recorded": True, "reflection_recorded": True}
             for i in range(1, 11)]
 
@@ -124,7 +124,7 @@ class Starter30ScorecardTests(unittest.TestCase):
         self.assertIn("Educational scorecard", html)
         self.assertIn("MPS30-ABCD1234", html)
         self.assertIn("Individual learning recommendations", html)
-        self.assertIn("100.00", html)
+        self.assertIn("1000.00", html)
 
     def test_scoring_does_not_claim_funds(self):
         html = render_private_scorecard(journal(), "MPS30-ABCD1234")

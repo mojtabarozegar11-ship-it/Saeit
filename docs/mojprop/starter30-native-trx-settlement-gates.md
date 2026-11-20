@@ -1,6 +1,6 @@
 # Moj Prop Starter30 — native TRX buyer-order reconciliation contract
 
-**Product:** `MOJPROP-STARTER30` (ten-session simulated journal and human-readable learning scorecard). **One-time indicative tariff:** exactly **30 native TRX = 30,000,000 sun**, **not** 30 USDT, 30 USD, or TRC-20 tokens. A simulated $100 equity reference never creates a funded account or a withdrawal right.
+**Product:** `MOJPROP-STARTER30` (60-day simulated challenge journal and human-readable learning scorecard). **One-time indicative tariff:** exactly **30 native TRX = 30,000,000 sun**, **not** 30 USDT, 30 USD, or TRC-20 tokens. A virtual $1,000 reference balance never creates a funded account or a withdrawal right.
 
 This document describes the exact *unmet* production integration gates. Source tests do not activate a merchant, order, live node or settlement.
 
