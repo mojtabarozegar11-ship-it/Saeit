@@ -115,7 +115,7 @@ independently confirmed settled order is reconciled and delivered.
 4. Complete legal seller, jurisdiction, customer terms, delivery owner, lawful TRX merchant and no-conflicting-automation checks. Without these, do not publish a pay-enabled page or collect funds.
 5. A specific release approval must be recorded. Only then may an operator run `MOJPROP_STARTER30_OWNER_APPROVED=static-only-approved python3 scripts/mojprop_starter30_static_release.py deploy RUN_ID REVIEWED_COMMIT`. This adds three files at one exact, owner-controlled path. It never creates a payment method or changes Django.
 6. Verify live HTTP 200 + exact bytes at the three expected paths and customer content; if verification fails, run `rollback RUN_ID REVIEWED_COMMIT`. Never delete user-modified files to force a rollback.
-7. Leave public page `noindex` and avoid linking from the commercial catalog until all legal/merchant gates are complete, and then perform a separately reviewed SEO/public link release.
+7. Keep payment, invoice and customer commitment blocked; allow this informational page to be indexed for organic discovery, while paid launch remains gated on legal and merchant evidence.
 
 **Important:** this publisher is a one-time **new path only** installer. Subsequent revisions must use a reviewed new update protocol; do not overwrite existing customer-facing files with the initial installer.
 
