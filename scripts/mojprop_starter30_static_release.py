@@ -24,7 +24,7 @@ FILES = ("index.html", "journal-template.csv", "journal-guide.txt")
 # The owner must explicitly review/re-pin any revision; do not trust staged
 # tarballs or a caller-supplied commit string as proof of identical bytes.
 REVIEWED_GIT_BLOBS = {
-    "index.html": "9a979b820ac6477b35ab772cf4f6f33ad4c3b035",
+    "index.html": "bc7015c259687f313daa33e9eff1d9780e7f58fe",
     "journal-template.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
     "journal-guide.txt": "1e02213de4bed3fc9211e388b3f8b135ef2c0f0a",
 }
@@ -167,10 +167,13 @@ def _stage_bytes(run_id: str) -> dict[str, bytes]:
     for item in FILES:
         out[item] = _read_reviewed_stage_file(stage, item)
     page = out["index.html"].decode("utf-8")
-    if ('MOJPROP-STARTER30' not in page or 'Payment not enabled' not in page
-            or 'index,follow' not in page or 'Do not send TRX' not in page
+    if (not all(mark in page for mark in (
+            "MOJPROP-STARTER30", "Checkout available · 30 TRX",
+            "server-issued 30 TRX invoice", "never send to another address",
+            "100% of every profit earned", "not a funded account"))
+            or 'index,follow' not in page
             or b"session,closing_equity_usd,risk_plan_recorded,reflection_recorded" not in out["journal-template.csv"]):
-        raise RuntimeError("staged product does not meet the no-payment scope")
+        raise RuntimeError("staged product does not meet the static commercial scope")
     return out
 
 
@@ -181,7 +184,7 @@ def _manifest(run_id: str, commit: str, source: dict[str, bytes]) -> dict:
             "reviewed_source_blobs": {
                 name: REVIEWED_GIT_BLOBS[name] for name in FILES
             },
-            "scope": "static-no-payment-no-backend"}
+            "scope": "static-page-no-payment-execution-no-backend"}
 
 
 def preflight(run_id: str, commit: str) -> dict:
