@@ -1,6 +1,12 @@
 """Contract tests for the pure MOJ PROP staging preflight."""
 
-from config.mojprop_staging_preflight import (
+import sys
+from pathlib import Path
+
+# The source-sync bundle is intentionally outside the production import root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from mojprop_staging_preflight import (  # noqa: E402
     MOJPROP_DB_ALIAS,
     MOJPROP_ROUTER_IMPORT,
     evaluate_staging_preflight,
