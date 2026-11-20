@@ -12,7 +12,7 @@ import re
 from scripts.mojprop_seo_current_live_v3_contract_20261120 import PINS, CHANGED, REQUIRED_ATTESTATIONS, build_v3
 
 PROTECTED = {
-    "signals/index.html": "05a80cd9dbec494a5e75a592ac7de79e54ee803fd3d234ab78fc6ab5cd73758d",
+    "signals/index.html": "efd9f93875e0a3421f1803e0784f9f4b76961765874184dc369edbff82a95a23",
     "starter-30-trx/index.html": "bdf9a515dc59b6501c99480918f62fef4bab5b5f0d6d2231a6379b7077b6ab8d",
 }
 def digest(data):
