@@ -1,5 +1,7 @@
 # Moj Prop Starter 30: buyer's guide to a 30 TRX simulated trading challenge
 
+> **Moj Prop educational resource** · Simulated trading and purchase safety. This is not investment advice, a profit guarantee, or proof of a completed payout.
+
 **Educational product information — check the current official terms before ordering.** Starter 30 is a *simulated* evaluation, not a real brokerage account, investment deposit, or custody of customer trading capital. This guide reflects publicly visible product information checked on 21 November 2026; it does not certify payment settlement, challenge outcomes, or reward transfers.
 
 ## At a glance
