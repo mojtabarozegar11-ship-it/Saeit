@@ -33,7 +33,7 @@ class PaymentReconciliationAdapterContractTests(unittest.TestCase):
             "ledger.evidence_digest != attestation.evidence_digest",
             "invoice.status != \"paid\"",
             "settlement_verified=True",
-            "invoice_owner",
+            "PropSimulationInvoiceOwner",
         ):
             self.assertIn(marker, source)
 
