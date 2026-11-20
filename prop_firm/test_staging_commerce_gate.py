@@ -100,7 +100,7 @@ class NonPayablePreviewTests(SimpleTestCase):
 
         clear_url_caches()
         loaded = importlib.reload(urlconf)
-        names = {pattern.name for pattern in loaded.urlpatterns if pattern.name}
+        names = {getattr(pattern, "name", None) for pattern in loaded.urlpatterns if getattr(pattern, "name", None)}
         self.assertIn("mojprop_staging_commerce_preview", names)
 
     def test_source_has_no_commerce_side_effect_markers(self):
