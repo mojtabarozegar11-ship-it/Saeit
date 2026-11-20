@@ -200,7 +200,18 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
         raise Starter30PaymentRejected("two provider proofs disagree")
     if transfer_a.recipient != approved_recipient() or transfer_a.amount_sun != NATIVE_AMOUNT_SUN:
         raise Starter30PaymentRejected("exact 30 TRX transfer to the approved receiver is required")
-    now = timezone.now()
+    outcome = _settle_verified_invoice(invoice_ref=invoice_ref, transfer_a=transfer_a)
+    if outcome is _EXPIRED_INVOICE:
+        # The EXPIRED write has committed; do not raise inside transaction.atomic.
+        raise Starter30PaymentRejected("invoice has expired")
+    return outcome
+
+
+_EXPIRED_INVOICE = object()
+
+
+def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
+    """Persist EXPIRED without rolling it back; all account issuance remains atomic."""
     with transaction.atomic(using=MOJPROP_DB_ALIAS):
         payment = (
             PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS)
@@ -208,6 +219,8 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
             .select_related("invoice_owner", "invoice_owner__identity")
             .get(invoice_owner__invoice_ref=invoice_ref)
         )
+        # Check the expiry AFTER the row lock, not while waiting for it.
+        now = timezone.now()
         if payment.status == PropSimulationPayment.Status.PAID:
             if payment.txid == transfer_a.tx_hash:
                 return _paid_result(payment)
@@ -217,7 +230,7 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
         if now >= payment.expires_at:
             payment.status = PropSimulationPayment.Status.EXPIRED
             payment.save(using=MOJPROP_DB_ALIAS, update_fields=["status", "updated_at"])
-            raise Starter30PaymentRejected("invoice has expired")
+            return _EXPIRED_INVOICE
         if transfer_a.block_time < payment.issued_at or transfer_a.block_time >= payment.expires_at:
             raise Starter30PaymentRejected("payment is outside the invoice window")
         expected_sender = hex_to_tron_address(payment.payer_hex41)
