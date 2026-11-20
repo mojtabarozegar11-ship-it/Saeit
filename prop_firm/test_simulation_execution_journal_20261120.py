@@ -24,7 +24,7 @@ if __name__ != "__main__":
             )
             output = process.stdout + "\n" + process.stderr
             self.assertEqual(process.returncode, 0, output)
-            self.assertIn("Ran 14 tests", output)
+            self.assertIn("Ran 25 tests", output)
             self.assertIn("OK", output)
 else:
     from django.conf import settings
@@ -200,4 +200,4 @@ else:
 
     from django.test.runner import DiscoverRunner
     raise SystemExit(bool(DiscoverRunner(verbosity=2).run_tests(
-        ["__main__.ExecutionJournalTests"])))
+        ["__main__.ExecutionJournalTests", "prop_firm.checkpoint_cases_20261121.CheckpointRecoveryTests"])))

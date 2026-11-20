@@ -208,6 +208,7 @@ class SimulationEngine:
         self.last_quote_time: Optional[datetime] = None
         self._closed_execution_records: List[ClosedExecutionRecord] = []
         self.blocked = False
+        self.quarantined = False
         self.closed = []
 
     @property
@@ -276,6 +277,9 @@ class SimulationEngine:
         return None
 
     def submit(self, order: OrderRequest, quote: MarketQuote) -> Execution:
+        if self.quarantined:
+            return Execution(order.order_id, "rejected", order.symbol,
+                             order.side, order.quantity, None, "quarantined_checkpoint")
         if self.blocked:
             return Execution(order.order_id, "rejected", order.symbol,
                              order.side, order.quantity, None, "account_blocked")
@@ -337,6 +341,8 @@ class SimulationEngine:
         return results
 
     def process_quote(self, quote: MarketQuote) -> List[Execution]:
+        if self.quarantined:
+            raise ValueError("quarantined_checkpoint")
         if quote.sequence <= self.last_quote_sequence:
             raise ValueError("quote sequence must increase")
         self._accept_quote(quote)
@@ -391,6 +397,8 @@ class SimulationEngine:
 
     def close(self, order_id: str, quote: MarketQuote,
               reason="manual") -> Execution:
+        if self.quarantined:
+            raise ValueError("quarantined_checkpoint")
         position = self.positions.get(order_id)
         if position is None:
             raise KeyError(order_id)
