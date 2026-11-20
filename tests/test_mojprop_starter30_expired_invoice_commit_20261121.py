@@ -166,6 +166,8 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         owner.identity = MagicMock()
         self.payment.invoice_owner = owner
         self.mock_manager.using.return_value.filter.return_value.exists.return_value = False
+        # A MagicMock model constructor does not populate fields from kwargs.
+        self.mock_accounts.return_value.account_ref = "MOJPROP30-ACC-valid"
         with patch(
             "prop_firm.starter30_live.hex_to_tron_address",
             return_value=self.transfer.sender,
