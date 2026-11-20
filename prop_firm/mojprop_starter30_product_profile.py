@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from datetime import date
+from collections.abc import Mapping
 
 
 @dataclass(frozen=True)
@@ -82,3 +84,67 @@ def validate_starter30_profile(
     if profile.consistency_rule_finalized is not True:
         errors.append("consistency_rule_not_finalized")
     return tuple(errors)
+
+
+@dataclass(frozen=True)
+class Starter30ConsistencyDecision:
+    allowed: bool
+    reasons: tuple[str, ...]
+    net_profit_usd: Decimal
+    best_day_net_profit_usd: Decimal
+    cap_pct: Decimal
+
+
+def _exact_usd_cents(value: Decimal) -> int:
+    """Strict finite USD cents within the isolated account money-field range."""
+    if type(value) is not Decimal or not value.is_finite():
+        raise ValueError("USD amounts must be finite Decimal values")
+    if abs(value) > Decimal("9999999999999999.99"):
+        raise ValueError("USD amount exceeds the supported range")
+    cents = value * 100
+    if cents != cents.to_integral_value():
+        raise ValueError("USD amount must be exact cents")
+    return int(cents)
+
+
+def assess_starter30_consistency(
+    *,
+    daily_realized_net_usd: Mapping[date, Decimal],
+    reconciled_realized_net_usd: Decimal,
+) -> Starter30ConsistencyDecision:
+    """Apply only Starter30's finalized 50% best-day rule.
+
+    Inputs are daily net realized P&L after applicable costs, bucketed using
+    the applicable challenge day definition. They must be derived from a
+    trusted reconciled execution ledger by the caller. This pure arithmetic
+    does not authenticate that ledger, authorize a challenge pass, persist an
+    account state, create a reward commitment or transfer money. It is not
+    the legacy multi-plan consistency rule.
+    """
+    profile = DEFAULT_STARTER30_PROFILE
+    if validate_starter30_profile(profile):
+        raise ValueError("Starter30 profile invalid")
+    if not isinstance(daily_realized_net_usd, Mapping):
+        raise ValueError("daily realized results must be a dated mapping")
+    if len(daily_realized_net_usd) > profile.challenge_duration_days:
+        raise ValueError("daily result count exceeds the challenge duration")
+    total = _exact_usd_cents(reconciled_realized_net_usd)
+    daily = []
+    for trading_day, pnl in daily_realized_net_usd.items():
+        if type(trading_day) is not date:
+            raise ValueError("each daily bucket must be a calendar date")
+        daily.append(_exact_usd_cents(pnl))
+    best = max([0] + daily)
+    reasons = []
+    if not daily:
+        reasons.append("daily_evidence_missing")
+    if sum(daily) != total:
+        reasons.append("daily_net_profit_reconciliation_mismatch")
+    if total <= 0:
+        reasons.append("positive_net_profit_required")
+    elif best * 100 > total * int(profile.best_day_profit_share_cap_pct):
+        reasons.append("starter30_profit_consistency_not_met")
+    return Starter30ConsistencyDecision(
+        not reasons, tuple(reasons), reconciled_realized_net_usd,
+        Decimal(best).scaleb(-2), profile.best_day_profit_share_cap_pct,
+    )
