@@ -26,12 +26,7 @@ EXPECTED = {
     "core/mojprop_views.py": "12ee5e408f2a50e0571d5e6d91a760644ec210a9",
     "core/mojprop_receipts.py": "9fe6eb1ad13857143440517b14b3f2ebcfef6db3",
     "core/mojprop_accessible_intake.py": "c792eab57e13044dcb20e71a46dd378e8b946675",
-    # Prior Plan1 pin: bdf2b2048c6a3605808cd5029c68b931d10aeaed.
-    # Reviewed source delta at 8bdd0f525fcf33062d26936b427887c90e81185a:
-    # all 190 prior lines preserved in order; eight additions only (two
-    # imports, four support/policy URL routes and two Starter30 URL routes).
-    # This candidate pin does not certify live deployment or payment readiness.
-    "config/urls.py": "0348f71d1dd0c1dbe569df78af26f5cf38b75b05",
+    "config/urls.py": "bdf2b2048c6a3605808cd5029c68b931d10aeaed",
     "core/management/commands/mojprop_sales_action_queue.py":
         "095dcf51e005694f4cb24df1e39ce8a4f6a0cf08",
 }
