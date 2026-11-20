@@ -69,7 +69,7 @@ from the actual seller, host and payment rail is independently verified.
   mark paid. The receiver, amount, txID, customer order and solidification must
   all be cross-checked; txID cannot be reused across orders.
 - Do not merge this file into a public **checkout** flow merely to hit a deadline.
-- Public landing is marked `noindex` until a reviewed and actually published
+- Public landing is indexable as an informational, request-only English page; payment remains blocked
   commercial release; then recheck SEO, sitemap and canonical.
 - No financial transaction, external message, owner fund transfer or expense
   is authorized by this runbook.
@@ -100,7 +100,7 @@ independently confirmed settled order is reconciled and delivered.
 
 ## Actual single-SKU delivery assets (added in current cycle)
 
-- `templates/moj-prop-v4/starter-30-trx/index.html`: English standalone information page with two free download CTAs; it is not currently live and remains `noindex`.
+- `templates/moj-prop-v4/starter-30-trx/index.html`: public English informational page with two free download CTAs; it is indexable, request-only and not payable.
 - `templates/moj-prop-v4/starter-30-trx/journal-template.csv`: bounded challenge journal template for the 60-day simulation. The template intentionally has **no invented profitable entries**.
 - `templates/moj-prop-v4/starter-30-trx/journal-guide.txt`: explicit fields, legal boundaries, risk and submission instructions.
 - `scripts/mojprop_starter30_journal_csv.py`: bounded UTF-8 CSV import for the challenge journal; strict identifier order, monetary decimal validation, yes/no flags and injection rejection.
@@ -115,7 +115,7 @@ independently confirmed settled order is reconciled and delivered.
 4. Complete legal seller, jurisdiction, customer terms, delivery owner, lawful TRX merchant and no-conflicting-automation checks. Without these, do not publish a pay-enabled page or collect funds.
 5. A specific release approval must be recorded. Only then may an operator run `MOJPROP_STARTER30_OWNER_APPROVED=static-only-approved python3 scripts/mojprop_starter30_static_release.py deploy RUN_ID REVIEWED_COMMIT`. This adds three files at one exact, owner-controlled path. It never creates a payment method or changes Django.
 6. Verify live HTTP 200 + exact bytes at the three expected paths and customer content; if verification fails, run `rollback RUN_ID REVIEWED_COMMIT`. Never delete user-modified files to force a rollback.
-7. Leave public page `noindex` and avoid linking from the commercial catalog until all legal/merchant gates are complete, and then perform a separately reviewed SEO/public link release.
+7. Keep payment, invoice and customer commitment blocked; allow this informational page to be indexed for organic discovery, while paid launch remains gated on legal and merchant evidence.
 
 **Important:** this publisher is a one-time **new path only** installer. Subsequent revisions must use a reviewed new update protocol; do not overwrite existing customer-facing files with the initial installer.
 

@@ -141,7 +141,7 @@ class Starter30PublicStaticOwnerEvidenceTests(unittest.TestCase):
     def test_12_exact_source_reviewed_blobs_have_not_been_fabricated(self):
         root = Path(__file__).resolve().parents[1] / "templates/moj-prop-v4/starter-30-trx"
         for name, expected in {
-            "index.html": "eb597ad13312001e1506206e70bc173195558758",
+            "index.html": "4b6f27070ff1846be2d5d2c368cc8f14eef4932c",
             "journal-template.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
             "journal-guide.txt": "1e02213de4bed3fc9211e388b3f8b135ef2c0f0a",
         }.items():

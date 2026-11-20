@@ -39,7 +39,7 @@ class Starter30PublicOfferTests(unittest.TestCase):
     def test_no_funded_account_claim(self):
         page = PUBLIC.read_text("utf-8")
         for required in ("No funded account is included", "no live brokerage account",
-                         "$1,000", "imaginary", "noindex,follow"):
+                         "$1,000", "imaginary", "index,follow"):
             self.assertIn(required.lower(), page.lower())
 
     def test_no_wallet_or_external_script(self):
