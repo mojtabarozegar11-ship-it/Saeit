@@ -110,7 +110,7 @@ def sitemap_xml(request):
             "/", "/store/",
             "/moj-prop/", "/moj-prop/starter-30-trx/",
             "/moj-prop/rules/", "/moj-prop/signals/",
-            "/moj-prop/payment/", "/moj-prop/contact/",
+            "/moj-prop/payment/", "/moj-prop/contact/", "/moj-prop/catalog/",
         ]
         origin = "https://mojplaywin.com"
     else:
