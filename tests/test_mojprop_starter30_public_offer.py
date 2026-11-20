@@ -56,6 +56,10 @@ class Starter30PublicOfferTests(unittest.TestCase):
         self.assertIn("/moj-prop/?service=blueprint&amp;package=starter-30-trx#request", page)
         self.assertNotIn("mailto:", page)
         self.assertIn("not an order", page.lower())
+        self.assertIn("educational simulation only", page.lower())
+        self.assertIn("does not create an order or a paid agreement", page.lower())
+        self.assertIn("cancellation and refund rules", page.lower())
+        self.assertIn("Current status:", page)
 
     def test_product_not_misrouted_to_149_usd_blueprint(self):
         page = PUBLIC.read_text("utf-8")
