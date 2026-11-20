@@ -44,7 +44,7 @@ def reconcile_candidate(path, original):
     # Existing non-structured scripts, form and styling must be byte-identical;
     # only the listed text anchors are eligible for changes.
     import re
-    for pattern in (r"<script\\b[^>]*>.*?</script>", r"<form\\b[^>]*>.*?</form>", r"<style\\b[^>]*>.*?</style>"):
+    for pattern in (r"<script\b[^>]*>.*?</script>", r"<form\b[^>]*>.*?</form>", r"<style\b[^>]*>.*?</style>"):
         if re.findall(pattern, body, re.S|re.I) != re.findall(pattern, changed, re.S|re.I):
             raise ValueError("functional markup changed")
     result = (head + "</head>" + changed).encode("utf-8")
