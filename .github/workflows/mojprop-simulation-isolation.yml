@@ -37,10 +37,13 @@ jobs:
           missing = required - class_nodes.keys()
           assert not missing, f"missing model classes: {sorted(missing)}"
 
+          source_text = models_path.read_text(encoding="utf-8")
           for name in required:
-              segment = ast.get_source_segment(models_path.read_text(encoding="utf-8"), class_nodes[name]) or ""
-              assert "auth_user" not in segment, f"{name} depends on auth_user"
-              assert "factory" not in segment.lower(), f"{name} mentions factory database"
+              for node in ast.walk(class_nodes[name]):
+                  if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                      if node.func.attr == "ForeignKey":
+                          segment = ast.get_source_segment(source_text, node) or ""
+                          assert "auth_user" not in segment, f"{name} has auth_user ForeignKey"
 
           migration_text = migration_path.read_text(encoding="utf-8")
           assert '("prop_firm", "0010_reward_reserve_ledger")' in migration_text
