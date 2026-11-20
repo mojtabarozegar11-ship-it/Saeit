@@ -84,3 +84,31 @@ class ThreePageTransactionTests(unittest.TestCase):
         self.public_bad=True
         with self.assertRaisesRegex(RuntimeError,"EXACT_ROLLBACK_VERIFIED"):self.run_transaction()
         self.assertEqual(self.live,{**self.before,**self.protected})
+
+    def test_protected_signal_and_starter_current_pins(self):
+        self.assertEqual(m.PROTECTED["signals/index.html"],
+                         "efd9f93875e0a3421f1803e0784f9f4b76961765874184dc369edbff82a95a23")
+        self.assertEqual(m.PROTECTED["starter-30-trx/index.html"],
+                         "bdf9a515dc59b6501c99480918f62fef4bab5b5f0d6d2231a6379b7077b6ab8d")
+
+    def test_protected_signal_drift_refuses_every_write(self):
+        self.live["signals/index.html"] = b"unreviewed signal update"
+        with self.assertRaises(ValueError):
+            self.run_transaction()
+        self.assertEqual(self.writes,[])
+
+    def test_mid_release_protected_drift_is_not_called_restored(self):
+        original_replace=self.replace
+        def concurrent_change(path,expected,data):
+            original_replace(path,expected,data)
+            if path == "index.html" and data==self.candidate[path]:
+                self.live["signals/index.html"]=b"independent changed signals"
+        with self.assertRaisesRegex(RuntimeError,"ROLLBACK_UNVERIFIED"):
+            self.run_transaction(replace_exact=concurrent_change)
+        self.assertEqual(self.live["index.html"],self.before["index.html"])
+        self.assertNotEqual(self.live["signals/index.html"],self.protected["signals/index.html"])
+
+    def test_wrong_exact_release_sha_fails_closed(self):
+        with self.assertRaises(PermissionError):
+            self.run_transaction(release_sha="b"*40)
+        self.assertEqual(self.writes,[])
