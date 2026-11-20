@@ -81,6 +81,9 @@ def starter30_checkout(request):
                 "This remains a simulated challenge with a virtual 1,000 USD balance.</p>"
                 "<div class='warn'>Send only after this server issues your unique invoice. "
                 "The receiver is owner-approved and the transaction must come from the wallet bound below.</div>"
+                "<p><strong>Cancellation and refund:</strong> before transaction verification, no payment is credited. "
+                "A verified payment that cannot be matched because of a server failure remains in manual review; "
+                "if the service cannot be delivered, refund is sent to the verified sending wallet.</p>"
                 + _form(request)
             )
         except Exception:
