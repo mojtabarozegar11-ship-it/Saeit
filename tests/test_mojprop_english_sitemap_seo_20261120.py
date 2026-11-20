@@ -18,6 +18,7 @@ class MojPropEnglishSitemapTests(SimpleTestCase):
             "https://mojplaywin.com/moj-prop/signals/",
             "https://mojplaywin.com/moj-prop/payment/",
             "https://mojplaywin.com/moj-prop/contact/",
+            "https://mojplaywin.com/moj-prop/catalog/",
         }
         for host in ("mojplaywin.com", "www.mojplaywin.com"):
             with self.subTest(host=host):
