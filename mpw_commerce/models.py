@@ -153,3 +153,28 @@ class CommerceOrderRequest(models.Model):
         max_length=3, choices=[("ETH", "ETH"), ("TRX", "TRX")],
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class CommerceBuyerIdentity(models.Model):
+    """One staff-only, evidence-backed identity projection per order.
+
+    Email comes from the immutable checkout claim. Wallet comes only from a
+    verified settlement receipt; neither field is accepted from a browser-only
+    assertion.
+    """
+    order = models.OneToOneField(
+        "core.Order", on_delete=models.PROTECT, related_name="buyer_identity",
+    )
+    email_address = models.EmailField(max_length=254, blank=True)
+    email_digest = models.CharField(max_length=64, blank=True)
+    payer_wallet = models.CharField(max_length=100, blank=True)
+    network = models.CharField(max_length=32, blank=True)
+    tx_hash = models.CharField(max_length=80, blank=True)
+    source = models.CharField(max_length=32, blank=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Commerce buyer identity"
+        verbose_name_plural = "Commerce buyer identities"
