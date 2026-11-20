@@ -23,15 +23,28 @@ def verified_guest_checkout_url(product_id):
         # cannot assert the customer checkout exists or is operational.
         from services.mpw_trx_public_pages import product_checkout
 
-        path = reverse("mpw_trx_public_product", kwargs={"product_id": product_id})
-        if path != f"/commerce/book/{product_id}/":
-            return None
-        match = resolve(path)
-        if (match.url_name != "mpw_trx_public_product"
-                or match.namespaces
-                or match.func is not product_checkout):
-            return None
-        return path
+        expected_path = f"/commerce/book/{product_id}/"
+        for route_name in ("mpw_trx_public_product", "mpw_trx_checkout"):
+            try:
+                path = reverse(route_name, kwargs={"product_id": product_id})
+            except Exception:
+                continue
+            if path != expected_path:
+                continue
+            match = resolve(path)
+            if match.namespaces or match.url_name != route_name:
+                continue
+            callback = match.func
+            if route_name == "mpw_trx_public_product":
+                if callback is product_checkout:
+                    return path
+            elif (
+                getattr(callback, "__name__", "") == "product_checkout"
+                and getattr(callback, "__module__", "")
+                == "services.mpw_trx_guest_commerce"
+            ):
+                return path
+        return None
     except Exception as exc:
         # Incorrect URL imports, absent private gateway and route shadows are
         # fail-closed. Never forge a checkout link from the product ID alone.
