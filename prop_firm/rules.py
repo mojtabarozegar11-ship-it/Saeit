@@ -13,6 +13,14 @@ LEVELS = tuple(map(D, (
     "20000", "35000", "50000", "70000", "85000", "100000",
 )))
 
+# A contract/risk/funding gate, not an unconditional right to higher funding.
+# The 20k -> 35k promotion remains unavailable until an independently
+# documented owner release is merged after broker and treasury review.
+LEVEL_10_INDEX = 9
+LEVEL_10_LOCKED = True
+LEVEL_10_CAPACITY_USD = LEVELS[LEVEL_10_INDEX]
+
+
 def dec(value):
     """Explicitly reject imprecise floats, bools and non-finite inputs."""
     if isinstance(value, (bool, float)):
@@ -183,6 +191,8 @@ def assess_promotion(*, level_index, realized_monthly_profit, trading_days,
     current = LEVELS[level_index]
     nxt = LEVELS[min(level_index + 1, len(LEVELS) - 1)]
     reasons = list(risk.reasons)
+    if LEVEL_10_LOCKED and level_index + 1 == LEVEL_10_INDEX:
+        reasons.append("level10_owner_decision_required")
     if risk.allowed is not True:
         reasons.append("risk_assessment_not_allowed")
     if level_index == len(LEVELS) - 1:
