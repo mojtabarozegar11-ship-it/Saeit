@@ -10,6 +10,13 @@
 4. [A structured 60-day practice plan](./sixty-day-practice-plan.md) — maintain a journal and review decisions without trying to force a pass.
 5. [TRX invoice safety checklist](./secure-trx-invoice-checklist.md) — review invoice details, recipient verification, confirmation and duplicate-payment risks.
 
+## Free practice journal downloads
+
+- [Download the simulated trading journal CSV](https://mojplaywin.com/moj-prop/starter-30-trx/journal-template.csv?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+- [Read the journal instructions](https://mojplaywin.com/moj-prop/starter-30-trx/journal-guide.txt?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+
+Both links were checked against the public site. They are free educational files, not a paid account or a challenge pass.
+
 ## Explore the official Moj Prop pages
 
 - [Overview and rules](https://mojplaywin.com/moj-prop/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
