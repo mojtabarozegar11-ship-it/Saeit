@@ -1,5 +1,6 @@
 """Retry admission using signed replay evidence and existing unique invoice key."""
 import uuid
+from urllib.parse import urlencode
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
@@ -76,13 +77,17 @@ class SimulationRetryTests(TestCase):
             self.assertEqual(PropPlan1Invoice.objects.count(),1)
             data={"accept_terms":"yes","terms_digest":self.first.terms_digest,"checkout_token":token}
             url=reverse("moj_prop_simulation_checkout")
-            self.assertEqual(self.client.post(url,data,secure=True,HTTP_HOST="mojplaywin.com").status_code,302)
-            self.assertEqual(self.client.post(url,data,secure=True,HTTP_HOST="mojplaywin.com").status_code,302)
+            # Django's default client encoding is multipart, unlike the
+            # actual HTML form. Reject it explicitly before the valid request.
+            self.assertEqual(self.client.post(url,data,secure=True,HTTP_HOST="mojplaywin.com").status_code,400)
+            self.assertEqual(PropPlan1Invoice.objects.count(),1)
+            self.assertEqual(self.client.post(url,urlencode(data),content_type="application/x-www-form-urlencoded",secure=True,HTTP_HOST="mojplaywin.com").status_code,302)
+            self.assertEqual(self.client.post(url,urlencode(data),content_type="application/x-www-form-urlencoded",secure=True,HTTP_HOST="mojplaywin.com").status_code,302)
             self.assertEqual(PropPlan1Invoice.objects.count(),2)
             self.assertEqual(PropPlan1Invoice.objects.get(order_ref=parsed["order_ref"]).amount_sun,18_000_000)
             parsed["retry_account_id"]+=100000
             data["checkout_token"]=signing.dumps(parsed,salt=SALT)
-            self.assertEqual(self.client.post(url,data,secure=True,HTTP_HOST="mojplaywin.com").status_code,400)
+            self.assertEqual(self.client.post(url,urlencode(data),content_type="application/x-www-form-urlencoded",secure=True,HTTP_HOST="mojplaywin.com").status_code,400)
 
     def test_retry_page_gate_closed(self):
         from django.urls import reverse
