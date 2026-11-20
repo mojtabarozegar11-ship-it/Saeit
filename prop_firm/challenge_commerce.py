@@ -50,6 +50,7 @@ class ChallengeOfferDecision:
 
 def assess_challenge_checkout(*, merchant_tenant, free_treasury_usd,
                               protected_reserves_usd, existing_commitments_usd=0,
+                              operating_buffer_usd=0,
                               required_first_tier_accounts=1, attestations=None,
                               plan_code=DEFAULT_PLAN_CODE,
                               trusted_merchant_registry=None):
@@ -104,9 +105,12 @@ def assess_challenge_checkout(*, merchant_tenant, free_treasury_usd,
                 blockers.append("prop_merchant_registration_changed_or_forged")
         except (ValueError, TypeError, AttributeError):
             blockers.append("prop_merchant_registration_changed_or_forged")
+    # Capital cannot be promised using the cash needed to operate the
+    # company, even when broker collateral and payout reserves are covered.
     capacity = funded_capacity(
         tier_index=plan.starting_tier_index, unencumbered_cash_usd=free_treasury_usd,
         protected_reserve_usd=protected_reserves_usd,
+        operating_buffer_usd=operating_buffer_usd,
         already_committed_usd=existing_commitments_usd,
         requested_new_accounts=required_first_tier_accounts,
     )
