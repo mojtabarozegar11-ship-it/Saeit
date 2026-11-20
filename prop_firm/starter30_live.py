@@ -3,7 +3,7 @@
 The route is English-only and uses only the dedicated mojprop database.
 It accepts exactly 30 TRX, verifies a submitted transaction through two
 independent SolidityNode providers, and grants a simulated account only inside
-one database transaction after both proofs agree.
+one database transaction after both proofs agree. A payer wallet may be supplied to bind an invoice, but it is optional; when omitted, the settled sender is recorded from the verified on-chain transfer.
 """
 from __future__ import annotations
 
@@ -127,13 +127,13 @@ def verify_pre_invoice_configuration() -> None:
         ) from exc
 
 
-def issue_invoice(*, email: str, payer_address: str, terms_accepted: bool) -> IssuedStarter30Invoice:
+def issue_invoice(*, email: str, payer_address: str | None = None, terms_accepted: bool) -> IssuedStarter30Invoice:
     require_release()
     if terms_accepted is not True:
         raise Starter30PaymentRejected("simulation disclosure must be accepted")
     verify_pre_invoice_configuration()
     normalized = normalize_email(email)
-    payer_hex41 = _payer_hex(payer_address)
+    payer_hex41 = _payer_hex(payer_address) if payer_address and payer_address.strip() else None
     subject_key, email_digest = _identity_keys(normalized)
     now = timezone.now()
     expires_at = now + timedelta(hours=24)
@@ -202,7 +202,6 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
         raise Starter30PaymentRejected("exact 30 TRX transfer to the approved receiver is required")
     outcome = _settle_verified_invoice(invoice_ref=invoice_ref, transfer_a=transfer_a)
     if outcome is _EXPIRED_INVOICE:
-        # The EXPIRED write has committed; do not raise inside transaction.atomic.
         raise Starter30PaymentRejected("invoice has expired")
     return outcome
 
@@ -211,7 +210,7 @@ _EXPIRED_INVOICE = object()
 
 
 def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
-    """Persist EXPIRED without rolling it back; all account issuance remains atomic."""
+    """Commit expiry before error; keep all other settlement work atomic."""
     with transaction.atomic(using=MOJPROP_DB_ALIAS):
         payment = (
             PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS)
@@ -219,17 +218,15 @@ def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
             .select_related("invoice_owner", "invoice_owner__identity")
             .get(invoice_owner__invoice_ref=invoice_ref)
         )
-        # Check the expiry AFTER the row lock, not while waiting for it.
-        now = timezone.now()
+        now = timezone.now()  # sample clock only AFTER the locked row is acquired
         if payment.status == PropSimulationPayment.Status.PAID:
             if payment.txid == transfer_a.tx_hash:
                 return _paid_result(payment)
             raise Starter30PaymentRejected("invoice is already settled")
         if payment.status != PropSimulationPayment.Status.AWAITING:
             raise Starter30PaymentRejected("invoice is not awaiting payment")
-        # The blockchain transfer timestamp governs whether payment was on time.
-        # Delayed provider confirmation or late user reconciliation must not
-        # erase an on-time transfer merely because the invoice has since expired.
+        # Transfer timestamp controls whether a transfer was on time; provider
+        # confirmation may arrive after expiry without penalizing the buyer.
         transfer_in_window = payment.issued_at <= transfer_a.block_time < payment.expires_at
         if now >= payment.expires_at and not transfer_in_window:
             payment.status = PropSimulationPayment.Status.EXPIRED
@@ -237,9 +234,10 @@ def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
             return _EXPIRED_INVOICE
         if not transfer_in_window:
             raise Starter30PaymentRejected("payment is outside the invoice window")
-        expected_sender = hex_to_tron_address(payment.payer_hex41)
-        if transfer_a.sender != expected_sender:
-            raise Starter30PaymentRejected("sender does not match the wallet bound to this invoice")
+        if payment.payer_hex41:
+            expected_sender = hex_to_tron_address(payment.payer_hex41)
+            if transfer_a.sender != expected_sender:
+                raise Starter30PaymentRejected("sender does not match the wallet bound to this invoice")
         if PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS).filter(txid=transfer_a.tx_hash).exists():
             raise Starter30PaymentRejected("transaction is already assigned")
         owner = payment.invoice_owner
@@ -262,7 +260,7 @@ def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
         account.save(using=MOJPROP_DB_ALIAS)
         payment.status = PropSimulationPayment.Status.PAID
         payment.txid = transfer_a.tx_hash
-        payment.sender_hex41 = payment.payer_hex41
+        payment.sender_hex41 = transfer_a.sender
         payment.settled_at = now
         payment.save(using=MOJPROP_DB_ALIAS)
         return {
