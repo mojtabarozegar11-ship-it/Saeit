@@ -260,7 +260,9 @@ def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
         account.save(using=MOJPROP_DB_ALIAS)
         payment.status = PropSimulationPayment.Status.PAID
         payment.txid = transfer_a.tx_hash
-        payment.sender_hex41 = transfer_a.sender
+        # Persist the verified on-chain sender in canonical 0x41-prefixed hex,
+        # not its Base58Check display form, for consistent future reconciliation.
+        payment.sender_hex41 = _hex_recipient(transfer_a.sender)
         payment.settled_at = now
         payment.save(using=MOJPROP_DB_ALIAS)
         return {
