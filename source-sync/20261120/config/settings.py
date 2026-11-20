@@ -108,7 +108,7 @@ if MPW_MOJPROP_DB_ALIAS_ENABLED:
         raise RuntimeError(
             "MOJ PROP reconciliation source must be explicit and distinct"
         )
-    DATABASES["mojprop"] = env.db(_mojprop_database_url)
+    DATABASES["mojprop"] = environ.Env.db_url_config(_mojprop_database_url)
     DATABASE_ROUTERS = (
         "config.mojprop_db_router.MojPropDatabaseRouter",
     )
