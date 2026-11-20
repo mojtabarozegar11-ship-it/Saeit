@@ -63,7 +63,7 @@ class MojPropCatalogSamplesContractTests(unittest.TestCase):
         starter = (SITE_SOURCE / expected[0]).read_text("utf-8")
         self.assertIn("./journal-template.csv", starter)
         self.assertIn("./journal-guide.txt", starter)
-        self.assertIn("Payment not enabled", starter)
+        self.assertIn("Checkout available · 30 TRX", starter)
         self.assertIn("not a funded account", starter)
 
     def test_market_brief_uses_named_sources_and_no_unverified_quote(self):
