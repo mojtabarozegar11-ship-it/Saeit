@@ -156,8 +156,8 @@ if getattr(_mojprop_settings, "MPW_MOJPROP_STAGING_IDENTITY_ROUTE_ENABLED", Fals
         staging_identity_challenge,
         staging_identity_consume,
         staging_identity_register,
-        staging_commerce_preview,
     )
+    from prop_firm.staging_commerce_views import staging_commerce_preview
 
     urlpatterns += [
         path(

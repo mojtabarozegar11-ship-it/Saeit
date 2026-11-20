@@ -85,6 +85,24 @@ class NonPayablePreviewTests(SimpleTestCase):
         self.assertFalse(body["public_route_allowed"])
         self.assertFalse(body["invoice_created"])
 
+    @override_settings(
+        MPW_MOJPROP_DB_ALIAS_ENABLED=True,
+        MPW_MOJPROP_DEPLOYMENT_ENV="staging",
+        MPW_MOJPROP_STAGING_IDENTITY_ROUTE_ENABLED=True,
+        MPW_MOJPROP_STAGING_ROUTE_TOKEN="s" * 40,
+        MPW_MOJPROP_STAGING_INTERNAL_IPS=("127.0.0.1",),
+    )
+    def test_enabled_urlconf_registers_commerce_preview_from_view_module(self):
+        import importlib
+
+        from django.urls import clear_url_caches
+        import config.urls as urlconf
+
+        clear_url_caches()
+        loaded = importlib.reload(urlconf)
+        names = {getattr(pattern, "name", None) for pattern in loaded.urlpatterns if getattr(pattern, "name", None)}
+        self.assertIn("mojprop_staging_commerce_preview", names)
+
     def test_source_has_no_commerce_side_effect_markers(self):
         source = open(__file__.replace("test_staging_commerce_gate.py", "staging_commerce_gate.py"), encoding="utf-8").read()
         for forbidden in ("create_invoice", "broadcast", "payout", "place_order"):
