@@ -88,8 +88,10 @@ class OrderRequest:
             raise ValueError("stop_price is required")
         if self.stop_loss is None:
             raise ValueError("stop_loss is required")
-        if self.take_profit is not None:
-            _positive(self.take_profit, "take_profit")
+        for name in ("limit_price", "stop_price", "stop_loss", "take_profit"):
+            value = getattr(self, name)
+            if value is not None:
+                _positive(value, name)
 
 
 @dataclass
@@ -198,7 +200,15 @@ class SimulationEngine:
             D("0"),
         )
 
-    def _risk_gate(self, order: OrderRequest, entry: Decimal) -> Optional[str]:
+    def _risk_gate(self, order: OrderRequest, entry: Decimal, quote: MarketQuote) -> Optional[str]:
+        stop = _positive(order.stop_loss, "stop_loss")
+        target = None if order.take_profit is None else _positive(order.take_profit, "take_profit")
+        executable = quote.bid if order.side == "buy" else quote.ask
+        if order.side == "buy":
+            if stop >= min(entry, executable) or (target is not None and target <= max(entry, executable)):
+                return "invalid_protection_bracket"
+        elif stop <= max(entry, executable) or (target is not None and target >= min(entry, executable)):
+            return "invalid_protection_bracket"
         risk = self._risk_at(order, entry)
         max_single = self.starting_balance * (
             D(str(SIMULATION_POLICY.max_risk_per_trade_pct)) / 100)
@@ -229,12 +239,13 @@ class SimulationEngine:
         self.last_quote_sequence = quote.sequence
         self._mark_quote(quote)
         self._enforce_drawdown()
+        self._protect_positions(quote)
         if self.blocked:
             return Execution(order.order_id, "rejected", order.symbol,
                              order.side, order.quantity, None, "account_blocked")
         entry = self._execution_price(order, quote)
         if order.order_type == "market":
-            reason = self._risk_gate(order, entry)
+            reason = self._risk_gate(order, entry, quote)
             if reason:
                 return Execution(order.order_id, "rejected", order.symbol,
                                  order.side, order.quantity, None, reason)
@@ -252,13 +263,33 @@ class SimulationEngine:
                 position.current_bid = quote.bid
                 position.current_ask = quote.ask
 
+    def _protect_positions(self, quote: MarketQuote) -> List[Execution]:
+        """Close triggered protections at the observed executable quote.
+
+        A stop is not a guaranteed price. During a gap the resulting loss may
+        exceed planned risk. A breached account still permits protective exits.
+        """
+        results = []
+        for order_id, position in sorted(self.positions.items()):
+            if position.symbol != quote.symbol:
+                continue
+            price = quote.bid if position.side == "buy" else quote.ask
+            stop_hit = price <= position.stop_loss if position.side == "buy" else price >= position.stop_loss
+            target = position.take_profit
+            target_hit = target is not None and (
+                price >= target if position.side == "buy" else price <= target)
+            if stop_hit or target_hit:
+                results.append(self._close_at_quote(
+                    order_id, quote, "stop_loss" if stop_hit else "take_profit"))
+        return results
+
     def process_quote(self, quote: MarketQuote) -> List[Execution]:
         if quote.sequence <= self.last_quote_sequence:
             raise ValueError("quote sequence must increase")
         self.last_quote_sequence = quote.sequence
         self._mark_quote(quote)
         self._enforce_drawdown()
-        executions = []
+        executions = self._protect_positions(quote)
         for order_id, order in list(self.pending.items()):
             if self.blocked:
                 executions.append(Execution(order_id, "rejected", order.symbol,
@@ -280,7 +311,7 @@ class SimulationEngine:
             )
             if trigger:
                 entry = self._execution_price(order, quote)
-                reason = self._risk_gate(order, entry)
+                reason = self._risk_gate(order, entry, quote)
                 if reason:
                     executions.append(Execution(order.order_id, "rejected",
                                                 order.symbol, order.side,
@@ -298,7 +329,8 @@ class SimulationEngine:
             order_id=order.order_id, symbol=order.symbol, side=order.side,
             quantity=order.quantity, entry_price=entry,
             stop_loss=_positive(order.stop_loss, "stop_loss"),
-            take_profit=order.take_profit, opened_sequence=quote.sequence,
+            take_profit=None if order.take_profit is None else _positive(order.take_profit, "take_profit"),
+            opened_sequence=quote.sequence,
             current_bid=quote.bid, current_ask=quote.ask,
         )
         return Execution(order.order_id, "filled", order.symbol, order.side,
@@ -314,6 +346,13 @@ class SimulationEngine:
         self.last_quote_sequence = quote.sequence
         self._mark_quote(quote)
         self._enforce_drawdown()
+        for execution in self._protect_positions(quote):
+            if execution.order_id == order_id:
+                return execution
+        return self._close_at_quote(order_id, quote, reason)
+
+    def _close_at_quote(self, order_id: str, quote: MarketQuote, reason: str) -> Execution:
+        position = self.positions[order_id]
         exit_price = quote.bid if position.side == "buy" else quote.ask
         direction = D("1") if position.side == "buy" else D("-1")
         gross = (exit_price - position.entry_price) * position.quantity * direction
