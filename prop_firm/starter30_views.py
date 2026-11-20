@@ -59,8 +59,9 @@ def _form(request, invoice_ref: str | None = None) -> str:
         "<input type='hidden' name='action' value='issue'>"
         "<label for='email'>Email for the isolated simulation identity</label>"
         "<input id='email' name='email' type='email' required autocomplete='email'>"
-        "<label for='payer_address'>Your sending TRON wallet address</label>"
-        "<input id='payer_address' name='payer_address' required autocomplete='off'>"
+        "<label for='payer_address'>Your sending TRON wallet address (optional)</label>"
+        "<input id='payer_address' name='payer_address' autocomplete='off'>"
+        "<small>If left blank, the verified on-chain sender is recorded after payment.</small>"
         "<label><input type='checkbox' name='terms' value='yes' required> "
         "I understand this is simulated trading: no customer capital or real broker account is involved. Every profit I earn after a successful pass is paid in full: 100% of my realized profit is transferred after verification under the published payout rules; no profit or pass result is guaranteed.</label>"
         "<button type='submit'>Create 30 TRX invoice</button></form>"
@@ -80,7 +81,7 @@ def starter30_checkout(request):
                 "<h1>Moj Prop Starter30</h1><p>Exact price: <strong>30 TRX</strong>. "
                 "This remains a simulated challenge with a virtual 1,000 USD balance. Every profit earned after a successful pass is paid in full: 100% of the trader's realized profit is transferred after verification under the published payout rules.</p>"
                 "<div class='warn'>Send only after this server issues your unique invoice. "
-                "The receiver is owner-approved and the transaction must come from the wallet bound below.</div>"
+                "The receiver is owner-approved. Binding your sending wallet is optional; if omitted, the verified on-chain sender is recorded after payment.</div>"
                 "<p><strong>Cancellation and refund:</strong> before transaction verification, no payment is credited. "
                 "A verified payment that cannot be matched because of a server failure remains in manual review; "
                 "if the service cannot be delivered, refund is sent to the verified sending wallet.</p>"
@@ -93,7 +94,7 @@ def starter30_checkout(request):
         if action == "issue":
             issued = issue_invoice(
                 email=request.POST.get("email", ""),
-                payer_address=request.POST.get("payer_address", ""),
+                payer_address=request.POST.get("payer_address", "").strip(),
                 terms_accepted=request.POST.get("terms") == "yes",
             )
             return _page(
@@ -127,7 +128,7 @@ def starter30_checkout(request):
             request,
             "Starter30 payment review",
             f"<h1>Payment not credited</h1><div class='warn'>{escape(str(error))}</div>"
-            "<p>No simulation account was created. Check the invoice, wallet and transaction ID.</p>",
+            "<p>No simulation account was created. Check the invoice and transaction ID.</p>",
         )
 
 
