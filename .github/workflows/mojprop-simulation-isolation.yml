@@ -1,0 +1,62 @@
+name: MOJ PROP Simulation Isolation
+
+on:
+  pull_request:
+    paths:
+      - "source-sync/20261120/prop_firm/**"
+      - ".github/workflows/mojprop-simulation-isolation.yml"
+  workflow_dispatch:
+
+jobs:
+  schema-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate isolated model and migration contract
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          root = Path("source-sync/20261120/prop_firm")
+          models_path = root / "models.py"
+          migration_path = root / "migrations/0011_simulation_isolation.py"
+          model_tree = ast.parse(models_path.read_text(encoding="utf-8"))
+          class_nodes = {
+              node.name: node
+              for node in model_tree.body
+              if isinstance(node, ast.ClassDef)
+          }
+          required = {
+              "PropSimulationIdentity",
+              "PropSimulationInvoiceOwner",
+              "PropSimulationAccount",
+              "PropSimulationLoginChallenge",
+              "PropSimulationEvent",
+          }
+          missing = required - class_nodes.keys()
+          assert not missing, f"missing model classes: {sorted(missing)}"
+
+          source_text = models_path.read_text(encoding="utf-8")
+          for name in required:
+              for node in ast.walk(class_nodes[name]):
+                  if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                      if node.func.attr == "ForeignKey":
+                          segment = ast.get_source_segment(source_text, node) or ""
+                          assert "auth_user" not in segment, f"{name} has auth_user ForeignKey"
+
+          migration_text = migration_path.read_text(encoding="utf-8")
+          assert '("prop_firm", "0010_reward_reserve_ledger")' in migration_text
+          for name in required:
+              assert f'name="{name}"' in migration_text, f"{name} missing from migration"
+
+          schema_doc = (root / "SIMULATION_SCHEMA.md").read_text(encoding="utf-8")
+          assert "live invoice route: disabled" in schema_doc
+
+          router_path = Path("source-sync/20261120/config/mojprop_db_router.py")
+          router_text = router_path.read_text(encoding="utf-8")
+          assert 'MOJPROP_DB_ALIAS = "mojprop"' in router_text
+          assert "return label in ISOLATED_MODEL_LABELS" in router_text
+          assert "return False" in router_text
+          print("MOJ PROP isolated simulation schema and router gate: PASS")
+          PY
