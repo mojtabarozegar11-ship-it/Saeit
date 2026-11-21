@@ -53,10 +53,13 @@ if (!is_array($parts) || ($parts['scheme'] ?? '') !== 'https' ||
     http_response_code(403); exit;
 }
 // The probe checks that PHP executes on the live site. It never affects counters.
+$dir = '/home/zomorod2/.private_mojplaywin_main_agents/mojprop_global_funnel_20261121';
 if ($action === 'probe') {
+    if (!is_dir($dir) || is_link($dir) || !is_writable($dir)) {
+        http_response_code(503); exit;
+    }
     header('X-MPW-Metrics-Probe: ok'); http_response_code(204); exit;
 }
-$dir = '/home/zomorod2/.private_mojplaywin_main_agents/mojprop_global_funnel_20261121';
 if (!is_dir($dir) || is_link($dir)) { http_response_code(503); exit; }
 $day = gmdate('Ymd');
 $file = $dir.'/events-'.$day.'.json';
