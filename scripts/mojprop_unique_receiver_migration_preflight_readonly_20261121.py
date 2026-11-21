@@ -106,7 +106,7 @@ def _verify_local_backup_manifest(raw: str | None) -> dict:
         == data.get("tables_in_live_schema")
         == data.get("create_table_statements")
         and data.get("tables_in_live_schema", 0) > 0
-        and not re.search(rb"(?im)^\\s*(DROP|TRUNCATE)\\s+TABLE\\s", plain)
+        and not re.search(rb"(?im)^\s*(DROP|TRUNCATE)\s+TABLE\s", plain)
     )
     # A readable archive is NOT a restored database. Never infer this from
     # a user-controlled flag or even an SQL checksum.
