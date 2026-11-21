@@ -60,6 +60,8 @@ class EnglishFreeTermsSourceParityTests(unittest.TestCase):
         self.assertIn("real company-funded reward-settlement controls", text)
         self.assertIn(FREE, text)
         self.assertNotIn('>Open secure 30 TRX checkout</a>', text)
+        self.assertNotIn('>Go to secure 30 TRX checkout</a>', text)
+        self.assertIn('href="/moj-prop/rules/">Read the published Starter30 rules</a>', text)
 
 
 if __name__ == "__main__":
