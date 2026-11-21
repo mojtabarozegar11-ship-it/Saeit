@@ -33,6 +33,12 @@ class SimulationPolicy:
     virtual_principal_withdrawable: bool = False
     customer_deposit_required: bool = False
     real_orders_enabled: bool = False
+    # Owner-approved REQUEST terms, not an automatic cash-transfer authority.
+    first_profit_request_after_days: int = 14
+    subsequent_profit_request_interval_days: int = 14
+    minimum_profit_request_usd: Decimal = D("10")
+    company_pays_payout_network_fees: bool = True
+    refund_initial_entry_on_first_successful_profit_payout: bool = True
 
 
 SIMULATION_POLICY = SimulationPolicy()
