@@ -55,7 +55,7 @@ class EnglishSelectedTradersStaticTests(unittest.TestCase):
         self.assertIn("real-money", source.lower())
         self.assertIn("company-controlled", source.lower())
         self.assertIn("not a public job vacancy", source.lower())
-        self.assertIn("does not automatically", source.lower())
+        self.assertIn("not automatic acceptance", source.lower())
         self.assertIn("/moj-prop/contact/", parsed.links)
         self.assertIn("/moj-prop/starter-30-trx/", parsed.links)
         mails = [urlsplit(link) for link in parsed.links if link.startswith("mailto:")]
@@ -83,7 +83,7 @@ class EnglishSelectedTradersStaticTests(unittest.TestCase):
         self.assertIn("individual written appointment", text)
         self.assertIn("virtual", text)
         self.assertIn("profit share", text)
-        self.assertIn("approved work expenses", text)
+        self.assertIn("approved work-related expenses", text)
 
 
 if __name__ == "__main__":
