@@ -1,0 +1,21 @@
+name: Arcade score integrity (isolated)
+on:
+  pull_request:
+    paths:
+      - 'site_releases/mojplaywin/games-20261021/**'
+      - 'scripts/verify_arcade_score_integrity_20261026.cjs'
+      - '.github/workflows/arcade-score-integrity-20261026.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  score-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify five independent game runtimes and score integrity
+        run: node scripts/verify_arcade_score_integrity_20261026.cjs
