@@ -1,0 +1,42 @@
+name: Mojtaba.bot.ai cyber module isolated offline checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "core/mojtaba_modules/**"
+      - "tests/test_mojtaba_cyber_security.py"
+      - "tests/test_mojtaba_origin_defense.py"
+      - "tests/test_mojtaba_incident_response.py"
+      - "docs/MOJTABA_BOT_CYBER_SECURITY_MODULE.md"
+      - ".github/workflows/mojtaba-cyber-offline-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtaba-cyber-offline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cyber-offline:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Syntax check (no dependencies)
+        run: |
+          python -m compileall -q core/mojtaba_modules \
+            tests/test_mojtaba_cyber_security.py \
+            tests/test_mojtaba_origin_defense.py \
+            tests/test_mojtaba_incident_response.py
+      - name: Isolated security module regression tests (offline only)
+        run: |
+          python -m unittest discover -s tests -p 'test_mojtaba_cyber_security.py' -v
+          python -m unittest discover -s tests -p 'test_mojtaba_origin_defense.py' -v
+          python -m unittest discover -s tests -p 'test_mojtaba_incident_response.py' -v

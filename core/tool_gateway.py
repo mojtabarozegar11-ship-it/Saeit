@@ -19,6 +19,8 @@ class ToolSpec:
     # An action may call a differently named adapter only when the adapter
     # explicitly declares that alias. A worker's tool_map is not authority.
     allowed_actions: tuple[str, ...] = ()
+    # Optional immutable restriction for the ONE canonical bot identity.
+    required_agent_code: str = ""
 
 
 class ToolGateway:
@@ -41,9 +43,15 @@ class ToolGateway:
         )
         if any(not action for action in allowed_actions):
             raise ToolGatewayError("Allowed action codes must be non-empty")
+        required_agent_code = spec.required_agent_code
+        if not isinstance(required_agent_code, str) or (
+            required_agent_code and (not required_agent_code.strip() or required_agent_code != required_agent_code.strip())
+        ):
+            raise ToolGatewayError("Required agent code must be an exact non-blank identity")
         self._tools[code] = ToolSpec(
             code=code, handler=spec.handler, risk=risk, enabled=spec.enabled,
             allowed_actions=allowed_actions,
+            required_agent_code=required_agent_code,
         )
 
     def describe(self):
@@ -72,6 +80,8 @@ class ToolGateway:
 
         if not task.agent.active:
             raise ToolGatewayError("Task agent is inactive")
+        if spec.required_agent_code and task.agent.code != spec.required_agent_code:
+            raise ToolGatewayError("Tool requires canonical agent identity")
         registry = AgentRegistry()
         capability = registry.capability_for(task.agent, task.action_type)
         if capability is None or (
