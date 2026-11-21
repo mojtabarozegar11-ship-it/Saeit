@@ -1,0 +1,482 @@
+{
+  "schema": "mojtaba.bot.ai.commercial-offer-registry.v1",
+  "canonical_bot_id": "mojtaba.bot.ai",
+  "offers": [
+    {
+      "offer_id": "farm_economics",
+      "title": "ارزیابی اقتصاد تولید مزرعه",
+      "buyer": "مدیر مزرعه و تولیدکننده",
+      "value_proposition": "تحلیل هزینه و حاشیه سود با فرضیات و سناریوهای شفاف",
+      "model": "consulting_quote",
+      "stage": "inquiry_candidate",
+      "channel": "زمرد ملل",
+      "source_files": [
+        "content/zomorod-nova-pages/services.html"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "نوع محصول و مساحت یا ظرفیت",
+        "عملکرد و قیمت فروش دوره پایه",
+        "هزینه نهاده و انرژی و نیروی کار"
+      ],
+      "deliverables": [
+        "چارچوب هزینه و درآمد",
+        "نقطه سربه‌سر و تحلیل حساسیت"
+      ],
+      "exclusions": [
+        "مشاوره بدون داده کافی تضمین سود نیست"
+      ],
+      "priority_band": 1,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "water_productivity",
+      "title": "ارزیابی بهره‌وری آب کشاورزی",
+      "buyer": "بهره‌بردار مزرعه و گلخانه",
+      "value_proposition": "مقایسه روش‌های مصرف آب بر پایه داده و محدودیت واقعی",
+      "model": "consulting_quote",
+      "stage": "inquiry_candidate",
+      "channel": "زمرد ملل",
+      "source_files": [
+        "content/zomorod-nova-pages/services.html"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "مساحت و نوع محصول",
+        "منبع و سهمیه آب",
+        "روش آبیاری و منطقه"
+      ],
+      "deliverables": [
+        "بودجه اولیه آب",
+        "مقایسه گزینه‌های مدیریت منابع"
+      ],
+      "exclusions": [
+        "نسخه آبیاری قطعی بدون اندازه‌گیری محلی صادر نمی‌شود"
+      ],
+      "priority_band": 1,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "project_feasibility",
+      "title": "امکان‌سنجی سرمایه‌گذاری کشاورزی",
+      "buyer": "سرمایه‌گذار و مدیر طرح",
+      "value_proposition": "آماده‌سازی سناریوهای مالی و ریسک پیش از تعهد سرمایه",
+      "model": "consulting_quote",
+      "stage": "inquiry_candidate",
+      "channel": "زمرد ملل",
+      "source_files": [
+        "content/zomorod-nova-pages/services.html"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "محل اجرا و ظرفیت پیشنهادی",
+        "بودجه سرمایه‌ای و نقدینگی",
+        "بازار هدف و کانال فروش"
+      ],
+      "deliverables": [
+        "چارچوب جریان نقدی طرح",
+        "سناریوهای ریسک و نقاط تصمیم"
+      ],
+      "exclusions": [
+        "تضمین وام یا مجوز یا سود داده نمی‌شود"
+      ],
+      "priority_band": 1,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "market_entry",
+      "title": "مطالعه بازار و زنجیره ارزش",
+      "buyer": "تولیدکننده و صادرکننده بالقوه",
+      "value_proposition": "شناسایی داده‌های لازم برای تصمیم عرضه و قیمت‌گذاری",
+      "model": "consulting_quote",
+      "stage": "inquiry_candidate",
+      "channel": "زمرد ملل",
+      "source_files": [
+        "core/views.py"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "محصول و حجم عرضه",
+        "بازار هدف و مشتری",
+        "قیمت‌های قابل استناد و رقبا"
+      ],
+      "deliverables": [
+        "نقشه بررسی تقاضا و رقابت",
+        "سناریوهای قیمت و کانال توزیع"
+      ],
+      "exclusions": [
+        "فروش و صادرات قطعی تضمین نمی‌شود"
+      ],
+      "priority_band": 1,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "equipment_economics",
+      "title": "ارزیابی اقتصادی ماشین‌آلات",
+      "buyer": "بهره‌بردار و سرمایه‌گذار تجهیزات",
+      "value_proposition": "مقایسه هزینه مالکیت، نگهداری و بهره‌برداری از گزینه‌ها",
+      "model": "consulting_quote",
+      "stage": "inquiry_candidate",
+      "channel": "زمرد ملل",
+      "source_files": [
+        "core/views.py"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "عملیات و سطح زیر کشت",
+        "مدل‌ها و ظرفیت تجهیزات",
+        "هزینه خرید و سوخت و نگهداری"
+      ],
+      "deliverables": [
+        "مقایسه هزینه چرخه عمر",
+        "آستانه استفاده اقتصادی"
+      ],
+      "exclusions": [
+        "تأمین و گارانتی دستگاه خارج از دامنه تحلیل است"
+      ],
+      "priority_band": 2,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "research_analysis",
+      "title": "طراحی مطالعه و تحلیل داده پژوهشی",
+      "buyer": "پژوهشگر و شرکت تولیدی",
+      "value_proposition": "تعریف سؤال و روش تحقیق و ارائه بررسی قابل بازبینی",
+      "model": "consulting_quote",
+      "stage": "inquiry_candidate",
+      "channel": "زمرد ملل",
+      "source_files": [
+        "content/zomorod-nova-pages/services.html"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "سؤال پژوهش و متغیر پاسخ",
+        "منشأ داده و مجوز استفاده",
+        "دامنه نمونه و موعد موردنظر"
+      ],
+      "deliverables": [
+        "طرح روش و اعتبارسنجی",
+        "قالب گزارش نتایج و محدودیت‌ها"
+      ],
+      "exclusions": [
+        "داده یا نتیجه پژوهشی ساخته یا دست‌کاری نمی‌شود"
+      ],
+      "priority_band": 2,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "agri_ai_assessment",
+      "title": "ارزیابی کاربرد هوش مصنوعی کشاورزی",
+      "buyer": "مدیر گلخانه و کسب‌وکار زراعی",
+      "value_proposition": "تعیین امکان استفاده از داده و مدل برای تصمیم مدیریتی",
+      "model": "consulting_quote",
+      "stage": "inquiry_candidate",
+      "channel": "زمرد ملل",
+      "source_files": [
+        "core/views.py"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "مسئله تصمیم‌گیری و داده موجود",
+        "فرکانس و کیفیت ثبت داده",
+        "نتیجه مورد انتظار و بودجه"
+      ],
+      "deliverables": [
+        "چارچوب سنجش کیفیت داده",
+        "معیار پذیرش مدل و ریسک استقرار"
+      ],
+      "exclusions": [
+        "مدل خودکار زنده یا تضمین دقت ادعا نمی‌شود"
+      ],
+      "priority_band": 2,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "cashflow_advisory",
+      "title": "بررسی نقدینگی واحد تولیدی",
+      "buyer": "مدیر کسب‌وکار کشاورزی",
+      "value_proposition": "تشخیص گلوگاه‌های جریان نقدی در چرخه تولید",
+      "model": "consulting_quote",
+      "stage": "inquiry_candidate",
+      "channel": "زمرد ملل",
+      "source_files": [
+        "content/zomorod-nova-pages/services.html"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "فصل و چرخه عملیات",
+        "دریافتنی و پرداختنی دوره",
+        "برنامه خرید نهاده و فروش"
+      ],
+      "deliverables": [
+        "تقویم جریان نقدی پیشنهادی",
+        "تحلیل کمبود نقدینگی و ریسک"
+      ],
+      "exclusions": [
+        "حسابداری قانونی یا حسابرسی بدون قرارداد ارائه نمی‌شود"
+      ],
+      "priority_band": 2,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "cafe_b2b_supply",
+      "title": "استعلام تأمین محصولات قنادی برای کافه",
+      "buyer": "مدیر کافه و خریدار عمده",
+      "value_proposition": "تعیین نیاز دوره‌ای برای صدور پیشنهاد تأمین مشروط به ظرفیت",
+      "model": "b2b_quote",
+      "stage": "inquiry_candidate",
+      "channel": "قنادی B2B",
+      "source_files": [
+        "public/ghanadi/cafe-shiraz/index.html"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "نوع محصول و مقدار دوره‌ای",
+        "شهر و نقطه تحویل",
+        "زمان‌بندی و استاندارد بسته‌بندی"
+      ],
+      "deliverables": [
+        "مشخصات نیاز تأمین",
+        "چک‌لیست قیمت و ظرفیت و شرایط تحویل"
+      ],
+      "exclusions": [
+        "موجودی یا تأمین منظم پیش از تأیید تضمین نمی‌شود"
+      ],
+      "priority_band": 1,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "physical_catalogue",
+      "title": "درخواست پیش‌فاکتور کالاهای کاتالوگ",
+      "buyer": "خریدار محصولات شرکت",
+      "value_proposition": "جمع‌آوری مشخصات SKU و مقدار برای بررسی امکان فروش",
+      "model": "physical_catalogue",
+      "stage": "inquiry_candidate",
+      "channel": "فروشگاه زمرد ملل",
+      "source_files": [
+        "content/zomorod-v11/store_index.php"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "کد SKU و تعداد",
+        "محل و روش دریافت",
+        "مشخصات فنی یا کیفیت موردنیاز"
+      ],
+      "deliverables": [
+        "پیشنهاد بررسی موجودی و قیمت",
+        "چک‌لیست شرایط تحویل و پیش‌فاکتور"
+      ],
+      "exclusions": [
+        "درگاه بانک شهر در کد فعلی فعال و تأییدشده نیست"
+      ],
+      "priority_band": 1,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "farm_direct_supply",
+      "title": "استعلام عرضه مستقیم کشاورزی",
+      "buyer": "خریدار عمده و تأمین‌کننده",
+      "value_proposition": "تعریف مشخصات محصول و محدودیت حمل پیش از پیشنهاد",
+      "model": "b2b_quote",
+      "stage": "inquiry_candidate",
+      "channel": "فروشگاه زمرد ملل",
+      "source_files": [
+        "content/zomorod-v11/store_index.php"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "نام و درجه کیفی محصول",
+        "مقدار و تناوب خرید",
+        "مقصد و روش حمل"
+      ],
+      "deliverables": [
+        "مشخصات پیشنهاد اولیه تأمین",
+        "چک‌لیست مدارک و شرایط معامله"
+      ],
+      "exclusions": [
+        "موجودی فعلی و قیمت قطعی تأیید نشده است"
+      ],
+      "priority_band": 2,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "free_wheat_tool",
+      "title": "ابزار رایگان محاسبه بذر گندم",
+      "buyer": "کشاورز و کارشناس زراعت",
+      "value_proposition": "معرفی ابزار آموزشی آفلاین بدون ایجاد خرید یا پرداخت",
+      "model": "free_acquisition",
+      "stage": "free_acquisition",
+      "channel": "آموزش رایگان",
+      "source_files": [
+        "content/zomorod-v11/free-products/wheat-seed-rate-planner-v1/index.html"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "تراکم مطلوب بوته",
+        "وزن هزار دانه و قوه نامیه"
+      ],
+      "deliverables": [
+        "محاسبه آموزشی بذر در هکتار",
+        "آموزش مفروضات و محدودیت‌های محاسبه"
+      ],
+      "exclusions": [
+        "نتیجه جایگزین توصیه محلی و بررسی مزرعه نیست"
+      ],
+      "priority_band": 2,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "digital_publications",
+      "title": "مجوز فروش کتاب و محتوای دیجیتال",
+      "buyer": "خریدار محتوای آموزشی",
+      "value_proposition": "عرضه صرفاً پس از نهایی‌شدن فایل، مجوز انتشار و تحویل",
+      "model": "digital_license",
+      "stage": "release_blocked",
+      "channel": "MojPlayWin",
+      "source_files": [
+        "core/templates/brands/mojplaywin/page.html"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "نسخه نهایی و مالکیت اثر",
+        "مجوز انتشار و قیمت مصوب"
+      ],
+      "deliverables": [
+        "فایل نهایی با هش قابل بررسی",
+        "سازوکار رسید و دریافت مجدد"
+      ],
+      "exclusions": [
+        "فایل پیش‌نویس یا بی‌مجوز برای فروش فعال نمی‌شود"
+      ],
+      "priority_band": 3,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "game_license",
+      "title": "فروش بازی و محتوای تعاملی",
+      "buyer": "بازیکن و خریدار جهانی",
+      "value_proposition": "آزادسازی عرضه فقط با ساخت نسخه قابل تحویل و پرداخت امن",
+      "model": "game_license",
+      "stage": "release_blocked",
+      "channel": "MojPlayWin",
+      "source_files": [
+        "site_releases/mojplaywin/arena/README.md"
+      ],
+      "intake_path": "/ask-master/index.php?service=1",
+      "required_inputs": [
+        "نسخه قابل نصب یا اجرا",
+        "مجوز دارایی و شرایط خریدار"
+      ],
+      "deliverables": [
+        "بیلد قابل دریافت و آزمون بازی",
+        "تحویل مجاز و پشتیبانی تعریف‌شده"
+      ],
+      "exclusions": [
+        "ارز یا پرداخت TRX بدون تأیید سمت‌سرور نباید پذیرفته شود"
+      ],
+      "priority_band": 3,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    },
+    {
+      "offer_id": "bot_subscription",
+      "title": "اشتراک خدمات ربات واحد مجتبی",
+      "buyer": "مشتری خدمات هوش مصنوعی",
+      "value_proposition": "فروش اشتراک فقط پس از اثبات ربات واحد و شروط پرداخت و خدمت",
+      "model": "subscription",
+      "stage": "release_blocked",
+      "channel": "Mojtaba.bot.ai",
+      "source_files": [
+        "runtime/mojtaba_bot_disposition_sources_v1.json"
+      ],
+      "intake_path": "/",
+      "required_inputs": [
+        "خدمت و سطح دسترسی موردنظر",
+        "مجوز پردازش داده و شرایط مصرف"
+      ],
+      "deliverables": [
+        "شرح سرویس و محدودیت‌ها",
+        "رسید سرویس و معیار کیفیت پاسخ"
+      ],
+      "exclusions": [
+        "وجود شناسه در مخزن اثبات فعال‌بودن ربات یا اشتراک نیست"
+      ],
+      "priority_band": 4,
+      "canonical_bot_id": "mojtaba.bot.ai",
+      "price_irr": null,
+      "payment_enabled": false,
+      "public_live_verified": false,
+      "delivery_verified": false,
+      "owner_approved": false
+    }
+  ]
+}
