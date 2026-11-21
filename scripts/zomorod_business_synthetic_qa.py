@@ -106,6 +106,18 @@ assert 'SyntheticOnlyProposalTitle' not in isolated_approval_page('anonymous'+sh
 print('ISOLATED_APPROVAL_ROUTE_AUTH=PASS')
 
 
+# Run the independent, disposable-DB concurrency regression in the existing
+# public synthetic QA workflow. A skipped pdo_sqlite test is not acceptance.
+stock_regression = pathlib.Path(__file__).resolve().parents[1] / 'tests/test_zm_business_stock_atomic.py'
+stock_run = subprocess.run(
+    [sys.executable, str(stock_regression)],
+    capture_output=True, text=True, timeout=90
+)
+assert stock_run.returncode == 0, ('Stock concurrency regression failed', stock_run.stderr[-2500:])
+assert 'skipped=' not in stock_run.stderr, 'Stock concurrency regression did not run'
+assert 'Ran 2 tests' in stock_run.stderr, ('Missing stock tests', stock_run.stderr[-1000:])
+print('ZM_STOCK_CONCURRENCY_REGRESSION=PASS')
+
 print('ROLE_DOWNGRADE_REVOKES_EXISTING_SESSION=PASS')
 print('ZOMOROD_ACCOUNTING_SYNTHETIC_QA=PASS')
 print('TEST_USERS=1 PARTIES=1 INVOICES=1 PAYMENTS=1 JOURNALS=3')
