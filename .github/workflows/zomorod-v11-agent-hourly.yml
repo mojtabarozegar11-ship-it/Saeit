@@ -1,11 +1,8 @@
 name: Zomorod V11 hourly site agent telemetry
 on:
-  schedule:
-    - cron: "17 * * * *"
+  # Continuous PHP agent cycles require a separately verified cPanel scheduler;
+  # this GitHub path is for explicitly authorized diagnostics only.
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: [".github/workflows/zomorod-v11-agent-hourly.yml"]
 permissions:
   contents: read
 concurrency:
@@ -13,6 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   monitor:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == 'mojtabarozegar11-ship-it'
     runs-on: ubuntu-latest
     timeout-minutes: 9
     steps:
