@@ -49,7 +49,8 @@ def normalized_scalar(value: str, *, max_size: int = 64) -> str | None:
     if not isinstance(value, str) or len(value) > max_size:
         return None
     compact = " ".join(value.strip().split())
-    if compact == "max":
+    # cgroup v2 cpu.max often uses "max 100000" for unbounded CPU.
+    if compact == "max" or re.fullmatch(r"max [0-9]{1,24}", compact):
         return compact
     if re.fullmatch(r"[0-9]{1,24}(?: [0-9]{1,24})?", compact):
         return compact
