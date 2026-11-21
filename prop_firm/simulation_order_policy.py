@@ -6,7 +6,7 @@ def authorize_simulation_order(*, account_capital, equity, day_open_equity,
                                risk_at_stop, open_risk_before, broker_minimum_risk,
                                verified_stop=False, authoritative_snapshot=False,
                                mode="challenge", execution_authorized=False):
-    if mode not in ("challenge", "real"):
+    if mode not in ("challenge", "funded_simulated", "real"):
         raise ValueError("invalid mode")
     capital, equity, opening, single, aggregate, minimum = map(dec, (
         account_capital, equity, day_open_equity, risk_at_stop,
@@ -34,6 +34,7 @@ def authorize_simulation_order(*, account_capital, equity, day_open_equity,
         reasons.append("stop_risk_exceeds_drawdown_headroom")
     if minimum > single:
         reasons.append("minimum_order_not_feasible")
+    # Both challenge and post-pass accounts are simulator-only; never broker orders.
     if mode == "real":
         reasons.append("real_execution_disabled")
     # This API is a pure simulator preflight. An execution request must fail closed.
