@@ -23,6 +23,19 @@
   <article class="services-domain services-domain-platform"><div class="services-no">14</div><span>AI · INTELLIGENCE</span><h2>هوش مصنوعی</h2><p>ابزارها و عامل‌های هوشمند برای پژوهش، تحلیل و اجرای کنترل‌شده.</p><a href="/agents/">ورود به هوش مصنوعی ↗</a></article>
   <article class="services-domain services-domain-platform"><div class="services-no">15</div><span>KNOWLEDGE · ENCYCLOPEDIA</span><h2>دانشنامه</h2><p>مرجع ساختاریافته دانش، مفاهیم و محتوای قابل استفاده پلتفرم.</p><a href="/knowledge/">ورود به دانشنامه ↗</a></article>
 </section>
+<section id="c19-six-service-scopes" aria-label="شش خدمت تخصصی قابل استعلام" style="margin:2rem auto;padding:clamp(1rem,3vw,2rem);max-width:1200px;border:1px solid rgba(170,140,72,.38);border-radius:16px">
+  <header><span>SPECIFIC PROFESSIONAL SERVICES · 06</span><h2>خدمات کارشناسی با دامنه مشخص</h2>
+  <p>قبل از ثبت درخواست، ورودی‌ها، اقلام تحویلی و محدودیت هر خدمت را بررسی کنید. ثبت استعلام، قرارداد یا تعهد مالی ایجاد نمی‌کند.</p></header>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem">
+    {% for code,title,description in scope_offers %}<article class="services-core-card" style="min-width:0">
+      <span>{{ code }}</span><h3>{{ title }}</h3><p>{{ description }}</p>
+      <a href="/services/scope/{{ code }}/" aria-label="شرح خدمت {{ code }}">مشاهده دامنه خدمت و راه استعلام ↗</a>
+      <p><a href="/company/#company-request" aria-label="فرم رسمی درخواست خدمت {{ code }}">فرم درخواست شرکت</a> ·
+      <a class="c19-email-alternative" href="mailto:zomorodmelal@gmail.com?subject=Service%20inquiry%20{{ code|urlencode }}" aria-label="ایمیل اختیاری برای {{ code }}">ایمیل اختیاری</a></p>
+    </article>{% endfor %}
+  </div>
+  <p><small>قیمت، مدت اجرا و پذیرش هر سفارش پس از ارزیابی کارشناسی و توافق جداگانه تعیین می‌شود. این بخش فرم جدید یا درگاه پرداخت ایجاد نمی‌کند. لینک ایمیل فقط نرم‌افزار ایمیل مشتری را باز می‌کند و هیچ پیام خودکاری ارسال نمی‌شود.</small></p>
+</section>
 <section class="services-map" aria-label="معماری خدمات"><div><span>PLATFORM MAP</span><h2>یک هاب، چند مسیر مستقل</h2><p>کاربر از صفحه اصلی وارد خدمات می‌شود و بدون خروج از معماری پلتفرم، به حوزه تخصصی موردنیاز خود می‌رسد.</p></div><div class="services-map-flow"><b>خدمات</b><i>→</i><span>کشاورزی</span><span>صنعت</span><span>بازار</span><i>→</i><span>آب‌وهوا</span><span>اقتصاد</span><span>استودیو</span></div></section>
 <section class="services-cta"><span>ONE PLATFORM · MANY CAPABILITIES</span><h2>صفحه اصلی؛ یک درگاه برای همه خدمات و زنجیره‌ها.</h2><p>کشاورزی، صنعت و بازار در خدمات یکپارچه شده‌اند و آب‌وهوا، اقتصاد و استودیو نیز به‌عنوان مسیرهای مستقل این پلتفرم از همین درگاه قابل دسترسی‌اند.</p><a href="/company/">شرکت ↗</a></section>
 {% endblock %}
