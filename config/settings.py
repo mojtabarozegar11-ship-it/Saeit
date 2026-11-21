@@ -132,6 +132,26 @@ MPW_MOJPROP_TRX_RELEASE_ENABLED = env.bool(
 MPW_MOJPROP_TRX_RPC_ATTESTED = env.bool(
     "MPW_MOJPROP_TRX_RPC_ATTESTED", default=False
 )
+
+# Commercial release evidence gates. These are intentionally independent of
+# generic release booleans: a configured flag cannot substitute for proof of
+# seller eligibility, custody, funded reward reserve, settlement rail or
+# recoverable customer delivery. All default closed.
+MPW_MOJPROP_SELLER_ELIGIBILITY_VERIFIED = env.bool(
+    "MPW_MOJPROP_SELLER_ELIGIBILITY_VERIFIED", default=False
+)
+MPW_MOJPROP_INVOICE_CUSTODY_VERIFIED = env.bool(
+    "MPW_MOJPROP_INVOICE_CUSTODY_VERIFIED", default=False
+)
+MPW_MOJPROP_REWARD_RESERVE_VERIFIED = env.bool(
+    "MPW_MOJPROP_REWARD_RESERVE_VERIFIED", default=False
+)
+MPW_MOJPROP_REWARD_SETTLEMENT_RAIL_VERIFIED = env.bool(
+    "MPW_MOJPROP_REWARD_SETTLEMENT_RAIL_VERIFIED", default=False
+)
+MPW_MOJPROP_DELIVERY_RECOVERY_VERIFIED = env.bool(
+    "MPW_MOJPROP_DELIVERY_RECOVERY_VERIFIED", default=False
+)
 # A private offline-custody attested pool of public per-invoice TRON addresses.
 # Fail closed by default. Never place owner wallet seeds or private keys here.
 MPW_MOJPROP_INVOICE_ADDRESS_POOL_VERIFIED = env.bool(
