@@ -298,5 +298,57 @@ class FactoryBackupAuditTests(unittest.TestCase):
         self.assertFalse(result["deletion_allowed"])
 
 
+    def test_hash_identity_confirms_exact_bytes_but_never_deletes(self):
+        source = self.make_database("master-before-20261026T000000Z.sqlite3")
+        nested = self.root / "historical"
+        nested.mkdir()
+        copy = nested / "other.sqlite3"
+        copy.write_bytes(source.read_bytes())
+        before = (source.read_bytes(), copy.read_bytes())
+        report = audit_module.backup_hash_identity(self.root, seconds=20)
+        self.assertTrue(report["full_hash_coverage"])
+        self.assertEqual(report["hashed_count"], 2)
+        self.assertEqual(len(report["identical_content_groups"]), 1)
+        self.assertFalse(report["identical_content_groups"][0]["approved_for_deletion"])
+        self.assertEqual(before, (source.read_bytes(), copy.read_bytes()))
+
+    def test_hash_identity_does_not_equate_size_with_content(self):
+        (self.root / "a.sqlite3").write_bytes(b"ab")
+        (self.root / "b.sqlite3").write_bytes(b"cd")
+        report = audit_module.backup_hash_identity(self.root, seconds=20)
+        self.assertEqual(report["hashed_count"], 2)
+        self.assertEqual(report["identical_content_groups"], [])
+
+    def test_hash_identity_skips_symlink_and_timeout_remains_unknown(self):
+        source = self.root / "one.sqlite3"
+        source.write_bytes(b"anything")
+        (self.root / "link.sqlite3").symlink_to(source)
+        report = audit_module.backup_hash_identity(self.root, seconds=0)
+        self.assertEqual(report["sqlite_files_seen"], 1)
+        self.assertFalse(report["full_hash_coverage"])
+        self.assertEqual(report["records"][0]["sha256"], None)
+        self.assertEqual(report["identical_content_groups"], [])
+
+    def test_new_snapshot_space_gate_uses_runtime_root_only(self):
+        runtime = Path(self.tmp.name) / "factory-runtime"
+        backups = runtime / "operations" / "backups"
+        backups.mkdir(parents=True)
+        db = runtime / "django-app" / "db.sqlite3"
+        db.parent.mkdir()
+        db.write_bytes(b"abcd")
+        gate = audit_module.backup_snapshot_space_gate(backups)
+        self.assertEqual(gate["status"], "observed")
+        self.assertEqual(gate["live_database_bytes"], 4)
+        self.assertEqual(
+            gate["required_before_new_snapshot_bytes"],
+            gate["reserve_bytes"] + 4,
+        )
+        self.assertEqual(
+            gate["shortfall_bytes"],
+            max(0, gate["required_before_new_snapshot_bytes"] -
+                gate["free_bytes"]),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
