@@ -1,0 +1,128 @@
+name: Align Zomorod company and research identity live 20261023
+on:
+  push:
+    branches: [zomorod/about-science-evidence-20261023]
+    paths: [.github/workflows/zomorod-company-research-identity-live-20261023.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-research-identity-safe-live
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate installer and live baselines before write
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_company_research_focus_20261023.py
+          python3 scripts/zomorod_company_research_focus_20261023.py selftest
+          for route in / /about/ /company/ /research/ /contact/ /admin/login/; do
+            result="$(curl -sSL --max-time 25 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route")"
+            test "$result" = 200
+            echo "BASELINE_OK=$route"
+          done
+      - name: Prepare fingerprint-pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-about-science-evidence-relay"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "RELAY_PINNED=yes"
+      - name: Publish ONLY company and research pages with private backups
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-about-science-evidence-relay"
+          stage="/home/zomorod2/.zm-rd-focus-20261023-$GITHUB_RUN_ID"
+          backup="/home/zomorod2/.backups/zomorod-company-research-20261023/$GITHUB_RUN_ID"
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; test ! -e '$stage'; install -d -m 700 '$stage'"
+          ssh -T -F "$d/config" saeit-cpanel "cat > '$stage/installer.py'" < scripts/zomorod_company_research_focus_20261023.py
+          ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' selftest"
+          ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' publish --backup '$backup'"
+          echo "COMPANY_RESEARCH_PATCH_WRITTEN=yes"
+      - name: Verify public pages and rollback both if verification fails
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-about-science-evidence-relay"
+          stage="/home/zomorod2/.zm-rd-focus-20261023-$GITHUB_RUN_ID"
+          backup="/home/zomorod2/.backups/zomorod-company-research-20261023/$GITHUB_RUN_ID"
+          audit() {
+            curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "https://zomorodmelal.ir/company/?rd-focus=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/zm-company-public.html" || return 1
+            curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "https://zomorodmelal.ir/research/?rd-focus=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/zm-research-public.html" || return 1
+            grep -Fq 'id="zm-company-rd-focus-20261023"' "$RUNNER_TEMP/zm-company-public.html" || return 1
+            grep -Fq 'id="zm-research-rd-focus-20261023"' "$RUNNER_TEMP/zm-research-public.html" || return 1
+            grep -Fq '۹۰٪ فعالیت‌های شرکت' "$RUNNER_TEMP/zm-company-public.html" || return 1
+            grep -Fq '۹۰٪ فعالیت‌های شرکت' "$RUNNER_TEMP/zm-research-public.html" || return 1
+            grep -Fq '۱۰٪' "$RUNNER_TEMP/zm-company-public.html" || return 1
+            grep -Fq '۱۰٪' "$RUNNER_TEMP/zm-research-public.html" || return 1
+            grep -Fq 'zm-company-comprehensive' "$RUNNER_TEMP/zm-company-public.html" || return 1
+            grep -Fq 'zm-ten-editorial' "$RUNNER_TEMP/zm-research-public.html" || return 1
+            for route in / /about/ /company/ /research/ /contact/ /admin/login/; do
+              test "$(curl -sSL --max-time 25 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route")" = 200 || return 1
+            done
+          }
+          if audit; then
+            ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' verify --backup '$backup'"
+            echo "COMPANY_RESEARCH_IDENTITY_LIVE=verified"
+            echo "ONLY_COMPANY_AND_RESEARCH_INDEX_UPDATED=yes"
+          else
+            echo "PUBLIC_CHECK_FAILED_ATTEMPT_ROLLBACK=yes"
+            ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' rollback --backup '$backup'"
+            exit 1
+          fi
+      - name: Clear ephemeral runner SSH keys
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-about-science-evidence-relay"
+          test ! -f "$d/vps.key" || shred -u "$d/vps.key"
+          test ! -f "$d/host.key" || shred -u "$d/host.key"
