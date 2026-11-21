@@ -159,19 +159,53 @@ jobs:
               sleep "$((attempt * 3))"
             done
           }
-          ssh_retry_capture "$RUNNER_TEMP/mpw-qa-feedback.json" 60s -T -F "$d/config" saeit-cpanel \
-            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-feedback"
-          python3 - <<'PY'
-          import json,os
+          # A single receipt batch is capped at 50; advance through every
+          # deterministic page, including previously accepted idempotent rows.
+          # The entire scan fails closed if the private backlog exceeds 1600.
+          total=0
+          completed=0
+          for page in $(seq 0 31); do
+            ssh_retry_capture "$RUNNER_TEMP/mpw-qa-feedback.json" 60s -T -F "$d/config" saeit-cpanel \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-feedback-page-$page"
+            count="$(python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
           data=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-qa-feedback.json'))
           assert data.get('tenant')=='mojplaywin-main'
           assert data.get('schema')=='mpw.factory.return-to-stage1.v1'
           assert isinstance(data.get('returns'),list)
           assert len(data['returns']) <= 50
-          print('MPW_FACTORY_QA_RETURN_RECEIPTS='+str(len(data['returns'])))
+          fingerprint=data.get('snapshot_sha256')
+          assert isinstance(fingerprint,str) and re.fullmatch(r'[a-f0-9]{64}',fingerprint)
+          marker=Path(os.environ['RUNNER_TEMP'])/'mpw-qa-feedback.snapshot'
+          if marker.exists():
+              assert marker.read_text()==fingerprint, 'RETURN_SNAPSHOT_CHANGED_DURING_PAGING'
+          else:
+              marker.write_text(fingerprint)
+          print(len(data['returns']))
           PY
-          ssh_retry_stdin 75s "$RUNNER_TEMP/mpw-qa-feedback.json" -T -F "$d/config" saeit-vps \
-            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return"
+            )"
+            if [ "$count" -eq 0 ]; then completed=1; break; fi
+            ssh_retry_stdin 75s "$RUNNER_TEMP/mpw-qa-feedback.json" -T -F "$d/config" saeit-vps \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return"
+            total=$((total + count))
+            # The Python source rejects >1600 receipts. A full final page (31)
+            # therefore means exactly 1600, not an incomplete scan.
+            if [ "$count" -lt 50 ] || [ "$page" -eq 31 ]; then completed=1; break; fi
+          done
+          test "$completed" -eq 1 || { echo RETURN_PAGE_CAP_REACHED >&2; exit 1; }
+          # Re-read the first page to detect a backlog mutation after replay.
+          # A failed comparison is safe: VPS receipt intake is idempotent.
+          ssh_retry_capture "$RUNNER_TEMP/mpw-qa-feedback-final.json" 60s -T -F "$d/config" saeit-cpanel \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-feedback-page-0"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          final=json.loads((root/'mpw-qa-feedback-final.json').read_text())
+          assert final.get('snapshot_sha256')==(root/'mpw-qa-feedback.snapshot').read_text(), 'RETURN_SNAPSHOT_CHANGED_AFTER_PAGING'
+          PY
+          echo "MPW_FACTORY_QA_RETURN_RECEIPTS_REPLAYED=$total"
           echo 'MPW_FACTORY_STAGE1_RETURN_CHANNEL=PASS'
       - name: Prove old site work orders and classify actual specialist blockers before new intake
         shell: bash
@@ -337,7 +371,7 @@ jobs:
               assert v['tenant']=='mojplaywin-main' and v['stage']==1
               assert v['published'] is False
               rows.append(v)
-          assert len(rows)<=50
+          assert len(rows)<=1600
           state=b/'design-state/mojplaywin-stage1-qa-work/stage1-status.json'
           assert state.is_file() and not state.is_symlink()
           proof=json.loads(state.read_text())
@@ -354,5 +388,16 @@ jobs:
         shell: bash
         run: |
           rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
-          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" "$RUNNER_TEMP/mpw-qa-feedback.json" "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl" "$RUNNER_TEMP/mpw-three-product-orders.json" "$RUNNER_TEMP/mpw-real-source-order-triage.jsonl"
+          # Never retain page fingerprints, final readback or rescue/admission
+          # payloads in the runner after a failed or successful private relay.
+          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" \
+            "$RUNNER_TEMP/mpw-qa-feedback.json" \
+            "$RUNNER_TEMP/mpw-qa-feedback-final.json" \
+            "$RUNNER_TEMP/mpw-qa-feedback.snapshot" \
+            "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl" \
+            "$RUNNER_TEMP/mpw-three-product-orders.json" \
+            "$RUNNER_TEMP/mpw-three-product-orders-rescue.json" \
+            "$RUNNER_TEMP/mpw-original-admission.jsonl" \
+            "$RUNNER_TEMP/mpw-rescue-admission.jsonl" \
+            "$RUNNER_TEMP/mpw-real-source-order-triage.jsonl"
 # Reconnect 2026-10-20: owner-requested bounded private warehouse/site receipts and three-workorder check; public release unchanged.

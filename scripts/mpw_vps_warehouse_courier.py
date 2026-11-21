@@ -606,11 +606,17 @@ def import_site(batch, root=DEST):
     return report
 
 
-def feedback_site(root=DEST):
+def feedback_site(root=DEST, page=0):
+    """Stable, bounded private receipt pages; every entry is validated on every scan."""
+    require(type(page) is int and 0 <= page < 32, "RETURN_PAGE_INVALID")
     root = target_root(root)
     folder = root/"returns"
     private_new(folder)
     rows = []
+    count = 0
+    # Hash the complete validated receipt set, not just the selected page.
+    # The caller must reject pages from different snapshots before replay.
+    snapshot = hashlib.sha256()
     for product in sorted(folder.iterdir()):
         require(product.is_dir() and not product.is_symlink()
                 and RECIPE.fullmatch(product.name), "RETURN_DIRECTORY_INVALID")
@@ -621,9 +627,18 @@ def feedback_site(root=DEST):
             require(value.get("tenant")==TENANT and value.get("schema")==RETURN_SCHEMA
                     and value.get("product_id")==product.name
                     and value.get("source_sha256")==item.stem, "RETURN_IDENTITY_INVALID")
-            rows.append(value)
-            require(len(rows)<=MAX_ITEMS,"RETURN_COUNT_LIMIT")
-    return json_blob({"schema":RETURN_SCHEMA,"tenant":TENANT,"returns":rows})
+            snapshot.update(json_blob({
+                "product_id": product.name,
+                "source_sha256": item.stem,
+                "receipt_sha256": digest(json_blob(value)),
+            }))
+            snapshot.update(b"\n")
+            if page * MAX_ITEMS <= count < (page + 1) * MAX_ITEMS:
+                rows.append(value)
+            count += 1
+            require(count <= MAX_ITEMS * 32, "RETURN_BACKLOG_REQUIRES_REVIEW")
+    return json_blob({"schema":RETURN_SCHEMA,"tenant":TENANT,
+                      "snapshot_sha256":snapshot.hexdigest(),"returns":rows})
 
 
 def receive_factory_returns(raw, root=VPS):
@@ -751,7 +766,7 @@ def triage_factory_stage1(root=VPS):
             else:
                 atomic(result,json_blob(details))
             items.append(details)
-            require(len(items)<=MAX_ITEMS,"STAGE1_QUEUE_CAPACITY")
+            require(len(items)<=MAX_ITEMS * 32,"STAGE1_QUEUE_CAPACITY")
         state = {"schema":RETURN_SCHEMA,"tenant":TENANT,
                  "actual_site_returns_accepted":len(items),
                  "factory_stage1_work_items":len(items),
@@ -814,7 +829,7 @@ def three_site_product_requests(root=DEST,cycle=None,*,require_fresh=False):
                     and qa.get("payment_enabled") is False,
                     "THREE_ORDERS_SITE_SOURCE_MISMATCH")
             candidates.append((product.name,version,meta["artifact_sha256"]))
-            require(len(candidates)<=MAX_ITEMS,"THREE_ORDERS_SITE_INDEX_FULL")
+            require(len(candidates)<=MAX_ITEMS * 32,"THREE_ORDERS_SITE_INDEX_FULL")
     require(len(candidates)>=3,"THREE_ORDERS_NOT_ENOUGH_VERIFIED_SITE_PRODUCTS")
     # Use distinct site-verified product versions before replaying older work.
     # Past batches are immutable: they are NOT removed, replaced or marked done.
@@ -1221,6 +1236,10 @@ def main():
         print("MPW_COURIER_SITE_INGEST=PASS", file=sys.stderr)
     elif mode=="site-feedback":
         sys.stdout.buffer.write(feedback_site())
+    elif mode.startswith("site-feedback-page-"):
+        match = re.fullmatch(r"site-feedback-page-(0|[1-9]|[12][0-9]|3[01])", mode)
+        require(match is not None, "RETURN_PAGE_INVALID")
+        sys.stdout.buffer.write(feedback_site(page=int(match.group(1))))
     elif mode=="vps-return":
         report=receive_factory_returns(sys.stdin.buffer.read(1_000_001))
         print("MPW_COURIER_FACTORY_STAGE1="+json.dumps(report,sort_keys=True))

@@ -114,6 +114,97 @@ class VPSWarehouseCourierTests(unittest.TestCase):
         entries=list((self.factory/"design-intake/mojplaywin-stage1-quality-returns").iterdir())
         self.assertEqual(len(entries),1)
 
+    def test_52_receipts_are_delivered_in_bounded_pages_with_idempotent_retry(self):
+        archive=export_factory(self.factory)
+        import_site(archive,self.site)
+        folder=self.site/"returns"/self.product
+        template=json.loads((folder/(self.version+".json")).read_text())
+        for index in range(1,52):
+            version=f"{index:064x}"
+            row=dict(template,source_sha256=version)
+            (folder/(version+".json")).write_text(json.dumps(row))
+            stock=self.factory/"production-warehouse/finished"/self.product/version
+            stock.mkdir(parents=True,mode=0o700)
+            manifest=dict(self.manifest,source_sha256=version)
+            (stock/"warehouse_manifest.json").write_text(json.dumps(manifest))
+            (stock/"product.zip").write_bytes(self.zip)
+        pages=[feedback_site(self.site,page=p) for p in range(2)]
+        identities=[(r["product_id"],r["source_sha256"])
+                    for payload in pages for r in json.loads(payload)["returns"]]
+        self.assertEqual(len(identities),52)
+        self.assertEqual(len(set(identities)),52)
+        self.assertEqual([len(json.loads(p)["returns"]) for p in pages],[50,2])
+        self.assertEqual(json.loads(feedback_site(self.site,page=2))["returns"],[])
+        self.assertEqual(sum(receive_factory_returns(p,self.factory)["accepted_stage1_qa_returns"]
+                             for p in pages),52)
+        self.assertEqual(sum(receive_factory_returns(p,self.factory)["previously_queued"]
+                             for p in pages),52)
+        state=triage_factory_stage1(self.factory)
+        self.assertEqual(state["factory_stage1_work_items"],52)
+        self.assertFalse(state["commercial_approval_claimed"])
+        with self.assertRaisesRegex(RuntimeError,"RETURN_PAGE_INVALID"):
+            feedback_site(self.site,page=32)
+
+    def test_earlier_page_rejects_corrupt_receipt_hidden_on_later_page(self):
+        """No page can be replayed if an off-page receipt is invalid."""
+        archive=export_factory(self.factory)
+        import_site(archive,self.site)
+        folder=self.site/"returns"/self.product
+        original=folder/(self.version+".json")
+        template=json.loads(original.read_text())
+        # The 50 numeric SHA names sort before the original 'a'*64 name.
+        # Thus the corrupted original sits on page 1, not page 0.
+        for index in range(1,51):
+            version=f"{index:064x}"
+            row=dict(template,source_sha256=version)
+            (folder/(version+".json")).write_text(json.dumps(row))
+        bad=dict(template,tenant="not-mojplaywin-main")
+        original.write_text(json.dumps(bad))
+        with self.assertRaisesRegex(RuntimeError,"RETURN_IDENTITY_INVALID"):
+            feedback_site(self.site,page=0)
+        self.assertFalse(
+            (self.factory/"design-intake/mojplaywin-stage1-quality-returns").exists()
+        )
+
+    def test_page_snapshot_fingerprint_detects_new_receipts_and_content_changes(self):
+        archive=export_factory(self.factory)
+        import_site(archive,self.site)
+        first=json.loads(feedback_site(self.site,page=0))
+        second=json.loads(feedback_site(self.site,page=1))
+        self.assertRegex(first["snapshot_sha256"],r"^[a-f0-9]{64}$")
+        self.assertEqual(first["snapshot_sha256"],second["snapshot_sha256"])
+        self.assertEqual(second["returns"],[])
+        folder=self.site/"returns"/self.product
+        original=folder/(self.version+".json")
+        row=json.loads(original.read_text())
+        row["issues"]=list(row["issues"])+["ADDITIONAL_REVIEW_REQUIRED"]
+        original.write_text(json.dumps(row))
+        changed=json.loads(feedback_site(self.site,page=0))
+        self.assertNotEqual(first["snapshot_sha256"],changed["snapshot_sha256"])
+        another="b"*64
+        row=dict(row,source_sha256=another)
+        (folder/(another+".json")).write_text(json.dumps(row))
+        extended=json.loads(feedback_site(self.site,page=0))
+        self.assertNotEqual(changed["snapshot_sha256"],extended["snapshot_sha256"])
+        self.assertEqual(len(extended["returns"]),2)
+
+    def test_exact_1600_receipts_fills_last_page_and_1601_fails_closed(self):
+        archive=export_factory(self.factory)
+        import_site(archive,self.site)
+        folder=self.site/"returns"/self.product
+        template=json.loads((folder/(self.version+".json")).read_text())
+        for index in range(1,1600):
+            version=f"{index:064x}"
+            row=dict(template,source_sha256=version)
+            (folder/(version+".json")).write_text(json.dumps(row))
+        last=json.loads(feedback_site(self.site,page=31))
+        self.assertEqual(len(last["returns"]),50)
+        self.assertEqual(len(json.loads(feedback_site(self.site,page=0))["returns"]),50)
+        extra=dict(template,source_sha256="f"*64)
+        (folder/("f"*64+".json")).write_text(json.dumps(extra))
+        with self.assertRaisesRegex(RuntimeError,"RETURN_BACKLOG_REQUIRES_REVIEW"):
+            feedback_site(self.site,page=31)
+
     def test_factory_authorization_never_inferred_from_technical_qa(self):
         self.manifest["commercial_release"]=True
         (self.stock/"warehouse_manifest.json").write_text(json.dumps(self.manifest))
@@ -145,6 +236,24 @@ class VPSWarehouseCourierTests(unittest.TestCase):
         import_site(batch,self.site)
         for candidate in ("public_html","products","store","checkout"):
             self.assertFalse((self.site/candidate).exists())
+
+    def test_private_paging_and_rescue_spool_is_erased_on_every_run(self):
+        """No QA fingerprints or private return/order bytes survive runner cleanup."""
+        workflow=(Path(__file__).resolve().parents[1]/
+                  ".github/workflows/mpw-vps-warehouse-courier.yml").read_text()
+        cleanup=workflow.split(
+            "      - name: Erase SSH credentials and all transferred product bytes", 1)
+        self.assertEqual(len(cleanup), 2)
+        self.assertIn("if: always()", cleanup[1])
+        self.assertIn("rm -rf --", cleanup[1])
+        for private_name in (
+            "mpw-factory-stock.tgz", "mpw-qa-feedback.json",
+            "mpw-qa-feedback-final.json", "mpw-qa-feedback.snapshot",
+            "mpw-factory-stage1-triage.jsonl", "mpw-three-product-orders.json",
+            "mpw-three-product-orders-rescue.json", "mpw-original-admission.jsonl",
+            "mpw-rescue-admission.jsonl", "mpw-real-source-order-triage.jsonl",
+        ):
+            self.assertIn('"$RUNNER_TEMP/'+private_name+'"', cleanup[1])
 
     def test_zip_bomb_or_path_traversal_rejected(self):
         x=io.BytesIO()
