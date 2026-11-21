@@ -1,0 +1,34 @@
+name: Factory F01 pinned restore admission offline CI
+on:
+  pull_request:
+    paths:
+      - 'scripts/f01_tar_restore_admission_readonly.py'
+      - 'tests/test_factory_f01_tar_restore_admission_readonly.py'
+      - 'docs/factory_f01_restore_admission_20261117.md'
+      - '.github/workflows/factory-f01-restore-admission-offline-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-f01-admission-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: false
+jobs:
+  safe-offline-31-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify pinned source and test bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/f01_tar_restore_admission_readonly.py
+          test ! -L tests/test_factory_f01_tar_restore_admission_readonly.py
+          test "$(sha256sum scripts/f01_tar_restore_admission_readonly.py | cut -d ' ' -f1)" = 'b561c80e2704ecc51a775cf38df1371e87f7ae04e273166009b3164e18bba876'
+          test "$(sha256sum tests/test_factory_f01_tar_restore_admission_readonly.py | cut -d ' ' -f1)" = '8d838c2b92f6ea3fac75798ff6b0f045da5c6bfe1b934dc605c4a710fac19f71'
+      - name: Verify 31 fail-closed synthetic cases (NO SECRETS / NO RESTORE)
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 -B -m unittest -q tests.test_factory_f01_tar_restore_admission_readonly
