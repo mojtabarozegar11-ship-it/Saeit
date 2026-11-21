@@ -147,6 +147,23 @@ def install(root,catalog_path):
             if not HASH_PATTERN.fullmatch(str(item.get("fingerprint",""))):
                 raise ValueError("P0_BAD_EXISTING_FINGERPRINT")
             old.append(item)
+        # An existing index is an immutable historical identity boundary.
+        # After an authorized cleanup, never silently recreate deleted orders
+        # with fresh WO IDs or overwrite the old owner index.
+        index_path=area/"owner-agri200-p0-index.json"
+        historical_ids=None
+        if index_path.exists() or index_path.is_symlink():
+            prior=read(index_path)
+            historical_ids=prior.get("order_ids_ranked")
+            if (prior.get("schema")!=INDEX_SCHEMA or
+                    not isinstance(historical_ids,list) or len(historical_ids)!=200 or
+                    any(not isinstance(i,str) or not ORDER_PATTERN.fullmatch(i+".json")
+                        for i in historical_ids) or len(set(historical_ids))!=200):
+                raise ValueError("P0_HISTORICAL_INDEX_INVALID")
+            for ident in historical_ids:
+                path=queue/(ident+".json")
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError("P0_HISTORICAL_ORDER_MISSING_RECONCILE_NOT_RECREATE")
         if len(old)+200>15000:raise ValueError("P0_ORDER_STORAGE_CAP")
         current={}
         for item in old:
@@ -154,6 +171,10 @@ def install(root,catalog_path):
             ident=item.get("source_product_id")
             if ident in current:raise ValueError("P0_DUPLICATE_PRIOR")
             current[ident]=item
+        if historical_ids is not None:
+            ranked_existing=[current.get(ident,{}).get("id") for ident,_,_ in rows]
+            if ranked_existing!=historical_ids:
+                raise ValueError("P0_HISTORICAL_INDEX_ORDER_DRIFT")
         expected={ident:make_order(ident,fa,en,rank) for rank,(ident,fa,en) in enumerate(rows,1)}
         for ident,item in current.items():
             if ident not in expected:raise ValueError("P0_UNEXPECTED_OLD_TOPIC")
