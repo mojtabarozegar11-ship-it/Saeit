@@ -114,6 +114,50 @@ class VPSWarehouseCourierTests(unittest.TestCase):
         entries=list((self.factory/"design-intake/mojplaywin-stage1-quality-returns").iterdir())
         self.assertEqual(len(entries),1)
 
+    def test_more_than_fifty_returns_are_paged_and_triaged_without_loss(self):
+        # The old courier failed permanently at receipt 51, even on retries.
+        returns=self.site/"returns"
+        returns.mkdir(mode=0o700)
+        for i in range(55):
+            product=f"farm_{i:03d}"
+            version=f"{i+1:064x}"
+            stock=self.factory/"production-warehouse/finished"/product/version
+            stock.mkdir(parents=True,mode=0o700)
+            manifest=dict(self.manifest,product_id=product,source_sha256=version)
+            (stock/"warehouse_manifest.json").write_text(json.dumps(manifest))
+            (stock/"product.zip").write_bytes(self.zip)
+            folder=returns/product
+            folder.mkdir(mode=0o700)
+            receipt={"schema":"mpw.factory.return-to-stage1.v1","tenant":TENANT,
+                     "product_id":product,"source_sha256":version,
+                     "artifact_sha256":manifest["artifact_sha256"],
+                     "stage":1,"status":"return_for_qa_completion",
+                     "issues":list(ISSUES),"published":False,
+                     "factory_original_must_be_preserved":True}
+            (folder/(version+".json")).write_text(json.dumps(receipt))
+        first=json.loads(feedback_site(self.site))
+        self.assertEqual(len(first["returns"]),50)
+        self.assertIsNotNone(first["next_after"])
+        second=json.loads(feedback_site(self.site,after=first["next_after"]))
+        self.assertEqual(len(second["returns"]),5)
+        self.assertIsNone(second["next_after"])
+        self.assertEqual(receive_factory_returns(json.dumps(first).encode(),self.factory)
+                         ["accepted_stage1_qa_returns"],50)
+        self.assertEqual(receive_factory_returns(json.dumps(second).encode(),self.factory)
+                         ["accepted_stage1_qa_returns"],5)
+        phase1=triage_factory_stage1(self.factory)
+        self.assertEqual(phase1["new_stage1_work_items_this_run"],50)
+        self.assertEqual(phase1["pending_untriaged"],5)
+        phase2=triage_factory_stage1(self.factory)
+        self.assertEqual(phase2["factory_stage1_work_items"],55)
+        self.assertEqual(phase2["pending_untriaged"],0)
+        self.assertEqual(phase2["new_stage1_work_items_this_run"],5)
+        self.assertEqual(len(list((self.factory/"design-intake/mojplaywin-stage1-quality-returns").glob("*.json"))),55)
+        self.assertEqual(receive_factory_returns(json.dumps(first).encode(),self.factory)
+                         ["previously_queued"],50)
+        with self.assertRaisesRegex(RuntimeError,"RETURN_CURSOR_INVALID"):
+            feedback_site(self.site,after="../invalid")
+
     def test_factory_authorization_never_inferred_from_technical_qa(self):
         self.manifest["commercial_release"]=True
         (self.stock/"warehouse_manifest.json").write_text(json.dumps(self.manifest))

@@ -1,0 +1,24 @@
+name: Factory QA return paging regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/mpw_vps_warehouse_courier.py'
+      - 'tests/test_mpw_vps_warehouse_courier.py'
+      - '.github/workflows/mpw-vps-warehouse-courier.yml'
+      - '.github/workflows/factory-qa-return-paging-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile the private courier
+        run: python3 -B -m py_compile scripts/mpw_vps_warehouse_courier.py
+      - name: Verify 55-receipt paging, Stage-1 continuation and existing safety contracts
+        run: python3 -B -m unittest tests.test_mpw_vps_warehouse_courier -v
