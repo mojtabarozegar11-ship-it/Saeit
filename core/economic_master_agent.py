@@ -5,9 +5,10 @@ verified revenue. Research is supporting work, not the terminal output.
 Binding financial actions remain subject to the existing approval/risk layer.
 """
 from .self_funding_policy import authorize_operating_expense
+from .unified_bot_identity import BOT_CODE, BOT_NAME
 
-AGENT_CODE = "economic-master-agent"
-AGENT_TITLE = "Economic Master Agent"
+AGENT_CODE = BOT_CODE
+AGENT_TITLE = BOT_NAME
 
 MISSION = (
     "self_improvement_from_verified_failures",
@@ -130,7 +131,7 @@ class EconomicMasterAgent:
 
     def system_architecture(self):
         return {
-            "orchestrator": "Economic Master Agent",
+            "orchestrator": BOT_NAME,
             "objective": self.next_objective_contract(),
             "pipeline": [
                 "ASSESS_PROJECT",

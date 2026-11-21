@@ -43,11 +43,11 @@ def test_private_queue_builds_all_four_with_real_master_and_audits(private_f41):
     call_command("factory_f41_enqueue", dry_run=True, verbosity=0)
     assert not AgentTask.objects.filter(action_type=ACTION).exists()
     call_command("factory_f41_enqueue", execute=True, verbosity=0)
-    master = Agent.objects.get(code="moj_1ro_1", active=True)
-    economic = Agent.objects.get(code="economic-master-agent", active=True)
-    assert set(master.capabilities.values_list("code", flat=True)) == {
-        "factory_native_review", ACTION}
-    assert not economic.capabilities.filter(code=ACTION).exists()
+    master = Agent.objects.get(code="mojtaba-bot-ai", active=True)
+    assert {"factory_native_review", ACTION, "income_market_research"}.issubset(
+        set(master.capabilities.values_list("code", flat=True))
+    )
+    assert not Agent.objects.filter(code__in=("economic-master-agent", "moj_1ro_1"), active=True).exists()
     tasks = list(AgentTask.objects.filter(agent=master, action_type=ACTION))
     assert len(tasks) == 4
     assert {x.output_data["kind"] for x in tasks} == set(KINDS)
@@ -111,7 +111,7 @@ def test_all_nineteen_prototypes_are_audited_real_master_tasks(private_f41):
     call_command("factory_f41_enqueue", dry_run=True, verbosity=0)
     assert AgentTask.objects.filter(action_type=ACTION).count() == 0
     call_command("factory_f41_enqueue", execute=True, verbosity=0)
-    master = Agent.objects.get(code="moj_1ro_1", active=True)
+    master = Agent.objects.get(code="mojtaba-bot-ai", active=True)
     tasks = list(AgentTask.objects.filter(agent=master, action_type=ACTION))
     assert len(tasks) == len(all_kinds) == 19
     assert {x.output_data["kind"] for x in tasks} == set(all_kinds)

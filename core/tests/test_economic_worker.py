@@ -47,7 +47,7 @@ def test_cycle_advances_from_self_improvement_to_verified_market_research(monkey
 @pytest.mark.parametrize("drain,expected", [(False, 1), (True, 20)])
 def test_economic_worker_bounded_drain_never_repeats_a_task(drain, expected):
     agent, _ = Agent.objects.update_or_create(
-        code="economic-master-agent",
+        code="mojtaba-bot-ai",
         defaults={"name": "Master", "mission": "Verified economic actions", "active": True},
     )
     tasks = AgentTask.objects.bulk_create([
@@ -138,7 +138,7 @@ def test_all_economic_worker_entry_points_enforce_bounded_execution(command, kwa
 @pytest.mark.django_db
 def test_legacy_worker_is_a_single_controlled_dispatcher_and_requires_active_agent():
     agent = Agent.objects.create(
-        code="economic-master-agent", name="Master", mission="Economic tasks", active=False
+        code="mojtaba-bot-ai", name="Master", mission="Economic tasks", active=False
     )
     tasks = AgentTask.objects.bulk_create([
         AgentTask(agent=agent, action_type="income_market_research",
@@ -177,7 +177,7 @@ def test_legacy_worker_is_a_single_controlled_dispatcher_and_requires_active_age
 @pytest.mark.django_db
 def test_worker_skips_unregistered_income_tool_without_consuming_attempts():
     agent = Agent.objects.create(
-        code="economic-master-agent", name="Master", mission="Bounded work", active=True,
+        code="mojtaba-bot-ai", name="Master", mission="Bounded work", active=True,
     )
     unsupported = AgentTask.objects.create(
         agent=agent, action_type="income_unregistered_external_post",
@@ -213,7 +213,7 @@ def test_worker_skips_unregistered_income_tool_without_consuming_attempts():
 @pytest.mark.django_db
 def test_worker_reports_unknown_only_queue_without_executing():
     agent = Agent.objects.create(
-        code="economic-master-agent", name="Master", mission="Bounded work", active=True,
+        code="mojtaba-bot-ai", name="Master", mission="Bounded work", active=True,
     )
     unsupported = AgentTask.objects.create(
         agent=agent, action_type="income_missing_tool", capability_code="income_missing_tool",

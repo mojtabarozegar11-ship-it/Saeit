@@ -27,6 +27,7 @@ class Command(BaseCommand):
             "scanned": summary.scanned,
             "recovered": summary.recovered,
             "failed": summary.failed,
+            "blocked": summary.blocked,
             "skipped": summary.skipped,
             "errors": summary.errors,
         }

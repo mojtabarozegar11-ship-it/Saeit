@@ -16,6 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.models import Agent, AgentTask, AuditLog
+from core.unified_bot_identity import BOT_CODE
 
 
 LEGACY_AGENT_CODES = frozenset({
@@ -36,6 +37,7 @@ LEGACY_SUCCESSORS = {
 }
 REVIEW_ONLY_PREFIXES = ("income-",)
 PROTECTED_AGENT_CODES = frozenset({
+    BOT_CODE,
     "economic-master-agent",
     "moj_1ro_1",
     "content-director",

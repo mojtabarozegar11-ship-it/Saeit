@@ -52,7 +52,7 @@ def execute_one_authorized_outbox(*, grant_id):
     sent = send_queued_trade_email(candidate.pk)
     AuditLog.objects.create(
         actor_type="economic-agent",
-        actor_id="economic-master-agent",
+        actor_id="mojtaba-bot-ai",
         action="external_trade_email_sent",
         target_type="TradeEmailOutbox",
         target_id=str(sent.pk),
