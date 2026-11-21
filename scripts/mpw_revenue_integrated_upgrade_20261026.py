@@ -65,7 +65,7 @@ def archive_docs():
                     '<script defer src="/mpw-editorial/revenue/assets/tools-v1.js"></script>'
                     '<noscript><p>Enable JavaScript for the browser tool. Secure inquiries remain available without JavaScript.</p></noscript>'
                     '<p><a href="/mpw-editorial/revenue/inquiry.php?service='+slug+'">Send a scoped service request</a> · '
-                    '<a href="mailto:support@mojplaywin.com?subject=MojPlayWin%20'+slug+'%20service%20enquiry">Email fallback</a>. Never send credentials.</p>'
+                    '<a href="mailto:mojplaywin@gmail.com?subject=MojPlayWin%20'+slug+'%20service%20enquiry">Email fallback</a>. Never send credentials.</p>'
                     '</section>'
                 ).encode()
                 data=data.replace(b"</head>",stylesheet+b"</head>",1).replace(b"</main>",section+b"</main>",1)

@@ -71,14 +71,14 @@ def publish(run):
                     '<div id="mpw-functional-tool" data-tool="'+slug+'"></div>'
                     '<script defer src="/mpw-editorial/revenue/assets/tools-v1.js"></script>'
                     '<noscript><p>Enable JavaScript to use the free tool. You can still request a service quotation.</p></noscript>'
-                    '<p><a href="mailto:support@mojplaywin.com?subject=MojPlayWin%20'+slug+'%20service%20enquiry">Request a tailored quote by email</a>. State your website or project objective, deliverables and deadline; never email credentials.</p>'
+                    '<p><a href="mailto:mojplaywin@gmail.com?subject=MojPlayWin%20'+slug+'%20service%20enquiry">Request a tailored quote by email</a>. State your website or project objective, deliverables and deadline; never email credentials.</p>'
                     '</section>'
                 ).encode("utf-8")
                 payload=payload.replace(b"</head>",stylesheet+b"</head>",1).replace(b"</main>",section+b"</main>",1)
                 if payload.count(b'id="mpw-functional-tool"')!=1:fail("Tool injection failed")
             if name=="earn/index.html":
                 if payload.count(b'<section id="offers">')!=1:fail("Hub structure changed")
-                note=b'<section aria-label="Tool availability"><h2>12 working free browser utilities</h2><p>Free tools create draft outputs in your own browser. Bespoke commercial services require a written scope and quotation; no payment is collected on these pages.</p><p><a href="mailto:support@mojplaywin.com?subject=MojPlayWin%20business%20quote">Request a business quotation</a></p></section>'
+                note=b'<section aria-label="Tool availability"><h2>12 working free browser utilities</h2><p>Free tools create draft outputs in your own browser. Bespoke commercial services require a written scope and quotation; no payment is collected on these pages.</p><p><a href="mailto:mojplaywin@gmail.com?subject=MojPlayWin%20business%20quote">Request a business quotation</a></p></section>'
                 payload=payload.replace(b'<section id="offers">',note+b'<section id="offers">',1)
             docs[name]=payload
     except (tarfile.TarError, OSError, UnicodeError) as exc:fail("Invalid archive: "+type(exc).__name__)
