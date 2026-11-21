@@ -52,5 +52,15 @@ class EnglishFreeTermsSourceParityTests(unittest.TestCase):
                 self.assertIn("mojplaywin.com/moj-prop/", txt)
 
 
+    def test_english_home_primary_free_terms_cta_matches_public_release(self):
+        page = ROOT / "templates/moj-prop-v4/index.html"
+        text = page.read_text(encoding="utf-8")
+        self.assertIn("Request written terms — free", text)
+        self.assertIn("listed entry fee 30 TRX", text)
+        self.assertIn("real company-funded reward-settlement controls", text)
+        self.assertIn(FREE, text)
+        self.assertNotIn('>Open secure 30 TRX checkout</a>', text)
+
+
 if __name__ == "__main__":
     unittest.main()
