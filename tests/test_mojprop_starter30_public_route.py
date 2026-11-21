@@ -14,7 +14,8 @@ class MojPropStarter30PublicRouteTests(SimpleTestCase):
     def test_starter30_route_does_not_expose_a_payment_form(self):
         response = self.client.get("/moj-prop/starter-30-trx/")
         self.assertNotContains(response, "payment-form")
-        self.assertNotContains(response, "<form")
-        self.assertNotContains(response, "wallet address")
-        self.assertNotContains(response, "type=\"submit\"")
+        self.assertContains(response, '<form action="/mojprop-starter30-status/" method="get"')
+        self.assertNotContains(response, 'method="post"')
+        self.assertNotContains(response, 'name="payer_address"')
+        self.assertNotContains(response, 'name="txid"')
         self.assertContains(response, 'href="/mojprop-starter30-checkout/"')
