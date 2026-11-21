@@ -83,6 +83,7 @@ class OwnerApprovedSimulationV2Tests(unittest.TestCase):
         self.assertIn("payment.invoice_owner.contract_version != TERMS_REF", source)
         self.assertIn("payment.terms_acceptance_ref != TERMS_REF", source)
         self.assertIn("previous.invoice_owner.contract_version != TERMS_REF", source)
+        self.assertIn("if policy_drift_defects():", source)
 
     def test_new_customer_receives_all_verified_qualifying_profit(self):
         result = calculate_payout(
