@@ -1,10 +1,5 @@
 name: MojPlayWin all private agents actual live audit
 on:
-  push:
-    branches: [main]
-    paths: [.github/workflows/mpw-all-agents-private-activation.yml]
-  schedule:
-    - cron: "37 2,14 * * *"
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   audit:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 7
     steps:
