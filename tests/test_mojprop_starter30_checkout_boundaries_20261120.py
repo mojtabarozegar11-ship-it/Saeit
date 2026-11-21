@@ -37,7 +37,7 @@ class Starter30CheckoutBoundaryTests(SimpleTestCase):
             self.assertContains(response, "Email a one-time verification code")
             self.assertNotContains(response, "Create 30 TRX invoice")
             self.assertContains(response, "30 TRX")
-            self.assertContains(response, "simulated trading")
+            self.assertContains(response, "simulated challenge")
             self.assertContains(response, "after verification under the published payout rules")
             self.assertContains(response, "Send only after this server issues your unique invoice")
             self.assertContains(response, "csrfmiddlewaretoken")
