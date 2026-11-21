@@ -170,11 +170,14 @@ def _stage_bytes(run_id: str) -> dict[str, bytes]:
         out[item] = _read_reviewed_stage_file(stage, item)
     page = out["index.html"].decode("utf-8")
     if (not all(mark in page for mark in (
-            "MOJPROP-STARTER30", "Checkout available · 30 TRX",
-            "server-issued 30 TRX invoice", "never send to another address",
+            "MOJPROP-STARTER30", "payment admission under independent verification",
+            "Request free written Starter30 terms", "never send TRX to an unverified address",
             "100% of every profit earned", "No real funded account",
             '<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>'))
             or 'index,follow' not in page
+            or 'href="/mojprop-starter30-checkout/"' in page
+            or "Checkout available · 30 TRX" in page
+            or '/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx' not in page
             or b"session,closing_equity_usd,risk_plan_recorded,reflection_recorded" not in out["journal-template.csv"]
             or b"utm_source" not in out["checkout-attribution.js"]
             or b"utm_content" not in out["checkout-attribution.js"]
