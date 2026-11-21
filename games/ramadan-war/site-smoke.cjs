@@ -162,6 +162,22 @@ const assert=require('node:assert/strict');
    assert((await page.locator('#pause').getAttribute('aria-label'))?.length>=3,'pause needs a screen-reader name');
    if(localCandidate)await page.evaluate(()=>{for(let i=0;i<40;i++)window.RamadanWarDebug.tick(.04)});
    else await page.waitForTimeout(1200);
+   // A desktop mouse drag aims without firing; a stationary primary click fires once.
+   if(localCandidate&&!v.mobile){
+     const box=await page.locator('#view').boundingBox();
+     assert(box&&box.width>200,'3D canvas must be visible');
+     const cx=box.x+box.width/2,cy=box.y+box.height/2;
+     const before=await page.evaluate(()=>window.RamadanWarDebug.getState().shots);
+     await page.mouse.move(cx,cy);
+     await page.mouse.down();
+     await page.mouse.move(cx+90,cy+20,{steps:8});
+     await page.mouse.up();
+     assert.equal(await page.evaluate(()=>window.RamadanWarDebug.getState().shots),before,'mouse aim drag must not spend ammo');
+     await page.mouse.click(cx,cy);
+     await page.waitForFunction(n=>window.RamadanWarDebug.getState().shots===n+1,before,{timeout:5000});
+     await page.evaluate(()=>{for(let i=0;i<15;i++)window.RamadanWarDebug.tick(.04)});
+     console.log('RAMADAN_MOUSE_AIM_NO_FIRE_AND_CLICK_FIRE_PASS',v.name);
+   }
    const shotsBefore=await page.evaluate(()=>window.RamadanWarDebug.getState().shots);
    await page.locator('#fire').click();
    await page.waitForFunction(n=>window.RamadanWarDebug.getState().shots>n,shotsBefore,{timeout:5000});
@@ -214,5 +230,24 @@ const assert=require('node:assert/strict');
    assert.equal(errors.length,0,errors.join('\n'));
    await context.close();console.log('RAMADAN_WEB_'+v.name.toUpperCase()+'_PASS native_campaign=6 heroes=30 lives=100 weapons=rocket+drone save=resume pickups=collectible-ammo');
   }
+  // Real 1024px touch viewport: the old width-only canvas click handler
+  // consumed ammo on a finger tap even though the finger was aiming.
+  const tablet=await browser.newContext({viewport:{width:1024,height:768},isMobile:true,hasTouch:true});
+  try{
+    const page=await tablet.newPage(),errors=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    await page.goto(process.env.GAME_URL,{waitUntil:'domcontentloaded',timeout:45000});
+    await page.waitForFunction(()=>window.RamadanWarDebug&&window.RamadanWarDebug.start,null,{timeout:15000});
+    await page.evaluate(()=>window.RamadanWarDebug.start());
+    await page.locator('#hud:not(.hidden)').waitFor();
+    const box=await page.locator('#view').boundingBox();
+    assert(box&&box.width>700,'tablet canvas must be wide enough to reproduce prior defect');
+    const before=await page.evaluate(()=>window.RamadanWarDebug.getState().shots);
+    await page.touchscreen.tap(box.x+box.width/2,box.y+box.height/2);
+    await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(()=>window.RamadanWarDebug.getState().shots),before,'tablet touch aim must not fire');
+    assert.equal(errors.length,0,errors.join('\n'));
+    console.log('RAMADAN_TABLET_TOUCH_AIM_NO_FIRE_PASS');
+  }finally{await tablet.close()}
  }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exit(1)});
