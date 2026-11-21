@@ -48,7 +48,7 @@ def _text(payload, key: str, limit: int) -> str:
 MAX_BODY_BYTES = 16 * 1024
 ALLOWED_FIELDS = frozenset((
     "name", "email", "service", "horizon", "notes", "consent", "website", "product_id",
-    "idempotency_key",
+    "idempotency_key", "utm_source", "utm_medium", "utm_campaign", "utm_content",
 ))
 # Only listed products may create an unpaid digital inquiry, never an invoice.
 CATALOG_INQUIRY_PRODUCTS = frozenset((72, 225, 879))
@@ -269,7 +269,8 @@ def _mojprop_intake_api(request):
 
     # Type-check JSON values; Python stringification must not turn arrays,
     # objects or integers into fabricated buyer names/addresses.
-    for field in ("name", "email", "service", "horizon", "notes", "website", "idempotency_key"):
+    for field in ("name", "email", "service", "horizon", "notes", "website", "idempotency_key",
+                  "utm_source", "utm_medium", "utm_campaign", "utm_content"):
         if field in payload and not isinstance(payload[field], str):
             return _json({"ok": False, "detail": "Invalid field types."}, status=400)
     product_id = payload.get("product_id")
@@ -291,7 +292,8 @@ def _mojprop_intake_api(request):
     # or create a quote for a materially different scope than the buyer sent.
     limits = {"name": 200, "email": 254, "service": 30,
               "horizon": 20, "notes": 5000, "website": 120,
-              "idempotency_key": 36}
+              "idempotency_key": 36, "utm_source": 40, "utm_medium": 40,
+              "utm_campaign": 80, "utm_content": 80}
     oversized = {key: "Field exceeds maximum length."
                  for key, maximum in limits.items()
                  if len(payload.get(key, "")) > maximum}
@@ -425,6 +427,11 @@ def _mojprop_intake_api(request):
     if request_obj is None:
         return _json({"ok": False, "detail": "Could not allocate a request ID. Please retry."}, status=503)
 
+    try:
+        from .commerce_funnel import record_funnel_event
+        record_funnel_event(request, "lead_submit")
+    except Exception:
+        pass
     return _intake_success(request_obj, reused=False)
 
 @csrf_protect
