@@ -31,6 +31,8 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         self.payment.issued_at = self.now - timedelta(days=1)
         self.payment.txid = ""
         self.payment.recipient = self.receiver
+        self.payment.invoice_owner.contract_version = m.TERMS_REF
+        self.payment.terms_acceptance_ref = m.TERMS_REF
         self.transfer = SimpleNamespace(
             tx_hash=self.txid,
             network=m.NETWORK,
@@ -175,6 +177,7 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         self.payment.payment_ref = "PAY-test"
         owner = MagicMock()
         owner.invoice_ref = "invoice-1"
+        owner.contract_version = m.TERMS_REF
         owner.identity = MagicMock()
         self.payment.invoice_owner = owner
         self.mock_manager.using.return_value.filter.return_value.exists.return_value = False
@@ -221,6 +224,7 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         self.payment.payment_ref = "PAY-walletless"
         owner = MagicMock()
         owner.invoice_ref = "invoice-1"
+        owner.contract_version = m.TERMS_REF
         owner.identity = MagicMock()
         self.payment.invoice_owner = owner
         self.mock_manager.using.return_value.filter.return_value.exists.return_value = False
@@ -265,6 +269,8 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         owner = MagicMock()
         owner.identity = MagicMock()
         owner.invoice_ref = "invoice-1"
+        owner.contract_version = m.TERMS_REF
+        owner.contract_version = m.TERMS_REF
         self.payment.invoice_owner = owner
         self.mock_accounts.return_value.account_ref = "MOJPROP30-ACC-recovered"
         self.mock_manager.using.return_value.filter.return_value.exists.return_value = False
