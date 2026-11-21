@@ -12,6 +12,9 @@ class MojPropEnglishSitemapTests(SimpleTestCase):
         expected = {
             "https://mojplaywin.com/",
             "https://mojplaywin.com/store/",
+            "https://mojplaywin.com/store/product/72/",
+            "https://mojplaywin.com/store/product/225/",
+            "https://mojplaywin.com/store/product/879/",
             "https://mojplaywin.com/moj-prop/",
             "https://mojplaywin.com/moj-prop/starter-30-trx/",
             "https://mojplaywin.com/moj-prop/rules/",
