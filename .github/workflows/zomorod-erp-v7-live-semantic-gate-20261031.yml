@@ -1,0 +1,193 @@
+name: Zomorod ERP V7 live PHP semantic compatibility gate (read only)
+on:
+  push:
+    branches:
+      - feature/zomorod-erp-v7-host-stage-20261031
+    paths:
+      - .github/workflows/zomorod-erp-v7-live-semantic-gate-20261031.yml
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-erp-v7-live-semantic-gate
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 97e3991d5b8b7e2c484c8ff6db74789dcaa7edec
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3,mbstring
+      - name: Strict source and test gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 97e3991d5b8b7e2c484c8ff6db74789dcaa7edec
+          php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'
+          python3 scripts/run_all_offline_qa.py --report-out OFFLINE_QA_REPORT.json
+          python3 - OFFLINE_QA_REPORT.json <<'PY'
+          import json, sys
+          r=json.load(open(sys.argv[1]))
+          assert r.get('offline_checks_available_here')=='PASS'
+          assert r.get('php_sqlite_business_tests')=='PASS'
+          assert r.get('full_offline_database_tests_verified') is True
+          assert not r.get('failed_or_timed_out', [])
+          print('V7_OFFLINE_GATE=PASS')
+          PY
+          mkdir -p "$RUNNER_TEMP/v7dist"
+          ZOMOROD_BUNDLE_OUTPUT="$RUNNER_TEMP/v7dist" python3 scripts/build_erp_offline_bundle.py
+          python3 scripts/verify_erp_bundle.py "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.zip" "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.tar.gz"
+          ( cd "$RUNNER_TEMP/v7dist" && sha256sum zomorod-erp-offline-v7.zip zomorod-erp-offline-v7.tar.gz > SHA256SUMS && sha256sum -c SHA256SUMS )
+          echo V7_SOURCE_ARCHIVE=verified_manifest_from_pinned_revision
+      - name: Classify live-to-V7 PHP function and route drift without modifying host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$GITHUB_RUN_ID" -gt 0
+          d="$RUNNER_TEMP/zomorod-v7-host-credentials"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 15
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          target=""
+          for host in saeit-cpanel saeit-cpanel-direct; do
+            if timeout 55s ssh -F "$d/config" "$host" 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/business/index.php && test -d /home/zomorod2/.private/zomorod-business' >/dev/null; then
+              target="$host"
+              break
+            fi
+          done
+          test -n "$target"
+          ssh -F "$d/config" "$target" "test -f /home/zomorod2/.private/zomorod-business/app.php && test ! -L /home/zomorod2/.private/zomorod-business/app.php"
+          remote_hash_before="$(ssh -F "$d/config" "$target" "sha256sum /home/zomorod2/.private/zomorod-business/app.php" | awk '{print $1}')"
+          scp -q -F "$d/config" "$target:/home/zomorod2/.private/zomorod-business/app.php" "$RUNNER_TEMP/live-erp-app.php"
+          chmod 600 "$RUNNER_TEMP/live-erp-app.php"
+          LIVE_APP="$RUNNER_TEMP/live-erp-app.php" SOURCE_APP="content/zomorod-business/app.php" php <<'PHP'
+          <?php
+          declare(strict_types=1);
+          function tokens(string $path): array {
+              $raw = file_get_contents($path);
+              if (!is_string($raw) || $raw === '') throw new RuntimeException('Unreadable source file');
+              return token_get_all($raw, TOKEN_PARSE);
+          }
+          function functionBodies(array $tokens): array {
+              $result = [];
+              $len = count($tokens);
+              for ($i = 0; $i < $len; $i++) {
+                  if (!is_array($tokens[$i]) || $tokens[$i][0] !== T_FUNCTION) continue;
+                  $j = $i + 1;
+                  while ($j < $len && is_array($tokens[$j]) && $tokens[$j][0] === T_WHITESPACE) $j++;
+                  if ($j < $len && $tokens[$j] === '&') $j++;
+                  while ($j < $len && is_array($tokens[$j]) && $tokens[$j][0] === T_WHITESPACE) $j++;
+                  if ($j >= $len || !is_array($tokens[$j]) || $tokens[$j][0] !== T_STRING) continue;
+                  $name = $tokens[$j][1];
+                  if (array_key_exists($name, $result)) throw new RuntimeException('Duplicate PHP function detected');
+                  $depth = 0;
+                  $start = -1;
+                  $end = -1;
+                  for ($k = $j + 1; $k < $len; $k++) {
+                      if ($tokens[$k] === '{') { if ($start < 0) $start = $i; $depth++; }
+                      if ($tokens[$k] === '}' && $start >= 0) {
+                          $depth--;
+                          if ($depth === 0) {$end = $k; break;}
+                      }
+                      if ($tokens[$k] === ';' && $start < 0) break;
+                  }
+                  if ($start < 0 || $end < 0) throw new RuntimeException('Unsupported PHP function structure: '.$name);
+                  $parts = array_slice($tokens,$start,$end-$start+1);
+                  $joined = implode('',array_map(static fn($t) => is_array($t) ? $t[1] : $t,$parts));
+                  $result[$name] = hash('sha256',$joined);
+                  $i = $end;
+              }
+              ksort($result);
+              return $result;
+          }
+          $liveFile = (string)getenv('LIVE_APP');
+          $v7File = (string)getenv('SOURCE_APP');
+          $liveSrc = file_get_contents($liveFile);
+          $v7Src = file_get_contents($v7File);
+          if (!is_string($liveSrc) || !is_string($v7Src)) throw new RuntimeException('Source unavailable');
+          $live = functionBodies(tokens($liveFile));
+          $v7 = functionBodies(tokens($v7File));
+          $names = array_values(array_intersect(array_keys($live),array_keys($v7)));
+          $changed = array_values(array_filter($names,static fn($n) => $live[$n] !== $v7[$n]));
+          $hostOnly = array_values(array_diff(array_keys($live),array_keys($v7)));
+          $v7Only = array_values(array_diff(array_keys($v7),array_keys($live)));
+          $modules = ['workflow_desk.php','industry_operations.php','finance_audit.php','payroll_control.php','payroll_ui.php','period_controls.php'];
+          $pages = ['workflow_desk','industry_ops','finance_audit','payroll','period_controls'];
+          $actions = ['flow_create','flow_transition','industry_create','industry_advance','payroll_create','payroll_decision','period_freeze','period_close'];
+          echo 'LIVE_FUNCTION_COUNT='.count($live).PHP_EOL;
+          echo 'V7_FUNCTION_COUNT='.count($v7).PHP_EOL;
+          echo 'SHARED_FUNCTION_COUNT='.count($names).PHP_EOL;
+          echo 'CHANGED_FUNCTION_BODIES='.implode(',',$changed).PHP_EOL;
+          echo 'HOST_ONLY_FUNCTIONS='.implode(',',$hostOnly).PHP_EOL;
+          echo 'V7_ONLY_FUNCTIONS='.implode(',',$v7Only).PHP_EOL;
+          echo 'MISSING_MODULE_IMPORTS='.implode(',',array_values(array_filter($modules,static fn($n)=>!str_contains($liveSrc,"'/".$n."'")))).PHP_EOL;
+          echo 'MISSING_PAGE_CASES='.implode(',',array_values(array_filter($pages,static fn($n)=>!str_contains($liveSrc,"\$page==='".$n."'")))).PHP_EOL;
+          echo 'MISSING_POST_ACTIONS='.implode(',',array_values(array_filter($actions,static fn($n)=>!str_contains($liveSrc,"'".$n."'")))).PHP_EOL;
+          echo 'LIVE_HAS_PERIOD_SCHEMA_HOOK='.(str_contains($liveSrc,'zmPeriodSchema($db)')?'YES':'NO').PHP_EOL;
+          echo 'LIVE_HAS_PERIOD_POSTING_GUARD='.(str_contains($liveSrc,'zmPeriodGuard($db,$date)')?'YES':'NO').PHP_EOL;
+          echo 'LIVE_HAS_CSRF_CHECK='.(str_contains($liveSrc,'verifyCsrf();')?'YES':'NO').PHP_EOL;
+          echo 'LIVE_HAS_OWNER_ONLY_AGENT_GUARD='.(str_contains($liveSrc,"if(role()!=='admin')")?'YES':'NO').PHP_EOL;
+          echo 'LIVE_APP_SHA256='.hash_file('sha256',$liveFile).PHP_EOL;
+          echo 'V7_APP_SHA256='.hash_file('sha256',$v7File).PHP_EOL;
+          echo 'INTEGRATION_POLICY=PRESERVE_LIVE_FUNCTIONS_AND_HOST_ONLY_MODULES'.PHP_EOL;
+          echo 'NO_APP_OR_DATABASE_WRITE=YES'.PHP_EOL;
+          if (count($names) < 20 || count($hostOnly) > 0 || count($v7Only) > 0) {
+              throw new RuntimeException('Unexpected function interface drift; block automated integration');
+          }
+          PHP
+          remote_hash_after="$(ssh -F "$d/config" "$target" "sha256sum /home/zomorod2/.private/zomorod-business/app.php" | awk '{print $1}')"
+          test "$remote_hash_before" = "$remote_hash_after"
+          echo LIVE_APP_UNCHANGED=YES
+          echo LIVE_DATABASE_UNCHANGED_BY_THIS_WORKFLOW=YES
+          echo FACTORY_HOLD_UNCHANGED=YES
+          echo V7_PRODUCTION_ACTIVATION=NOT_PERFORMED

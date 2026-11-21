@@ -1,0 +1,169 @@
+name: Zomorod ERP V7 isolated live DB backup and restore verification
+on:
+  push:
+    branches:
+      - feature/zomorod-erp-v7-host-stage-20261031
+    paths:
+      - .github/workflows/zomorod-erp-v7-backup-restore-20261031.yml
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-erp-v7-backup-restore
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 97e3991d5b8b7e2c484c8ff6db74789dcaa7edec
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3,mbstring
+      - name: Strict source and test gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 97e3991d5b8b7e2c484c8ff6db74789dcaa7edec
+          php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'
+          python3 scripts/run_all_offline_qa.py --report-out OFFLINE_QA_REPORT.json
+          python3 - OFFLINE_QA_REPORT.json <<'PY'
+          import json, sys
+          r=json.load(open(sys.argv[1]))
+          assert r.get('offline_checks_available_here')=='PASS'
+          assert r.get('php_sqlite_business_tests')=='PASS'
+          assert r.get('full_offline_database_tests_verified') is True
+          assert not r.get('failed_or_timed_out', [])
+          print('V7_OFFLINE_GATE=PASS')
+          PY
+          mkdir -p "$RUNNER_TEMP/v7dist"
+          ZOMOROD_BUNDLE_OUTPUT="$RUNNER_TEMP/v7dist" python3 scripts/build_erp_offline_bundle.py
+          python3 scripts/verify_erp_bundle.py "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.zip" "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.tar.gz"
+          ( cd "$RUNNER_TEMP/v7dist" && sha256sum zomorod-erp-offline-v7.zip zomorod-erp-offline-v7.tar.gz > SHA256SUMS && sha256sum -c SHA256SUMS )
+          echo V7_SOURCE_ARCHIVE=verified_manifest_from_pinned_revision
+      - name: Create private SQLite snapshot and verify isolated restoration without touching live DB
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$GITHUB_RUN_ID" -gt 0
+          d="$RUNNER_TEMP/zomorod-v7-host-credentials"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 15
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          target=""
+          for host in saeit-cpanel saeit-cpanel-direct; do
+            if timeout 55s ssh -F "$d/config" "$host" 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/business/index.php && test -d /home/zomorod2/.private/zomorod-business' >/dev/null; then
+              target="$host"
+              break
+            fi
+          done
+          test -n "$target"
+          ssh -F "$d/config" "$target" "python3 -B - '$GITHUB_RUN_ID'" <<'PY'
+          import hashlib,os,pathlib,re,sqlite3,sys
+          run=sys.argv[1]
+          if not re.fullmatch(r'[0-9]{8,15}',run): raise SystemExit('INVALID_RUN_ID')
+          private=pathlib.Path('/home/zomorod2/.private/zomorod-business')
+          live=private/'management.sqlite3'
+          backups=pathlib.Path('/home/zomorod2/.backups')
+          if private.is_symlink() or not private.is_dir() or live.is_symlink() or not live.is_file():
+              raise SystemExit('LIVE_DB_PATH_REJECTED')
+          if backups.is_symlink() or not backups.is_dir():
+              raise SystemExit('PRIVATE_BACKUP_ROOT_REJECTED')
+          root=backups/'zomorod-erp-v7-db-safety'
+          root.mkdir(mode=0o700,exist_ok=True)
+          if root.is_symlink(): raise SystemExit('BACKUP_PARENT_SYMLINK_REJECTED')
+          os.chmod(root,0o700)
+          stage=root/run
+          stage.mkdir(mode=0o700,exist_ok=False)
+          source=sqlite3.connect('file:'+str(live)+'?mode=ro',uri=True,timeout=15)
+          source.execute('PRAGMA query_only=ON')
+          snapshot=stage/'predeploy-snapshot.sqlite3'
+          target=sqlite3.connect(str(snapshot),timeout=15)
+          source.backup(target,pages=256,sleep=0.1)
+          target.commit()
+          target.close()
+          source.close()
+          os.chmod(snapshot,0o600)
+          def verify(path):
+              connection=sqlite3.connect('file:'+str(path)+'?mode=ro',uri=True,timeout=10)
+              connection.execute('PRAGMA query_only=ON')
+              valid=connection.execute('PRAGMA quick_check').fetchall()==[('ok',)]
+              if not valid: raise SystemExit('SQLITE_QUICK_CHECK_FAILED')
+              violations=connection.execute('PRAGMA foreign_key_check').fetchall()
+              if violations: raise SystemExit('SQLITE_FK_CHECK_FAILED')
+              tables=[r[0] for r in connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+              structure=[tuple(r) for r in connection.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name")]
+              counts=[]
+              for name in tables:
+                  quoted='"'+name.replace('"','""')+'"'
+                  counts.append((name,connection.execute('SELECT count(*) FROM '+quoted).fetchone()[0]))
+              connection.close()
+              return (structure,counts)
+          original_checks=verify(snapshot)
+          restored=stage/'isolated-restoration.sqlite3'
+          source_copy=sqlite3.connect('file:'+str(snapshot)+'?mode=ro',uri=True,timeout=10)
+          destination=sqlite3.connect(str(restored),timeout=10)
+          source_copy.backup(destination)
+          destination.commit()
+          destination.close()
+          source_copy.close()
+          os.chmod(restored,0o600)
+          if verify(restored)!=original_checks: raise SystemExit('ISOLATED_RESTORE_MISMATCH')
+          print('ERP_SQLITE_BACKUP=CREATED_IN_PRIVATE_HOST_STORAGE')
+          print('ERP_SQLITE_ISOLATED_RESTORE=PASS')
+          print('ERP_SCHEMA_AND_TABLE_ROW_COUNTS=EQUAL')
+          print('ERP_BACKUP_FILE_MODE=0600')
+          print('ERP_BACKUP_DIR_MODE=0700')
+          print('ERP_BACKUP_PATH='+str(stage))
+          print('LIVE_DATABASE_OVERWRITTEN=NO')
+          print('ERP_PRODUCTION_ACTIVATION=NOT_PERFORMED')
+          PY
+          echo FACTORY_HOLD_UNCHANGED=YES
