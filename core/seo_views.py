@@ -111,6 +111,12 @@ def sitemap_xml(request):
             "/moj-prop/", "/moj-prop/starter-30-trx/",
             "/moj-prop/rules/", "/moj-prop/signals/",
             "/moj-prop/payment/", "/moj-prop/contact/", "/moj-prop/catalog/",
+            "/moj-prop/education/",
+            "/moj-prop/education/risk-management/",
+            "/moj-prop/education/drawdown-and-position-sizing/",
+            "/moj-prop/education/sixty-day-simulated-challenge/",
+            "/moj-prop/education/best-day-consistency/",
+            "/moj-prop/education/simulated-versus-live/",
         ]
         origin = "https://mojplaywin.com"
     else:
