@@ -3,6 +3,7 @@ import importlib
 import unittest
 
 from django.db import migrations
+from django.db.models.fields import NOT_PROVIDED
 
 
 class CommerceFunnelLeadChoiceMigrationTests(unittest.TestCase):
@@ -38,7 +39,7 @@ class CommerceFunnelLeadChoiceMigrationTests(unittest.TestCase):
         self.assertEqual(op.field.get_internal_type(), "CharField")
         self.assertIsNone(op.field.db_column)
         self.assertFalse(op.field.null)
-        self.assertIsNone(op.field.default.__class__.__name__ == "NoneType" or None)
+        self.assertIs(op.field.default, NOT_PROVIDED)
         self.assertEqual(op.field.max_length, 32)
         self.assertNotIn("RunPython", repr(migration.Migration.operations))
         self.assertNotIn("RunSQL", repr(migration.Migration.operations))
