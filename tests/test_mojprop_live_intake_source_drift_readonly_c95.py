@@ -125,7 +125,7 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         archive = root / "docs/mojprop/historical-static-evidence" / (old_pin + ".py.txt")
         current = root / "config/urls.py"
         self.assertEqual(exact_git_blob(archive.read_bytes()), old_pin)
-        self.assertEqual(exact_git_blob(current.read_bytes()), "0348f71d1dd0c1dbe569df78af26f5cf38b75b05")
+        self.assertEqual(exact_git_blob(current.read_bytes()), "cb4699964920ff9554a57f7588a9c16330c943c7")
         prior = iter(archive.read_text(encoding="utf-8").splitlines())
         expected_line = next(prior, None)
         additions = []
@@ -136,8 +136,10 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
                 additions.append(line)
         self.assertIsNone(expected_line)
         self.assertEqual(additions, [
+            "from core.mpw_legacy_guest_checkout_redirect import legacy_guest_checkout",
             "from prop_firm.starter30_views import starter30_checkout, starter30_status",
             "from services.mpw_trx_public_pages import support_page, terms_page, privacy_page, cookies_page",
+            '    path("store/product/<int:product_id>/checkout/", legacy_guest_checkout, name="mpw_legacy_guest_checkout_redirect"),',
             '    path("support/", support_page, name="mpw_support"),',
             '    path("terms/", terms_page, name="mpw_terms"),',
             '    path("privacy/", privacy_page, name="mpw_privacy"),',

@@ -63,6 +63,9 @@ def stage(path: str):
     if path in exact:
         return exact[path]
     dynamic = (
+        # Only currently advertised legacy SKUs; scanner sentinel IDs are
+        # deliberately excluded so they cannot masquerade as lost buyers.
+        (r'/store/product/(?:72|225|879)/checkout/', ("store", "legacy_checkout")),
         (r'/store/product/' + SUFFIX_ID + r'/', ("store", "product")),
         (r'/commerce/book/' + SUFFIX_ID + r'/', ("store", "checkout_request")),
         (r'/commerce/trx-easy/start/' + SUFFIX_ID + r'/', ("store", "start_submission")),
@@ -153,6 +156,8 @@ def summarize(logs=None, days=7, now=None):
         event_counts = counts[name]
         report["stages"][name] = {
             "get_200_browser_like_unverified": event_counts.get("GET_200_browser_like_unverified", 0),
+            "get_404_requests": sum(n for k, n in event_counts.items() if k.startswith("GET_404_")),
+            "get_30x_redirects": sum(n for k, n in event_counts.items() if k.startswith(("GET_301_", "GET_302_", "GET_307_", "GET_308_"))),
             "get_200_likely_automated": event_counts.get("GET_200_likely_automated", 0),
             "get_200_unknown_agent": event_counts.get("GET_200_unknown_agent", 0),
             "post_2xx_or_3xx_requests": sum(
