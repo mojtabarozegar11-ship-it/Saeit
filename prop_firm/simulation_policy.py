@@ -14,7 +14,7 @@ D = Decimal
 
 @dataclass(frozen=True)
 class SimulationPolicy:
-    contract_version: str = "2026-11-19/simulation-v1"
+    contract_version: str = "2026-11-21/simulation-v2"
     account_mode: str = "simulated"
     payout_mode: str = "real_performance_reward"
     starting_balance_usd: Decimal = D("1000")

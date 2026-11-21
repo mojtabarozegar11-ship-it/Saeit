@@ -53,11 +53,8 @@ class Policy:
     promotion_goal_pct: Decimal = D("3.6")
     promotion_min_days: int = 12
     promotion_cycle_days: int = 30
-    # New simulated contract pays 100% of eligible realized net performance
-    # profit from the company's own reserve. The old 70/30 version is handled
-    # explicitly by calculate_payout(contract_version=LEGACY_CONTRACT_VERSION).
-    trader_profit_share_pct: Decimal = SIMULATION_POLICY.trader_eligible_profit_share_pct
-    company_profit_share_pct: Decimal = SIMULATION_POLICY.company_eligible_profit_share_pct
+    trader_profit_share_pct: Decimal = D("100")
+    company_profit_share_pct: Decimal = D("0")
     inactivity_notice_days: int = 14
     inactivity_grace_days: int = 14
     completion_deadline_days: int = SIMULATION_POLICY.challenge_window_days
@@ -140,17 +137,17 @@ def assess_risk(*, account_capital, equity, day_open_equity):
         reasons.append("total_loss_floor_reached")
     return RiskDecision(not reasons, tuple(reasons), daily_floor, total_floor)
 
-def _consistency_reasons(*, verified_profit, max_profitable_day,
-                         contract_version=None):
-    from .social_policy import LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION
+def _consistency_reasons(*, verified_profit, max_profitable_day, contract_version=None):
+    """Apply the immutable best-day cap the customer actually accepted."""
+    from .social_policy import (
+        LEGACY_CONTRACT_VERSION, PREVIOUS_CONTRACT_VERSION, NEW_CONTRACT_VERSION,
+    )
     version = POLICY.version if contract_version is None else contract_version
-    if version not in (LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION):
+    if version not in (LEGACY_CONTRACT_VERSION, PREVIOUS_CONTRACT_VERSION, NEW_CONTRACT_VERSION):
         raise ValueError("Unknown immutable challenge contract version")
-    # Preserve the explicitly selected 2026-11-14 historical rule; never
-    # silently recalculate older accepted contracts using today's threshold.
-    best_day_cap = D("32") if version == LEGACY_CONTRACT_VERSION else POLICY.best_day_share_pct
     maximum = _nonnegative(max_profitable_day, "max_profitable_day")
-    if verified_profit <= 0 or maximum > percent(verified_profit, best_day_cap):
+    limit = POLICY.best_day_share_pct if version == NEW_CONTRACT_VERSION else D("32")
+    if verified_profit <= 0 or maximum > percent(verified_profit, limit):
         return ("profit_consistency_not_met",)
     return ()
 
@@ -175,11 +172,11 @@ def assess_challenge(*, phase, account_capital, realized_net_profit,
         reasons.append("phase_one_pass_required")
     if evidence_verified is not True:
         reasons.append("reconciled_evidence_required")
-    from .social_policy import LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION
+    from .social_policy import LEGACY_CONTRACT_VERSION, PREVIOUS_CONTRACT_VERSION, NEW_CONTRACT_VERSION
     version = POLICY.version if contract_version is None else contract_version
-    if version not in (LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION):
+    if version not in (LEGACY_CONTRACT_VERSION, PREVIOUS_CONTRACT_VERSION, NEW_CONTRACT_VERSION):
         raise ValueError("Unknown immutable challenge contract version")
-    if version == NEW_CONTRACT_VERSION and phase == 2:
+    if version in (PREVIOUS_CONTRACT_VERSION, NEW_CONTRACT_VERSION) and phase == 2:
         if social_posts_verified is not True:
             reasons.append("social_single_post_each_platform_unverified")
         trades = _days(verified_cumulative_trades, "verified_cumulative_trades")
@@ -223,24 +220,22 @@ def assess_promotion(*, level_index, realized_monthly_profit, trading_days,
         reasons.append("next_level_funding_not_confirmed")
     return PromotionDecision(not reasons, tuple(dict.fromkeys(reasons)), current, nxt)
 
-def calculate_payout(*, cumulative_realized_net_profit, previously_allocated_profit,
-                     contract_version=None):
-    """Versioned high-water accounting ONLY, never a payment or promise of earnings.
+def calculate_payout(*, cumulative_realized_net_profit, previously_allocated_profit, contract_version=None):
+    """Loss-recovery high-water calculation, NOT an actual transfer command.
 
-    New successful simulated accounts allocate 100% of independently verified
-    eligible profit to trader; legacy 2026-11-14/v1.1 expressly preserves 70%.
-    Never default to legacy on a missing or unrecognized version. Persist the
-    high-water mark atomically with a unique settlement key elsewhere.
+    Persist new_allocated_high_water_usd atomically with a unique settlement key.
     """
-    from .social_policy import LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION
-    version = POLICY.version if contract_version is None else contract_version
-    if version not in (LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION):
-        raise ValueError("Unknown immutable profit allocation contract version")
     pnl = dec(cumulative_realized_net_profit)
     prior = _nonnegative(previously_allocated_profit, "previously_allocated_profit")
     eligible = max(D("0"), pnl - prior).quantize(CENT, rounding=ROUND_DOWN)
-    share = D("70") if version == LEGACY_CONTRACT_VERSION else POLICY.trader_profit_share_pct
-    trader = percent(eligible, share).quantize(CENT, rounding=ROUND_DOWN)
+    from .social_policy import LEGACY_CONTRACT_VERSION, PREVIOUS_CONTRACT_VERSION, NEW_CONTRACT_VERSION
+    version = POLICY.version if contract_version is None else contract_version
+    if version not in (LEGACY_CONTRACT_VERSION, PREVIOUS_CONTRACT_VERSION, NEW_CONTRACT_VERSION):
+        raise ValueError("Unknown immutable payout contract version")
+    # Historical explicitly versioned customer terms retain their old 70/30 rule.
+    # New simulated-v2 buyers receive 100% of independently qualified profit.
+    trader_pct = POLICY.trader_profit_share_pct if version == NEW_CONTRACT_VERSION else D("70")
+    trader = percent(eligible, trader_pct).quantize(CENT, rounding=ROUND_DOWN)
     return Payout(eligible, trader, eligible - trader, prior + eligible)
 
 def authorize_funding(*, requested_capital, unencumbered_cash,
@@ -289,8 +284,8 @@ def authorize_order(*, account_capital, equity, day_open_equity,
         reasons.append("per_order_risk_limit")
     if aggregate + single > percent(capital, POLICY.aggregate_risk_pct):
         reasons.append("aggregate_risk_limit")
-    # Static per-order/open caps cannot protect a challenge that has already
-    # consumed nearly all of its 4% daily or 8% total drawdown allowance.
+    # Even approved 3% / 4% risk caps do not protect a challenge that has already
+    # consumed nearly all of its 6% daily or 8% total drawdown allowance.
     # The authoritative equity mark includes current floating P&L. The
     # aggregate known loss-at-stop (existing positions + proposed order)
     # must leave equity STRICTLY above both breach floors even at stop-out.

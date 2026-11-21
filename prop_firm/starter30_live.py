@@ -47,7 +47,7 @@ from services.mpw_trx_walletless_core import PaymentHold
 from services.mojtaba_tron_owner_receiver import approved_recipient
 
 NETWORK = "tron-mainnet"
-TERMS_REF = "starter30-simulation-v1"
+TERMS_REF = SIMULATION_POLICY.contract_version  # Immutable new invoice policy identifier.
 _RELEASE_FLAGS = (
     "MPW_MOJPROP_PRODUCTION_RELEASE_APPROVED",
     "MPW_MOJPROP_TRX_RELEASE_ENABLED",
@@ -205,6 +205,14 @@ def issue_invoice(
                     .first()
                 )
                 if previous is not None:
+                    # Never reuse a prior-policy invoice for a new v2 customer.
+                    if (
+                        previous.invoice_owner.contract_version != TERMS_REF
+                        or previous.terms_acceptance_ref != TERMS_REF
+                    ):
+                        raise Starter30PaymentRejected(
+                            "previous invoice has a different immutable contract; contact support"
+                        )
                     if previous.recipient not in receivers:
                         raise Starter30PaymentRejected("previous invoice requires support")
                     if (previous.payer_hex41 or None) != payer_hex41:
@@ -337,6 +345,14 @@ def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
             PropSimulationPayment.Status.EXPIRED,
         ):
             raise Starter30PaymentRejected("invoice is not awaiting payment")
+        # Existing v1 invoices require separately version-aware reconciliation.
+        if (
+            payment.invoice_owner.contract_version != TERMS_REF
+            or payment.terms_acceptance_ref != TERMS_REF
+        ):
+            raise Starter30PaymentRejected(
+                "invoice policy version requires manual support before settlement"
+            )
         # A wrong/out-of-window txid can expire an invoice even though a genuine
         # in-window transfer may still be awaiting independent confirmation.
         # Accept only the original invoice-window proof, never a late transfer.
