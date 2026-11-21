@@ -298,12 +298,24 @@ def _paid_result(payment) -> dict:
 
 
 def invoice_status(invoice_ref: str) -> dict:
+    """Report actual time-expired invoice status without a database mutation.
+
+    The old settlement path still requires a separate transactional expiry
+    persistence fix (issue #2799). This read-only customer display change
+    never credits payment, extends an invoice or activates an account.
+    """
     require_release()
     payment = PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS).select_related(
         "invoice_owner"
     ).get(invoice_owner__invoice_ref=invoice_ref)
+    effective_status = payment.status
+    if (
+        effective_status == PropSimulationPayment.Status.AWAITING
+        and timezone.now() >= payment.expires_at
+    ):
+        effective_status = PropSimulationPayment.Status.EXPIRED
     return {
-        "status": payment.status,
+        "status": effective_status,
         "payment_ref": payment.payment_ref,
         "invoice_ref": invoice_ref,
         "recipient": payment.recipient,
