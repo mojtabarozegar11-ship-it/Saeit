@@ -47,6 +47,21 @@ class PlatformAdapterTests(unittest.TestCase):
         with self.assertRaises(Blocked):
             send(account("researchgate","x"),{"text":"Hello"},"abcdefg",mock)
 
+    def test_legacy_restricted_instagram_identity_never_reaches_transport(self):
+        for profile in (
+            "https://www.instagram.com/Dr.Mojtaba.Rozegar/",
+            "https://instagram.com/dr%2Emojtaba%2Erozegar/",
+            "https://instagram.com/dr%252Emojtaba%252Erozegar/",
+        ):
+            with self.subTest(profile=profile):
+                mock, calls = respond(ok({"id": "should-not-be-used"}))
+                with self.assertRaises(Blocked):
+                    send(account("instagram", "123456789", public_url=profile),
+                         {"text": "Normal content",
+                          "image_url": "https://mojplaywin.com/media/photo.jpg"},
+                         "token123", mock)
+                self.assertEqual(calls, [])
+
     def test_telegram_returns_real_remote_id(self):
         mock,calls=respond(ok({"ok":True,"result":{"message_id":42}}))
         result=send(account(),{"text":"Research update"},"123456789:"+"A"*30,mock)
@@ -204,6 +219,19 @@ class DurableQueueTests(unittest.TestCase):
         with self.assertRaises(Blocked):
             run_one(self.db,pid,env=env,transport=mock,execute=True)
         self.assertEqual(len(calls),1)
+
+    def test_legacy_restricted_profile_cannot_claim_preapproved_post(self):
+        self.db.verify_account(self.aid, proof="api-proof-authorized-12345", actor="owner")
+        pid = self.db.draft(account_id=self.aid, content={"text": "Regular message"}, actor="staff")
+        self.db.approve(pid, "owner")
+        # Simulate a legacy DB row imported after verification, not the safe API.
+        self.db.db.execute("UPDATE accounts SET public_url=? WHERE id=?",
+                           ("https://instagram.com/dr%2Emojtaba%2Erozegar/", self.aid))
+        with self.assertRaises(Blocked):
+            self.db.claim(pid)
+        self.assertEqual(self.db.post(pid)["state"], "approved")
+        with self.assertRaises(Blocked):
+            self.db.draft(account_id=self.aid, content={"text": "Other"}, actor="staff")
 
     def test_ambiguous_failure_requires_manual_review(self):
         self.db.verify_account(self.aid,proof="api-proof-authorized-12345",actor="owner")
