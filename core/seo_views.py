@@ -77,6 +77,7 @@ def robots_txt(request):
             "Disallow: /mojprop-starter30-checkout/\n"
             "Disallow: /mojprop-starter30-status/\n"
             "Sitemap: https://mojplaywin.com/sitemap.xml\n"
+            "Sitemap: https://mojplaywin.com/moj-prop/education/sitemap.xml\n"
         )
     else:
         body = (
