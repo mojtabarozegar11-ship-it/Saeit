@@ -18,4 +18,5 @@ class MojPropStarter30PublicRouteTests(SimpleTestCase):
         self.assertNotContains(response, 'method="post"')
         self.assertNotContains(response, 'name="payer_address"')
         self.assertNotContains(response, 'name="txid"')
-        self.assertContains(response, 'href="/mojprop-starter30-checkout/"')
+        self.assertContains(response, 'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"')
+        self.assertNotContains(response, 'href="/mojprop-starter30-checkout/"')

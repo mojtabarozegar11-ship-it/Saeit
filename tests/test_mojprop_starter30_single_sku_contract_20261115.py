@@ -49,7 +49,8 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertIn("package=starter-30-trx#request", starter)
         self.assertIn("30 TRX", self.detail)
         self.assertIn("server-issued 30 TRX invoice", self.detail)
-        self.assertIn('href="/mojprop-starter30-checkout/"', self.detail)
+        self.assertIn('href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"', self.detail)
+        self.assertNotIn('href="/mojprop-starter30-checkout/"', self.detail)
 
     def test_single_consent_based_crm_route_and_no_unmarked_149_dollar_quote(self):
         for page in (self.home, self.catalog, self.detail):

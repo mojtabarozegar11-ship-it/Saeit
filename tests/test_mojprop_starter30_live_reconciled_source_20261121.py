@@ -10,8 +10,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "templates/moj-prop-v4/starter-30-trx/index.html"
 PIN = ROOT / "scripts/mojprop_starter30_static_release.py"
-APPROVED_LIVE_SHA256 = "5208b99d6d3af8ee6a24277eaefca9880cf6b084082998d1c911207cc1586b8f"
-APPROVED_LIVE_GIT_BLOB = "aed48d54b7d37b6dfba4d53295d8ffdab53cad83"
+APPROVED_LIVE_SHA256 = "0edb94e2c12a27f994916eedc4be2d81d1f4d53166c11b924105a4921acedc6e"
+APPROVED_LIVE_GIT_BLOB = "2101b9aed43b8d5c78fb94c7785f844903cf5755"
 
 
 class Scan(HTMLParser):
@@ -54,7 +54,8 @@ class OfficialStarter30LiveSourceTests(unittest.TestCase):
         page.feed(data)
         self.assertEqual(page.h1_count, 1)
         self.assertEqual(page.canonical, ["https://mojplaywin.com/moj-prop/starter-30-trx/"])
-        self.assertEqual(page.ctas.count("/mojprop-starter30-checkout/"), 2)
+        self.assertEqual(page.ctas.count("/mojprop-starter30-checkout/"), 0)
+        self.assertEqual(page.ctas.count("/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx"), 3)
         status = [x for x in page.forms if x.get("method") == "get"
                   and x.get("action") == "/mojprop-starter30-status/"]
         self.assertEqual(len(status), 1)
@@ -62,9 +63,9 @@ class OfficialStarter30LiveSourceTests(unittest.TestCase):
         self.assertEqual(len(refs), 1)
         self.assertEqual(refs[0].get("pattern"), "MOJPROP30-[A-Z0-9]{20}")
         self.assertIn("required", refs[0])
-        self.assertLess(data.index("How the secure 30 TRX checkout works"),
+        self.assertLess(data.index("How a future verified 30 TRX checkout must work"),
                         data.index("What you receive"))
-        self.assertIn("does not currently email an invoice copy", data)
+        self.assertIn("A public checkout page alone is not evidence", data)
 
     def test_campaign_attribution_and_opt_in_tracker_maintained(self):
         page = Scan()
