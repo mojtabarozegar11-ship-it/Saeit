@@ -36,4 +36,7 @@ def authorize_simulation_order(*, account_capital, equity, day_open_equity,
         reasons.append("minimum_order_not_feasible")
     if mode == "real":
         reasons.append("real_execution_disabled")
+    # This API is a pure simulator preflight. An execution request must fail closed.
+    if execution_authorized is not False:
+        reasons.append("execution_request_not_supported")
     return RiskDecision(not reasons, tuple(reasons), daily_floor, total_floor)
