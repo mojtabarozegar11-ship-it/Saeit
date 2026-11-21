@@ -23,13 +23,24 @@ class SimulationPolicy:
     total_loss_limit_pct: Decimal = D("8")
     max_risk_per_trade_pct: Decimal = D("3")
     max_open_risk_pct: Decimal = D("4")
-    canonical_best_day_share_pct: Decimal = D("32")
+    # Current owner-approved new-enrolment policy. Historical contracts keep
+    # their own immutable version; they must never be silently recalculated.
+    canonical_best_day_share_pct: Decimal = D("50")
     proposed_best_day_share_pct: Decimal = D("50")
     entry_fee_trx: Decimal = D("30")
     retry_fee_trx: Decimal = D("18")
     retry_discount_pct: Decimal = D("40")
     minimum_closed_positions: int = 50
     post_visibility_days: int = 28
+    # Verified eligible profit is a company-financed cash obligation, not
+    # withdrawable simulated principal or an investment return guarantee.
+    trader_eligible_profit_share_pct: Decimal = D("100")
+    company_eligible_profit_share_pct: Decimal = D("0")
+    first_payout_min_activity_days: int = 14
+    subsequent_payout_interval_days: int = 14
+    minimum_payout_request_usd: Decimal = D("10")
+    transfer_network_fees_paid_by_company: bool = True
+    entry_fee_refund_with_first_successful_profit_withdrawal: bool = True
     virtual_principal_withdrawable: bool = False
     customer_deposit_required: bool = False
     real_orders_enabled: bool = False
