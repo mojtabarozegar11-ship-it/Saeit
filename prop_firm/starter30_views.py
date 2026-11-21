@@ -71,7 +71,7 @@ def _form(request, invoice_ref: str | None = None) -> str:
             f"<input type='hidden' name='action' value='settle'>"
             f"<input type='hidden' name='invoice_ref' value='{escape(invoice_ref)}'>"
             + _funnel_hidden_fields(request)
-            "<label for='txid'>TRON transaction ID</label>"
+            + "<label for='txid'>TRON transaction ID</label>"
             "<input id='txid' name='txid' required pattern='[A-Fa-f0-9]{64}' autocomplete='off'>"
             "<button type='submit'>Verify 30 TRX payment</button></form>"
         )
@@ -80,7 +80,7 @@ def _form(request, invoice_ref: str | None = None) -> str:
         f"<input type='hidden' name='csrfmiddlewaretoken' value='{token}'>"
         "<input type='hidden' name='action' value='issue'>"
         + _funnel_hidden_fields(request)
-        "<label for='email'>Email for the isolated simulation identity</label>"
+        + "<label for='email'>Email for the isolated simulation identity</label>"
         "<input id='email' name='email' type='email' required autocomplete='email'>"
         "<label for='payer_address'>Your sending TRON wallet address (optional)</label>"
         "<input id='payer_address' name='payer_address' autocomplete='off'>"
