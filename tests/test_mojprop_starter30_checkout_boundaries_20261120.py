@@ -64,7 +64,7 @@ class Starter30CheckoutBoundaryTests(SimpleTestCase):
         response = self.client.get("/moj-prop/starter-30-trx/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "MOJPROP-STARTER30")
-        self.assertContains(response, 'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"')
+        self.assertContains(response, 'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx&amp;utm_source=moj_prop&amp;utm_medium=onsite&amp;utm_campaign=starter30_lead&amp;utm_content=free_terms"')
         self.assertNotContains(response, 'href="/mojprop-starter30-checkout/"')
         self.assertContains(response, "No real funded account or customer capital is involved")
         self.assertContains(response, "server-issued 30 TRX invoice")
