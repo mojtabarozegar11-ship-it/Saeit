@@ -68,5 +68,24 @@ class LiveMojtabaBotPortalCandidateTests(unittest.TestCase):
                          '17b341a62338964f83ef36e8bbcbedac1feaf8e179f73df151bae746cca67ad5')
 
 
+    def test_altered_legacy_release_logic_cannot_be_patched_by_hash_override(self):
+        # A changed or revived invoice CTA is not the reviewed 10,522-byte source.
+        altered = self.SOURCE.replace(
+            b'Online 30 TRX invoice creation is currently enabled',
+            b'Pay TRX to any address now',
+        )
+        with patch.object(m, "ORIGINAL_SHA256", hashlib.sha256(altered).hexdigest()):
+            with self.assertRaisesRegex(ValueError, 'legacy gate or free-terms anchor'):
+                m.generate_candidate(altered)
+
+    def test_generator_itself_uses_no_write_or_network_primitives(self):
+        # No filesystem releases, subprocesses, network calls or POSTs.
+        names = set(m.generate_candidate.__code__.co_names)
+        for forbidden in ("open", "write", "unlink", "replace_file", "requests",
+                          "urlopen", "Popen", "system", "subprocess"):
+            self.assertNotIn(forbidden, names)
+
+
+
 if __name__ == '__main__':
     unittest.main()
