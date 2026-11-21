@@ -32,15 +32,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(lsb_release -rs)" = "24.04"
-          # Refuse to weaken the host-wide AppArmor user-namespace policy.
-          test "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)" = "1"
-          test -x /usr/bin/bwrap
-          test -x /usr/bin/python3
+          if [ "$(lsb_release -rs)" != "24.04" ]; then
+            echo "::error::AVA isolation requires pinned Ubuntu 24.04"; exit 1
+          fi
+          # Read existing host policy; never lower any kernel or AppArmor setting.
+          policy=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [ ! -r "$policy" ]; then
+            echo "::error::AppArmor namespace policy unavailable"; exit 1
+          fi
+          echo "Existing AppArmor userns policy: $(cat "$policy") (unchanged)"
           profile=/usr/share/apparmor/extra-profiles/bwrap-userns-restrict
-          test -r "$profile"
-          sudo install -m 0644 "$profile" /etc/apparmor.d/bwrap-userns-restrict
+          if [ ! -x /usr/bin/bwrap ] || [ ! -r "$profile" ]; then
+            echo "Installing distro Bubblewrap and restrictive AppArmor profile on ephemeral CI VM"
+            sudo apt-get update -qq
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends bubblewrap apparmor-profiles
+          fi
+          if [ ! -x /usr/bin/bwrap ] || [ ! -x /usr/bin/python3 ] || [ ! -r "$profile" ]; then
+            echo "::error::Required distro sandbox dependency not installed"; exit 1
+          fi
+          if [ -e /etc/apparmor.d/bwrap-userns-restrict ]; then
+            if ! cmp -s "$profile" /etc/apparmor.d/bwrap-userns-restrict; then
+              echo "::error::Existing Bubblewrap AppArmor profile conflicts with distro source"; exit 1
+            fi
+          else
+            sudo install -m 0644 "$profile" /etc/apparmor.d/bwrap-userns-restrict
+          fi
           sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+          echo "Running actual rootless network and filesystem isolation assertions"
           # Execute real assertions INSIDE the rootless, networkless sandbox.
           # A missing namespace, readable host /etc, or network path fails CI.
           /usr/bin/bwrap --unshare-user --unshare-net --unshare-pid --unshare-ipc --unshare-uts \
