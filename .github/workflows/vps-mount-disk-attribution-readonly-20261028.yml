@@ -1,0 +1,603 @@
+name: VPS mount-wide read-only disk attribution
+on:
+  pull_request:
+    paths:
+      - .github/workflows/vps-mount-disk-attribution-readonly-20261028.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-mount-attribution-readonly
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bounded read-only VPS mount attribution without private filenames
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-mount-attribution"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 210s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY' | awk '/^VPS_MOUNT_ATTRIBUTION=/{print;fflush()}' | tee "$RUNNER_TEMP/vps-mount-attribution-receipt.txt"
+          import datetime
+          import heapq
+          import json
+          import os
+          from pathlib import Path
+          import shutil
+          import sqlite3
+          import stat
+          import subprocess
+          import time
+
+          home = Path.home()
+          if home.is_symlink() or not home.is_dir():
+              raise SystemExit("HOME_UNSAFE")
+          start = time.monotonic()
+          disk = shutil.disk_usage(home)
+
+          def bounded_du(path, seconds=12):
+              if path.is_symlink() or not path.is_dir():
+                  return {"bytes": None, "complete": False}
+              try:
+                  p = subprocess.run(
+                      ["du", "-x", "-s", "-B1", "--", str(path)],
+                      capture_output=True, text=True, timeout=seconds, check=False)
+                  first = p.stdout.splitlines()[0].split()[0] if p.stdout.strip() else ""
+                  size = int(first) if first.isdigit() else None
+                  return {"bytes": size, "complete": p.returncode == 0}
+              except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
+                  return {"bytes": None, "complete": False}
+
+          # Per-root numeric totals only; never print private paths or filenames.
+          roots = {"home": "/home", "var": "/var", "usr": "/usr",
+                   "opt": "/opt", "tmp": "/tmp", "srv": "/srv"}
+          root_sizes = {label: bounded_du(Path(path), 13) for label, path in roots.items()}
+          # All categories are on the same device only when st_dev agrees.
+          devices = {}
+          for label, path in roots.items():
+              try:
+                  devices[label] = os.stat(path).st_dev == os.stat(home).st_dev
+              except OSError:
+                  devices[label] = None
+
+          # Bounded immediate-home inventory; non-factory entries are anonymized.
+          try:
+              entries_all = [p for p in home.iterdir()
+                             if not p.is_symlink() and p.is_dir()]
+              entries_truncated = len(entries_all) > 70
+              entries = entries_all[:70]
+          except OSError:
+              entries = []
+              entries_truncated = True
+          home_du = {}
+          if entries:
+              try:
+                  p = subprocess.run(
+                      ["du", "-x", "-s", "-B1", "--"] + [str(x) for x in entries],
+                      capture_output=True, text=True, timeout=45, check=False)
+                  for line in p.stdout.splitlines():
+                      size, sep, path = line.partition("\t")
+                      if sep and size.isdigit():
+                          home_du[path] = int(size)
+                  home_complete = p.returncode == 0 and not entries_truncated
+              except (OSError, subprocess.TimeoutExpired):
+                  home_complete = False
+          else:
+              home_complete = False
+          labels = {"factory-runtime": "factory_runtime",
+                    ".cache": "user_cache", ".local": "user_local",
+                    ".npm": "npm_cache", ".cargo": "cargo_cache",
+                    ".rustup": "rust_toolchain"}
+          known = {label: home_du.get(str(home / name))
+                   for name, label in labels.items()}
+          others = sorted((size for path, size in home_du.items()
+                           if Path(path).name not in labels), reverse=True)
+
+          # Read-only bounded scan for recently modified large files; never emit names.
+          # This can attribute rapid growth even when full du hits a timeout.
+          recent = {"complete": False, "scanned_large": 0,
+                    "allocated_bytes": 0, "by_category_allocated_bytes": {},
+                    "top_ten_anonymous": []}
+          cmd = ["find", str(home), "-xdev", "-type", "f",
+                 "-mmin", "-180", "-size", "+8M", "-printf", "%s\t%p\n"]
+          try:
+              scan = subprocess.run(cmd, capture_output=True, text=True,
+                                    timeout=45, check=False)
+              raw = scan.stdout
+              recent["complete"] = scan.returncode == 0
+          except subprocess.TimeoutExpired as exc:
+              raw = exc.stdout or b""
+              if isinstance(raw, bytes):
+                  raw = raw.decode("utf-8", errors="replace")
+          except OSError:
+              raw = ""
+          buckets = {}
+          largest_recent = []
+          # Fixed labels only: identify whether recent factory Django growth is
+          # database/WAL, logs, archives, event streams or another file class.
+          # Never print actual file names, paths, record contents or identifiers.
+          django_types = {}
+          django_type_counts = {}
+          sqlite_candidates = []
+          def django_file_class(name):
+              n = name.lower()
+              if n.endswith(("-wal", "-journal")):
+                  return "sqlite_write_ahead_or_journal"
+              if n.endswith((".sqlite3", ".sqlite", ".db")):
+                  return "database_main"
+              if n.endswith((".log", ".log.1")):
+                  return "log"
+              if n.endswith((".jsonl", ".ndjson")):
+                  return "event_stream"
+              if n.endswith((".zip", ".gz", ".zst", ".tar")):
+                  return "archive"
+              if n.endswith((".sqlite3-shm", ".db-shm")):
+                  return "sqlite_shared_memory"
+              return "other"
+          recent_lines = raw.splitlines()
+          recent["truncated_at_3000"] = len(recent_lines) > 3000
+          for line in recent_lines[:3000]:
+              length, sep, filename = line.partition("\t")
+              if not sep or not length.isdigit():
+                  continue
+              try:
+                  candidate = Path(filename)
+                  rel = candidate.relative_to(home).parts
+                  if not rel or candidate.is_symlink():
+                      continue
+                  st = candidate.stat()
+                  if not stat.S_ISREG(st.st_mode):
+                      continue
+                  allocated = st.st_blocks * 512
+                  if rel[0] == "factory-runtime":
+                      sub = rel[1] if len(rel) > 1 else "root"
+                      category = {
+                          "operations": "factory_operations",
+                          "django-app": "factory_django",
+                          "private": "factory_private",
+                          ".venv": "factory_python",
+                      }.get(sub, "factory_other")
+                  else:
+                      category = {
+                          ".cache": "user_cache", ".local": "user_local",
+                          ".npm": "npm_cache", ".cargo": "cargo_cache",
+                          ".rustup": "rust_toolchain",
+                      }.get(rel[0], "home_other")
+                  buckets[category] = buckets.get(category, 0) + allocated
+                  if category == "factory_django":
+                      file_class = django_file_class(candidate.name)
+                      django_types[file_class] = django_types.get(file_class, 0) + allocated
+                      django_type_counts[file_class] = django_type_counts.get(file_class, 0) + 1
+                      if file_class == "database_main":
+                          # Prioritize the three largest allocated files, not
+                          # arbitrary find traversal order; no paths are emitted.
+                          heapq.heappush(sqlite_candidates,
+                                         (allocated, recent["scanned_large"], candidate))
+                          if len(sqlite_candidates) > 3:
+                              heapq.heappop(sqlite_candidates)
+                  largest_recent.append((allocated, category))
+                  recent["scanned_large"] += 1
+                  recent["allocated_bytes"] += allocated
+              except (OSError, ValueError):
+                  continue
+          recent["by_category_allocated_bytes"] = dict(sorted(buckets.items()))
+          recent["factory_django_by_file_class_bytes"] = dict(sorted(django_types.items()))
+          recent["factory_django_by_file_class_counts"] = dict(sorted(django_type_counts.items()))
+          recent["factory_django_classification_complete"] = (
+              recent["complete"] and not recent["truncated_at_3000"])
+          recent["top_ten_anonymous"] = [
+              {"allocated_bytes": size, "category": cat}
+              for size, cat in sorted(largest_recent, reverse=True)[:10]]
+          # Constant-time, immutable read-only SQLite header/PRAGMA inspection.
+          # No SQL rows or table names read; no WAL/shm creation, no DB changes.
+          sqlite_health = []
+          for _, _, candidate in sorted(sqlite_candidates, reverse=True):
+              entry = {"readable": False, "file_bytes": None,
+                       "page_count": None, "page_size": None,
+                       "freelist_pages": None, "freelist_bytes": None,
+                       "live_consistency_verified": False}
+              try:
+                  entry["file_bytes"] = candidate.stat().st_size
+                  connection = sqlite3.connect(
+                      candidate.as_uri() + "?mode=ro&immutable=1",
+                      uri=True, timeout=1)
+                  try:
+                      connection.execute("PRAGMA query_only=ON")
+                      pages = int(connection.execute("PRAGMA page_count").fetchone()[0])
+                      size = int(connection.execute("PRAGMA page_size").fetchone()[0])
+                      free_pages = int(connection.execute("PRAGMA freelist_count").fetchone()[0])
+                      if pages >= 0 and 0 < size <= 65536 and 0 <= free_pages <= pages:
+                          entry.update({"readable": True, "page_count": pages,
+                                        "page_size": size, "freelist_pages": free_pages,
+                                        "freelist_bytes": free_pages * size})
+                  finally:
+                      connection.close()
+              except (OSError, ValueError, sqlite3.Error):
+                  pass
+              sqlite_health.append(entry)
+          # Deleted-but-open regular files visible to this user; no file names.
+          deleted_count = 0
+          deleted_allocated = 0
+          deleted_duplicate_fds = 0
+          deleted_seen_inodes = set()
+          fd_scanned = 0
+          proc_scanned = 0
+          proc_truncated = False
+          try:
+              pids = [p for p in Path("/proc").iterdir() if p.name.isdigit()]
+              for proc in pids:
+                  if proc_scanned >= 180:
+                      proc_truncated = True
+                      break
+                  try:
+                      if proc.stat().st_uid != os.getuid():
+                          continue
+                      proc_scanned += 1
+                      for fd in list((proc / "fd").iterdir())[:256]:
+                          fd_scanned += 1
+                          try:
+                              if os.readlink(fd).endswith(" (deleted)"):
+                                  s = os.stat(fd)
+                                  if stat.S_ISREG(s.st_mode):
+                                      inode_key = (s.st_dev, s.st_ino)
+                                      if inode_key in deleted_seen_inodes:
+                                          deleted_duplicate_fds += 1
+                                      else:
+                                          deleted_seen_inodes.add(inode_key)
+                                          deleted_count += 1
+                                          deleted_allocated += s.st_blocks * 512
+                          except OSError:
+                              continue
+                  except OSError:
+                      continue
+          except OSError:
+              proc_truncated = True
+
+          # Independent fast probes: do not require a full mount traversal or root access.
+          # All labels are fixed categories; no private paths or filenames are logged.
+          fs = os.statvfs(home)
+          inode_state = {"total": fs.f_files, "free": fs.f_ffree,
+                         "available": fs.f_favail}
+          hot_roots = {
+              "var_log": "/var/log",
+              "var_lib_docker": "/var/lib/docker",
+              "var_lib_containers": "/var/lib/containers",
+              "factory_operations": str(home / "factory-runtime" / "operations"),
+          }
+          hot_sizes = {label: bounded_du(Path(path), 5)
+                       for label, path in hot_roots.items()}
+
+          # Bounded, read-only operations inventory to prioritize *reversible*
+          # recovery. All directory names are suppressed; no delete candidates
+          # are declared safe from age or size alone.
+          def factory_operations_age_inventory(root):
+              out = {"complete": False, "files_scanned": 0, "dirs_scanned": 0,
+                     "allocated_bytes_scanned": 0, "age_allocated_bytes": {},
+                     "class_allocated_bytes": {}, "class_age_allocated_bytes": {},
+                     "older_archive_log_bytes": 0, "older_archive_log_is_safe_to_delete": False,
+                     "largest_groups_anonymous": [], "scan_seconds": None,
+                     "hardlink_duplicates_skipped": 0, "scan_errors": 0,
+                     "accounting_consistent": False, "scan_truncated": False}
+              if root.is_symlink() or not root.is_dir():
+                  return out
+              started = time.monotonic()
+              groups = {}
+              group_classes = {}
+              group_ages = {}
+              top_database_files = []
+              top_other_files = []
+              seen_inodes = set()
+              def on_walk_error(_error):
+                  out["scan_errors"] += 1
+              try:
+                  device = root.stat().st_dev
+                  for base, dirs, files in os.walk(root, topdown=True, followlinks=False,
+                                                  onerror=on_walk_error):
+                      if time.monotonic() - started > 18 or out["files_scanned"] >= 120000:
+                          out["scan_truncated"] = True
+                          break
+                      here = Path(base)
+                      if here.is_symlink() or here.stat().st_dev != device:
+                          dirs[:] = []
+                          continue
+                      safe_dirs = []
+                      for dirname in dirs:
+                          subdir = here / dirname
+                          try:
+                              if not subdir.is_symlink() and subdir.stat().st_dev == device:
+                                  safe_dirs.append(dirname)
+                          except OSError:
+                              # Unreadable directory metadata invalidates a
+                              # claimed complete scan; never silently omit it.
+                              out["scan_errors"] += 1
+                      dirs[:] = safe_dirs
+                      out["dirs_scanned"] += 1
+                      for filename in files:
+                          if time.monotonic() - started > 18 or out["files_scanned"] >= 120000:
+                              out["scan_truncated"] = True
+                              break
+                          candidate = here / filename
+                          try:
+                              st = candidate.lstat()
+                              if not stat.S_ISREG(st.st_mode) or st.st_dev != device:
+                                  continue
+                              inode_key = (st.st_dev, st.st_ino)
+                              if inode_key in seen_inodes:
+                                  out["hardlink_duplicates_skipped"] += 1
+                                  continue
+                              seen_inodes.add(inode_key)
+                              age_days = max(0, (time.time() - st.st_mtime) / 86400)
+                              age = "lt_1d" if age_days < 1 else ("1_to_7d" if age_days < 7
+                                    else ("7_to_30d" if age_days < 30 else "ge_30d"))
+                              name = filename.lower()
+                              kind = ("database" if name.endswith((".db", ".sqlite", ".sqlite3"))
+                                      else "db_journal" if name.endswith(("-wal", "-shm", "-journal"))
+                                      else "archive" if name.endswith((".zip", ".tar", ".gz", ".zst"))
+                                      else "log" if name.endswith((".log", ".jsonl", ".ndjson"))
+                                      else "other")
+                              allocated = st.st_blocks * 512
+                              out["files_scanned"] += 1
+                              out["allocated_bytes_scanned"] += allocated
+                              out["age_allocated_bytes"][age] = out["age_allocated_bytes"].get(age, 0) + allocated
+                              out["class_allocated_bytes"][kind] = out["class_allocated_bytes"].get(kind, 0) + allocated
+                              class_ages = out["class_age_allocated_bytes"].setdefault(kind, {})
+                              class_ages[age] = class_ages.get(age, 0) + allocated
+                              if age == "ge_30d" and kind in ("archive", "log"):
+                                  # A screening figure only; never an approved deletion set.
+                                  out["older_archive_log_bytes"] += allocated
+                              relative = candidate.relative_to(root).parts
+                              group = "root" if len(relative) == 1 else relative[0]
+                              groups[group] = groups.get(group, 0) + allocated
+                              class_totals = group_classes.setdefault(group, {})
+                              class_totals[kind] = class_totals.get(kind, 0) + allocated
+                              age_totals = group_ages.setdefault(group, {})
+                              age_totals[age] = age_totals.get(age, 0) + allocated
+                              if kind == "database":
+                                  heapq.heappush(top_database_files,
+                                                 (allocated, out["files_scanned"], candidate, age))
+                                  if len(top_database_files) > 8:
+                                      heapq.heappop(top_database_files)
+                              elif kind == "other":
+                                  heapq.heappush(top_other_files, allocated)
+                                  if len(top_other_files) > 8:
+                                      heapq.heappop(top_other_files)
+                          except (OSError, ValueError):
+                              out["scan_errors"] += 1
+                              continue
+                      if out["scan_truncated"]:
+                          break
+                  else:
+                      out["complete"] = out["scan_errors"] == 0 and not out["scan_truncated"]
+              except (OSError, ValueError):
+                  out["scan_errors"] += 1
+              out["accounting_consistent"] = (
+                  out["allocated_bytes_scanned"] == sum(out["age_allocated_bytes"].values())
+                  == sum(out["class_allocated_bytes"].values())
+                  == sum(sum(ages.values()) for ages in out["class_age_allocated_bytes"].values())
+              )
+              if not out["accounting_consistent"]:
+                  out["complete"] = False
+              out["largest_groups_anonymous"] = sorted(groups.values(), reverse=True)[:12]
+              out["largest_groups_anonymous_class_age"] = [
+                  {"allocated_bytes": total,
+                   "by_class_bytes": dict(sorted(group_classes[group].items())),
+                   "by_age_bytes": dict(sorted(group_ages[group].items()))}
+                  for group, total in sorted(groups.items(),
+                                             key=lambda item: item[1], reverse=True)[:8]]
+              out["largest_other_files_anonymous"] = sorted(top_other_files, reverse=True)
+              # Header bytes only, no SQL, rows, names, file hashes, or write locks.
+              # SQLite header page/freelist counters may lag an active WAL.
+              out["database_header_probe_is_consistency_check"] = False
+              out["largest_database_files_anonymous"] = []
+              for allocated, _, candidate, age in sorted(top_database_files, reverse=True):
+                  entry = {"allocated_bytes": allocated, "age_bucket": age,
+                           "sqlite_header_valid": False, "file_bytes": None,
+                           "header_page_size": None, "header_page_count": None,
+                           "header_freelist_pages": None}
+                  try:
+                      flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                      fd = os.open(candidate, flags)
+                      try:
+                          st = os.fstat(fd)
+                          if stat.S_ISREG(st.st_mode) and st.st_dev == device:
+                              entry["file_bytes"] = st.st_size
+                              header = os.read(fd, 100)
+                              if len(header) == 100 and header[:16] == b"SQLite format 3\x00":
+                                  size = int.from_bytes(header[16:18], "big")
+                                  size = 65536 if size == 1 else size
+                                  pages = int.from_bytes(header[28:32], "big")
+                                  free = int.from_bytes(header[36:40], "big")
+                                  if size in (512, 1024, 2048, 4096, 8192, 16384, 32768, 65536) and free <= pages:
+                                      entry.update({"sqlite_header_valid": True,
+                                                    "header_page_size": size,
+                                                    "header_page_count": pages,
+                                                    "header_freelist_pages": free})
+                      finally:
+                          os.close(fd)
+                  except OSError:
+                      pass
+                  out["largest_database_files_anonymous"].append(entry)
+              out["scan_seconds"] = round(time.monotonic() - started, 1)
+              return out
+
+          operations_inventory = factory_operations_age_inventory(
+              home / "factory-runtime" / "operations")
+
+          # Screening is deliberately not a deletion plan. No backup/rollback
+          # provenance is proven by this read-only workflow.
+          # Use the lowest of the start/end free-space observations: an active
+          # factory can grow while this bounded scan runs. Never authorize
+          # recovery or worker restart from a stale optimistic measurement.
+          disk_end = shutil.disk_usage(home)
+          conservative_free = min(disk.free, disk_end.free)
+          reserve_gap_bytes = max(0, 5 * 1024**3 - conservative_free)
+          aged_screening_bytes = operations_inventory["older_archive_log_bytes"]
+          recovery_screening_insufficient = aged_screening_bytes < reserve_gap_bytes
+          # Incident-specific read-only cron continuity check. An earlier
+          # failed SQLite backup may have exited before the restore trap
+          # completed. Never modify crontab or print its contents.
+          def cron_continuity():
+              out = {"inspection_ok": False, "current_master_tags": None,
+                     "saved_master_tags": None, "saved_backup_age_seconds": None,
+                     "restore_suspected": False, "cron_daemon_active": None,
+                     "crontab_modified": False}
+              try:
+                  current = subprocess.run(["crontab", "-l"], capture_output=True,
+                                           text=True, timeout=8, check=False)
+                  if current.returncode not in (0, 1):
+                      return out
+                  current_text = current.stdout if current.returncode == 0 else ""
+                  out["current_master_tags"] = sum(
+                      "SAEIT_MASTER_AGENT_V1" in line
+                      for line in current_text.splitlines())
+                  backups = home / "factory-runtime" / "operations" / "backups"
+                  candidates = []
+                  if backups.is_dir() and not backups.is_symlink():
+                      for p in backups.glob("cron-before-master-*.txt"):
+                          if p.is_file() and not p.is_symlink():
+                              candidates.append((p.stat().st_mtime, p))
+                          if len(candidates) >= 200:
+                              break
+                  if candidates:
+                      ts, latest = max(candidates, key=lambda item: item[0])
+                      # Do not expose file name, cron content or other entries.
+                      with latest.open("r", encoding="utf-8", errors="replace") as f:
+                          out["saved_master_tags"] = sum(
+                              "SAEIT_MASTER_AGENT_V1" in line for line in f)
+                      out["saved_backup_age_seconds"] = max(0, int(time.time() - ts))
+                  statuses = []
+                  for daemon in ("cron", "crond"):
+                      try:
+                          p = subprocess.run(["systemctl", "is-active", daemon],
+                                             capture_output=True, text=True,
+                                             timeout=4, check=False)
+                          statuses.append(p.returncode == 0 and
+                                          p.stdout.strip() == "active")
+                      except (OSError, subprocess.TimeoutExpired):
+                          pass
+                  out["cron_daemon_active"] = any(statuses) if statuses else None
+                  out["restore_suspected"] = (
+                      out["current_master_tags"] == 0 and
+                      out["saved_master_tags"] == 2 and
+                      out["saved_backup_age_seconds"] is not None and
+                      out["saved_backup_age_seconds"] < 86400)
+                  out["inspection_ok"] = True
+              except (OSError, ValueError, subprocess.TimeoutExpired):
+                  pass
+              return out
+
+          cron_status = cron_continuity()
+          result = {
+              "schema": "saeit.vps.mount-disk-attribution.readonly.v1",
+              "master_cron_continuity": cron_status,
+              "reserve_5_gib_gap_bytes": reserve_gap_bytes,
+              "aged_archive_log_screening_bytes": aged_screening_bytes,
+              "aged_archive_log_screening_insufficient": recovery_screening_insufficient,
+              "reversible_cleanup_proven": False,
+              "off_host_backup_verified": False,
+              "worker_restart_authorized": False,
+              "observed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "mount_total_bytes": disk.total,
+              "mount_used_bytes": disk_end.used,
+              "mount_free_bytes": disk_end.free,
+              "mount_free_bytes_at_start": disk.free,
+              "mount_free_bytes_min_observed": conservative_free,
+              "reserve_2048_mib_met": conservative_free >= 2048 * 1024 * 1024,
+              "reserve_5_gib_met": conservative_free >= 5 * 1024**3,
+              "root_du_bytes": root_sizes,
+              "inode_state": inode_state,
+              "bounded_hot_roots": hot_sizes,
+              "factory_operations_age_inventory": operations_inventory,
+              "root_same_device_as_factory": devices,
+              "home_known_bytes": known,
+              "home_other_largest_bytes": others[:12],
+              "home_other_total_observed_bytes": sum(others),
+              "home_inventory_complete": home_complete,
+              "home_entries_truncated": entries_truncated,
+              "home_entries_scanned": len(entries),
+              "recent_large_files": recent,
+              "factory_sqlite_readonly_header": sqlite_health,
+              "open_deleted_visible_fd_count": deleted_count,
+              "open_deleted_duplicate_fds_skipped": deleted_duplicate_fds,
+              "open_deleted_visible_allocated_bytes": deleted_allocated,
+              "open_deleted_proc_scanned": proc_scanned,
+              "open_deleted_fd_scanned": fd_scanned,
+              "open_deleted_scan_truncated": proc_truncated,
+              "inspection_seconds": round(time.monotonic() - start, 1),
+              "mutations": 0,
+              "deleted": 0,
+              "backups_touched": 0,
+          }
+          print("VPS_MOUNT_ATTRIBUTION=" + json.dumps(result, sort_keys=True))
+          PY
+          # Independent existing read-only leech capacity and manuscript count probe.
+          # Does not launch a model, write a manuscript, or alter cron/single-writer lock.
+          timeout 25s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' < scripts/factory_leech_vps_capacity_probe_20261025.py
+      - name: Validate and archive anonymized read-only receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          f="$RUNNER_TEMP/vps-mount-attribution-receipt.txt"
+          test -s "$f"
+          python3 - "$f" <<'PY'
+          import json
+          import pathlib
+          import sys
+          rows = pathlib.Path(sys.argv[1]).read_text().splitlines()
+          assert len(rows) == 1 and rows[0].startswith("VPS_MOUNT_ATTRIBUTION=")
+          data = json.loads(rows[0].split("=", 1)[1])
+          assert data["mutations"] == data["deleted"] == data["backups_touched"] == 0
+          cron = data["master_cron_continuity"]
+          assert cron["crontab_modified"] is False
+          assert cron["current_master_tags"] is None or cron["current_master_tags"] >= 0
+          assert cron["saved_master_tags"] is None or cron["saved_master_tags"] >= 0
+          assert cron["restore_suspected"] is False or (cron["current_master_tags"] == 0 and cron["saved_master_tags"] == 2)
+          inv = data["factory_operations_age_inventory"]
+          assert inv["accounting_consistent"] and not inv["older_archive_log_is_safe_to_delete"]
+          assert not (inv["complete"] and inv["scan_truncated"])
+          assert inv["older_archive_log_bytes"] <= inv["allocated_bytes_scanned"]
+          assert inv["database_header_probe_is_consistency_check"] is False
+          recent = data["recent_large_files"]
+          assert recent["factory_django_classification_complete"] == (
+              recent["complete"] and not recent["truncated_at_3000"])
+          assert len(data["factory_sqlite_readonly_header"]) <= 3
+          assert all(e["file_bytes"] is None or e["file_bytes"] >= 0
+                     for e in data["factory_sqlite_readonly_header"])
+          assert sum(x["allocated_bytes"] for x in inv["largest_database_files_anonymous"]) <= inv["class_allocated_bytes"].get("database", 0)
+          assert sum(inv["largest_other_files_anonymous"]) <= inv["class_allocated_bytes"].get("other", 0)
+          assert all(sum(x["by_class_bytes"].values()) == x["allocated_bytes"] == sum(x["by_age_bytes"].values())
+                     for x in inv["largest_groups_anonymous_class_age"])
+          assert len(inv["largest_database_files_anonymous"]) <= 8
+          assert data["mount_free_bytes_min_observed"] == min(
+              data["mount_free_bytes_at_start"], data["mount_free_bytes"])
+          assert data["reserve_5_gib_gap_bytes"] == max(
+              0, 5 * 1024**3 - data["mount_free_bytes_min_observed"])
+          assert data["reserve_5_gib_met"] == (data["mount_free_bytes_min_observed"] >= 5 * 1024**3)
+          assert data["aged_archive_log_screening_bytes"] == inv["older_archive_log_bytes"]
+          assert data["aged_archive_log_screening_insufficient"] == (inv["older_archive_log_bytes"] < data["reserve_5_gib_gap_bytes"])
+          assert data["reversible_cleanup_proven"] is False
+          assert data["off_host_backup_verified"] is False
+          assert data["worker_restart_authorized"] is False
+          assert data["open_deleted_duplicate_fds_skipped"] >= 0
+          print("ANONYMIZED_RECEIPT_VALIDATED=1")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vps-mount-readonly-receipt-${{ github.run_id }}
+          path: ${{ runner.temp }}/vps-mount-attribution-receipt.txt
+          if-no-files-found: error
+          retention-days: 3
