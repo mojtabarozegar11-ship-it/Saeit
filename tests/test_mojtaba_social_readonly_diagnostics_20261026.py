@@ -141,6 +141,13 @@ class ReadOnlyOfficialAPIContracts(unittest.TestCase):
             inspect(account("google_scholar","some_handle"),"test-token",transport=fake)
         self.assertEqual(fake.calls,[])
 
+    def test_instagram_provider_banned_username_does_not_verify(self):
+        mock = Mocks({"id":"123456789","username":"Dr.Mojtaba.Rozegar"})
+        with self.assertRaises(Blocked):
+            inspect(account("instagram","123456789"),"test-token",transport=mock)
+        self.assertEqual(len(mock.calls), 1)
+        self.assertEqual(mock.calls[0][0], "GET")
+
     def test_no_token_or_provider_body_in_errors(self):
         mock=Mocks({"data":{"id":"OTHER_USER"}})
         with self.assertRaises(Blocked) as caught:
