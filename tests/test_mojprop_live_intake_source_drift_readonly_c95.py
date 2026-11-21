@@ -148,7 +148,7 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         # original production comparison; the new PR is NOT a cPanel release.
         # The updated reviewed source additionally allows three bounded unpaid
         # product enquiries; immutable historical C95 deployment pin stays fixed.
-        self.assertEqual(exact_git_blob(current.read_bytes()), "f042ac9be1fbe9ffba20b8bc74af17e2d57fd039")
+        self.assertEqual(exact_git_blob(current.read_bytes()), "ee4374977fa82cf80df1244f4617dc1a689c061b")
         self.assertNotEqual(exact_git_blob(current.read_bytes()), old_ref)
 
     def test_current_url_source_exact_delta_without_changing_historical_auditor(self):
