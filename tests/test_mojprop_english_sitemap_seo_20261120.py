@@ -19,6 +19,12 @@ class MojPropEnglishSitemapTests(SimpleTestCase):
             "https://mojplaywin.com/moj-prop/payment/",
             "https://mojplaywin.com/moj-prop/contact/",
             "https://mojplaywin.com/moj-prop/catalog/",
+            "https://mojplaywin.com/moj-prop/education/",
+            "https://mojplaywin.com/moj-prop/education/risk-management/",
+            "https://mojplaywin.com/moj-prop/education/drawdown-and-position-sizing/",
+            "https://mojplaywin.com/moj-prop/education/sixty-day-simulated-challenge/",
+            "https://mojplaywin.com/moj-prop/education/best-day-consistency/",
+            "https://mojplaywin.com/moj-prop/education/simulated-versus-live/",
         }
         for host in ("mojplaywin.com", "www.mojplaywin.com"):
             with self.subTest(host=host):
