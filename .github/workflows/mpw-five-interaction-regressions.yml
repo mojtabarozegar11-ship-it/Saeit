@@ -1,0 +1,25 @@
+name: MojPlayWin five-game interaction regressions (non-deploy)
+on:
+  pull_request:
+    paths:
+      - "site_releases/mojplaywin/games-20261021/**"
+      - "tests/game/mpw-five-interaction-regressions.cjs"
+      - ".github/workflows/mpw-five-interaction-regressions.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-logic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Execute deterministic game input and replay regressions
+        run: node tests/game/mpw-five-interaction-regressions.cjs
+      - name: Verify no deployment was attempted
+        run: echo "SOURCE_ONLY_QA_NO_VPS_NO_CPANEL_NO_PAYMENT"
