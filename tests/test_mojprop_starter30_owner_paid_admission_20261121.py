@@ -93,11 +93,14 @@ class Starter30OwnerPaidAdmissionTests(SimpleTestCase):
 
     @override_settings(**FAKE_APPROVALS)
     def test_old_or_changed_payout_ledger_percentage_is_refused(self):
-        from prop_firm import simulation_payout
-        with (
-            patch.dict(sys.modules, {"prop_firm.rules": _mock_effective_scorer()}),
-            patch.object(simulation_payout, "PAYOUT_PERCENT", 70),
-        ):
+        # Replace the exact import target, not a package-level cached alias.
+        # This avoids module cache leakage across thousands of CI tests.
+        legacy_ledger = ModuleType("prop_firm.simulation_payout")
+        legacy_ledger.PAYOUT_PERCENT = 70
+        with patch.dict(sys.modules, {
+            "prop_firm.rules": _mock_effective_scorer(),
+            "prop_firm.simulation_payout": legacy_ledger,
+        }):
             defects = admission.paid_admission_defects()
         self.assertIn("verified_profit_commitment_not_100_percent", defects)
 
