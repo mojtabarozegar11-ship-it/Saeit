@@ -28,6 +28,8 @@ class LiveMojtabaBotPortalCandidateTests(unittest.TestCase):
     def test_only_safe_gate_and_one_free_signals_link_change(self):
         candidate = self._candidate(self.SOURCE)
         self.assertNotIn(b'/mojprop-starter30-checkout/', candidate)
+        self.assertNotIn(b"starter30_checkout_available", candidate)
+        self.assertEqual(candidate.count(b'href="/moj-prop-intake/?format=html&amp;service=signals"'), 1)
         self.assertEqual(candidate.count(b'service=signals'), 1)
         self.assertIn(b'Do not send TRX.', candidate)
         self.assertIn(b'not guaranteed', candidate)
