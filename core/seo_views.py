@@ -118,6 +118,7 @@ def sitemap_xml(request):
             "/moj-prop/education/sixty-day-simulated-challenge/",
             "/moj-prop/education/best-day-consistency/",
             "/moj-prop/education/simulated-versus-live/",
+            "/moj-prop/selected-traders/",
         ]
         origin = "https://mojplaywin.com"
     else:
