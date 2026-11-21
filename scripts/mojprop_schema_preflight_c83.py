@@ -5,6 +5,7 @@ call this BEFORE backing up/writing model, migration, URL or admin source.
 A successful source audit does NOT prove an independently restorable database.
 """
 import ast
+import hashlib
 from pathlib import Path
 
 
@@ -17,6 +18,11 @@ MIGRATIONS = (
     "0046_signal_free_subscription",
     "0047_mpw_guest_email_recovery",
 )
+# Explicit source-tree self-test allowance only; never a live-DB migration release.
+# The 0048 migration is state-only and is pinned to the reviewed exact Git blob.
+REVIEWED_SELFTEST_ONLY_LATER = {
+    "0048_alter_commercefunnelevent_event_name": "afe0bda740566284b263f533eb14e5ebd8f6fc3c",
+}
 MODELS = ("MojPropRequest", "MojPropOffer", "MojPropDeliveryEvidence")
 ADMINS = ("MojPropRequestAdmin", "MojPropOfferAdmin", "MojPropDeliveryEvidenceAdmin")
 LEGACY_BASELINES = {
@@ -204,6 +210,16 @@ def check_schema_closure(live_root, staged_root):
             raise RuntimeError("unsafe live core migration symlink")
         head = path.stem.split("_", 1)[0]
         if head.isdigit() and int(head) >= 41 and path.stem not in known:
+            # Only ignore the exact reviewed 0048 bytes during a SAME-TREE
+            # self-test. A separate live root must still reject a newer schema
+            # before any installer writing or a migration to old target 0047.
+            if live_root == staged_root and path.stem in REVIEWED_SELFTEST_ONLY_LATER:
+                data = path.read_bytes()
+                git_blob = hashlib.sha1(
+                    b"blob " + str(len(data)).encode("ascii") + b"\x00" + data
+                ).hexdigest()
+                if len(data) <= 4096 and git_blob == REVIEWED_SELFTEST_ONLY_LATER[path.stem]:
+                    continue
             raise RuntimeError("unreviewed later or conflicting core migration: " + path.stem)
 
     # Owner-preserved signal modules cannot be silently replaced with an
