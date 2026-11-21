@@ -245,7 +245,8 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         self.events.clear()
         self.payment.save.reset_mock()
         # Independently solidified legitimate transfer landed before expiry.
-        self.transfer.tx_hash = "b" * 64
+        self.txid = "b" * 64
+        self.transfer.tx_hash = self.txid
         self.transfer.block_time = self.now - timedelta(minutes=5)
         self.payment.payer_hex41 = None
         self.payment.payment_ref = "PAY-recovered"
