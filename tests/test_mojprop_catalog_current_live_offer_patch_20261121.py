@@ -19,11 +19,12 @@ class ExactCurrentCatalogPatchTests(unittest.TestCase):
         with patch.object(m, "SOURCE_SHA256", hashlib.sha256(original).hexdigest()):
             return m.generate_candidate(original)
 
-    def test_injects_exact_one_distinct_simulated_offer_with_actual_checkout_link(self):
+    def test_injects_exact_one_simulated_offer_with_safe_free_terms_cta(self):
         result = self.verified(self.ORIGINAL)
         self.assertEqual(result.count(b'id="starter30-offer"'), 1)
         self.assertEqual(result.count(b'/moj-prop/starter-30-trx/'), 1)
-        self.assertEqual(result.count(b'/mojprop-starter30-checkout/'), 1)
+        self.assertNotIn(b'/mojprop-starter30-checkout/', result)
+        self.assertEqual(result.count(b'/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx'), 1)
         self.assertIn(b'30 TRX', result)
         self.assertIn(b'60-day simulated challenge', result)
         self.assertIn(b'virtual USD 1,000', result)
@@ -57,6 +58,8 @@ class ExactCurrentCatalogPatchTests(unittest.TestCase):
             m.generate_candidate("not bytes")
 
     def test_no_other_site_or_wallet_in_new_markup(self):
+        self.assertIn(b'Request written Starter30 terms without payment', m.NEW_OFFER)
+        self.assertNotIn(b'/mojprop-starter30-checkout/', m.NEW_OFFER)
         self.assertNotIn(b'<form', m.NEW_OFFER)
         self.assertNotIn(b'<script', m.NEW_OFFER)
         self.assertNotIn(b'TH', m.NEW_OFFER)

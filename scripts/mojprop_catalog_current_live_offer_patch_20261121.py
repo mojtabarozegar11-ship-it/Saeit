@@ -24,7 +24,7 @@ NEW_OFFER = (
     '<p>Pay only against a unique invoice created by the official checkout. '
     'No customer trading capital is held by Moj Prop.</p>'
     '<p><a class="cta" href="/moj-prop/starter-30-trx/">Review Starter 30 rules</a> '
-    '<a href="/mojprop-starter30-checkout/">Check 30 TRX checkout availability</a></p>'
+    '<a href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx">Request written Starter30 terms without payment</a></p>'
     '</section>'
 ).encode("utf-8")
 
