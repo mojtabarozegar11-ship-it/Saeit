@@ -14,8 +14,10 @@ by a separately authorized procedure, never in the live tenant.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
+import re
 from pathlib import Path
 
 _APP = "prop_firm"
@@ -77,22 +79,37 @@ def _verify_local_backup_manifest(raw: str | None) -> dict:
     """Digest/checksize verification only; never claims an import worked."""
     if not raw:
         return {"verified": False, "restore_verified": False}
-    manifest_path = Path(raw).resolve(strict=True)
-    if manifest_path.is_symlink() or not manifest_path.is_file():
+    original = Path(raw).expanduser()
+    if original.is_symlink() or not original.is_file():
         return {"verified": False, "restore_verified": False}
-    data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    archive = manifest_path.parent / "mojprop-full-logical.sql.gz"
-    if archive.is_symlink() or not archive.is_file():
+    try:
+        manifest_path = original.resolve(strict=True)
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        archive = manifest_path.parent / "mojprop-full-logical.sql.gz"
+        if archive.is_symlink() or not archive.is_file():
+            return {"verified": False, "restore_verified": False}
+        if archive.stat().st_size > 256 * 1024 * 1024:
+            return {"verified": False, "restore_verified": False}
+        blob = archive.read_bytes()
+        with gzip.open(archive, "rb") as stream:
+            plain = stream.read(512 * 1024 * 1024 + 1)
+        if len(plain) > 512 * 1024 * 1024:
+            return {"verified": False, "restore_verified": False}
+    except (OSError, ValueError, TypeError, json.JSONDecodeError, EOFError):
         return {"verified": False, "restore_verified": False}
-    if archive.stat().st_size > 256 * 1024 * 1024:
-        return {"verified": False, "restore_verified": False}
-    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     exists = (
-        digest == data.get("gzip_sha256")
-        and archive.stat().st_size == data.get("compressed_bytes")
-        and data.get("tables_in_live_schema") == data.get("create_table_statements")
+        hashlib.sha256(blob).hexdigest() == data.get("gzip_sha256")
+        and hashlib.sha256(plain).hexdigest() == data.get("sql_sha256")
+        and len(blob) == data.get("compressed_bytes")
+        and len(plain) == data.get("uncompressed_bytes")
+        and len(re.findall(rb"(?m)^CREATE TABLE ", plain))
+        == data.get("tables_in_live_schema")
+        == data.get("create_table_statements")
         and data.get("tables_in_live_schema", 0) > 0
+        and not re.search(rb"(?im)^\\s*(DROP|TRUNCATE)\\s+TABLE\\s", plain)
     )
+    # A readable archive is NOT a restored database. Never infer this from
+    # a user-controlled flag or even an SQL checksum.
     return {"verified": exists, "restore_verified": False}
 
 
