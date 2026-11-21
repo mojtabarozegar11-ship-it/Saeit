@@ -1,0 +1,72 @@
+name: Revenue36 cPanel targeted patch applicability (read-only)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/revenue36-patch-applicability.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  patch-check:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 9
+    steps:
+      - name: Checkout fixed reviewed CRM candidate as data only
+        uses: actions/checkout@v4
+        with:
+          ref: 3027b3543798d07f40189a62e44e29e75a24fe3f
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build bounded patch from fixed main baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e e3ec7bc77e3f7b6c2f48cd5ae1b7abc1f6ca3d97^{commit}
+          git diff --binary e3ec7bc77e3f7b6c2f48cd5ae1b7abc1f6ca3d97 3027b3543798d07f40189a62e44e29e75a24fe3f -- \
+            config/urls.py core/models.py core/admin.py core/financial_brand_pages.py \
+            core/templates/core/financial_brand_page.html > "$RUNNER_TEMP/revenue36-targeted.patch"
+          test -s "$RUNNER_TEMP/revenue36-targeted.patch"
+          echo "PATCH_BASELINE=e3ec7bc77e3f7b6c2f48cd5ae1b7abc1f6ca3d97"
+          echo "PATCH_CANDIDATE=3027b3543798d07f40189a62e44e29e75a24fe3f"
+          echo "PATCH_BYTE_SIZE=$(wc -c < "$RUNNER_TEMP/revenue36-targeted.patch")"
+      - name: Test patch without writing cPanel files
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/revenue36-patch-verify-$GITHUB_RUN_ID"
+          umask 077
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d" "$RUNNER_TEMP/revenue36-targeted.patch"' EXIT
+          test -n "$HOST_KEY"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          timeout 12s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          set +e
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" \
+            -o ConnectTimeout=10 -o ForwardAgent=no -p 1396 \
+            zomorod2@zohal.pws-dns.net \
+              'set -eu; cd /home/zomorod2/Saeit-staging; git apply --check --whitespace=nowarn -' \
+            < "$RUNNER_TEMP/revenue36-targeted.patch"
+          rc="$?"
+          set -e
+          if [[ "$rc" == "0" ]]; then
+            echo "TARGETED_PATCH_APPLIES=yes; ORIGIN_WRITE=no"
+          else
+            echo "::warning::TARGETED_PATCH_APPLIES=no; ORIGIN_WRITE=no"
+            echo "Potential active file drift detected; manual three-way merge is required."
+          fi
+          exit "$rc"
+      - name: Never alter production or buyer accounts
+        if: always()
+        run: echo "READ_ONLY_ORIGIN_WRITE=false"
