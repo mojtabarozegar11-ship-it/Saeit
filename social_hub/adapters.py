@@ -11,7 +11,7 @@ import json
 import re
 from urllib.parse import urlsplit, urlencode
 
-from .catalog import BRANDS, MEDIA_HOSTS, RESTRICTED_HANDLES, platform
+from .catalog import BRANDS, MEDIA_HOSTS, RESTRICTED_HANDLES, platform, restricted_profile_in
 
 class Blocked(ValueError):
     pass
@@ -120,6 +120,11 @@ def send(account: dict, content: dict, token: str, transport) -> DispatchOutcome
     destination = account.get("destination")
     if not isinstance(destination, str) or not destination or len(destination) > 180:
         raise Blocked("Destination missing")
+    # A legacy or externally imported account may bypass initial registration.
+    # Deny before transport, even if its numeric provider ID looks valid.
+    if restricted_profile_in(destination, account.get("public_url"),
+                             account.get("profile_handle"), account.get("provider_identity")):
+        raise Blocked("Restricted account cannot be a publishing destination")
     text = content.get("text", "")
     if any(x in json.dumps(content, ensure_ascii=False).casefold() for x in RESTRICTED_HANDLES):
         raise Blocked("Restricted account may not be promoted")
