@@ -43,7 +43,7 @@ def generate_candidate(original: bytes) -> bytes:
     candidate = original.replace(INSERT_BEFORE, NEW_OFFER + INSERT_BEFORE, 1)
     if candidate.replace(NEW_OFFER, b"", 1) != original:
         raise ValueError("unexpected unrelated change")
-    for kind in (rb"<script\\b[^>]*>.*?</script>", rb"<style\\b[^>]*>.*?</style>", rb"<form\\b[^>]*>.*?</form>"):
+    for kind in (rb"<script\b[^>]*>.*?</script>", rb"<style\b[^>]*>.*?</style>", rb"<form\b[^>]*>.*?</form>"):
         if re.findall(kind, original, re.I | re.S) != re.findall(kind, candidate, re.I | re.S):
             raise ValueError("protected functional markup changed")
     return candidate
