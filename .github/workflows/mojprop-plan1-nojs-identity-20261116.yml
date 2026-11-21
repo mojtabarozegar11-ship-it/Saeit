@@ -48,7 +48,9 @@ jobs:
           from pathlib import Path
           src=Path("core/mojprop_accessible_intake.py").read_text("utf-8")
           assert 'if packages == ["moj-prop-01"]:' in src
-          assert "MOJ-PROP-01 simulated trading challenge" in src\n          assert "Both challenge and post-pass funded stages use simulated capital." in src\n          assert "A real funded account" not in src
+          assert "MOJ-PROP-01 simulated trading challenge" in src
+          assert "Both challenge and post-pass funded stages use simulated capital." in src
+          assert "A real funded account" not in src
           assert "This form takes no" in src
           assert 'ACTION = "/moj-prop-intake/?format=html"' in src
           assert 'from .models import MojPropRequest' in src
