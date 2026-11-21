@@ -31,6 +31,37 @@ class MasterAgentChat:
 
         ChatMessage.objects.create(session=session, role="user", content=text)
 
+        # This is a bounded, local database census, not a language model.
+        # No task execution, external request or owner-command auto approval.
+        from django.db import DatabaseError
+        from .mojtaba_readonly_status import (
+            is_status_command, owner_runtime_snapshot, render_owner_status,
+        )
+        if is_status_command(text):
+            if not is_authorized_chat_operator(session.user):
+                reply = "گزارش مدیریتی از این حساب مجاز نیست."
+                execution = "forbidden"
+            else:
+                try:
+                    reply = render_owner_status(owner_runtime_snapshot(session.user))
+                    execution = "read_only_status"
+                except DatabaseError:
+                    reply = "گزارش وضعیت قابل دریافت نیست؛ صحت بانک اطلاعاتی باید بررسی شود."
+                    execution = "read_only_unavailable"
+            ChatMessage.objects.create(
+                session=session,
+                role="assistant",
+                content=reply,
+                metadata={
+                    "agent": "master_agent",
+                    "capability_pack": "1.0.0",
+                    "execution": execution,
+                    "llm_called": False,
+                },
+            )
+            return reply
+
+
         # Explicit operational language creates only a pending operation.
         # Merely chatting as a superuser is NOT an independent authorization to
         # perform deployment, external writes, or other privileged side effects.
