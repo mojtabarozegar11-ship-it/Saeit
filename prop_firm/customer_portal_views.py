@@ -16,6 +16,7 @@ import secrets
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.mail import send_mail
 from django.db import DatabaseError, transaction
 from django.db.models import Max
@@ -213,8 +214,8 @@ def _request_code(request) -> HttpResponse:
             )
             if sent == 1:
                 request.session[_SESSION_CHALLENGE] = challenge.challenge_ref
-    except (IdentityAdapterClosed, DatabaseError, SMTPException, OSError,
-            ValueError, TypeError, LookupError):
+    except (IdentityAdapterClosed, ObjectDoesNotExist, DatabaseError,
+            SMTPException, OSError, ValueError, TypeError, LookupError):
         pass
     # A transport or DB outage must fail closed (never issue a browser login).
     # Deliberately no email addresses, codes or invoice refs in HTTP errors.
@@ -230,7 +231,8 @@ def _verify_code(request) -> HttpResponse:
         identity_id = consume_login_challenge(ref, code)
         if not settled_accounts(identity_id):
             raise IdentityAdapterClosed("settled entitlement required")
-    except (IdentityAdapterClosed, ValueError, TypeError, LookupError):
+    except (IdentityAdapterClosed, ObjectDoesNotExist, ValueError,
+            TypeError, LookupError):
         return _login_page(request, note="Code invalid or expired.")
     request.session.cycle_key()
     request.session.pop(_SESSION_CHALLENGE, None)
@@ -378,7 +380,8 @@ def _journal(request) -> HttpResponse:
                 payload_digest=sha256(canonical.encode()).hexdigest(),
                 payload=payload,
             )
-    except (InvalidJournal, ValueError, TypeError, AttributeError, LookupError):
+    except (InvalidJournal, ObjectDoesNotExist, ValueError, TypeError,
+            AttributeError, LookupError):
         return _dashboard(request, note="The journal was not accepted. Check the CSV format, active account and submission limits.")
     return _report(request, case_ref)
 
