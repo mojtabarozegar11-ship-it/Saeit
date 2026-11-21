@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#102a28">
+<title>ROOTLINE — Bloom Defense | Offline Game Pilot F14</title>
+<meta name="description" content="An original offline tactical garden-defense browser game. Balance irrigation, planting and defense against garden pests.">
+<link rel="stylesheet" href="game.css">
+</head>
+<body>
+<main class="layout">
+<header class="mast">
+<div class="identity"><span class="eyebrow">FACTORY F14 · ORIGINAL OFFLINE GAME · PRIVATE PILOT</span><h1>ROOTLINE <span>Bloom Defense</span></h1><p>Protect the orchard's roots. Every drop of water is a decision.</p></div>
+<div class="header-actions"><button id="help" class="quiet" type="button" aria-expanded="false" aria-controls="instructions">How to play</button><button id="mute" class="quiet" type="button" aria-pressed="true">Sound: off</button></div>
+</header>
+<section class="status" aria-label="Live game status">
+<div><small>WAVE</small><strong id="wave">1</strong></div><div><small>ROOT HEALTH</small><strong id="health">12 / 12</strong></div>
+<div><small>WATER</small><strong id="water">28</strong></div><div><small>SCORE</small><strong id="score">0</strong></div>
+<div><small>RECORD</small><strong id="best">0</strong></div>
+</section>
+<section id="instructions" class="instructions" hidden>
+<h2>Protect five root lanes</h2>
+<p>Enemies move from right to left. Choose a plant below, then tap an empty garden tile to plant it. Defenders fire along their lane; mist plants slow invaders; wells restore water. Save water for an emergency rainburst. A pest reaching the root damages orchard health.</p>
+<p><strong>Keyboard:</strong> 1 = Thorn, 2 = Mist, 3 = Well; Space = rainburst; P = pause. All actions also have touch-friendly buttons. Hold position strategically; planting in the wrong lane wastes water. This is a fixed-scope tactical prototype, not a commercially accepted game.</p>
+</section>
+<section class="playfield" aria-label="Game board">
+<canvas id="field" width="900" height="540" role="img" aria-label="Five-lane strategic orchard; tap garden cells to place a selected plant. Game state is also reported in the status panel.">
+Your browser must support Canvas 2D to play.
+</canvas>
+<div id="overlay" class="overlay"><div class="overlay-card"><span class="mini">FIELD OPERATIONS / 01</span><h2 id="overlayTitle">Your orchard is under threat</h2><p id="overlayText">Plant defenders, gather water, and survive increasingly difficult waves.</p><button id="launch" type="button">Start defense</button></div></div>
+</section>
+<section class="toolbar" aria-label="Plant and ability controls">
+<fieldset><legend>SELECT A PLANT</legend><div class="tools">
+<button type="button" class="tool active" data-kind="thorn" aria-pressed="true"><span class="tool-icon" aria-hidden="true">✦</span><span class="tool-title">Thorn</span><small>12 water · damage</small><kbd>1</kbd></button>
+<button type="button" class="tool" data-kind="mist" aria-pressed="false"><span class="tool-icon" aria-hidden="true">≈</span><span class="tool-title">Mist</span><small>16 water · slows</small><kbd>2</kbd></button>
+<button type="button" class="tool" data-kind="well" aria-pressed="false"><span class="tool-icon" aria-hidden="true">◉</span><span class="tool-title">Well</span><small>19 water · income</small><kbd>3</kbd></button>
+</div></fieldset>
+<div class="abilities"><button type="button" id="rain" class="ability">Rainburst <small>25 water · Space</small></button><button type="button" id="pause" class="quiet">Pause <kbd>P</kbd></button><button type="button" id="restart" class="quiet">Restart</button></div>
+</section>
+<p id="notice" class="notice" aria-live="polite" aria-atomic="true">Ready to defend the roots.</p>
+<footer>ROOTLINE v0.1 technical prototype. Local play only; no purchases, advertising, login, trackers or external assets. Manual playtesting, browser compatibility, independent quality and commercial rights approval still required. <span id="version">Factory F14 · candidate</span></footer>
+</main><script src="engine.js" defer></script><script src="game.js" defer></script>
+</body></html>
