@@ -54,6 +54,7 @@ namespace MojTrade.OmegaX
         private RelativeStrengthIndex _rsi;
         private AverageTrueRange _atr;
         private double _sessionStartEquity;
+        private DateTime _riskDayUtc;
         private int _consecutiveLosses;
 
         protected override void OnStart()
@@ -82,6 +83,7 @@ namespace MojTrade.OmegaX
             _rsi = Indicators.RelativeStrengthIndex(Bars.ClosePrices, RsiPeriod);
             _atr = Indicators.AverageTrueRange(AtrPeriod, MovingAverageType.Exponential);
             _sessionStartEquity = Account.Equity;
+            _riskDayUtc = Server.TimeInUtc.Date;
             Positions.Closed += OnPositionClosed;
             Print("OMEGA X DEMO adapter started: {0} {1}", SymbolName, TimeFrame);
         }
@@ -92,7 +94,8 @@ namespace MojTrade.OmegaX
                 return;
             if (DailyLossReached() || _consecutiveLosses >= ConsecutiveLossStop)
                 return;
-            if (CurrentSpreadPips() > MaxSpreadPips)
+            var spreadPips = CurrentSpreadPips();
+            if (!IsFinitePositive(spreadPips) || spreadPips > MaxSpreadPips)
                 return;
 
             var positions = Positions.FindAll(Label, SymbolName);
@@ -101,7 +104,7 @@ namespace MojTrade.OmegaX
 
             var index = Bars.Count - 1;
             var atrPrice = _atr.Result[index];
-            if (atrPrice <= 0)
+            if (!IsFinitePositive(atrPrice))
                 return;
 
             var buyVotes = 0;
@@ -124,6 +127,10 @@ namespace MojTrade.OmegaX
                 buyVotes++;
             if (close < rangeLow && fast < slow)
                 sellVotes++;
+
+            if (!IsFinite(fast) || !IsFinite(slow) || !IsFinite(previousFast) ||
+                !IsFinite(previousSlow) || !IsFinite(rsi))
+                return;
 
             if (buyVotes >= 2 && sellVotes == 0)
                 SubmitDemoOrder(TradeType.Buy, atrPrice);
@@ -162,10 +169,15 @@ namespace MojTrade.OmegaX
         {
             var stopPips = Math.Max(atrPrice * AtrStopMultiplier / Symbol.PipSize, 1.0);
             var takePips = stopPips * RewardRisk;
+            if (!IsFinitePositive(stopPips) || !IsFinitePositive(takePips))
+                return;
             var volume = Symbol.VolumeForProportionalRisk(ProportionalAmountType.Equity,
                                                            RiskPercent, stopPips);
+            if (!IsFinitePositive(volume))
+                return;
             volume = Symbol.NormalizeVolumeInUnits(volume, RoundingMode.Down);
-            if (volume < Symbol.VolumeInUnitsMin)
+            if (!IsFinitePositive(stopPips) || !IsFinitePositive(takePips) ||
+                !IsFinitePositive(volume) || volume < Symbol.VolumeInUnitsMin)
                 return;
 
             var result = ExecuteMarketOrder(tradeType, SymbolName, volume, Label, stopPips, takePips);
@@ -176,6 +188,16 @@ namespace MojTrade.OmegaX
                       tradeType, volume, stopPips, takePips);
         }
 
+        private static bool IsFinite(double value)
+        {
+            return !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private static bool IsFinitePositive(double value)
+        {
+            return IsFinite(value) && value > 0;
+        }
+
         private double CurrentSpreadPips()
         {
             return (Symbol.Ask - Symbol.Bid) / Symbol.PipSize;
@@ -183,6 +205,18 @@ namespace MojTrade.OmegaX
 
         private bool DailyLossReached()
         {
+            // Refresh the daily baseline only at the UTC date boundary.
+            // This guard is demo-only and does not authorize live execution.
+            var todayUtc = Server.TimeInUtc.Date;
+            if (todayUtc != _riskDayUtc)
+            {
+                _riskDayUtc = todayUtc;
+                _sessionStartEquity = Account.Equity;
+                _consecutiveLosses = 0;
+            }
+            // Fail closed if the broker/account feed is non-finite or the equity baseline is unusable.
+            if (!IsFinitePositive(Account.Equity) || !IsFinitePositive(_sessionStartEquity))
+                return true;
             return Account.Equity <= _sessionStartEquity * (1.0 - DailyLossStopPercent / 100.0);
         }
 
