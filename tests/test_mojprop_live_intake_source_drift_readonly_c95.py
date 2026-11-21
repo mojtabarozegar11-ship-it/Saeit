@@ -139,7 +139,7 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
             "from core.mpw_legacy_guest_checkout_redirect import legacy_guest_checkout",
             "from prop_firm.starter30_views import starter30_checkout, starter30_status",
             "from services.mpw_trx_public_pages import support_page, terms_page, privacy_page, cookies_page",
-            '    path("store/product/<int:product_id>/checkout/", legacy_guest_checkout, name="mpw_legacy_guest_checkout_redirect"),'
+            '    path("store/product/<int:product_id>/checkout/", legacy_guest_checkout, name="mpw_legacy_guest_checkout_redirect"),',
             '    path("support/", support_page, name="mpw_support"),',
             '    path("terms/", terms_page, name="mpw_terms"),',
             '    path("privacy/", privacy_page, name="mpw_privacy"),',
