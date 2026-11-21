@@ -149,7 +149,7 @@ class SignalEvidenceTests(unittest.TestCase):
     def test_unaudited_signal_history_does_not_enable_checkout(self):
         audit = self.history()
         result = subscription_preflight(
-            history=audit, verified_order_source=True,
+            history=audit, merchant_brand="saman", verified_order_source=True,
             timestamped_independent_execution_audit=False,
             risk_and_fee_disclosures_approved=True,
             jurisdiction_approved=True, subscriber_delivery_proven=True,
@@ -162,7 +162,7 @@ class SignalEvidenceTests(unittest.TestCase):
     def test_truthy_approval_words_are_not_valid_release_evidence(self):
         audit = self.history()
         result = subscription_preflight(
-            history=audit, verified_order_source="yes",
+            history=audit, merchant_brand="saman", verified_order_source="yes",
             timestamped_independent_execution_audit=True,
             risk_and_fee_disclosures_approved=1,
             jurisdiction_approved=True, subscriber_delivery_proven=True,
@@ -176,7 +176,7 @@ class SignalEvidenceTests(unittest.TestCase):
     def test_all_eight_prep_checks_still_do_not_issue_money_or_access(self):
         audit = self.history()
         result = subscription_preflight(
-            history=audit, verified_order_source=True,
+            history=audit, merchant_brand="saman", verified_order_source=True,
             timestamped_independent_execution_audit=True,
             risk_and_fee_disclosures_approved=True,
             jurisdiction_approved=True, subscriber_delivery_proven=True,
@@ -188,6 +188,59 @@ class SignalEvidenceTests(unittest.TestCase):
         self.assertFalse(result["realized_performance_verified"])
         self.assertIsNone(result["money_received"])
 
+
+    def test_cross_brand_history_never_qualifies_different_merchant(self):
+        signed_history = self.history()
+        result = subscription_preflight(
+            history=signed_history, merchant_brand="zahra",
+            verified_order_source=True,
+            timestamped_independent_execution_audit=True,
+            risk_and_fee_disclosures_approved=True,
+            jurisdiction_approved=True,
+            subscriber_delivery_proven=True,
+            refund_terms_approved=True,
+            legal_merchant_ready=True,
+        )
+        self.assertFalse(result["eligible_for_owner_release_review"])
+        self.assertIn("merchant_scope_matches_history", result["missing"])
+        self.assertEqual(result["brand"], "saman")
+        self.assertFalse(result["checkout_enabled"])
+        self.assertIsNone(result["money_received"])
+
+    def test_invalid_merchant_brand_cannot_be_hidden_in_boolean_approvals(self):
+        for bad in ("unknown_brand", "", None, [], {}, True, 1):
+            with self.subTest(brand=str(bad)[:30]):
+                decision = subscription_preflight(
+                    history=self.history(), merchant_brand=bad,
+                    verified_order_source=True,
+                    timestamped_independent_execution_audit=True,
+                    risk_and_fee_disclosures_approved=True,
+                    jurisdiction_approved=True,
+                    subscriber_delivery_proven=True,
+                    refund_terms_approved=True,
+                    legal_merchant_ready=True,
+                )
+                self.assertFalse(decision["eligible_for_owner_release_review"])
+                self.assertIn("merchant_scope_matches_history", decision["missing"])
+                self.assertFalse(decision["checkout_enabled"])
+
+    def test_matching_brand_only_allows_review_not_money(self):
+        a = self.history()
+        result = subscription_preflight(
+            history=a, merchant_brand="saman",
+            verified_order_source=True,
+            timestamped_independent_execution_audit=True,
+            risk_and_fee_disclosures_approved=True,
+            jurisdiction_approved=True,
+            subscriber_delivery_proven=True,
+            refund_terms_approved=True,
+            legal_merchant_ready=True,
+        )
+        self.assertTrue(result["eligible_for_owner_release_review"])
+        self.assertEqual(result["brand"], "saman")
+        self.assertFalse(result["checkout_enabled"])
+        self.assertFalse(result["account_or_subscriber_created"])
+        self.assertIsNone(result["money_received"])
 
 if __name__ == "__main__":
     unittest.main()

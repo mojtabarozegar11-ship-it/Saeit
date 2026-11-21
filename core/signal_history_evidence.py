@@ -170,7 +170,7 @@ def audit_history(entries, *, source_id, brand, signing_key, now_utc):
     )
 
 
-def subscription_preflight(*, history: SignalAudit, verified_order_source,
+def subscription_preflight(*, history: SignalAudit, merchant_brand, verified_order_source,
                            timestamped_independent_execution_audit,
                            risk_and_fee_disclosures_approved,
                            jurisdiction_approved, subscriber_delivery_proven,
@@ -180,6 +180,10 @@ def subscription_preflight(*, history: SignalAudit, verified_order_source,
         raise SignalHistoryRejected("history_attestation_required")
     checks = {
         "source_history_integrity": history.integrity_verified_for_supplied_history is True,
+        "merchant_scope_matches_history": (
+            type(merchant_brand) is str and merchant_brand in SIGNAL_BRANDS
+            and history.brand == merchant_brand
+        ),
         "signed_order_source": verified_order_source is True,
         "independent_execution_audit": timestamped_independent_execution_audit is True,
         "risk_and_fee_disclosures": risk_and_fee_disclosures_approved is True,
@@ -192,6 +196,7 @@ def subscription_preflight(*, history: SignalAudit, verified_order_source,
         "eligible_for_owner_release_review": all(checks.values()),
         "missing": [key for key, ok in checks.items() if not ok],
         "history_events": history.event_count,
+        "brand": history.brand,
         "account_or_subscriber_created": False,
         "checkout_enabled": False,
         "money_received": None,
