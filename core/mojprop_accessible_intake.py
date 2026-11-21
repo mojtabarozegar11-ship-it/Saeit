@@ -95,6 +95,18 @@ def _safe_service_prefill(request, *, allow_starter30_post_retry=False):
     return service, ""
 
 
+def _attribution_hidden_fields(request):
+    """Carry bounded campaign attribution through the HTML POST without PII."""
+    fields = []
+    for name in ("utm_source", "utm_medium", "utm_campaign", "utm_content"):
+        value = request.GET.get(name, "") or request.POST.get(name, "")
+        fields.append(
+            '<input type="hidden" name="' + escape(name, quote=True) +
+            '" value="' + escape(str(value).strip()[:80], quote=True) + '">'
+        )
+    return "".join(fields)
+
+
 def _options(choices, *, selected=None):
     return "".join(
         '<option value="' + escape(value, quote=True) + '"' +
@@ -157,6 +169,7 @@ def request_form(request, *, error=None, status=200):
         '<form method="post" action="' + action + '" '
         'enctype="application/x-www-form-urlencoded">'
         '<input type="hidden" name="csrfmiddlewaretoken" value="' + csrf + '">'
+        + _attribution_hidden_fields(request)'
         '<p><label>Your name <input name="name" autocomplete="name" '
         'required minlength="2" maxlength="200"></label></p>'
         '<p><label>Contact email <input type="email" name="email" '
