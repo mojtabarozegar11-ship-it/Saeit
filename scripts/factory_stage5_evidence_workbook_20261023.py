@@ -309,9 +309,16 @@ def execute(root, lib, batch=200, only_order_id=None, excluded_orders=None):
             selected = [name for name in names if name.startswith(only_order_id + "--r")][:batch]
             next_state = lib.read(cursor_path) if cursor_path.exists() else {
                 "schema": "saeit.factory.stage5.round-robin.v1", "next_index": 0}
-        created, blocked = 0, 0
+        created, blocked, held = 0, 0, 0
         for name in selected:
             try:
+                # Stage-2 identity is authenticated by its original hash-linked
+                # handoff and receipts. Do not write any new Stage-5 output for
+                # owner-held SKU879; retain the preexisting packet unchanged.
+                _, _, order, _ = lib.verified_stage2(area, name)
+                if lib.owner_held_sku879(order):
+                    held += 1
+                    continue
                 created += int(stage5(area, name, lib))
             except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
                 blocked += 1
@@ -324,6 +331,7 @@ def execute(root, lib, batch=200, only_order_id=None, excluded_orders=None):
         result = {
             "stage5_inbox": len(names), "stage5_created_this_tick": created,
             "stage5_blocked_this_tick": blocked,
+            "stage5_owner_held_sku879_skipped": held,
             "stage5_drafts_total": len(list((area / "stage-05" / "completed-drafts").glob("WO-*.json"))),
             "stage6_review_queue": len(list((area / "stage-06" / "inbox").glob("WO-*.json"))),
             "stage6_independent_reviews_completed_by_worker": 0,

@@ -84,6 +84,48 @@ class StageTwoTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "STAGE2_UNEXPECTED_INBOX_FILE"):
             STAGE2.stage2_loop(self.root)
 
+    def test_owner_hold_skips_legacy_stage2_879_without_touching_archive(self):
+        # Reconstruct an authenticated old stage-1 handoff created before
+        # the owner hold. No storefront or production data is modified.
+        self.stage1(topic=1, serial=1)
+        name = "WO-00000001--r001.json"
+        packet_path = self.area / "stage-02/inbox" / name
+        receipt_path = self.area / "stage-01/receipts" / name
+        packet = STAGE2.read(packet_path)
+        packet["work_order"]["source_product_id"] = 879
+        packet["source_order_sha256"] = STAGE2.sha(packet["work_order"])
+        STAGE2.atomic(packet_path, packet)
+        receipt = STAGE2.read(receipt_path)
+        receipt["source_order_sha256"] = packet["source_order_sha256"]
+        receipt["stage_2_packet_sha256"] = STAGE2.sha(packet)
+        STAGE2.atomic(receipt_path, receipt)
+        old_packet = packet_path.read_bytes()
+        old_receipt = receipt_path.read_bytes()
+        archive = self.area / "stage-02/completed-dossiers" / name
+        STAGE2.atomic(archive, {"existing_private_archive": True})
+        old_archive = archive.read_bytes()
+
+        eligible = self.stage1(topic=2, serial=2)
+        self.research_source(eligible, 2)
+        result = STAGE2.stage2_loop(self.root)
+        self.assertEqual(result["owner_held_sku879_packets_skipped"], 1)
+        self.assertEqual(result["newly_completed_research_dossiers"], 1)
+        self.assertTrue((self.area / "stage-03/inbox/WO-00000002--r001.json").is_file())
+        self.assertFalse((self.area / "stage-03/inbox" / name).exists())
+        self.assertFalse((self.area / "stage-02/research-needed" / name).exists())
+        self.assertEqual(packet_path.read_bytes(), old_packet)
+        self.assertEqual(receipt_path.read_bytes(), old_receipt)
+        self.assertEqual(archive.read_bytes(), old_archive)
+
+    def test_owner_hold_identity_is_exact_and_other_skus_are_eligible(self):
+        for source in (879, "879", "SKU879", "SKU-879", "MPW-879"):
+            self.assertTrue(STAGE2.owner_held_sku879({"source_product_id": source}))
+        self.assertTrue(STAGE2.owner_held_sku879(
+            {"source_product_id": "AGRI-001", "store_sku": "879"}))
+        for source in (72, 225, "SKU72", "SKU225", "AGRI-879"):
+            self.assertFalse(STAGE2.owner_held_sku879({"source_product_id": source}))
+        self.assertFalse(STAGE2.owner_held_sku879({"title": "Atelier Interior"}))
+
     def test_curated_research_reaches_stage3_only_with_traceable_sources(self):
         order = self.stage1()
         evidence = self.research_source(order, 1)

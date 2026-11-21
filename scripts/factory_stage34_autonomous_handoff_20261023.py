@@ -148,6 +148,17 @@ def verified_stage2(area, name):
         raise RuntimeError("STAGE34_MISSING_BILINGUAL_EDITIONS")
     return inbox, research, order, translated
 
+def owner_held_sku879(order):
+    """Hold exact storefront SKU identity only; do not match Atelier by title."""
+    if not isinstance(order, dict):
+        return False
+    source = order.get("source_product_id")
+    return (source == 879
+            or (isinstance(source, str) and source.upper() in
+                {"879", "SKU879", "SKU-879", "MPW-879"})
+            or order.get("store_sku") in (879, "879"))
+
+
 def make_design(inbox, research, order, editions):
     chapters = []
     prompts = (
@@ -339,9 +350,16 @@ def execute(root, batch=250, only_order_id=None, excluded_orders=None):
                 selected = [name for name in names if name.startswith(only_order_id + "--r")][:batch]
                 next_state = read(cursor_path) if cursor_path.exists() else {
                     "schema": "saeit.factory.stage%d.round-robin.v1" % n, "next_index": 0}
-            fresh, invalid = 0, 0
+            fresh, invalid, held = 0, 0, 0
             for name in selected:
                 try:
+                    # Verify the complete immutable Stage-1/2 receipt chain before
+                    # skipping an owner-held legacy packet; do not create a blocked
+                    # artifact, delete its packet or starve independent SKU72/225.
+                    _, _, order, _ = verified_stage2(area, name)
+                    if owner_held_sku879(order):
+                        held += 1
+                        continue
                     fresh += int(fn(area, name))
                 except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
                     invalid += 1
@@ -352,6 +370,7 @@ def execute(root, batch=250, only_order_id=None, excluded_orders=None):
                         "promoted": False
                     })
             atomic(cursor_path, next_state)
+            totals["stage%d_owner_held_sku879_skipped" % n] = held
             totals["stage%d_new" % n] = fresh
             totals["stage%d_blocked_this_tick" % n] = invalid
             totals["stage%d_inbox_total" % n] = len(names)

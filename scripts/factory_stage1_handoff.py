@@ -68,6 +68,13 @@ def save(path, document):
 
 
 def validate_order(order, required_id):
+    # Owner SKU879 hold applies to new stage-1 forwarding, including returns.
+    # Never rewrite, delete or disable the original order or existing receipts.
+    source = order.get("source_product_id")
+    if (source == 879 or (isinstance(source, str) and source.upper() in
+            {"879", "SKU879", "SKU-879", "MPW-879"})
+            or order.get("store_sku") in (879, "879")):
+        raise ValueError("STAGE1_SKU879_OWNER_HOLD")
     if order.get("schema") != SCHEMA or order.get("id") != required_id:
         raise ValueError("STAGE1_BAD_ORDER_ID_OR_SCHEMA")
     if order.get("public_distribution_allowed") is not False:

@@ -95,6 +95,10 @@ def local_research_tasks(root):
         ident=item.get("product_id")
         if not isinstance(ident,int) or isinstance(ident,bool) or ident<1:
             raise RuntimeError("ORDERS_BAD_RESEARCH_PRODUCT_ID")
+        # Owner-held storefront SKU 879: no NEW work from stale research snapshots.
+        # Existing work orders, archives, rights and storefront state remain untouched.
+        if ident == 879:
+            continue
         rev=item.get("sha256")
         if not isinstance(rev,str) or not HASH_RE.fullmatch(rev):
             raise RuntimeError("ORDERS_BAD_RESEARCH_REVISION")
@@ -145,6 +149,9 @@ def local_input_tasks(root):
                     or not isinstance(title,str) or not 8<=len(title)<=160
                     or not isinstance(details,str) or not 30<=len(details)<=3000):
                 raise RuntimeError("ORDERS_INCOMPLETE_SOURCE_ENTRY:"+kind)
+            # Only explicit SKU identity is blocked; do not infer Atelier ZIP equivalence.
+            if key.upper() in {"SKU879", "SKU-879", "MPW-879"} or item.get("store_sku") in (879, "879"):
+                continue
             # Customer & external market assertions remain unverified snapshots.
             result.append({"origin":kind,"source_product_id":key,
                 "source_sha256":checksum({"id":key,"title":title,"specification":details}),

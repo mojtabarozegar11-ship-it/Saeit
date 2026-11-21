@@ -35,9 +35,12 @@ def select_product_ids(conn, previous_id=0, limit=25):
     required = {"id", "active", "factory_managed"}
     if not required.issubset(columns):
         raise RuntimeError("FACTORY_PRODUCT_SCHEMA_INCOMPATIBLE")
-    # Never rewrite already listed products. Do not process unrelated store items.
+    # Owner hold: storefront SKU 879 must not re-enter factory research/production.
+    # Keep its existing private archives, orders and storefront records untouched.
+    # This is a conservative numeric-id gate; do not infer source-kit equivalence.
     ids = [row[0] for row in conn.execute(
-        "SELECT id FROM core_product WHERE factory_managed=1 AND active=0 ORDER BY id"
+        "SELECT id FROM core_product WHERE factory_managed=1 AND active=0 AND id <> ? ORDER BY id",
+        (879,),
     )]
     if not ids:
         return []
@@ -56,6 +59,8 @@ def read_cursor(path):
 
 def persist_product(bundle, root):
     ident = int(bundle["product_id"])
+    if ident == 879:
+        raise RuntimeError("SKU879_OWNER_HOLD_NO_NEW_FACTORY_DOSSIER")
     folder = root / ("product-" + str(ident))
     data = json.dumps(bundle, ensure_ascii=False, sort_keys=True, indent=2)
     digest = hashlib.sha256(data.encode("utf-8")).hexdigest()

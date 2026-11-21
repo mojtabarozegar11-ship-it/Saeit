@@ -47,6 +47,21 @@ class Stage5Proof(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "STAGE5_CURSOR_INVALID"):
             stage5.fair_batch(self.area, ["order-a"], 1, stage34)
 
+    def test_owner_held_879_legacy_stage5_packet_is_preserved(self):
+        legacy = self.area / "stage-05/inbox" / self.name
+        before = legacy.read_bytes()
+        self.fixture.mark_owner_held_879()
+        receipt = self.area / "stage-02/receipts" / self.name
+        original_receipt = receipt.read_bytes()
+        result = stage5.execute(self.root, stage34)
+        self.assertEqual(result["stage5_owner_held_sku879_skipped"], 1)
+        self.assertEqual(result["stage5_created_this_tick"], 0)
+        self.assertEqual(result["stage5_blocked_this_tick"], 0)
+        self.assertEqual(legacy.read_bytes(), before)
+        self.assertEqual(receipt.read_bytes(), original_receipt)
+        self.assertFalse((self.area / "stage-05/completed-drafts" / self.name).exists())
+        self.assertFalse((self.area / "stage-06/inbox" / self.name).exists())
+
     def test_actual_draft_and_stage6_independent_review_queue(self):
         result = stage5.execute(self.root, stage34)
         self.assertEqual(result["stage5_created_this_tick"], 1)

@@ -67,6 +67,36 @@ class AutonomousProductTests(unittest.TestCase):
         self.assertEqual([p["product_id"] for p in third["entries"]], [3, 5, 1])
         self.assertEqual(third["updated_count"], 0)
 
+    def test_owner_hold_skips_879_without_touching_72_225_or_archives(self):
+        meta = json.dumps({"factory_state": "needs_research", "validation": {
+            "outcome": "NEEDS_MORE_EVIDENCE", "missing_factors": ["more evidence"]}})
+        with sqlite3.connect(str(self.db)) as con:
+            con.execute("UPDATE core_product SET factory_managed=0")
+            con.executemany("INSERT INTO core_product VALUES (?,?,?,?,?,?,?,?,?)", [
+                (72, "Existing independent product 72", "digital", meta, 0, "0", None, None, 1),
+                (225, "Existing independent product 225", "digital", meta, 0, "0", None, None, 1),
+                (879, "Owner-held SKU 879", "digital", meta, 0, "0", None, None, 1),
+                (880, "Independent product 880", "digital", meta, 0, "0", None, None, 1),
+            ])
+        existing = self.out / "product-879"
+        existing.mkdir(parents=True)
+        archived = existing / "owner-private-receipt.keep"
+        archived.write_bytes(b"EXISTING_PRIVATE_ARCHIVE_MUST_NOT_CHANGE")
+        original_db = self.db.read_bytes()
+        result = factory.build(str(self.db), str(self.out), 25)
+        self.assertEqual([p["product_id"] for p in result["entries"]], [72, 225, 880])
+        self.assertEqual(result["processed_count"], 3)
+        self.assertTrue((self.out / "product-72" / "evidence_manifest.json").is_file())
+        self.assertTrue((self.out / "product-225" / "evidence_manifest.json").is_file())
+        self.assertEqual(archived.read_bytes(), b"EXISTING_PRIVATE_ARCHIVE_MUST_NOT_CHANGE")
+        self.assertFalse((existing / "evidence_manifest.json").exists())
+        self.assertEqual(self.db.read_bytes(), original_db)
+
+    def test_owner_hold_rejects_direct_dossier_write_for_879(self):
+        with self.assertRaisesRegex(RuntimeError, "SKU879_OWNER_HOLD"):
+            factory.persist_product({"product_id": 879}, self.out)
+        self.assertFalse(self.out.exists())
+
     def test_invalid_batch_fails_without_file_changes(self):
         with self.assertRaises(ValueError):
             factory.build(str(self.db), str(self.out), 0)
