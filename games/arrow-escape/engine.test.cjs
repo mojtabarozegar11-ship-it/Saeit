@@ -36,5 +36,19 @@ for (const level of [...Array(200)].map((_, index) => index + 1).concat([500, 99
   assert.equal(remaining.length, 0);
   tested++;
 }
+// Malformed saved/imported puzzle data must fail closed, not throw inside the UI.
+const validPiece = {id: 1, dir: 0, path: [{x: 2, y: 2}, {x: 3, y: 2}]};
+for (const invalid of [
+  null,
+  {...validPiece, dir: -1},
+  {...validPiece, dir: 4},
+  {...validPiece, dir: NaN},
+  {...validPiece, path: []},
+  {...validPiece, path: [{x: Infinity, y: 2}]},
+  {...validPiece, path: [{x: 100, y: 2}]}
+]) assert.equal(game.canExit(invalid, [validPiece], 7), false);
+assert.equal(game.canExit(validPiece, [null], 7), false);
+assert.equal(game.canExit(validPiece, [validPiece], NaN), false);
+assert.equal(game.canExit(validPiece, null, 7), false);
 assert.ok(withBlockers > 10, 'levels contain no challenging dependencies');
 console.log('ARROW_SOLVABLE_LEVELS=PASS', { tested, withBlockers, min, max });

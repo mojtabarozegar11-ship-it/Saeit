@@ -8,7 +8,8 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), rnd=(a,b)=>a+Math.random()*(b-a)
 const saveKey='rwNativeCampaign',stageNames=NAMES;
 const sceneFiles=['./scene-sniper-desert-v2.webp','./scene-night.webp','./scene-airbase.webp'];function setMissionScene(m){const el=$('#missionBackdrop'),file=sceneFiles[m%sceneFiles.length];if(el.dataset.scene!==file){el.style.backgroundImage=`url("${file}")`;el.dataset.scene=file}el.style.setProperty('--pan-x','0px');el.style.setProperty('--pan-y','0px')}
 
-let hero=+(localStorage.rwHero||0),world=null,screen='home',last=0,toastTimer=0,hitTimer=0,fireHeld=false,joyId=null,aimId=null,joyX=0,joyY=0,joyF=0,joyS=0,aimLast=0,keys={},effects=[],audioCtx=null;
+function validatedHero(value){const n=Number(value);return Number.isInteger(n)&&n>=0&&n<NAMES.length?n:0}
+let hero=(()=>{try{return validatedHero(localStorage.getItem('rwHero'))}catch{return 0}})(),world=null,screen='home',last=0,toastTimer=0,hitTimer=0,fireHeld=false,joyId=null,aimId=null,joyX=0,joyY=0,joyF=0,joyS=0,aimLast=0,keys={},effects=[],audioCtx=null;
 const MAPSIZE=16,FOV=1.02;
 
 /* Each operation has a different win condition: objectives, not a recycled kill arena. */
