@@ -113,11 +113,28 @@ def _page(request, title: str, body: str) -> HttpResponse:
     )
 
 
+def _pre_invoice_information_links() -> str:
+    """Buyer-safe alternative to payment; no invoice, email, or wallet required."""
+    return (
+        "<section aria-label='Read before paying'>"
+        "<p>Before requesting an invoice, read the "
+        "<a href='/moj-prop/rules/'>complete simulation rules</a> and "
+        "<a href='/moj-prop/payment/'>reward and refund disclosures</a>. "
+        "Not ready to pay? "
+        "<a href='/moj-prop-intake/?format=html&amp;service=blueprint"
+        "&amp;package=starter-30-trx'>"
+        "Request the written Starter30 terms free of charge</a>. "
+        "This request does not issue an invoice, collect TRX, or open an account."
+        "</p></section>"
+    )
+
+
 def _closed(request):
     return _page(
         request,
         "Starter30 unavailable",
-        "<h1>Starter30 checkout</h1><div class='warn'>Payment is not available at this moment. No transfer should be sent.</div>",
+        "<h1>Starter30 checkout</h1><div class='warn'>Payment is not available at this moment. No transfer should be sent.</div>"
+        + _pre_invoice_information_links(),
     )
 
 
@@ -172,6 +189,7 @@ def starter30_checkout(request):
                 "<p><strong>Cancellation and refund:</strong> before transaction verification, no payment is credited. "
                 "A verified payment that cannot be matched because of a server failure remains in manual review; "
                 "if the service cannot be delivered, refund is sent to the verified sending wallet.</p>"
+                + _pre_invoice_information_links()
                 + _email_forms(request)
             )
         except Exception:
@@ -252,6 +270,7 @@ def starter30_checkout(request):
             f"<h1>Payment not credited</h1><div class='warn'>{escape(str(error))}</div>"
             "<p>No simulation account was created, and no payment has been credited. "
             "If checkout email verification failed, request a new code below.</p>"
+            + _pre_invoice_information_links()
             + _email_forms(request),
         )
 
