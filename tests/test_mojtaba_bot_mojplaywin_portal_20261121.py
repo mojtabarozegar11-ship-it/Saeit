@@ -41,17 +41,19 @@ class MojtabaSiteEntryTests(SimpleTestCase):
         self.assertNotIn("OPENAI_API_KEY", body)
         self.assertNotIn('href="/mojprop-starter30-checkout/"', body)
 
-    def test_checkout_link_only_when_real_release_preflight_passes(self):
-        with patch("prop_firm.starter30_live.release_is_open", return_value=True), \
+    def test_untrusted_old_release_flag_cannot_advertise_payment_on_bot_portal(self):
+        with patch("prop_firm.starter30_live.release_is_open", return_value=True) as release, \
              patch("prop_firm.starter30_live.verify_pre_invoice_configuration") as preflight:
             response = self._get(authenticated=False)
         body = response.content.decode()
         self.assertEqual(response.status_code, 200)
-        self.assertIn('href="/mojprop-starter30-checkout/"', body)
+        self.assertNotIn('href="/mojprop-starter30-checkout/"', body)
         self.assertIn('href="/moj-prop/starter-30-trx/"', body)
         self.assertIn("not a real-money investment", body)
-        self.assertIn("Passing the challenge or earning profit is not guaranteed", body)
-        preflight.assert_called_once_with()
+        self.assertIn("Do not send TRX", body)
+        self.assertIn("Passing a challenge or earning profit is not guaranteed", body)
+        release.assert_not_called()
+        preflight.assert_not_called()
         self.assertNotIn('id="chat-form"', body)
 
     def test_closed_payment_release_never_advertises_checkout(self):

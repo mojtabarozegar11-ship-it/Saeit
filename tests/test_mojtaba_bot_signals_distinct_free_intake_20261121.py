@@ -14,6 +14,8 @@ class MojtabaCentralBotSignalEnquiryTests(unittest.TestCase):
         self.assertIn("Request a written educational signal proposal — no payment", text)
         self.assertIn("not a trading order, signal subscription, paid invoice or confirmed delivery", text.lower())
         self.assertNotIn('href="/mojprop-starter30-checkout/"', text)
+        self.assertNotIn('starter30_checkout_available', text)
+        self.assertIn("Do not send TRX", text)
 
     def test_starter30_remains_distinct_simulated_blueprint_offer(self):
         text = PAGE.read_text(encoding="utf-8")
