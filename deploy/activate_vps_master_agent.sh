@@ -82,6 +82,7 @@ modules=(
   core/worker_runner.py
   core/management/commands/autonomous_master_loop.py
   core/management/commands/online_income_cycle.py
+  core/management/commands/economic_autorun.py
   core/recovery_scheduler.py
   core/management/commands/recover_stale_tasks.py
 )

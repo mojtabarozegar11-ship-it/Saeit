@@ -1,6 +1,7 @@
 """Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
 from core.models import AgentTask, Product, Order, LedgerEntry
+from core.economic_tool_pack import actionable_economic_tasks
 
 @dataclass(frozen=True)
 class Candidate:
@@ -77,7 +78,9 @@ class AutonomousBrain:
             for seen_at in (latest_paid_order_at, latest_payment_entry_at)
         )
         return {
-            "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
+            "unfinished_tasks": actionable_economic_tasks(
+                economic_tasks.filter(status__in=("queued", "running", "blocked"))
+            ).count(),
             "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
             "market_research_complete": market_research_complete,
             "market_inventory_measured": latest_inventory is not None,

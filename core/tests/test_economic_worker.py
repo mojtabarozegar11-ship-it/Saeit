@@ -227,3 +227,71 @@ def test_worker_reports_unknown_only_queue_without_executing():
     assert unsupported.attempt_count == 0
     assert unsupported.status == "queued"
     assert "BLOCKED_UNSUPPORTED" in output.getvalue()
+
+
+@pytest.mark.django_db
+def test_legacy_profit_baseline_backlog_is_held_across_worker_invocations():
+    agent = Agent.objects.create(
+        code="economic-master-agent", name="Master", mission="Do useful work", active=True,
+    )
+    task = AgentTask.objects.create(
+        agent=agent, action_type="income_profit_optimize",
+        capability_code="income_profit_optimize", status="queued",
+    )
+    with patch("core.management.commands.run_economic_worker.WorkerRunner") as runner:
+        for _ in range(3):
+            output = StringIO()
+            call_command("economic_worker", stdout=output)
+            assert f"DIAGNOSTIC_BACKLOG_HELD task={task.pk}" in output.getvalue()
+        runner.assert_not_called()
+    task.refresh_from_db()
+    assert task.status == "queued"
+    assert task.attempt_count == 0
+
+    with pytest.raises(CommandError, match="Diagnostic-only profit task is held"):
+        call_command("run_economic_worker", task_id=task.pk)
+    task.refresh_from_db()
+    assert task.status == "queued"
+    assert task.attempt_count == 0
+
+
+@pytest.mark.django_db
+def test_worker_drains_useful_task_but_does_not_touch_older_profit_baseline():
+    agent = Agent.objects.create(
+        code="economic-master-agent", name="Master", mission="Do useful work", active=True,
+    )
+    diagnostic = AgentTask.objects.create(
+        agent=agent, action_type="income_profit_optimize",
+        capability_code="income_profit_optimize", status="queued",
+    )
+    useful = AgentTask.objects.create(
+        agent=agent, action_type="income_market_research",
+        capability_code="income_market_research", status="queued",
+    )
+
+    def finish(task_id):
+        assert task_id == useful.pk
+        AgentTask.objects.filter(pk=task_id).update(status="completed")
+        return SimpleNamespace(pk=task_id, status="completed", output_data={
+            "verified_effect": True, "action_performed": "Catalog measured",
+        })
+
+    gateway = SimpleNamespace(describe=lambda: {
+        "income_profit_optimize": {"enabled": True},
+        "income_market_research": {"enabled": True},
+    })
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway), patch(
+                   "core.management.commands.run_economic_worker.WorkerRunner"
+               ) as runner:
+        runner.return_value.run.side_effect = finish
+        output = StringIO()
+        call_command("run_economic_worker", "--drain", stdout=output)
+        runner.return_value.run.assert_called_once_with(useful.pk)
+    diagnostic.refresh_from_db()
+    useful.refresh_from_db()
+    assert diagnostic.status == "queued"
+    assert diagnostic.attempt_count == 0
+    assert useful.status == "completed"
+    assert f"DIAGNOSTIC_BACKLOG_HELD task={diagnostic.pk}" in output.getvalue()
+    assert "DRAIN_SUMMARY completed=1 limit=20" in output.getvalue()

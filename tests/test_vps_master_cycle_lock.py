@@ -49,7 +49,7 @@ class VpsMasterCycleLockTests(unittest.TestCase):
             py.write_text(
                 '#!/bin/sh\n'
                 'if [ "$1" = "-" ]; then echo 1; exit 0; fi\n'
-                'printf "%s\\n" "$2" >> "$MOJ_AGENT_LOCK_TEST_LOG"\n'
+                'printf "%s\n" "$2" >> "$MOJ_AGENT_LOCK_TEST_LOG"\n'
                 'sleep 0.35\n',
                 encoding='utf-8',
             )
@@ -82,6 +82,21 @@ class VpsMasterCycleLockTests(unittest.TestCase):
                 'recover_stale_tasks', 'autonomous_master_loop',
             ])
 
+
+    def test_private_deployment_transfers_economic_autorun_lock_module(self):
+        module = 'core/management/commands/economic_autorun.py'
+        activation = (REPO_ROOT / 'deploy/activate_vps_master_agent.sh').read_text(
+            encoding='utf-8')
+        workflow = (REPO_ROOT / '.github/workflows/vps-master-agent-activate.yml').read_text(
+            encoding='utf-8')
+        # Source inclusion, transfer bundle, and unpack manifest must agree.
+        self.assertIn('\n  ' + module + '\n', activation)
+        tar_line = next(line for line in workflow.splitlines()
+                        if line.lstrip().startswith('tar -cf "$d/bundle.tar"'))
+        self.assertIn(module, tar_line)
+        self.assertIn('"' + module + '"', workflow)
+        # The verification job and both trigger filters must see future fixes.
+        self.assertGreaterEqual(workflow.count(module), 6)
 
 if __name__ == '__main__':
     unittest.main()
