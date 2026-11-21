@@ -74,6 +74,25 @@ def regular_file_present(path: Path) -> bool:
         return False
 
 
+
+def trusted_system_binary_present(name: str, path: Path) -> bool:
+    """Recognize the common same-directory versioned /usr/bin/python3 symlink.
+
+    This only reports metadata. It never executes the target, follows a
+    chain of links, or accepts an arbitrary link out of /usr/bin.
+    """
+    try:
+        if name == "python3" and path == BINS["python3"] and path.is_symlink():
+            link = os.readlink(path)
+            if not re.fullmatch(r"python3\\.[0-9]{1,2}", link):
+                return False
+            target = path.parent / link
+            return regular_file_present(target) and os.access(target, os.X_OK)
+        return regular_file_present(path) and os.access(path, os.X_OK)
+    except (OSError, ValueError):
+        return False
+
+
 def directory_present(path: Path) -> bool:
     try:
         return path.is_dir() and not path.is_symlink()
@@ -98,8 +117,7 @@ def snapshot() -> dict:
 
     limits = {k: read_scalar(v) for k, v in KERNEL.items()}
     cgroup = {k: read_scalar(v) for k, v in CGROUP.items()}
-    tools = {k: regular_file_present(v) and os.access(v, os.X_OK)
-             for k, v in BINS.items()}
+    tools = {k: trusted_system_binary_present(k, v) for k, v in BINS.items()}
     sources = {
         k: (directory_present(v) if k == "factory_runtime_root"
             else regular_file_present(v))
