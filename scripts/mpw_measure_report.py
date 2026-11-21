@@ -108,7 +108,8 @@ def summarize(records, days: int, invalid: int = 0):
             "qualified_entry_sessions": len(entry_qualified),
             "buy_click_sessions": len(buys),
             "buy_clicks_from_qualified_entry": len(entry_qualified & buys),
-            "checkout_page_sessions": len(checkout),
+            "checkout_page_sessions": None,
+            "checkout_page_coverage": "not_instrumented: Django checkout retains script-src none",
             "form_submit_sessions": len(forms),
             "qualified_entry_without_buy_click": len(entry_qualified - buys),
             "qualified_entry_to_buy_click_rate_pct": round(
@@ -122,6 +123,7 @@ def summarize(records, days: int, invalid: int = 0):
                 "Consent is optional, and a session means one consenting browser tab for <=30 minutes. "
                 "Missing next step is a drop-off proxy, not proof of abandonment. "
                 "Bot filtering is heuristic; script-blocked visits are omitted. "
+                "Django checkout pages intentionally disallow injected scripts. "
                 "Payment and delivery require the verified back-office ledger."
             ),
         }
