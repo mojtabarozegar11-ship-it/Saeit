@@ -1,0 +1,56 @@
+name: Guarded MySQL stale factory evidence retirement after VERIFIED backup
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - .github/workflows/cpanel-mysql-stale-evidence-guarded-prune-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: VERIFY offhost complete SQL backup then retire 48h-old stale evidence in bounded transactions
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo PREDELETE_MYSQL_GUARD=VERIFY_COMPLETE_VPS_BACKUP
+          timeout 900s ssh -T -F "$d/config" saeit-vps 'set -euo pipefail; test -f /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz; test "$(stat -c%s /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz)" -gt 100000; gzip -t /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz; gzip -dc /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz | tail -c 4096 | grep -q -- '\''-- Dump completed on'\''; echo FULL_MYSQL_BACKUP_FOOTER_AND_GZIP_VERIFIED=YES'
+          echo PREDELETE_MYSQL_GUARD=PASS
+          timeout 1000s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,sys,json,subprocess
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit("WRONG_CPANEL_ACCOUNT")
+          stage=h/'Saeit-staging'
+          if not stage.is_dir() or stage.is_symlink():raise SystemExit("STAGING_MISSING")
+          exe=h/'virtualenv/Saeit-staging/3.11/bin/python'
+          if not exe.is_file():raise SystemExit("NO_STAGING_PY")
+          probe="import os,sys,json,subprocess\nos.environ.setdefault(\"DJANGO_SETTINGS_MODULE\",\"config.settings\")\nos.environ[\"PYTHONDONTWRITEBYTECODE\"]=\"1\"\nimport django\ndjango.setup()\nfrom django.db import connections,transaction\nc=connections[\"default\"]\nout={\"action\":\"guarded_prune\",\"sql_writes\":0,\"completed\":False}\nif c.settings_dict[\"ENGINE\"]!=\"django.db.backends.mysql\":raise SystemExit(\"WRONG_BACKEND\")\nwith c.cursor() as cur:\n cur.execute(\"SELECT DATABASE()\")\n name=cur.fetchone()[0]\n u=subprocess.run([\"uapi\",\"--output=json\",\"Mysql\",\"list_databases\"],capture_output=True,text=True,timeout=30)\n if u.returncode!=0:raise SystemExit(\"DB_SCOPE_FAILED\")\n names=[x[\"database\"] for x in json.loads(u.stdout).get(\"result\",{}).get(\"data\",[]) if isinstance(x,dict) and x.get(\"database\")]\n if len(names)!=1 or names[0]!=name:raise SystemExit(\"UNEXPECTED_DB\")\n cur.execute(\"SELECT COUNT(*) FROM core_factoryevidence WHERE status='valid'\")\n valid_before=cur.fetchone()[0]\n cur.execute(\"SELECT COUNT(*) FROM core_factoryevidence WHERE status='stale'\")\n stale_before=cur.fetchone()[0]\n cur.execute(\"SELECT UTC_TIMESTAMP() - INTERVAL 48 HOUR\")\n cutoff=cur.fetchone()[0]\n cur.execute(\"SELECT COUNT(*) FROM core_factoryevidence WHERE status='stale' AND created_at < %s\",[cutoff])\n candidates=cur.fetchone()[0]\n out.update({\"valid_before\":valid_before,\"stale_before\":stale_before,\"eligible_before\":candidates,\"batch_max\":25,\"rows_hard_cap\":10000,\"cutoff_utc\":str(cutoff)})\n if candidates<=0:\n  out[\"completed\"]=True\n  print(\"MYSQL_STALE_EVIDENCE_PRUNE=\"+json.dumps(out,sort_keys=True),flush=True)\n  raise SystemExit(0)\n if candidates>10000:raise SystemExit(\"TOO_MANY_ELIGIBLE_FOR_ONE_ACTION\")\n deleted=0\n while True:\n  with transaction.atomic():\n   with c.cursor() as tx:\n    tx.execute(\"SELECT id FROM core_factoryevidence WHERE status=%s AND created_at < %s ORDER BY id LIMIT 25\",[\"stale\",cutoff])\n    ids=[x[0] for x in tx.fetchall()]\n    if not ids:break\n    placeholders=\",\".join([\"%s\"]*len(ids))\n    tx.execute(\"DELETE FROM core_factoryevidence WHERE status=%s AND created_at < %s AND id IN (\"+placeholders+\")\",[\"stale\",cutoff]+ids)\n    changed=tx.rowcount\n    if changed!=len(ids):raise RuntimeError(\"UNEXPECTED_ROWCOUNT\")\n  deleted+=changed\n  if deleted>10000:raise SystemExit(\"ROW_HARD_CAP\")\n with c.cursor() as cur:\n  cur.execute(\"SELECT COUNT(*) FROM core_factoryevidence WHERE status='valid'\")\n  valid_after=cur.fetchone()[0]\n  cur.execute(\"SELECT COUNT(*) FROM core_factoryevidence WHERE status='stale'\")\n  stale_after=cur.fetchone()[0]\n out.update({\"deleted\":deleted,\"valid_after\":valid_after,\"stale_after\":stale_after,\"sql_writes\":deleted,\"completed\":valid_after==valid_before and stale_before-stale_after==deleted})\n print(\"MYSQL_STALE_EVIDENCE_PRUNE=\"+json.dumps(out,sort_keys=True),flush=True)\n if not out[\"completed\"]:raise SystemExit(\"POSTCHECK_FAILED\")"
+          env=os.environ.copy()
+          env["PYTHONDONTWRITEBYTECODE"]="1"
+          env["PYTHONPATH"]=str(stage)
+          subprocess.check_call([str(exe),"-B","-c",probe],cwd=str(stage),env=env)
+          PY
+          echo GUARDED_STALE_EVIDENCE_PRUNE_DONE
