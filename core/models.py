@@ -796,3 +796,223 @@ class MojPropDeliveryEvidence(T):
 
 # Independent consent/confirmation domain; distinct from MojPropRequest leads.
 from .signal_free_models import MojSignalFreeSubscription  # noqa: E402,F401
+
+
+class MojPropStarter30ImmutableQuerySet(models.QuerySet):
+    """Source-only fail-closed ORM mutations for order/TXID records.
+
+    Raw SQL, privileged connections and Django's internal low-level SQL APIs
+    still bypass this layer. A restricted DB account and independent immutable
+    settlement audit are mandatory before a real payment workflow.
+    """
+
+    def update(self, **kwargs):
+        raise ValidationError("Starter30 order and transaction claim updates are blocked.")
+
+    def delete(self):
+        raise ValidationError("Starter30 order and transaction claim deletion is blocked.")
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise ValidationError("Starter30 bulk updates bypass immutable identity guards.")
+
+    def bulk_create(self, objs, *args, **kwargs):
+        # bulk_create bypasses Model.save(), full_clean(), consent checks and
+        # owner-recipient validation. Never permit backdoor order/txid insertion.
+        raise ValidationError("Starter30 bulk inserts bypass contract validation.")
+
+    def _raw_delete(self, using):
+        raise ValidationError("Starter30 raw queryset delete is blocked.")
+
+
+MojPropStarter30ImmutableManager = models.Manager.from_queryset(
+    MojPropStarter30ImmutableQuerySet
+)
+
+
+class MojPropStarter30Order(T):
+    """Dedicated native-TRX educational order, separate from USD/IRR offers.
+
+    Not a funded trading challenge. No checkout or payment route uses this
+    table until the independent legal, restore and merchant release gates pass.
+    """
+
+    STATES = (
+        ("draft", "Prepared privately, not payable"),
+        ("issued", "Owner-authorized invoice issued"),
+        ("settled", "Independently confirmed native TRX settlement"),
+        ("delivered", "Educational deliverable acknowledged"),
+        ("cancelled", "Cancelled without automatic refund"),
+    )
+    lead = models.ForeignKey(
+        "MojPropRequest", on_delete=models.PROTECT, related_name="starter30_orders"
+    )
+    order_ref = models.CharField(max_length=42, unique=True)
+    product = models.CharField(max_length=32, default="MOJPROP-STARTER30")
+    merchant_domain = models.CharField(max_length=64, default="mojplaywin.com")
+    merchant_id = models.CharField(max_length=40, default="mojplaywin-store")
+    network = models.CharField(max_length=20, default="tron-mainnet")
+    recipient = models.CharField(max_length=34)
+    payer_hex41 = models.CharField(max_length=42)
+    amount_sun = models.PositiveBigIntegerField(default=30_000_000)
+    buyer_terms_acceptance = models.CharField(max_length=128)
+    issued_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    status = models.CharField(max_length=12, choices=STATES, default="draft")
+
+    objects = MojPropStarter30ImmutableManager()
+
+    class Meta:
+        default_permissions = ()
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(product="MOJPROP-STARTER30"),
+                name="mojprop30_fixed_product",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(amount_sun=30_000_000),
+                name="mojprop30_fixed_native_sun",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(network="tron-mainnet"),
+                name="mojprop30_fixed_mainnet",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(merchant_domain="mojplaywin.com")
+                & models.Q(merchant_id="mojplaywin-store"),
+                name="mojprop30_fixed_merchant",
+            ),
+            models.CheckConstraint(
+                # SQL updates bypass clean()/save(); reject reverse or zero
+                # invoice windows at the MariaDB layer as well.
+                condition=models.Q(expires_at__gt=models.F("issued_at")),
+                name="mojprop30_positive_window",
+            ),
+            models.CheckConstraint(
+                # Never accept an unbound, blank contract/wallet/order even
+                # through raw SQL. Owner wallet and legal consent still
+                # require independent checks before any payable issuance.
+                condition=(
+                    ~models.Q(order_ref="")
+                    & ~models.Q(recipient="")
+                    & ~models.Q(payer_hex41="")
+                    & ~models.Q(buyer_terms_acceptance="")
+                ),
+                name="mojprop30_required_fields",
+            ),
+            models.CheckConstraint(
+                # No source-only order can become payable/settled by an arbitrary
+                # admin or ORM field update without an independently reviewed ledger.
+                condition=models.Q(status="draft"),
+                name="mojprop30_draft_only",
+            ),
+        ]
+
+    def clean(self):
+        from datetime import datetime, timezone
+        from services.mojprop_starter30_tron_settlement import (
+            Starter30PersistedInvoice, NativeTRXMatchRejected,
+            validate_persisted_order,
+        )
+        super().clean()
+        errors = {}
+        if self.status != "draft":
+            errors["status"] = "This source-only order cannot issue, settle or deliver."
+        if self.issued_at is None or self.expires_at is None:
+            errors["expires_at"] = "Both invoice timestamps are required."
+        elif (
+            type(self.issued_at) is not datetime
+            or type(self.expires_at) is not datetime
+            or self.issued_at.tzinfo is None or self.issued_at.utcoffset() is None
+            or self.expires_at.tzinfo is None or self.expires_at.utcoffset() is None
+        ):
+            errors["expires_at"] = "Timezone-aware invoice times are required."
+        if self.lead_id is None:
+            errors["lead"] = "A persisted, consented customer inquiry is required."
+        if errors:
+            raise ValidationError(errors)
+        if not self.lead.consent:
+            raise ValidationError({"lead": "Buyer inquiry lacks consent."})
+        try:
+            invoice = Starter30PersistedInvoice(
+                product=self.product,
+                order_ref=self.order_ref,
+                merchant_domain=self.merchant_domain,
+                merchant_id=self.merchant_id,
+                network=self.network,
+                recipient=self.recipient,
+                amount_sun=self.amount_sun,
+                issued_at_sec=int(self.issued_at.astimezone(timezone.utc).timestamp()),
+                expires_at_sec=int(self.expires_at.astimezone(timezone.utc).timestamp()),
+                buyer_terms_acceptance=self.buyer_terms_acceptance,
+                payer_hex41=self.payer_hex41,
+            )
+            validate_persisted_order(invoice)
+        except (NativeTRXMatchRejected, ValueError, TypeError, OverflowError) as exc:
+            raise ValidationError({"order_ref": "Invalid Starter30 invoice contract."}) from exc
+
+    def delete(self, *args, **kwargs):
+        # Deleting an order can erase the binding needed to detect repeat
+        # payment claims. Do not remove it through Model.delete().
+        raise ValidationError({"order_ref": "Starter30 orders are not deletable via ORM."})
+
+    def save(self, *args, **kwargs):
+        # Only first insertion is allowed in the source-only order table.
+        # Allowing ORM edits after a TXID is claimed could rewrite the buyer,
+        # payer, receiver, or invoice window and misattribute that same txID.
+        # QuerySet.update()/raw SQL can bypass this method; DB grants and
+        # a reviewed immutable ledger remain mandatory before live issuance.
+        if self.pk is not None or not self._state.adding:
+            raise ValidationError({"order_ref": "Starter30 order identity is append-only."})
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+class MojPropStarter30TxClaim(T):
+    """Exclusive TXID claim; an UNVERIFIED claim never credits a buyer."""
+
+    order = models.OneToOneField(
+        "MojPropStarter30Order", on_delete=models.PROTECT,
+        related_name="tx_claim",
+    )
+    txid = models.CharField(max_length=64, unique=True)
+    network = models.CharField(max_length=20, default="tron-mainnet")
+    state = models.CharField(max_length=12, default="unverified")
+
+    objects = MojPropStarter30ImmutableManager()
+
+    class Meta:
+        default_permissions = ()
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(network="tron-mainnet"),
+                name="mojprop30_tx_mainnet_only",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(state="unverified"),
+                name="mojprop30_tx_never_auto_credit",
+            ),
+        ]
+
+    def clean(self):
+        import re
+        super().clean()
+        if type(self.txid) is not str or re.fullmatch(r"[0-9a-f]{64}", self.txid) is None:
+            raise ValidationError({"txid": "Canonical lower-case native TRON txID required."})
+        if self.order_id is None:
+            raise ValidationError({"order": "A persisted Starter30 invoice is required."})
+        if self.network != "tron-mainnet" or self.state != "unverified":
+            raise ValidationError({"state": "This source-only claim cannot prove settlement."})
+
+    def delete(self, *args, **kwargs):
+        # A deleted claim would free its txID for replay and reassignment.
+        # QuerySet.delete()/raw SQL still require separately enforced DB grants.
+        raise ValidationError({"txid": "Starter30 transaction claims are not deletable via ORM."})
+
+    def save(self, *args, **kwargs):
+        # Never permit reassignment of an existing txID via Model.save():
+        # changing an old claim frees its UNIQUE(txid) for reuse elsewhere.
+        # Database-level UPDATE permissions must also be restricted on release.
+        if self.pk is not None or not self._state.adding:
+            raise ValidationError({"txid": "Starter30 TXID claims are append-only."})
+        self.full_clean()
+        return super().save(*args, **kwargs)

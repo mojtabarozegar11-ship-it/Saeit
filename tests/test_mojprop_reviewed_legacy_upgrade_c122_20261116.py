@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,7 +15,7 @@ from unittest.mock import patch
 
 from scripts import deploy_mojplaywin_moj_prop_backend as installer
 from scripts.mojprop_schema_preflight_c83 import (
-    ADMINS, LEGACY_BASELINES, MIGRATIONS, MODELS,
+    ADMINS, LEGACY_BASELINES, MIGRATIONS, MODELS, MODULES,
     check_schema_closure, has_reviewed_legacy_suffix,
 )
 
@@ -38,6 +39,21 @@ class ReviewedLegacyUpgradeTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.live = Path(tmp.name)
         (self.live / "core/migrations").mkdir(parents=True)
+        self.stage = self.live / "reviewed_release_stage"
+        for relative in (
+            "core/models.py", "core/admin.py", "config/urls.py", "config/settings.py",
+            *MODULES,
+            *LEGACY_BASELINES.values(),
+            *(f"core/migrations/{name}.py" for name in MIGRATIONS),
+        ):
+            target = self.stage / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(SOURCE / relative, target)
+        model = self.stage / "core/models.py"
+        text = model.read_text(encoding="utf-8")
+        marker = "\nclass MojPropStarter30Order(T):"
+        assert text.count(marker) == 1
+        model.write_text(text.split(marker, 1)[0].rstrip() + "\n", encoding="utf-8")
         for relative, prefix in PREFIXES.items():
             path = self.live / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -49,7 +65,7 @@ class ReviewedLegacyUpgradeTests(unittest.TestCase):
 
     def patch_both(self):
         with contextlib.redirect_stdout(io.StringIO()):
-            installer.patch_models(self.live / "core/models.py", SOURCE / "core/models.py")
+            installer.patch_models(self.live / "core/models.py", self.stage / "core/models.py")
             installer.patch_admin(self.live / "core/admin.py", SOURCE / "core/admin.py")
 
     def test_exact_legacy_model_suffix_is_recognized(self):
@@ -59,7 +75,7 @@ class ReviewedLegacyUpgradeTests(unittest.TestCase):
         self.assertTrue(has_reviewed_legacy_suffix(self.live, SOURCE, "core/admin.py"))
 
     def test_reviewed_intake_only_source_passes_preflight(self):
-        result = check_schema_closure(self.live, SOURCE)
+        result = check_schema_closure(self.live, self.stage)
         self.assertEqual(result["source_chain"], list(MIGRATIONS))
         self.assertFalse(result["live_db_restored"])
 
@@ -85,7 +101,7 @@ class ReviewedLegacyUpgradeTests(unittest.TestCase):
 
     def test_expanded_sources_pass_current_main_closure(self):
         self.patch_both()
-        result = check_schema_closure(self.live, SOURCE)
+        result = check_schema_closure(self.live, self.stage)
         self.assertEqual(result["source_chain"][-1], "0047_mpw_guest_email_recovery")
 
     def test_unknown_legacy_suffix_is_denied(self):
@@ -93,25 +109,25 @@ class ReviewedLegacyUpgradeTests(unittest.TestCase):
         path.write_text(path.read_text() + "\n# unreviewed edit\n", encoding="utf-8")
         self.assertFalse(has_reviewed_legacy_suffix(self.live, SOURCE, "core/models.py"))
         with self.assertRaisesRegex(RuntimeError, "partial Moj Prop model"):
-            check_schema_closure(self.live, SOURCE)
+            check_schema_closure(self.live, self.stage)
 
     def test_unknown_legacy_admin_suffix_is_denied(self):
         path = self.live / "core/admin.py"
         path.write_text(path.read_text() + "\n# unreviewed edit\n", encoding="utf-8")
         with self.assertRaisesRegex(RuntimeError, "partial Moj Prop admin"):
-            check_schema_closure(self.live, SOURCE)
+            check_schema_closure(self.live, self.stage)
 
     def test_non_reviewed_partial_model_set_is_denied(self):
         path = self.live / "core/models.py"
         path.write_text(path.read_text() + "\nclass MojPropOffer(T):\n    pass\n", encoding="utf-8")
         with self.assertRaisesRegex(RuntimeError, "partial Moj Prop model"):
-            check_schema_closure(self.live, SOURCE)
+            check_schema_closure(self.live, self.stage)
 
     def test_duplicate_class_in_prefix_is_denied(self):
         path = self.live / "core/models.py"
         path.write_text("class MojPropRequest:\n    pass\n" + path.read_text(), encoding="utf-8")
         with self.assertRaisesRegex(RuntimeError, "duplicate Moj Prop class"):
-            check_schema_closure(self.live, SOURCE)
+            check_schema_closure(self.live, self.stage)
 
 
 if __name__ == "__main__":

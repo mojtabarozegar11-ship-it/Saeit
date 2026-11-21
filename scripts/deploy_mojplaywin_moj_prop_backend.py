@@ -151,7 +151,9 @@ def selftest(repo_root: Path) -> None:
     missing = [marker for marker, text in required if marker not in text]
     if missing:
         raise RuntimeError(f"backend selftest missing markers: {missing}")
-    check_schema_closure(repo_root, repo_root)
+    # Offline source integrity may include reviewed but unreleased Starter30
+    # schema. Live deployment still calls the strict default gate separately.
+    check_schema_closure(repo_root, repo_root, source_only_selftest=True)
     print("MOJ_PROP_BACKEND_SELFTEST=PASS")
 
 
