@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import stat
 import tempfile
 
 ORDER = "WO-26102501"
@@ -108,7 +109,20 @@ def list_parts():
         chapter, part = map(int, match.groups())
         if not 1 <= chapter <= REQUIRED_CHAPTERS or not 1 <= part <= 999:
             reject("INVALID_CHAPTER_PART_FILENAME")
-        text = p.read_text(encoding="utf-8")
+        # Bind validation to the opened inode, not the earlier path stat:
+        # a concurrently replaced manuscript part must never cause an
+        # unbounded read, a symlink follow, or a FIFO hang in status mode.
+        try:
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+            with os.fdopen(os.open(p, flags), "rb") as stream:
+                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                    reject("UNEXPECTED_PRIVATE_MANUSCRIPT_ENTRY")
+                raw = stream.read(50001)
+            if not 200 < len(raw) <= 50000:
+                reject("UNEXPECTED_PRIVATE_MANUSCRIPT_ENTRY")
+            text = raw.decode("utf-8")
+        except (OSError, UnicodeError) as exc:
+            raise RuntimeError("LEECH_ZERO_COST_UNSAFE_PRIVATE_MANUSCRIPT_IO") from exc
         chunks[chapter].append((part, text))
     for chapter, entries in chunks.items():
         if [i for i, _ in entries] != list(range(1, len(entries) + 1)):
