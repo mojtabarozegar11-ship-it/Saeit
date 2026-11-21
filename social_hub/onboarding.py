@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 import uuid
 
 from .adapters import Blocked
-from .catalog import BRANDS, RESTRICTED_HANDLES, platform, PLATFORMS
+from .catalog import BRANDS, RESTRICTED_HANDLES, platform, PLATFORMS, restricted_profile_in
 from .store import utc_now
 
 HOSTS = {
@@ -92,7 +92,7 @@ def _valid_url(value,network,instance):
             raise Blocked("Mastodon profile and declared instance differ")
     elif host not in known and not (base and host.endswith("."+base) and host!=base):
         raise Blocked("Profile URL does not belong to the declared network")
-    if any(term in value.casefold() for term in RESTRICTED_HANDLES):
+    if restricted_profile_in(value):
         raise Blocked("Restricted promotional profile")
     return value
 
@@ -124,7 +124,7 @@ def validate_manifest(value):
         meta=platform(name)
         if not isinstance(dest,str) or not 2<=len(dest)<=180 or any(ord(c)<32 for c in dest):
             raise Blocked("Invalid account identifier")
-        if any(term in dest.casefold() for term in RESTRICTED_HANDLES):
+        if restricted_profile_in(dest):
             raise Blocked("Restricted promotional account")
         instance=row.get("instance","")
         if not isinstance(instance,str) or len(instance)>200:
