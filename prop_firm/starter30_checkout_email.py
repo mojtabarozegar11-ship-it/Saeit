@@ -61,8 +61,12 @@ def request_checkout_email_code(email: str) -> str:
     public rollout. No receiving-address allocation occurs in this operation.
     """
     require_email_verification_release()
-    normalized = normalize_email(email)
-    identity_id = register_identity(normalized)
+    try:
+        normalized = normalize_email(email)
+        identity_id = register_identity(normalized)
+    except IdentityAdapterClosed as exc:
+        # No raw-email or blocked-account enumeration in the HTTP response.
+        raise CheckoutEmailUnavailable("email verification could not be started") from exc
     now = timezone.now()
     with transaction.atomic(using=MOJPROP_DB_ALIAS):
         identity = (
@@ -114,10 +118,13 @@ def consume_checkout_email_code(challenge_ref: str, code: str) -> str:
         )
     except IdentityAdapterClosed as exc:
         raise CheckoutEmailUnavailable("invalid or expired email code") from exc
-    identity = (
-        PropSimulationIdentity.objects.using(MOJPROP_DB_ALIAS)
-        .get(pk=identity_id)
-    )
+    try:
+        identity = (
+            PropSimulationIdentity.objects.using(MOJPROP_DB_ALIAS)
+            .get(pk=identity_id)
+        )
+    except PropSimulationIdentity.DoesNotExist as exc:
+        raise CheckoutEmailUnavailable("email verification is no longer valid") from exc
     if identity.status == PropSimulationIdentity.Status.BLOCKED:
         raise CheckoutEmailUnavailable("email identity is unavailable")
     payload = {
