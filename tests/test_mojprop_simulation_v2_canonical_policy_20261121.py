@@ -50,7 +50,7 @@ class OwnerApprovedSimulationV2Tests(unittest.TestCase):
 
     def test_integrity_preflight_is_no_longer_obsolete_v1_contract(self):
         result = policy_integrity_report()
-        self.assertEqual(result["checked_invariants"], 21)
+        self.assertEqual(result["checked_invariants"], 23)
         self.assertEqual(result["defects"], [])
         self.assertEqual(result["canonical_contract_id"], NEW_CONTRACT_VERSION)
         self.assertFalse(result["payment_or_trading_authorized"])
@@ -67,6 +67,22 @@ class OwnerApprovedSimulationV2Tests(unittest.TestCase):
         self.assertTrue(accepted.passed)
         self.assertFalse(rejected.passed)
         self.assertIn("profit_consistency_not_met", rejected.reasons)
+
+    def test_owner_approved_profit_request_rules_are_only_policy_not_transfer(self):
+        self.assertEqual(SIMULATION_POLICY.first_profit_request_after_days, 14)
+        self.assertEqual(SIMULATION_POLICY.subsequent_profit_request_interval_days, 14)
+        self.assertEqual(SIMULATION_POLICY.minimum_profit_request_usd, Decimal("10"))
+        self.assertTrue(SIMULATION_POLICY.company_pays_payout_network_fees)
+        self.assertTrue(SIMULATION_POLICY.refund_initial_entry_on_first_successful_profit_payout)
+        self.assertEqual(SIMULATION_POLICY.payout_mode, "real_performance_reward")
+
+    def test_invoice_new_terms_match_exact_simulation_v2(self):
+        from pathlib import Path
+        source = (Path(__file__).resolve().parents[1] / "prop_firm/starter30_live.py").read_text()
+        self.assertIn("TERMS_REF = SIMULATION_POLICY.contract_version", source)
+        self.assertIn("payment.invoice_owner.contract_version != TERMS_REF", source)
+        self.assertIn("payment.terms_acceptance_ref != TERMS_REF", source)
+        self.assertIn("previous.invoice_owner.contract_version != TERMS_REF", source)
 
     def test_new_customer_receives_all_verified_qualifying_profit(self):
         result = calculate_payout(
