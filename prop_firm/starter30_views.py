@@ -7,6 +7,26 @@ from django.http import Http404, HttpResponse
 from django.middleware.csrf import get_token
 from django.views.decorators.http import require_http_methods
 
+def _record_funnel_event(request, event_name: str) -> None:
+    """Best-effort first-party funnel measurement; never block checkout."""
+    try:
+        from core.commerce_funnel import record_funnel_event
+        record_funnel_event(request, event_name)
+    except Exception:
+        return
+
+
+def _funnel_hidden_fields(request) -> str:
+    fields = []
+    for name in ("utm_source", "utm_medium", "utm_campaign", "utm_content"):
+        value = request.GET.get(name, "") or request.POST.get(name, "")
+        value = str(value).strip()[:80]
+        fields.append(
+            f"<input type='hidden' name='{name}' value='{escape(value, quote=True)}'>"
+        )
+    return "".join(fields)
+
+
 from .starter30_live import (
     Starter30PaymentRejected,
     Starter30ReleaseClosed,
@@ -50,7 +70,8 @@ def _form(request, invoice_ref: str | None = None) -> str:
             f"<input type='hidden' name='csrfmiddlewaretoken' value='{token}'>"
             f"<input type='hidden' name='action' value='settle'>"
             f"<input type='hidden' name='invoice_ref' value='{escape(invoice_ref)}'>"
-            "<label for='txid'>TRON transaction ID</label>"
+            + _funnel_hidden_fields(request)
+            + "<label for='txid'>TRON transaction ID</label>"
             "<input id='txid' name='txid' required pattern='[A-Fa-f0-9]{64}' autocomplete='off'>"
             "<button type='submit'>Verify 30 TRX payment</button></form>"
         )
@@ -58,7 +79,8 @@ def _form(request, invoice_ref: str | None = None) -> str:
         "<form method='post' action='/mojprop-starter30-checkout/'>"
         f"<input type='hidden' name='csrfmiddlewaretoken' value='{token}'>"
         "<input type='hidden' name='action' value='issue'>"
-        "<label for='email'>Email for the isolated simulation identity</label>"
+        + _funnel_hidden_fields(request)
+        + "<label for='email'>Email for the isolated simulation identity</label>"
         "<input id='email' name='email' type='email' required autocomplete='email'>"
         "<label for='payer_address'>Your sending TRON wallet address (optional)</label>"
         "<input id='payer_address' name='payer_address' autocomplete='off'>"
@@ -77,6 +99,7 @@ def starter30_checkout(request):
             if not release_is_open():
                 return _closed(request)
             verify_pre_invoice_configuration()  # no DB write or remote RPC call
+            _record_funnel_event(request, "begin_checkout")
             return _page(
                 request,
                 "Starter30 checkout",
@@ -99,6 +122,7 @@ def starter30_checkout(request):
                 payer_address=request.POST.get("payer_address", "").strip(),
                 terms_accepted=request.POST.get("terms") == "yes",
             )
+            _record_funnel_event(request, "invoice_created")
             return _page(
                 request,
                 "Starter30 invoice",
@@ -115,6 +139,8 @@ def starter30_checkout(request):
                 invoice_ref=request.POST.get("invoice_ref", ""),
                 txid=request.POST.get("txid", ""),
             )
+            _record_funnel_event(request, "payment_confirmed")
+            _record_funnel_event(request, "delivery_success")
             return _page(
                 request,
                 "Starter30 activated",

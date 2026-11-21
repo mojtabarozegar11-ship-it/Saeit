@@ -397,5 +397,23 @@
       });
     })();
   </script>
+
+<script>
+(function () {
+  const links = document.querySelectorAll('a[href="/moj-prop/starter-30-trx/"],a[href="/mojprop-starter30-checkout/"]');
+  links.forEach(function (link) {
+    link.addEventListener('click', function () {
+      const path = link.getAttribute('href');
+      if (!path || path.indexOf('?') !== -1) return;
+      const url = new URL(path, window.location.origin);
+      url.searchParams.set('utm_source', 'moj_prop');
+      url.searchParams.set('utm_medium', 'onsite');
+      url.searchParams.set('utm_campaign', 'starter30_launch');
+      url.searchParams.set('utm_content', path.indexOf('checkout') !== -1 ? 'hero_checkout' : 'hero_product');
+      link.href = url.pathname + url.search;
+    });
+  });
+}());
+</script>
 </body>
 </html>
