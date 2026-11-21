@@ -114,12 +114,10 @@ def education_course_detail(request, slug):
     assessments = course.assessments.filter(active=True, approved=True).prefetch_related("questions")
     enrollment = None
     progress_map = {}
-    bookmarked = False
     if request.user.is_authenticated:
         enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status="active").first()
         if enrollment:
             progress_map = {p.lesson_id: p for p in enrollment.progress.all()}
-        bookmarked = EducationBookmark.objects.filter(user=request.user, lesson=lesson).exists()
     lesson_rows = [{"lesson": lesson, "progress": progress_map.get(lesson.id)} for lesson in lessons]
     return render(request, "core/education_course_detail.html", {
         "course": course,
