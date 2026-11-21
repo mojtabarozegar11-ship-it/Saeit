@@ -38,8 +38,8 @@ class Starter30StaticReleaseTests(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def test_precisely_three_static_files(self):
-        self.assertEqual(set(rel.FILES), {"index.html", "journal-template.csv", "journal-guide.txt"})
+    def test_precisely_four_static_files(self):
+        self.assertEqual(set(rel.FILES), {"index.html", "journal-template.csv", "journal-guide.txt", "checkout-attribution.js"})
 
     def test_preflight_is_read_only(self):
         report = rel.preflight("123", COMMIT)
