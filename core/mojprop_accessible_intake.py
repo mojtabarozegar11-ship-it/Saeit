@@ -264,13 +264,13 @@ def request_form(request, *, error=None, status=200):
         'required minlength="2" maxlength="200"></label></p>'
         '<p><label>Contact email <input type="email" name="email" '
         'autocomplete="email" required maxlength="254"></label></p>'
-        ('<p><label>Service: Digital product inquiry</label>'
+        + ('<p><label>Service: Digital product inquiry</label>'
          '<input type="hidden" name="service" value="digital"></p>'
          if digital_product else
          '<p><label>Service <select name="service" required>' +
          _options(tuple(choice for choice in MojPropRequest.ROUTE_CHOICES
                         if choice[0] != "digital"), selected=selected) +
-         '</select></label></p>')
+         '</select></label></p>') +
         '<p>For downloadable products, use the verified store checkout; this '
         'form creates only an unpaid manual-review request.</p>'
         '<p><label>Time horizon <select name="horizon" required>'
