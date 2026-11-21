@@ -1,5 +1,21 @@
 name: MojPlayWin visitor and support inbox read-only audit
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-sales-intake-readonly-20261024.yml"
+      - "scripts/mpw_cpanel_direct_first_transport_readonly.py"
+      - "scripts/mpw_cpanel_source_attestation_readonly.py"
+      - "scripts/mpw_encrypted_inquiry_queue_readonly.py"
+      - "tests/test_mpw_cpanel_direct_first_transport_readonly.py"
+      - "tests/test_cpanel_source_attestation_readonly.py"
+      - "tests/test_mpw_encrypted_inquiry_queue_readonly.py"
+      - "scripts/mpw_runner_port_reachability_readonly.py"
+      - "tests/test_mpw_runner_port_reachability_readonly.py"
+      - "scripts/mpw_cpanel_uapi_https_revenue_readonly.py"
+      - "tests/test_mpw_cpanel_uapi_https_revenue_readonly.py"
+      - "scripts/mpw_cpanel_https_surface_readonly.py"
+      - "tests/test_mpw_cpanel_https_surface_readonly.py"
   push:
     branches: [main]
     paths:
@@ -8,6 +24,16 @@ on:
       - "scripts/mpw_paid_provenance_readonly_20261105.py"
       - "scripts/mpw_live_email_recovery_capability_readonly_20261105.py"
       - "scripts/mpw_live_guest_email_linkage_readonly_20261105.py"
+      - "scripts/mpw_cpanel_direct_first_transport_readonly.py"
+      - "scripts/mpw_cpanel_source_attestation_readonly.py"
+      - "scripts/mpw_encrypted_inquiry_queue_readonly.py"
+      - "tests/test_mpw_encrypted_inquiry_queue_readonly.py"
+      - "scripts/mpw_runner_port_reachability_readonly.py"
+      - "tests/test_mpw_runner_port_reachability_readonly.py"
+      - "scripts/mpw_cpanel_uapi_https_revenue_readonly.py"
+      - "tests/test_mpw_cpanel_uapi_https_revenue_readonly.py"
+      - "scripts/mpw_cpanel_https_surface_readonly.py"
+      - "tests/test_mpw_cpanel_https_surface_readonly.py"
   schedule:
     - cron: '21 * * * *'
   workflow_dispatch:
@@ -16,6 +42,74 @@ concurrency:
   group: mpw-intake-read-only-audit
   cancel-in-progress: false
 jobs:
+  audit-source-only:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check syntax of all three read-only tools
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          for name in (
+             'scripts/mpw_cpanel_direct_first_transport_readonly.py',
+             'scripts/mpw_cpanel_source_attestation_readonly.py',
+             'scripts/mpw_encrypted_inquiry_queue_readonly.py',
+             'scripts/mpw_cpanel_uapi_https_revenue_readonly.py',
+          ):
+             ast.parse(Path(name).read_text(encoding='utf8'),filename=name)
+          print('MPW_SAFE_READONLY_SOURCE_SYNTAX=PASS')
+          PY
+      - name: Observe runner-to-server TCP connectivity without SSH secrets
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_mpw_runner_port_reachability_readonly.py' -v
+          python3 -B scripts/mpw_runner_port_reachability_readonly.py
+      - name: Verify cPanel HTTPS auth gate without token or customer access
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_mpw_cpanel_https_surface_readonly.py' -v
+          python3 -B scripts/mpw_cpanel_https_surface_readonly.py
+      - name: Audit HTTPS UAPI fail-closed protocol and 30 nonmutating cases
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_mpw_cpanel_uapi_https_revenue_readonly.py' -v
+          echo 'MPW_UAPI_30_SAFE_REGRESSIONS=PASS'
+      - name: Execute 70 offline regressions without SSH or customer access
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_mpw_cpanel_direct_first_transport_readonly.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_cpanel_source_attestation_readonly.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_mpw_encrypted_inquiry_queue_readonly.py' -v
+          echo 'MPW_70_OFFLINE_REGRESSIONS=PASS'
+  audit-https-uapi-readonly:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Independent HTTPS cPanel summary when SSH ports are blocked
+        env:
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mpw_cpanel_uapi_https_revenue_readonly.py
   audit-live:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -45,81 +139,37 @@ jobs:
           assert route_bucket("/store/product/72/checkout/") == "product_checkout"
           print("MPW_SALES_FUNNEL_ROUTE_CLASSIFICATION=PASS")
           PY
-      - name: Establish pinned SSH relay to cPanel
+          echo "Running stdlib-only safe transport and source attestation regressions"
+          python3 -B -m unittest discover -s tests -p 'test_mpw_cpanel_direct_first_transport_readonly.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_cpanel_source_attestation_readonly.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_mpw_encrypted_inquiry_queue_readonly.py' -v
+          echo "MPW_READONLY_TRANSPORT_SOURCE_LEADS_REGRESSIONS=PASS"
+      - name: Establish fail-closed fingerprint-pinned direct-first cPanel route
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
-          umask 077
+          python3 -B scripts/mpw_cpanel_direct_first_transport_readonly.py
+      - name: Attest actual cPanel Passenger and TRX source without mutation
+        continue-on-error: true
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
-          install -d -m 700 "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
-          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
-          chmod 600 "$d/"*
-          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
-          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          # Bound transient VPS connection drops; reject a changed identity immediately.
-          for attempt in 1 2 3 4; do
-            if timeout 12s ssh-keyscan -T 8 -t rsa 178.239.147.150 > "$d/vps.candidate" 2>/dev/null && test -s "$d/vps.candidate"; then
-              actual_pin="$(ssh-keygen -lf "$d/vps.candidate" -E sha256 | awk '{print $2}' | sort -u)"
-              if test "$actual_pin" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
-                echo "MPW_AUDIT_VPS_PIN=mismatch_fail_closed" >&2
-                exit 1
-              fi
-              mv "$d/vps.candidate" "$d/vps.known"
-              echo "MPW_AUDIT_VPS_PIN=verified_attempt_$attempt"
-              break
-            fi
-            if test "$attempt" = 4; then
-              echo "MPW_AUDIT_VPS_RELAY=unreachable_after_4_attempts" >&2
-              exit 1
-            fi
-            sleep $((attempt * 2))
-          done
-          cat > "$d/config" <<EOF
-          Host saeit-vps
-            HostName 178.239.147.150
-            User githubops
-            Port 22
-            IdentityFile $d/vps.key
-            UserKnownHostsFile $d/vps.known
-          Host saeit-cpanel
-            HostName zohal.pws-dns.net
-            User zomorod2
-            Port 1396
-            IdentityFile $d/host.key
-            UserKnownHostsFile $d/host.known
-            ProxyJump saeit-vps
-          Host *
-            StrictHostKeyChecking yes
-            IdentitiesOnly yes
-            BatchMode yes
-            ConnectTimeout 10
-            ConnectionAttempts 1
-            ForwardAgent no
-            RequestTTY no
-          EOF
-          chmod 600 "$d/config"
-          # Keep the hosting host-key pin independent of the VPS relay.
-          for attempt in 1 2 3 4; do
-            if timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null && test -s "$d/host.candidate"; then
-              actual_pin="$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)"
-              if test "$actual_pin" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
-                echo "MPW_AUDIT_CPANEL_PIN=mismatch_fail_closed" >&2
-                exit 1
-              fi
-              mv "$d/host.candidate" "$d/host.known"
-              echo "MPW_AUDIT_CPANEL_PIN=verified_attempt_$attempt"
-              break
-            fi
-            if test "$attempt" = 4; then
-              echo "MPW_AUDIT_CPANEL_RELAY=unreachable_after_4_attempts" >&2
-              exit 1
-            fi
-            sleep $((attempt * 2))
-          done
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_cpanel_source_attestation_readonly.py
+      - name: Read encrypted service inquiry backlog counts, no customer contents
+        continue-on-error: true
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_encrypted_inquiry_queue_readonly.py
       - name: Run read-only live sales and checkout audit
+        continue-on-error: true
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
