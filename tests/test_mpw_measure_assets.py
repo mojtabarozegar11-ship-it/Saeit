@@ -18,6 +18,16 @@ class MeasurementAssetTests(unittest.TestCase):
         self.assertIn("mpw_measure_consent_v1", js)
         self.assertIn('credentials: "omit"', js)
 
+    def test_starter30_info_link_is_not_checkout_buy_click(self):
+        js = JS.read_text(encoding="utf-8")
+        purchase = js[js.index("function onLinkClick(e)"):js.index("function init()")]
+        before_buy, after_buy = purchase.split('send("buy_click");', 1)
+        # The main MOJ PROP landing's Starter30 plan link is only interest.
+        self.assertNotIn('p === "/moj-prop/starter-30-trx/"', before_buy)
+        self.assertIn('p === "/moj-prop/starter-30-trx/"', after_buy)
+        self.assertIn('p === "/mojprop-starter30-checkout/"', before_buy)
+        self.assertIn('send("plan_click");', after_buy)
+
     def test_collector_does_not_persist_form_fields_or_ip(self):
         php = PHP.read_text(encoding="utf-8")
         for bad in ("$_POST", "HTTP_X_FORWARDED_FOR", "$_SERVER['REMOTE_ADDR']",

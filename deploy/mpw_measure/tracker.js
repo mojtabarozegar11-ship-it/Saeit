@@ -104,13 +104,15 @@
     if (u.origin !== location.origin) return;
     var p = u.pathname;
     if (/^\/commerce\/book\/[0-9]+\/$/.test(p) ||
-        p === "/mojprop-starter30-checkout/" ||
-        p === "/moj-prop/starter-30-trx/") {
+        p === "/mojprop-starter30-checkout/") {
+      // Opening a real checkout form is purchase intent, not a paid order.
       send("buy_click");
     } else if (/^\/store\/product\/[0-9]+\/$/.test(p)) {
       send("product_click");
-    } else if (p === "/moj-prop/catalog/" || p === "/moj-prop/rules/" ||
+    } else if (p === "/moj-prop/starter-30-trx/" ||
+               p === "/moj-prop/catalog/" || p === "/moj-prop/rules/" ||
                p === "/moj-prop/payment/") {
+      // Reading a challenge plan is informational interest, not buy intent.
       send("plan_click");
     } else if (p === "/moj-prop/contact/" || p === "/support/") {
       send("help_click");
