@@ -67,9 +67,9 @@ class Starter30PublicOfferTests(unittest.TestCase):
     def test_current_exact_price_and_invoice_boundary(self):
         page = PUBLIC.read_text("utf-8")
         for required in ("30 TRX", "one-time simulated access",
-                         'href="/mojprop-starter30-checkout/"',
+                         'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"',
                          "server-issued 30 TRX invoice",
-                         "two independent TRON SolidityNode proofs agree"):
+                         "A public checkout page alone is not evidence"):
             self.assertIn(required, page)
         self.assertEqual(page.lower().count("<form"), 1)
         self.assertIn('<form action="/mojprop-starter30-status/" method="get"', page)

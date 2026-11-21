@@ -8,8 +8,8 @@ from pathlib import Path
 import unittest
 
 PAGE=Path(__file__).resolve().parents[1]/"templates"/"moj-prop-v4"/"index.html"
-SHA256="b1b9eaf8a0f49ffce4254d35a5a4ae0e3ed2b73ad1ccc0eaea1b499fcf1b7b71"
-BLOB="169f4464107da0145fe47cbe5725a6aebbdca79a"
+SHA256="abe683212f89af0375347167fe2414d392df1643a926e7ec9e2ab19829c20619"
+BLOB="bbaf6d9a19c90ce63a62db163f5a8f92c2d1dbf6"
 
 class Scan(HTMLParser):
     def __init__(self):

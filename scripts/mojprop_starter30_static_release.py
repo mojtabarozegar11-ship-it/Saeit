@@ -25,7 +25,7 @@ FILES = LEGACY_FILES + ("checkout-attribution.js",)
 # The owner must explicitly review/re-pin any revision; do not trust staged
 # tarballs or a caller-supplied commit string as proof of identical bytes.
 REVIEWED_GIT_BLOBS = {
-    "index.html": "aed48d54b7d37b6dfba4d53295d8ffdab53cad83",
+    "index.html": "2101b9aed43b8d5c78fb94c7785f844903cf5755",
     "journal-template.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
     "journal-guide.txt": "1e02213de4bed3fc9211e388b3f8b135ef2c0f0a",
     "checkout-attribution.js": "dbf6035a9cfeb65dd92995d1302081123ebfbe5c",
@@ -170,11 +170,14 @@ def _stage_bytes(run_id: str) -> dict[str, bytes]:
         out[item] = _read_reviewed_stage_file(stage, item)
     page = out["index.html"].decode("utf-8")
     if (not all(mark in page for mark in (
-            "MOJPROP-STARTER30", "Checkout available · 30 TRX",
-            "server-issued 30 TRX invoice", "never send to another address",
+            "MOJPROP-STARTER30", "payment admission under independent verification",
+            "Request free written Starter30 terms", "Never send TRX to an unverified address",
             "100% of every profit earned", "No real funded account",
             '<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>'))
             or 'index,follow' not in page
+            or 'href="/mojprop-starter30-checkout/"' in page
+            or "Checkout available · 30 TRX" in page
+            or '/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx' not in page
             or b"session,closing_equity_usd,risk_plan_recorded,reflection_recorded" not in out["journal-template.csv"]
             or b"utm_source" not in out["checkout-attribution.js"]
             or b"utm_content" not in out["checkout-attribution.js"]

@@ -13,10 +13,11 @@ SCRIPT_TAG = '<script defer src="/moj-prop/starter-30-trx/checkout-attribution.j
 
 
 class Starter30UTMLandingContract(unittest.TestCase):
-    def test_static_html_keeps_checkout_cta_and_scoped_script(self):
+    def test_static_html_keeps_free_terms_cta_and_scoped_script(self):
         html = HTML.read_text("utf-8")
         self.assertEqual(html.count(SCRIPT_TAG), 1)
-        self.assertIn('href="/mojprop-starter30-checkout/"', html)
+        self.assertIn('href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"', html)
+        self.assertNotIn('href="/mojprop-starter30-checkout/"', html)
         self.assertIn('<link rel="canonical" href="https://mojplaywin.com/moj-prop/starter-30-trx/">', html)
         self.assertIn("30 TRX", html)
         self.assertIn("simulated", html.lower())

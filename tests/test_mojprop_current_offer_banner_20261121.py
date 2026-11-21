@@ -10,9 +10,9 @@ class MojPropCurrentOfferBannerTest(unittest.TestCase):
         text = PAGE.read_text(encoding="utf-8")
         before_plan1 = text.split('<section class="section" id="mojprop01"', 1)[0]
         self.assertIn('id="starter30-current-offer"', before_plan1)
-        self.assertIn("Current commercial route: Starter30", before_plan1)
+        self.assertIn("Starter30 — 60-day simulated challenge; listed entry fee 30 TRX", before_plan1)
         self.assertIn('href="/moj-prop/starter-30-trx/"', before_plan1)
-        self.assertIn('href="/mojprop-starter30-checkout/"', before_plan1)
+        self.assertIn('href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"', before_plan1)
 
     def test_legal_prelaunch_disclosure_remains_present(self):
         text = PAGE.read_text(encoding="utf-8")
