@@ -45,7 +45,8 @@ class Starter30PublicOfferTests(unittest.TestCase):
 
     def test_no_wallet_or_unreviewed_external_script(self):
         page = PUBLIC.read_text("utf-8")
-        self.assertEqual(page.count("<script"), 1)
+        self.assertEqual(page.count("<script"), 2)
+        self.assertIn('<script defer src="/mpw-measure/tracker.js"></script>', page)
         self.assertIn('<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>', page)
         self.assertNotIn("tronlink", page.lower())
         self.assertNotIn("tronweb", page.lower())
@@ -70,8 +71,10 @@ class Starter30PublicOfferTests(unittest.TestCase):
                          "server-issued 30 TRX invoice",
                          "two independent TRON SolidityNode proofs agree"):
             self.assertIn(required, page)
-        self.assertNotIn("<form", page.lower())
-        self.assertNotIn('type="submit"', page.lower())
+        self.assertEqual(page.lower().count("<form"), 1)
+        self.assertIn('<form action="/mojprop-starter30-status/" method="get"', page)
+        self.assertNotIn('method="post"', page.lower())
+        self.assertNotIn('name="txid"', page.lower())
 
     def test_current_simulation_and_reward_disclosure(self):
         page = PUBLIC.read_text("utf-8")
