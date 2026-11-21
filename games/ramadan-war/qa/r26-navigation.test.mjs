@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {objectiveWaypoint,INTERACT_RANGE,canInteractAt} from '../objective-navigation.mjs';
+const game=readFileSync(new URL('../game.js',import.meta.url),'utf8');
+const free=(x,y)=>x>=1&&x<=5&&y>=1&&y<=5;
+test('objective route on open map chooses first walkable tile',()=>{const r=objectiveWaypoint(1.5,1.5,4.5,1.5,free,7);assert.deepEqual(r,{x:2.5,y:1.5,steps:3})});
+test('objective arrow detours around blocked tiles',()=>{const pass=(x,y)=>free(x,y)&&!(x===2&&y===1);const r=objectiveWaypoint(1.5,1.5,4.5,1.5,pass,7);assert.deepEqual(r,{x:1.5,y:2.5,steps:5})});
+test('unreachable or solid goal returns no fabricated path',()=>{const pass=(x,y)=>free(x,y)&&x!==3;assert.equal(objectiveWaypoint(1.5,1.5,4.5,1.5,pass,7),null);assert.equal(objectiveWaypoint(1.5,1.5,3.5,1.5,(x,y)=>free(x,y)&&x!==3,7),null)});
+test('same tile points directly to target',()=>assert.deepEqual(objectiveWaypoint(2.2,2.4,2.8,2.7,free,7),{x:2.8,y:2.7,steps:0}));
+test('bad input is safely rejected',()=>{assert.equal(objectiveWaypoint(NaN,2,3,4,free),null);assert.equal(objectiveWaypoint(1,2,3,4,null),null)});
+test('interaction boundary matches visible action affordance',()=>{assert.equal(canInteractAt(1,1,1+INTERACT_RANGE,1),true);assert.equal(canInteractAt(1,1,1+INTERACT_RANGE+.01,1),false);assert.match(game,/canInteractAt\(world\.x,world\.y,target\[0\],target\[1\]\)/);assert.match(game,/canInteractAt\(world\.x,world\.y,site\[0\],site\[1\]\)/)});
+test('game objective arrow uses wall-aware waypoint and clearly reports unreachable route',()=>{assert.match(game,/objectiveWaypoint\(world\.x,world\.y,site\[0\],site\[1\]/);assert.match(game,/مسیر بسته است/)});
