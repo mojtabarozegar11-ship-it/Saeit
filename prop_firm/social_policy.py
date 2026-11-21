@@ -1,7 +1,4 @@
-"""Moj Prop social-evidence policy for the simulation-v1 contract.
-
-No publication to the owner's prohibited dr.mojtaba.rozegar profile.
-This module validates independently reviewed evidence only; it never publishes.
+"""Moj Prop social-evidence policy for versioned simulated challenge contracts.
 
 Exactly one original Instagram and one original Facebook post for the *entire*
 challenge enrollment (two phases combined), not per trade or per phase.
@@ -16,7 +13,8 @@ from urllib.parse import urlsplit
 
 PLATFORMS = ("instagram", "facebook")
 LEGACY_CONTRACT_VERSION = "2026-11-14/v1.1"
-NEW_CONTRACT_VERSION = "2026-11-19/simulation-v1"
+PREVIOUS_CONTRACT_VERSION = "2026-11-19/simulation-v1"
+NEW_CONTRACT_VERSION = "2026-11-21/simulation-v2"
 DURATION_DAYS = 28
 POST_START_GRACE_HOURS = 24
 BLOCKED_OWNER_PROFILE = "dr.mojtaba.rozegar"
