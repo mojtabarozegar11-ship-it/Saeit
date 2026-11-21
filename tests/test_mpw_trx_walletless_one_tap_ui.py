@@ -1,5 +1,8 @@
 """Mobile walletless invoice convenience: no funds sent without explicit wallet approval."""
 import unittest
+from unittest.mock import patch
+from urllib.parse import parse_qs,urlparse
+from html.parser import HTMLParser
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
 from dataclasses import replace
@@ -16,12 +19,29 @@ INV=InvoiceIntent(order_id=14,customer_id=22,network="tron-mainnet",
     quote_usd_per_trx=Decimal("0.30"))
 PATH="/commerce/trx-easy/status/14/"
 
+class WalletLinkParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links=[]
+    def handle_starttag(self,tag,attrs):
+        if tag=="a":
+            self.links.append(dict(attrs))
+
 class NativeTRXOneTapTests(unittest.TestCase):
+    def setUp(self):
+        # Render tests verify the checkout HTML/CSP, not QR generation. QR's
+        # encoder has separate tests and requires the optional segno wheel.
+        qr=patch("services.mpw_trx_walletless_checkout_ui.build_recipient_qr",
+                 return_value='<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+        qr.start()
+        self.addCleanup(qr.stop)
+
     def test_wallet_and_qr_fallback_in_same_invoice(self):
         html,csp=render_one_tap_invoice(INV,status_path=PATH)
         s=html.decode()
         self.assertIn('id="mpw-easy-pay"',s)
         self.assertIn('id="mpw-open-wallet"',s)
+        self.assertIn('id="mpw-open-trustwallet"',s)
         self.assertIn('data-sun="1234567"',s)
         self.assertIn('QR contains the address only',s)
         self.assertIn('<svg',s)
@@ -33,6 +53,21 @@ class NativeTRXOneTapTests(unittest.TestCase):
         self.assertNotIn("'unsafe-inline'",csp)
         self.assertNotIn("'unsafe-eval'",csp)
         self.assertIn("frame-ancestors 'none'",csp)
+
+    def test_trust_wallet_prefills_only_server_issued_tron_invoice(self):
+        html,_=render_one_tap_invoice(INV,status_path=PATH)
+        p=WalletLinkParser()
+        p.feed(html.decode())
+        item=next(x for x in p.links if x.get("id")=="mpw-open-trustwallet")
+        target=urlparse(item["href"])
+        self.assertEqual((target.scheme,target.netloc,target.path),
+            ("https","link.trustwallet.com","/send"))
+        self.assertEqual(parse_qs(target.query),{
+            "asset":["c195"],"address":[INV.recipient],"amount":["1.234567"],
+        })
+        self.assertIn("noopener",item["rel"])
+        self.assertNotIn("tx_hash",item["href"])
+        self.assertNotIn("private",item["href"])
 
     def test_tronlink_launcher_cannot_leave_known_checkout_origin(self):
         self.assertIn('location.hostname==="mojplaywin.com"',WALLET_ACTION_JS)

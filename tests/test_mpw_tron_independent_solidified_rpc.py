@@ -1,12 +1,15 @@
 """Offline safe canonical TRON SolidityNode verification tests; no money or network."""
 import copy
+import json
 import unittest
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
+from unittest.mock import patch
 
 from services.mpw_tron_independent_solidified_rpc import (
     RpcProvider,PaymentHold,parse_solidified_native_trx,hex_to_tron_address,
     verify_distinct_provider_config,query_solidified_transfer,verified_live_pair,
+    query_solidified_head,_post,
 )
 from services.mpw_trx_walletless_core import InvoiceIntent
 TX="a"*64
@@ -48,6 +51,15 @@ class ReadOnlyTronVerifierTests(unittest.TestCase):
         self.assertEqual(rec.recipient,hex_to_tron_address(HEX_TO))
         self.assertEqual(rec.block_time,datetime.fromtimestamp(MS/1000,timezone.utc))
         self.assertTrue(rec.solidified and rec.execution_success and rec.transfer_contract)
+
+    def test_shasta_evidence_is_explicitly_tagged_and_refused_by_mainnet(self):
+        shasta=parse_solidified_native_trx(TX,self.body,self.info,source_id="shasta-probe",network="tron-shasta")
+        self.assertEqual(shasta.network,"tron-shasta")
+        with self.assertRaises(PaymentHold):
+            parse_solidified_native_trx(TX,self.body,self.info,source_id="probe",network="tron-nile")
+        for host in ("api.shasta.trongrid.io","nile.trongrid.io","api.nileex.io","proxy-shasta.example.com"):
+            with self.subTest(host=host),self.assertRaises(PaymentHold):
+                RpcProvider("shasta","testnet",f"https://{host}").validate()
 
     def test_malformed_or_foreign_hash_rejected(self):
         for value in ("a"*63,"b"*64,"a"*64+"f"):
@@ -99,6 +111,106 @@ class ReadOnlyTronVerifierTests(unittest.TestCase):
         ):
             with self.subTest(endpoint=b.endpoint),self.assertRaises(PaymentHold):
                 verify_distinct_provider_config(SOURCE_A,b)
+
+    def test_independent_operators_require_correct_scoped_keys(self):
+        with self.assertRaises(PaymentHold):
+            RpcProvider("a","tron-grid","https://api.trongrid.io").validate()
+        with self.assertRaises(PaymentHold):
+            RpcProvider("b","nodit","https://tron-mainnet.nodit.io", "demo").validate()
+        with self.assertRaises(PaymentHold):
+            RpcProvider("b","nodit","https://tron-mainnet.nodit.io", "real-key", "Authorization").validate()
+        grid=RpcProvider("grid","TronGrid","https://api.trongrid.io", "site-key")
+        nodit=RpcProvider("nodit","Nodit","https://tron-mainnet.nodit.io", "site-key", "X-API-KEY")
+        verify_distinct_provider_config(grid,nodit)
+        self.assertEqual(grid.request_headers()["TRON-PRO-API-KEY"],"site-key")
+        self.assertEqual(nodit.request_headers()["X-API-KEY"],"site-key")
+        self.assertNotIn("TRON-PRO-API-KEY",nodit.request_headers())
+
+    def test_solidified_head_is_readonly_get_and_fresh(self):
+        now=datetime(2026,10,22,6,tzinfo=timezone.utc)
+        called=[]
+        def transport(provider,path,txid):
+            called.append((provider.source_id,path,txid))
+            return {"block_header":{"raw_data":{"number":70000001,
+                "timestamp":int(now.timestamp()*1000)-20_000}}}
+        self.assertEqual(query_solidified_head(SOURCE_A,transport=transport,now=now),70000001)
+        self.assertEqual(called,[("rpc-one","/walletsolidity/getnowblock","")])
+        for offset in (-700_000,120_000):
+            def bad(_provider,_path,_txid):
+                return {"block_header":{"raw_data":{"number":70000001,
+                    "timestamp":int(now.timestamp()*1000)+offset}}}
+            with self.subTest(offset=offset),self.assertRaises(PaymentHold):
+                query_solidified_head(SOURCE_A,transport=bad,now=now)
+        for payload in ({},{"block_header":{"raw_data":{"number":True,"timestamp":12}}}):
+            with self.subTest(payload=payload),self.assertRaises(PaymentHold):
+                query_solidified_head(SOURCE_A,transport=lambda *_:payload,now=now)
+
+    def test_realistic_large_solidified_head_stays_bounded_separately(self):
+        now=datetime.now(timezone.utc)
+        header={"block_header":{"raw_data":{"number":70000001,
+                "timestamp":int(now.timestamp()*1000)-15000}}}
+        body=json.dumps({**header,"transactions":"a"*500_000}).encode()
+        self.assertGreater(len(body),150_000)
+        class Response:
+            status=200
+            headers={"Content-Type":"application/json"}
+            def __init__(self,payload):self.payload=payload
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,limit):return self.payload[:limit]
+        class Opener:
+            def __init__(self,payload):self.payload=payload
+            def open(self,request,timeout):return Response(self.payload)
+        with patch("services.mpw_tron_independent_solidified_rpc.urllib.request.build_opener",
+                   return_value=Opener(body)):
+            self.assertEqual(query_solidified_head(SOURCE_A,now=now),70000001)
+            with self.assertRaises(PaymentHold):
+                _post(SOURCE_A,"/walletsolidity/gettransactionbyid",TX)
+        oversized=json.dumps({**header,"transactions":"a"*2_000_000}).encode()
+        with patch("services.mpw_tron_independent_solidified_rpc.urllib.request.build_opener",
+                   return_value=Opener(oversized)):
+            with self.assertRaises(PaymentHold):
+                query_solidified_head(SOURCE_A,now=now)
+
+    def test_nodit_solidified_head_uses_get_and_x_api_key(self):
+        provider=RpcProvider("nodit","Nodit","https://tron-mainnet.nodit.io","private-test-key","X-API-KEY")
+        captures=[]
+        class Response:
+            status=200
+            headers={"Content-Type":"application/json"}
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,_limit):return b'{"block_header":{"raw_data":{"number":1,"timestamp":1}}}'
+        class Opener:
+            def open(self,request,timeout):
+                captures.append((request,timeout))
+                return Response()
+        with patch("services.mpw_tron_independent_solidified_rpc.urllib.request.build_opener",return_value=Opener()):
+            _post(provider,"/walletsolidity/getnowblock","")
+        request,timeout=captures[0]
+        self.assertEqual(request.get_method(),"GET")
+        self.assertIsNone(request.data)
+        self.assertEqual(request.get_header("X-api-key"),"private-test-key")
+        self.assertFalse(request.has_header("Tron-pro-api-key"))
+        self.assertEqual(timeout,8)
+
+    def test_transaction_queries_keep_post_and_json_body(self):
+        provider=RpcProvider("nodit","Nodit","https://tron-mainnet.nodit.io", "private-test-key", "X-API-KEY")
+        recorded=[]
+        class Response:
+            status=200
+            headers={"Content-Type":"application/json"}
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,_limit):return b'{}'
+        class Opener:
+            def open(self,request,timeout):
+                recorded.append(request)
+                return Response()
+        with patch("services.mpw_tron_independent_solidified_rpc.urllib.request.build_opener",return_value=Opener()):
+            _post(provider,"/walletsolidity/gettransactionbyid",TX)
+        self.assertEqual(recorded[0].get_method(),"POST")
+        self.assertEqual(json.loads(recorded[0].data),{"value":TX,"visible":False})
 
     def test_unattested_pair_never_created(self):
         with self.assertRaises(PaymentHold):

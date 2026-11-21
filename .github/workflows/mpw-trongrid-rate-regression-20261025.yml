@@ -1,0 +1,24 @@
+name: MPW TronGrid production rate control regression 2026-10-25
+on:
+  push:
+    branches: [fix/mpw-trongrid-indexer-rate-20261025]
+    paths:
+      - services/mpw_tron_readonly_deposit_candidates.py
+      - tests/test_mpw_trongrid_rate_20261025.py
+      - tests/test_mpw_tron_readonly_deposit_candidates.py
+      - .github/workflows/mpw-trongrid-rate-regression-20261025.yml
+permissions: {contents: read}
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Compile and verify approved narrow indexer changes
+        run: |
+          set -euo pipefail
+          python3 -m py_compile services/mpw_tron_readonly_deposit_candidates.py
+          python3 -m unittest discover -s tests -p test_mpw_trongrid_rate_20261025.py -v
+          python3 -m unittest discover -s tests -p test_mpw_tron_readonly_deposit_candidates.py -v
+          python3 -m unittest discover -s tests -p test_mpw_tron_bounded_finalized_head_20261025.py -v

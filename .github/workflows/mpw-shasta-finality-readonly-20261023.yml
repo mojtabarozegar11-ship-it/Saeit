@@ -1,0 +1,32 @@
+name: MojPlayWin verify finalized Shasta test payment
+on:
+  push:
+    branches: [fix/mpw-tron-provider-auth-20261022]
+    paths:
+      - .github/workflows/mpw-shasta-finality-readonly-20261023.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  verify-real-testnet-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify known public Shasta native-TRX transaction from two RPC endpoints
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mpw_shasta_one_test_transfer_verify_20261023.py
+          python3 - <<'PY'
+          import json,pathlib
+          receipt={
+              "network":"tron-shasta","test_only":True,
+              "sender":"TWTBsKZPVuQgaGNbyJWJm9XR28g4wVBCNQ",
+              "recipient":"TQUeFHztrWCeoD5mqnex9ENp1tW9SHNs93",
+              "amount_sun":1123456,
+              "txid":"5c03b8d3e7fbcae6c847b60e595b959f28c9bfffc981c7cadd8af4c01c1d962f"
+          }
+          pathlib.Path("/tmp/mpw-public-shasta-receipt.json").write_text(json.dumps(receipt),encoding="utf8")
+          PY
+          timeout 165s python3 -B scripts/mpw_shasta_one_test_transfer_verify_20261023.py /tmp/mpw-public-shasta-receipt.json
+          echo 'SHASTA_TESTNET_FINALITY_VERIFIED; NO_PRODUCTION_PAYMENT_WRITES'

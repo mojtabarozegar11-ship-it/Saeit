@@ -1,0 +1,35 @@
+name: MojPlayWin Shasta real-chain payment parser canary (NO TRANSFERS)
+on:
+  pull_request:
+    paths:
+      - services/mpw_tron_independent_solidified_rpc.py
+      - scripts/mpw_shasta_gateway_chain_canary_20261022.py
+      - tests/test_mpw_shasta_gateway_chain_canary.py
+      - tests/test_mpw_tron_independent_solidified_rpc.py
+      - .github/workflows/mpw-tron-shasta-readonly-proof-20261022.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  parser-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Reject invalid Shasta evidence before payment
+        env: {PYTHONDONTWRITEBYTECODE: '1'}
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest tests.test_mpw_tron_independent_solidified_rpc tests.test_mpw_shasta_gateway_chain_canary -q
+  public-shasta-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify real solidified Shasta transfer and account (read-only)
+        env: {PYTHONDONTWRITEBYTECODE: '1'}
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mpw_shasta_gateway_chain_canary_20261022.py
+          echo 'TESTNET_ONLY=TRUE; PAYMENT_BROADCAST=0; PRODUCTION_WRITES=0; CHECKOUT_ACCEPTANCE=NOT_PROVEN'

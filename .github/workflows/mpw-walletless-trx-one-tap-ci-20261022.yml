@@ -1,10 +1,12 @@
 name: MojPlayWin easy one-tap TRX buyer checkout CI
 on:
   push:
-    branches: [feature/mpw-walletless-trx-e2e-20261022]
+    branches: [feature/mpw-walletless-trx-e2e-20261022, fix/mpw-tron-provider-auth-20261022]
     paths:
       - services/mpw_trx_walletless_one_tap_ui.py
       - tests/test_mpw_trx_walletless_one_tap_ui.py
+      - services/mpw_trx_walletless_checkout_ui.py
+      - tests/test_mpw_trx_walletless_smart_ui.py
       - .github/workflows/mpw-walletless-trx-one-tap-ci-20261022.yml
   workflow_dispatch:
 permissions: {contents: read}
@@ -22,6 +24,8 @@ jobs:
           set -euo pipefail
           python3 -m py_compile services/mpw_trx_walletless_one_tap_ui.py tests/test_mpw_trx_walletless_one_tap_ui.py
           python3 -m unittest discover -s tests -p 'test_mpw_trx_walletless_one_tap_ui.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_walletless_checkout_ui.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_trx_walletless_smart_ui.py' -v
       - name: Compile injected one-tap wallet JS
         run: |
           set -euo pipefail

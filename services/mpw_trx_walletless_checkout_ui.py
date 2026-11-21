@@ -48,17 +48,42 @@ async function copy(which){
 }
 document.getElementById("copy-recipient").addEventListener("click",()=>copy("recipient"));
 document.getElementById("copy-amount").addEventListener("click",()=>copy("amount"));
-let stopped=false,started=Date.now();
-function schedule(delay){if(!stopped)window.setTimeout(check,delay);}
-async function check(){
+let stopped=false,checking=false,failures=0,started=Date.now(),timer=null,lastProofAttempt=0;
+function schedule(delay){
   if(stopped)return;
+  if(timer!==null)window.clearTimeout(timer);
+  timer=window.setTimeout(()=>{timer=null;check();},delay);
+}
+function nextDelay(){
+  const elapsed=Date.now()-started;
+  return elapsed<2*60*1000?4000:elapsed<10*60*1000?8000:15000;
+}
+async function check(){
+  if(stopped||checking)return;
   if(Date.now()-started>35*60*1000){stopped=true;status.textContent="Automatic status checks paused. Contact support; do not send a second payment.";return;}
   if(document.hidden){schedule(10000);return;}
+  checking=true;
+  const controller=new AbortController();
+  const timeout=window.setTimeout(()=>controller.abort(),8000);
+  let delay=nextDelay();
   try{
     const url=frame.getAttribute("data-status-url");
     if(!/^\\/commerce\\/trx-easy\\/status\\/[1-9][0-9]*\\/$/.test(url))throw new Error("Invalid status endpoint");
+    // Optional isolated adapter: ask the merchant server to verify incoming
+    // transfers. This POST carries no txID, wallet signature or proof claim.
+    const proofUrl=frame.getAttribute("data-reconcile-url")||"";
+    const csrf=frame.getAttribute("data-csrf-token")||"";
+    if(/^\\/commerce\\/trx-easy\\/reconcile\\/[1-9][0-9]*\\/$/.test(proofUrl)
+      && /^[A-Za-z0-9]{32,128}$/.test(csrf)
+      && Date.now()-lastProofAttempt>=15000){
+      lastProofAttempt=Date.now();
+      try{
+        await fetch(proofUrl,{method:"POST",credentials:"same-origin",cache:"no-store",
+          redirect:"error",signal:controller.signal,headers:{"Accept":"application/json","X-CSRFToken":csrf}});
+      }catch(e){/* Await next authenticated status observation; never accept browser proof. */}
+    }
     const r=await fetch(url,{credentials:"same-origin",cache:"no-store",redirect:"error",
-      headers:{"Accept":"application/json"}});
+      signal:controller.signal,headers:{"Accept":"application/json"}});
     if(!r.ok)throw new Error("Payment check temporarily unavailable");
     const data=await r.json();
     if(data.status==="paid" && data.can_download===true
@@ -70,13 +95,25 @@ async function check(){
     }
     status.textContent=data.status==="expired"
       ?"Invoice expired. Do not pay this invoice."
-      :"Waiting for independent TRON payment confirmation. Do not pay twice.";
+      :data.status==="review"||data.status==="paid"
+      ?"Payment needs an additional server check. Do not pay again; contact support if delayed."
+      :"Checking TRON automatically. Your download opens after final confirmation; do not pay twice.";
     if(data.status==="expired"){stopped=true;return;}
-  }catch(e){status.textContent="Unable to verify payment right now. Do not pay twice.";}
-  schedule(12000);
+    failures=0;
+  }catch(e){
+    failures=Math.min(3,failures+1);
+    delay=Math.min(30000,6000*(2**(failures-1)));
+    status.textContent="Connection to payment checker is interrupted. It will retry; do not pay twice.";
+  }finally{
+    window.clearTimeout(timeout);
+    checking=false;
+    if(!stopped)schedule(delay);
+  }
 }
 document.addEventListener("visibilitychange",()=>{if(!document.hidden && !stopped)check();});
-schedule(3000);
+window.addEventListener("online",()=>{if(!stopped)check();});
+window.addEventListener("mpw-wallet-submitted",()=>{if(!stopped)check();});
+schedule(1500);
 })();"""
 
 def build_recipient_qr(recipient: str) -> str:

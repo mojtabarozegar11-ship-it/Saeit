@@ -1,10 +1,12 @@
 name: MojPlayWin TRON two independent SolidityNode proof contract tests
 on:
   push:
-    branches: [feature/mpw-walletless-trx-e2e-20261022]
+    branches: [feature/mpw-walletless-trx-e2e-20261022, fix/mpw-tron-provider-auth-20261022]
     paths:
       - services/mpw_tron_independent_solidified_rpc.py
       - tests/test_mpw_tron_independent_solidified_rpc.py
+      - tests/test_mpw_tron_dual_provider_auth_readonly_20261022.py
+      - scripts/mpw_tron_dual_provider_auth_readonly_20261022.py
       - .github/workflows/mpw-tron-dual-solidified-proof-20261022.yml
   workflow_dispatch:
 permissions: {contents: read}
@@ -19,9 +21,10 @@ jobs:
       - name: Compile independently parsed solidity node responses
         run: |
           set -euo pipefail
-          python3 -m py_compile services/mpw_tron_independent_solidified_rpc.py tests/test_mpw_tron_independent_solidified_rpc.py
+          python3 -m py_compile services/mpw_tron_independent_solidified_rpc.py tests/test_mpw_tron_independent_solidified_rpc.py scripts/mpw_tron_dual_provider_auth_readonly_20261022.py tests/test_mpw_tron_dual_provider_auth_readonly_20261022.py
       - name: Verify canonical body, solidified receipt, provider independence, native TRX, duplicate replay
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_mpw_tron_independent_solidified_rpc.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_tron_dual_provider_auth_readonly_20261022.py' -v
           echo "MPW_TRON_DUAL_SOLIDIFIED_NODE_PARSER=PASS; NO_LIVE_MONEY_MOVED=TRUE"

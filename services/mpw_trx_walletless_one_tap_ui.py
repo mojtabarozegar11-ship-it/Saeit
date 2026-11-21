@@ -11,10 +11,14 @@ from __future__ import annotations
 import base64
 import hashlib
 from html import escape
+from decimal import Decimal
+from urllib.parse import urlencode
 from services.mpw_trx_walletless_checkout_ui import (
     render_invoice_page, _digest, STATUS_ROUTE,
 )
-from services.mpw_trx_walletless_core import InvoiceIntent, PaymentHold, NETWORK
+from services.mpw_trx_walletless_core import (
+    InvoiceIntent, PaymentHold, NETWORK, ADDRESS, SUN_PER_TRX,
+)
 
 WALLET_ACTION_JS = r"""(()=>{
 "use strict";
@@ -46,31 +50,39 @@ if(!/^\d+\.\d{6}$/.test(amount)||!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(recipient)|
 const canSend=Boolean(app && app.trx && typeof app.trx.sendTransaction==="function");
 if (!canSend) {
   payButton.hidden=true;
-  note.textContent="On a phone, choose Open in TronLink; or use the QR and exact amount in any TRX wallet.";
+  note.textContent="On a phone, choose Open in Trust Wallet or TronLink; or use the QR and exact amount in any TRX wallet.";
 } else {
   appButton.hidden=true;
 }
+// A wallet call can time out after a broadcast; never offer a rapid second
+// payment on the same invoice based solely on a client-side error or reply.
+let attempted=false;
 payButton.addEventListener("click",async()=>{
-  if(!canSend)return;
+  if(!canSend||attempted)return;
+  attempted=true;
   payButton.disabled=true;
   note.textContent="Review recipient, amount and TRON network in your wallet. Approve only if correct.";
   try {
     const result=await app.trx.sendTransaction(recipient,Number(sun));
     // Browser wallet results are UNTRUSTED and are NEVER used to grant a download.
-    if(!result||!result.result) {
-      note.textContent="No verified payment yet. Check your wallet; do not pay twice.";
+    if(result===false||result?.result===false) {
+      note.textContent="Wallet did not confirm. Check wallet activity before any retry; do not pay twice.";
     } else {
-      note.textContent="Transfer submitted. The site is checking TRON automatically. Do not pay twice.";
+      note.textContent="Wallet request completed. The site checks TRON automatically. Do not pay twice.";
     }
   }catch(err){
-    note.textContent="The wallet did not finish the transfer. Check wallet activity before retrying.";
-  }finally{payButton.disabled=false;}
+    note.textContent="Wallet response is uncertain. Check activity before retrying; the site keeps verifying.";
+  }finally{
+    payButton.hidden=true;
+    window.dispatchEvent(new Event("mpw-wallet-submitted"));
+  }
 });
 })();"""
 
 BUTTONS = """<section aria-label="Easy TRX payment">
 <button id="mpw-easy-pay" type="button">Pay TRX in my wallet</button>
 <a id="mpw-open-wallet" class="buy" rel="noopener noreferrer" href="#" role="button">Open in TronLink</a>
+{trust_wallet_link}
 <p id="mpw-wallet-note" role="status" aria-live="polite">The wallet will ask you to approve payment; download unlocks only after blockchain confirmation.</p>
 </section>"""
 
@@ -83,11 +95,26 @@ def render_one_tap_invoice(invoice: InvoiceIntent, *, status_path: str, guest_ch
     old,csp=render_invoice_page(invoice,status_path=status_path)
     if invoice.amount_sun>2**53-1:
         raise PaymentHold("Amount exceeds wallet's safe atomic-number limit")
+    if not ADDRESS.fullmatch(invoice.recipient):
+        raise PaymentHold("Invalid Trust Wallet TRON payment recipient")
+    # Trust Wallet's official Send Payment deep link; TRON uses SLIP-44 195.
+    # Parameters are generated exclusively from the immutable server invoice.
+    # A wallet confirmation is still required; this URL grants no entitlement.
+    amount=f"{Decimal(invoice.amount_sun)/Decimal(SUN_PER_TRX):.6f}"
+    trust_wallet_url="https://link.trustwallet.com/send?"+urlencode({
+        "asset":"c195", "address":invoice.recipient, "amount":amount,
+    })
+    trust_wallet_link=(
+        '<a id="mpw-open-trustwallet" class="buy" role="button" '
+        'rel="noopener noreferrer" href="'+escape(trust_wallet_url,quote=True)
+        +'">Open in Trust Wallet (TRX)</a>'
+    )
     html=old.decode("utf8")
     if html.count('<p>QR contains the address only.') != 1:
         raise PaymentHold("Invoice template unexpectedly changed")
     html=html.replace('<p>QR contains the address only.',
-                      BUTTONS+'\n<p>QR contains the address only.',1)
+                      BUTTONS.format(trust_wallet_link=trust_wallet_link)
+                      +'\n<p>QR contains the address only.',1)
     if html.count('<main id="checkout"')!=1:
         raise PaymentHold("Unexpected invoice frame")
     if guest_checkout is True:
