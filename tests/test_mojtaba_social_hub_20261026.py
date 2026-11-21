@@ -47,6 +47,33 @@ class PlatformAdapterTests(unittest.TestCase):
         with self.assertRaises(Blocked):
             send(account("researchgate","x"),{"text":"Hello"},"abcdefg",mock)
 
+    def test_all_forbidden_target_aliases_are_blocked_before_http(self):
+        for destination in ("dr.mojtaba.rozegar", "7317306", "102203064721826"):
+            calls = []
+            def transport(*args):
+                calls.append(args)
+                raise AssertionError("transport must never be called")
+            with self.assertRaises(Blocked):
+                send(account("facebook_pages", destination),
+                     {"text": "Commercial copy that does not mention target"},
+                     "valid-facebook-token", transport)
+            self.assertEqual(calls, [])
+
+    def test_metricool_brand_id_and_page_alias_block_other_destinations(self):
+        for account_override in (
+            {"metricool_brand_id": 7317306},
+            {"facebook_page_id": "102203064721826"},
+            {"public_url": "https://instagram.com/dr.mojtaba.rozegar"},
+        ):
+            calls=[]
+            def transport(*args):
+                calls.append(args)
+                raise AssertionError("should never send")
+            details=account("facebook_pages","444444444444444",**account_override)
+            with self.assertRaises(Blocked):
+                send(details, {"text":"Unrelated offer text"},"valid-token",transport)
+            self.assertEqual(calls, [])
+
     def test_telegram_returns_real_remote_id(self):
         mock,calls=respond(ok({"ok":True,"result":{"message_id":42}}))
         result=send(account(),{"text":"Research update"},"123456789:"+"A"*30,mock)

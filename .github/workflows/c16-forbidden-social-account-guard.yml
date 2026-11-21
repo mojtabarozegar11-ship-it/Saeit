@@ -1,0 +1,44 @@
+name: C16 owner-forbidden personal page — hard stop and no-network regression
+on:
+  push:
+    branches:
+      - fix/forbidden-social-target-hard-stop-c16-20261114
+    paths:
+      - scripts/mojtaba_direct_social_publisher_20261026.py
+      - tests/test_mojtaba_direct_social_publisher_20261026.py
+      - social_hub/catalog.py
+      - social_hub/adapters.py
+      - social_hub/service.py
+      - tests/test_mojtaba_social_hub_20261026.py
+      - .github/workflows/c16-forbidden-social-account-guard.yml
+  pull_request:
+    paths:
+      - social_hub/catalog.py
+      - social_hub/adapters.py
+      - social_hub/service.py
+      - tests/test_mojtaba_social_hub_20261026.py
+      - .github/workflows/c16-forbidden-social-account-guard.yml
+permissions:
+  contents: read
+jobs:
+  forbid-social-publication:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm ban covers handle, Metricool and Facebook page IDs
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_hub_20261026.py' -q
+          python3 -m unittest discover -s tests -p 'test_mojtaba_direct_social_publisher_20261026.py' -q
+          python3 - <<'PY'
+          from social_hub.catalog import RESTRICTED_HANDLES
+          assert {'dr.mojtaba.rozegar','7317306','102203064721826'} <= set(RESTRICTED_HANDLES)
+          print('C16_FORBIDDEN_ACCOUNT_HARDSTOP_SOURCE=true')
+          PY
+      - name: No social provider calls in this workflow
+        run: |
+          echo 'C16_EXTERNAL_POSTS=0'
+          echo 'C16_PAID_AD_SPEND=0'

@@ -120,6 +120,14 @@ def send(account: dict, content: dict, token: str, transport) -> DispatchOutcome
     destination = account.get("destination")
     if not isinstance(destination, str) or not destination or len(destination) > 180:
         raise Blocked("Destination missing")
+    # Validate the destination itself before preparing any provider request.
+    # A post's text need not mention the page being posted to.
+    if any(banned in destination.casefold() for banned in RESTRICTED_HANDLES):
+        raise Blocked("Owner-prohibited destination; publication disabled")
+    for identity_field in ("public_url", "metricool_brand_id", "facebook_page_id"):
+        value = account.get(identity_field, "")
+        if any(banned in str(value).casefold() for banned in RESTRICTED_HANDLES):
+            raise Blocked("Owner-prohibited linked account; publication disabled")
     text = content.get("text", "")
     if any(x in json.dumps(content, ensure_ascii=False).casefold() for x in RESTRICTED_HANDLES):
         raise Blocked("Restricted account may not be promoted")

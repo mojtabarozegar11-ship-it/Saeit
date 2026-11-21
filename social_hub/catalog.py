@@ -3,7 +3,14 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 BRANDS = ("personal", "zomorod", "mojplaywin")
-RESTRICTED_HANDLES = ("dr.mojtaba.rozegar",)
+# Owner hard prohibition covers the handle AND its connected Metricool brand
+# and Facebook Page numeric identifiers. An alias or platform switch must never
+# silently re-enable publication to the same forbidden account.
+RESTRICTED_HANDLES = (
+    "dr.mojtaba.rozegar",
+    "7317306",          # Metricool brand id
+    "102203064721826",  # connected Facebook Page id
+)
 MEDIA_HOSTS = frozenset({"mojplaywin.com", "www.mojplaywin.com",
                          "zomorodmelal.ir", "www.zomorodmelal.ir"})
 
