@@ -54,4 +54,7 @@ def mojtaba_bot_portal(request):
     )
     response["Referrer-Policy"] = "same-origin"
     response["X-Content-Type-Options"] = "nosniff"
+    if signed_in:
+        # The private operator-only chat must never inherit public SEO headers.
+        response["X-Robots-Tag"] = "noindex, nofollow, noarchive"
     return response
