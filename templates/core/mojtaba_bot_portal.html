@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="same-origin">
+  <title>Mojtaba.bot.ai | MojPlayWin secure assistant</title>
+  <meta name="description" content="Protected Mojtaba.bot.ai assistant entry point hosted under MojPlayWin.">
+  <style nonce="{{ nonce }}">
+    :root{color-scheme:dark;--bg:#07111a;--panel:#12212c;--line:#304351;--ink:#f3f7fa;--muted:#a6becb;--accent:#86dcca}
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(circle at 85% 0%,#173443,transparent 35%),var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}
+    a{color:var(--accent)}
+    .container{max-width:870px;margin:0 auto;padding:24px}
+    .nav{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 0 20px;border-bottom:1px solid var(--line)}
+    .brand{font-weight:800;letter-spacing:.015em}
+    .navlinks{display:flex;gap:15px;flex-wrap:wrap}
+    main{padding:34px 0 55px}
+    h1{font-size:clamp(27px,5vw,45px);line-height:1.18;margin:5px 0 16px}
+    h2{font-size:21px;margin:0 0 10px}
+    p{margin:0 0 18px}
+    .sub{color:var(--muted);max-width:770px}
+    .eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.11em;color:var(--accent);font-weight:700}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;margin:22px 0}
+    .notice{border-left:3px solid var(--accent);padding:12px 16px;background:#102935;color:#d1e5e9;border-radius:4px;margin:18px 0}
+    .small{font-size:13px;color:var(--muted)}
+    button,.button{display:inline-block;font:inherit;background:var(--accent);border:0;color:#061c22;padding:10px 19px;border-radius:9px;font-weight:750;cursor:pointer;text-decoration:none}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    button:focus-visible,textarea:focus-visible,a:focus-visible{outline:3px solid #fff;outline-offset:3px}
+    textarea{width:100%;min-height:130px;background:#091923;color:var(--ink);border:1px solid #628394;border-radius:9px;padding:13px;font:inherit;resize:vertical;margin:8px 0 14px}
+    label{display:block;font-weight:600}
+    .thread{min-height:84px;max-height:480px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:12px;background:#081822;margin:12px 0 24px}
+    .bubble{white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;border-radius:9px;margin:0 0 12px;background:#1b3140}
+    .bubble.user{background:#18463f}
+    .speaker{font-size:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:800;margin-bottom:5px}
+    .status{min-height:22px;font-size:14px;color:var(--accent)}
+    footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding:25px 0}
+  </style>
+</head>
+<body>
+<div class="container">
+  <nav class="nav" aria-label="Main navigation">
+    <span class="brand">Mojtaba.bot.ai · MojPlayWin</span>
+    <div class="navlinks"><a href="/">MojPlayWin</a><a href="/moj-prop/">Moj Prop</a><a href="/privacy/">Privacy</a></div>
+  </nav>
+  <main>
+    <p class="eyebrow">Official protected site entry</p>
+    <h1>Mojtaba.bot.ai</h1>
+    <p class="sub">This page uses MojPlayWin's existing authenticated assistant API. A public page or API endpoint is not evidence that a single production worker, autonomous execution, paid services, or customer delivery have been certified.</p>
+    <div class="notice">No wallet transfer, trading order, social post, paid subscription or factory operation can be initiated by loading this page. Do not send private keys, passwords, seed phrases or identity documents through the chat.</div>
+    {% if signed_in %}
+    <section class="panel" aria-label="Authenticated assistant">
+      <h2>Protected assistant conversation</h2>
+      <p class="small">Your existing MojPlayWin authenticated session is used. Messages are sent only to the same-origin /api/master-chat/ endpoint. Account permissions and action approvals are enforced by the backend. Chat delivery may be unavailable if the model or operator runtime is not configured.</p>
+      <div id="thread" class="thread" role="log" aria-label="Assistant conversation" aria-live="polite" aria-relevant="additions">
+        <p class="small" id="thread-empty">No messages sent in this browser session.</p>
+      </div>
+      <form id="chat-form" method="post" action="/api/master-chat/">
+        <label for="chat-message">Your message</label>
+        <textarea id="chat-message" name="message" maxlength="4000" required autocomplete="off" placeholder="Describe your question or authorized task"></textarea>
+        <button id="send" type="submit">Send securely</button>
+      </form>
+      <p class="status" id="chat-status" role="status" aria-live="polite"></p>
+    </section>
+    {% else %}
+    <section class="panel">
+      <h2>Sign-in required for private chat</h2>
+      <p>Private management and assistant conversations require a recognized MojPlayWin account. No conversation data is exposed to visitors.</p>
+      <p><a class="button" href="/admin/login/?next=/mojtaba.bot.ai/">Authorized operator sign-in</a></p>
+      <p class="small">This sign-in route is for authorized staff/operators, not for public customer registration.</p>
+    </section>
+    {% endif %}
+    <section class="panel">
+      <h2>Customer inquiries</h2>
+      <p>Visitors may request the written terms of the simulated Moj Prop Starter30 challenge without sending payment. This request is not an activated challenge, trading account or promise of returns.</p>
+      <a href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx">Request written Starter30 terms</a>
+      <p class="small">Public self-service assistant chat, automated delivery, and signal subscriptions are not claimed as active until verified in production.</p>
+    </section>
+  </main>
+  <footer>One authorized assistant identity · No public privileged operations · © MojPlayWin</footer>
+</div>
+{% if signed_in %}
+<script nonce="{{ nonce }}">
+(function () {
+  "use strict";
+  var form = document.getElementById("chat-form");
+  var input = document.getElementById("chat-message");
+  var send = document.getElementById("send");
+  var output = document.getElementById("thread");
+  var status = document.getElementById("chat-status");
+  var sessionId = null;
+  var busy = false;
+  var csrf = "{{ csrf_for_chat|escapejs }}";
+
+  function add(role, message) {
+    var empty = document.getElementById("thread-empty");
+    if (empty) empty.remove();
+    var box = document.createElement("div");
+    box.className = role === "You" ? "bubble user" : "bubble";
+    var label = document.createElement("div");
+    label.className = "speaker";
+    label.textContent = role;
+    var content = document.createElement("div");
+    content.textContent = String(message || "");
+    box.appendChild(label);
+    box.appendChild(content);
+    output.appendChild(box);
+    output.scrollTop = output.scrollHeight;
+  }
+  form.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    if (busy) return;
+    var message = input.value.trim();
+    if (!message || message.length > 4000) {
+      status.textContent = "Enter a message of 1–4000 characters.";
+      return;
+    }
+    busy = true;
+    send.disabled = true;
+    status.textContent = "Submitting via protected site API…";
+    var endpoint = sessionId === null ? "/api/master-chat/" :
+      "/api/master-chat/" + encodeURIComponent(String(sessionId)) + "/messages/";
+    try {
+      var response = await fetch(endpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        redirect: "error",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "X-CSRFToken": csrf
+        },
+        body: JSON.stringify(sessionId === null ?
+          {title: "Mojtaba.bot.ai site conversation", message: message} :
+          {message: message})
+      });
+      var result = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        status.textContent = response.status === 401 || response.status === 403 ?
+          "Not authenticated or CSRF token invalid. Sign in again and reload." :
+          "Message not confirmed (HTTP " + String(response.status) + ").";
+        return;
+      }
+      if (sessionId === null && result.session &&
+          (typeof result.session.id === "number" || typeof result.session.id === "string")) {
+        sessionId = result.session.id;
+      }
+      add("You", message);
+      add("Assistant", typeof result.reply === "string" ?
+        result.reply : "Response pending or unavailable.");
+      input.value = "";
+      status.textContent = "Server response received. No external action is implied by this message.";
+    } catch (error) {
+      status.textContent = "Connection unavailable. Outcome is not confirmed; verify before retrying.";
+    } finally {
+      busy = false;
+      send.disabled = false;
+    }
+  });
+}());
+</script>
+{% endif %}
+</body>
+</html>
