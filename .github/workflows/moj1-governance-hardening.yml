@@ -1,13 +1,17 @@
-name: MOJ1 governance hardening - isolated TVM
+name: MOJ1 governance and reward claims - isolated TVM
 on:
   push:
     branches:
       - moj1/internal-hardening-20261024
+      - moj1/reward-claims-pilot-20261024
   pull_request:
     branches:
       - moj1/shasta-pilot-20261021
+      - moj1/internal-hardening-20261024
     paths:
       - experiments/moj1-pilot/contracts/MojPilotGovernance.sol
+      - experiments/moj1-pilot/contracts/MojRewardClaimsPilot.sol
+      - experiments/moj1-pilot/contracts/test/MojRewardTestToken.sol
       - experiments/moj1-pilot/tests/tronbox/**
       - experiments/moj1-pilot/package.json
       - .github/workflows/moj1-governance-hardening.yml
@@ -47,7 +51,7 @@ jobs:
             docker logs --tail 80 moj1-governance-local
             exit 1
           fi
-      - name: Run original and new TVM regression tests
+      - name: Run original and reward-claims TVM regression tests
         env:
           LOCAL_PRIVATE_KEY: '0000000000000000000000000000000000000000000000000000000000000001'
         run: npm run test:onchain:local
