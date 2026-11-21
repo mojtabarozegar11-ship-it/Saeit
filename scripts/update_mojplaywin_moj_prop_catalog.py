@@ -123,17 +123,20 @@ def source_root(run_id: str) -> Path:
         doc = html[str(sample)]
         if "<title>" not in doc or "Sample" not in doc:
             raise RuntimeError("Staged commercial sample invalid: " + str(sample))
-    # The page may advertise the exact simulated offer, but this publisher
-    # never executes payment, creates an invoice, or migrates the backend.
-    # Checkout must remain server-issued and all profit language must retain
-    # the simulation/no-custody boundary.
+    # The static publisher must NOT announce an already chargeable checkout
+    # while the distinct backend admission, receiver, reserve and payout gates
+    # are unverified. The only current entry is a free written-terms request.
+    # No invoice, fee, account or migration is created by this script.
     starter = html["starter-30-trx/index.html"]
     if (not all(mark in starter for mark in (
-            "MOJPROP-STARTER30", "Checkout available · 30 TRX",
+            "MOJPROP-STARTER30", "payment admission under independent verification",
+            "Request free written Starter30 terms", "/moj-prop-intake/?format=html",
             "./journal-template.csv", "./journal-guide.txt",
             "30 TRX", "No real funded account",
             "server-issued 30 TRX invoice",
-            "100% of every profit earned"))):
+            "100% of every profit earned"))
+            or 'href="/mojprop-starter30-checkout/"' in starter
+            or "Checkout available · 30 TRX" in starter):
         raise RuntimeError("Starter30 page is missing its ethical sales and delivery boundary")
     guide = (path / STARTER30_FILES[1]).read_text(encoding="utf-8")
     if not all(mark in guide for mark in (
