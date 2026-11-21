@@ -167,7 +167,7 @@ class Starter30PublicStaticOwnerEvidenceTests(unittest.TestCase):
         from scripts import mojprop_starter30_static_release as release
         root = Path(__file__).resolve().parents[1] / "templates/moj-prop-v4/starter-30-trx"
         expected = {
-            "index.html": "bc7015c259687f313daa33e9eff1d9780e7f58fe",
+            "index.html": "cb860afb6b0e011b9d4613a598c0cd2ec91566f2",
             "journal-template.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
             "journal-guide.txt": "1e02213de4bed3fc9211e388b3f8b135ef2c0f0a",
         }
