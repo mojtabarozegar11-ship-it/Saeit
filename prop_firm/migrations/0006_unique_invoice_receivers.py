@@ -14,6 +14,18 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.AlterField(
+            model_name="propsimulationloginchallenge",
+            name="purpose",
+            field=models.CharField(
+                choices=[
+                    ("login", "Login"),
+                    ("recovery", "Recovery"),
+                    ("checkout", "Verified pre-invoice email"),
+                ],
+                max_length=16,
+            ),
+        ),
+        migrations.AlterField(
             model_name="propsimulationpayment",
             name="recipient",
             field=models.CharField(max_length=64, unique=True),
