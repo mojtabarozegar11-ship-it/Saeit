@@ -1,0 +1,17 @@
+name: Ramadan War Next structural contract
+on:
+  pull_request:
+    paths:
+      - 'games/ramadan-war-next/**'
+      - '.github/workflows/ramadan-next-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Project safety contract (not a Unity build)
+        run: python3 games/ramadan-war-next/tools/check_contract.py
