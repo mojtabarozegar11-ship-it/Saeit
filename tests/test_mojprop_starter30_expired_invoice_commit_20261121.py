@@ -119,7 +119,7 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         with self.assertRaisesRegex(m.Starter30PaymentRejected, "invoice has expired"):
             self._settle()
         self.payment.save.reset_mock()
-        with self.assertRaisesRegex(m.Starter30PaymentRejected, "not awaiting"):
+        with self.assertRaisesRegex(m.Starter30PaymentRejected, "invoice has expired"):
             self._settle()
         self.payment.save.assert_not_called()
         self.mock_accounts.assert_not_called()
@@ -235,3 +235,61 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         address = hex_to_tron_address(raw)
         from services.mojprop_starter30_tron_settlement import _hex_recipient
         self.assertEqual(_hex_recipient(address), raw)
+
+    def test_expired_invoice_can_recover_valid_on_time_proof_after_wrong_late_txid(self):
+        # First proof is a valid unrelated 30 TRX transfer outside this invoice.
+        # It must not prevent a later proof of the buyer's actual on-time tx.
+        with self.assertRaisesRegex(m.Starter30PaymentRejected, "invoice has expired"):
+            self._settle()
+        self.assertEqual(self.payment.status, m.PropSimulationPayment.Status.EXPIRED)
+        self.events.clear()
+        self.payment.save.reset_mock()
+        # Independently solidified legitimate transfer landed before expiry.
+        self.transfer.tx_hash = "b" * 64
+        self.transfer.block_time = self.now - timedelta(minutes=5)
+        self.payment.payer_hex41 = None
+        self.payment.payment_ref = "PAY-recovered"
+        owner = MagicMock()
+        owner.identity = MagicMock()
+        owner.invoice_ref = "invoice-1"
+        self.payment.invoice_owner = owner
+        self.mock_accounts.return_value.account_ref = "MOJPROP30-ACC-recovered"
+        self.mock_manager.using.return_value.filter.return_value.exists.return_value = False
+        with patch("prop_firm.starter30_live._hex_recipient",
+                   return_value="41" + "1" * 40), patch(
+                "prop_firm.starter30_live._token",
+                return_value="MOJPROP30-ACC-recovered"):
+            result = self._settle()
+        self.assertEqual(result["status"], "paid")
+        self.assertEqual(result["txid"], "b" * 64)
+        self.assertEqual(self.payment.status, m.PropSimulationPayment.Status.PAID)
+        self.assertEqual(owner.settlement_reference, "b" * 64)
+        self.assertIn("commit", self.events)
+        self.assertNotIn("rollback", self.events)
+        self.mock_accounts.assert_called_once()
+
+    def test_expired_invoice_repeated_late_proofs_do_not_write_or_create_account(self):
+        self.payment.status = m.PropSimulationPayment.Status.EXPIRED
+        with self.assertRaisesRegex(m.Starter30PaymentRejected, "invoice has expired"):
+            self._settle()
+        self.payment.save.assert_not_called()
+        self.mock_accounts.assert_not_called()
+        self.assertIn("commit", self.events)
+
+    def test_early_administrative_expiry_stays_closed(self):
+        self.payment.status = m.PropSimulationPayment.Status.EXPIRED
+        self.payment.expires_at = self.now + timedelta(hours=1)
+        self.transfer.block_time = self.now - timedelta(minutes=5)
+        with self.assertRaisesRegex(m.Starter30PaymentRejected, "not awaiting"):
+            self._settle()
+        self.payment.save.assert_not_called()
+        self.mock_accounts.assert_not_called()
+        self.assertIn("rollback", self.events)
+
+    def test_other_terminal_invoice_state_is_not_reopened(self):
+        self.payment.status = "cancelled"
+        self.transfer.block_time = self.now - timedelta(minutes=5)
+        with self.assertRaisesRegex(m.Starter30PaymentRejected, "not awaiting"):
+            self._settle()
+        self.payment.save.assert_not_called()
+        self.mock_accounts.assert_not_called()
