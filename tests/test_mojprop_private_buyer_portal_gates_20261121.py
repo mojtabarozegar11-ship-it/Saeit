@@ -137,6 +137,9 @@ class MojPropPrivateEducationalPortalTests(SimpleTestCase):
         ):
             self.assertNotIn(banned, source)
         self.assertIn("invoice_owner__settlement_verified=True", source)
+        self.assertIn("invoice_owner__payment__product=PRODUCT", source)
+        self.assertIn("invoice_owner__payment__status=PropSimulationPayment.Status.PAID", source)
+        self.assertIn("account.kind != PropSimulationAccount.Kind.CHALLENGE", source)
         self.assertIn("payout_eligibility", source)
 
 
