@@ -6,6 +6,7 @@ payment entitlement or private data is created by these tests.
 from pathlib import Path
 from unittest.mock import patch
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
@@ -74,6 +75,20 @@ class MojPropPrivateEducationalPortalTests(SimpleTestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn(b"Secure Starter30 sign-in", response.content)
             events.assert_not_called()
+
+    def test_unknown_challenge_is_generic_and_never_authenticates(self):
+        request = RequestFactory().post(
+            "/mojprop-buyer-portal/", {"action": "verify", "code": "not-the-code"}
+        )
+        request.session = {portal._SESSION_CHALLENGE: "dummy-random-reference"}
+        with patch.object(
+            portal, "consume_login_challenge",
+            side_effect=ObjectDoesNotExist("not found"),
+        ):
+            result = portal._verify_code(request)
+        self.assertEqual(result.status_code, 200)
+        self.assertIn(b"Code invalid or expired", result.content)
+        self.assertNotIn(portal._SESSION_ID, request.session)
 
     def test_bad_report_reference_is_not_queried_even_when_logged_in(self):
         request = RequestFactory().get("/mojprop-buyer-portal/")
