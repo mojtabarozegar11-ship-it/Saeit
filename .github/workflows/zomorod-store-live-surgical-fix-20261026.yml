@@ -1,0 +1,98 @@
+name: Zomorod native store surgical security live fix
+on:
+  push:
+    branches: ["fix/zomorod-store-security-accessibility-20261026"]
+    paths: [".github/workflows/zomorod-store-live-surgical-fix-20261026.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zm-store-only-hardening
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Lint and regression before isolated deployment
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-v11/store_index.php
+          python3 -m unittest discover -s tests -p 'test_zomorod_store_live_harden_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_zomorod_free_seed_product.py' -v
+
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Inspect, back up, and patch ONLY Zomorod native PHP storefront
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          p="$HOME/public_html/store/index.php"
+          test ! -L "$p" && test -f "$p"
+          test -f "$HOME/.private/zomorod-business/site_store.php"
+          test -f "$HOME/public_html/store/free-products/wheat-seed-rate-planner-v1/index.html"
+          grep -Fq "پرداخت بانک شهر" "$p"
+          grep -Fq "free_digital_products WHERE enabled=1" "$p"
+          echo ZM_PREDEPLOY_SITE_SCOPE=verified
+          REMOTE
+          before="$(ssh -F "$d/config" saeit-cpanel "sha256sum /home/zomorod2/public_html/store/index.php" | awk '{print $1}')"
+          printf "%s" "$before" | grep -Eq "^[0-9a-f]{64}$"
+          stage="/home/zomorod2/.private/zomorod-business/.store-fix-stage-$GITHUB_RUN_ID"
+          ssh -F "$d/config" saeit-cpanel "test ! -e '$stage' && install -d -m 700 '$stage'"
+          scp -q -F "$d/config" scripts/zomorod_store_live_harden_20261026.py saeit-cpanel:"$stage/installer.py"
+          ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' --expected-sha256 '$before' --run '$GITHUB_RUN_ID'"
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
