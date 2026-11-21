@@ -33,6 +33,12 @@ def classify(log: str) -> dict:
             ("merchant_canary", "MERCHANT_CANARY_NOT_VERIFIED"),
             ("public_enabled", "PUBLIC_CHECKOUT_DISABLED"),
             ("release_authorized", "PUBLIC_RELEASE_NOT_AUTHORIZED"),
+            # Owner's latest policy permits email-free guest checkout. Proof
+            # of an invoice-scoped receipt key and real paid-file recovery is
+            # required instead; a green source test alone cannot establish it.
+            ("guest_checkout_without_email_verified", "EMAIL_FREE_GUEST_CHECKOUT_NOT_VERIFIED"),
+            ("owned_invoice_receipt_issued", "PRIVATE_RECEIPT_ISSUANCE_NOT_VERIFIED"),
+            ("receipt_paid_download_recovery_verified", "PAID_RECEIPT_RECOVERY_NOT_VERIFIED"),
         ) if state.get(key) is not True
     ]
     results = {}
@@ -71,6 +77,7 @@ def classify(log: str) -> dict:
         "paid_receipt": "not_examined",
         "authenticated_download_e2e": "not_examined",
         "independent_legal_clearance": "not_established_by_metadata",
+        "commercial_sale_proven": False,
     }
 
 

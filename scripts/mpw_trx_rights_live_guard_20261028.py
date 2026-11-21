@@ -50,6 +50,30 @@ def rights_cleared_for_sale(product):
     return (is_sha256(catalog_sha) and is_sha256(approved_sha) and
             catalog_sha.lower() == approved_sha.lower() and is_sha256(document_sha))
 '''
+# The installed v1 helper compared metadata to metadata. V2 additionally
+# hashes the actual private buyer file at checkout; this cannot grant rights,
+# but prevents a replaced file from inheriting an older version's clearance.
+CONTEXT_V2=CONTEXT_NEW.replace('''    return (is_sha256(catalog_sha) and is_sha256(approved_sha) and
+            catalog_sha.lower() == approved_sha.lower() and is_sha256(document_sha))
+''','''    if not (is_sha256(catalog_sha) and is_sha256(approved_sha) and
+            catalog_sha.lower() == approved_sha.lower() and is_sha256(document_sha)):
+        return False
+    try:
+        import hashlib
+        from types import SimpleNamespace
+        from mpw_commerce.downloads import _private_file
+        asset = _private_file(SimpleNamespace(product=product))
+        if (asset.is_symlink() or not asset.is_file()
+                or not 0 < asset.stat().st_size <= 150*1024*1024):
+            return False
+        h = hashlib.sha256()
+        with asset.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024*1024), b""):
+                h.update(chunk)
+        return h.hexdigest() == approved_sha.lower()
+    except (ImportError, OSError, ValueError, TypeError, AttributeError, RuntimeError):
+        return False
+''')
 WEB_IMPORT_OLD="from services.mpw_trx_walletless_core import PaymentHold\n"
 WEB_IMPORT_NEW=WEB_IMPORT_OLD+"from services.mpw_trx_commercial_context import rights_cleared_for_sale\n"
 WEB_CHECK_OLD='        if not _eligible(product) or not Decimal("0") < Decimal(product.price) <= Decimal("1000"):\n'
@@ -64,7 +88,7 @@ PAGES_CHECKOUT_NEW="""    if product is None or not _eligible(product) or not ri
         raise Http404
 """
 PATCHES={
-    "context":[(CONTEXT_OLD,CONTEXT_NEW)],
+    "context":[(CONTEXT_OLD,CONTEXT_V2)],
     "web":[(WEB_IMPORT_OLD,WEB_IMPORT_NEW),(WEB_CHECK_OLD,WEB_CHECK_NEW)],
     "pages":[(PAGES_IMPORT_OLD,PAGES_IMPORT_NEW),
              (PAGES_CHECKOUT_OLD,PAGES_CHECKOUT_NEW)],
@@ -75,6 +99,10 @@ def digest(raw):
 
 def transform(key,src):
     if key not in PATCHES: raise RuntimeError("UNKNOWN_MODULE")
+    if key=="context" and src.count(CONTEXT_NEW)==1 and src.count(CONTEXT_V2)==0:
+        upgraded=src.replace(CONTEXT_NEW,CONTEXT_V2,1)
+        compile(upgraded,key,"exec")
+        return upgraded,True
     statuses=[]
     for old,new in PATCHES[key]:
         if src.count(new)==1:
@@ -102,6 +130,8 @@ def check_structure(sources):
                     "rights_cleared", "publication_approved", "rights_asset_sha256",
                     "rights_document_sha256", "sha256")):
                 raise RuntimeError("RIGHTS_LINKAGE_CHECK_ABSENT")
+            if "_private_file" not in code or "hashlib.sha256()" not in code:
+                raise RuntimeError("RIGHTS_ACTUAL_ASSET_HASH_GUARD_ABSENT")
         elif key=="web":
             fn=funcs.get("_select_order")
             if fn is None or not any(isinstance(n,ast.With) for n in ast.walk(fn)):
@@ -142,7 +172,11 @@ def inspect():
         source,changed=transform(k,raw.decode("utf8"))
         new[k]=source.encode("utf8")
         statuses.append(changed)
-    if len(set(statuses))!=1:
+    # An already-installed v1 gate needs only a context-helper upgrade: the
+    # web/pages entry-point checks are already installed and must stay intact.
+    legacy_upgrade=(statuses==[True,False,False] and
+                    old["context"].decode("utf8").count(CONTEXT_NEW)==1)
+    if len(set(statuses))!=1 and not legacy_upgrade:
         raise RuntimeError("CROSS_MODULE_PARTIAL_PATCH")
     check_structure({k:v.decode("utf8") for k,v in new.items()})
     return old,new,statuses[0]
@@ -170,20 +204,41 @@ def restart():
 
 def runtime_validate():
     """Read-only Django import + SKU flags; no order creation."""
-    code='''import json,os,sys
+    code='''import hashlib,json,os,sys
 os.chdir("/home/zomorod2/Saeit-staging");sys.path.insert(0,os.getcwd())
 os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
 import django
 django.setup()
 from core.models import Product
+from mpw_commerce.downloads import _private_file
+from types import SimpleNamespace
 from services.mpw_trx_commercial_context import rights_cleared_for_sale
 from services.mpw_trx_commercial_web import _select_order
 from services.mpw_trx_public_pages import public_shop,product_checkout
 data={}
 for sku in (72,225,879):
     p=Product.objects.filter(pk=sku).first()
+    asset_matches=False
+    if p is not None:
+        try:
+            asset=_private_file(SimpleNamespace(product=p))
+            metadata=p.metadata if type(p.metadata) is dict else {}
+            if (asset.is_file() and not asset.is_symlink()
+                    and 0<asset.stat().st_size<=150*1024*1024):
+                h=hashlib.sha256()
+                with asset.open("rb") as stream:
+                    for piece in iter(lambda:stream.read(1024*1024),b""):
+                        h.update(piece)
+                actual=h.hexdigest()
+                catalog=metadata.get("sha256")
+                approved=metadata.get("rights_asset_sha256")
+                asset_matches=(type(catalog) is str and type(approved) is str
+                    and actual==catalog.lower()==approved.lower())
+        except (OSError,ValueError,TypeError,AttributeError):
+            pass
     data[str(sku)]={"exists":p is not None,
-      "explicit_rights":rights_cleared_for_sale(p) if p is not None else False}
+      "explicit_rights":rights_cleared_for_sale(p) if p is not None else False,
+      "exact_asset_hash_verified":asset_matches}
 print("MPW_TRX_RIGHTS_RUNTIME="+json.dumps({"read_only":True,"no_invoices_created":True,
  "gate_imports_ok":True,"products":data},sort_keys=True))
 '''
@@ -200,6 +255,10 @@ print("MPW_TRX_RIGHTS_RUNTIME="+json.dumps({"read_only":True,"no_invoices_create
         products=payload["products"]
         if any(products[str(sku)]["exists"] is not True for sku in (72,225,879)):
             raise RuntimeError("RIGHTS_REQUIRED_PRODUCT_MISSING")
+        if any(products[str(sku)].get("explicit_rights") is True and
+               products[str(sku)].get("exact_asset_hash_verified") is not True
+               for sku in (72,225,879)):
+            raise RuntimeError("RIGHTS_RUNTIME_ASSET_HASH_MISMATCH")
     except (ValueError,KeyError,TypeError) as exc:
         raise RuntimeError("RIGHTS_RUNTIME_RECEIPT_INVALID") from exc
     print(evidence[0])
@@ -217,16 +276,28 @@ def receipt(run_id):
     return folder,json.loads(manifest.read_text("utf8"))
 
 def operation(mode,run_id=None):
-    if mode not in ("check","apply","verify","rollback","recover"): raise RuntimeError("UNKNOWN_MODE")
-    if mode!="check" and (run_id is None or not re.fullmatch(r"[0-9]{6,20}",run_id)):
+    if mode not in ("check","verify-current","apply","verify","rollback","recover"):
+        raise RuntimeError("UNKNOWN_MODE")
+    if mode not in ("check","verify-current") and (run_id is None or not re.fullmatch(r"[0-9]{6,20}",run_id)):
         raise RuntimeError("INVALID_RUN_ID")
     guard()
     if mode=="check":
         old,new,needed=inspect()
+        legacy_v1=(needed and old["context"].decode("utf8").count(CONTEXT_NEW)==1
+                   and old["web"]==new["web"] and old["pages"]==new["pages"])
         print("MPW_TRX_RIGHTS_PREFLIGHT="+json.dumps({"needs_install":needed,
+          "needs_v1_to_v2_upgrade":legacy_v1,
+          "needs_fresh_install":needed and not legacy_v1,
           "old":{k:digest(v) for k,v in old.items()},
           "candidate":{k:digest(v) for k,v in new.items()},
           "read_only":True,"new_orders":0},sort_keys=True))
+        return
+    if mode=="verify-current":
+        _,_,needed=inspect()
+        if needed:
+            raise RuntimeError("RIGHTS_GATE_NOT_INSTALLED")
+        runtime_validate()
+        print("MPW_TRX_RIGHTS_RELEASE=CURRENT_INSTALL_VERIFIED_READ_ONLY")
         return
     private_root()
     with (BACKUPS/"release.lock").open("a+b") as lock:
@@ -318,6 +389,7 @@ def operation(mode,run_id=None):
                 print("MPW_TRX_RIGHTS_RELEASE=ROLLED_BACK_EXACT_RELEASE")
 
 if __name__=="__main__":
-    if len(sys.argv)==2 and sys.argv[1]=="check": operation("check")
+    if len(sys.argv)==2 and sys.argv[1] in ("check","verify-current"):
+        operation(sys.argv[1])
     elif len(sys.argv)==3: operation(sys.argv[1],sys.argv[2])
-    else: raise SystemExit("check | apply RUN_ID | verify RUN_ID | rollback RUN_ID | recover RUN_ID")
+    else: raise SystemExit("check | verify-current | apply RUN_ID | verify RUN_ID | rollback RUN_ID | recover RUN_ID")

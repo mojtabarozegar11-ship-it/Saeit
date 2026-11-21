@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Bounded, read-only *artifact* checks; immutable QA1000 rework tickets for three paid store SKUs.
+"""Bounded, read-only artifact checks; immutable strict-quality rework tickets for three paid SKUs.
 
+The legacy quality1000-rework path/schema are retained for existing private QA receipts.
 Reads private factory copies, never touches storefront, orders, rights flags, or stock.
-A technical check is NOT a professional 1000/1000 quality or paid-release approval.
+A technical check is NOT an independent quality review or paid-release approval.
 """
 import argparse
 import hashlib
@@ -159,8 +160,8 @@ def make_order(ident, row, copy, facts):
         {"task": "reconcile the existing registered legal dossier and approval record to this exact SKU, sale-asset SHA-256, authorship, and component licenses",
          "state": "owner_confirmed_dossier_complete_execution_active",
          "evidence": "use the existing dossier; do not reopen it or request duplicate signatures; record exact-version mapping in the audited release record"},
-        {"task": "independent adversarial quality review against 100 distinct criteria", "state": "pending"},
-        {"task": "execute and authenticate all required QC1000 scenarios and expert evidence", "state": "pending"},
+        {"task": "independent risk-based review of buyer-critical quality and actual product value", "state": "pending"},
+        {"task": "execute and authenticate required functional, editorial, security and buyer-delivery QA evidence", "state": "pending"},
         {"task": "produce version-bound technically improved candidate without touching live SKU", "state": "pending"},
         {"task": "test customer checkout through paid invoice and private delivery without real transfer until owner authorizes", "state": "pending"}
     ]
@@ -170,18 +171,32 @@ def make_order(ident, row, copy, facts):
     else:
         stages.insert(2, {"task": "execute isolated responsive browser tests and inspect every archive asset", "state": "pending"})
         stages.insert(3, {"task": "repair accessibility, package documentation and static-site security defects", "state": "pending"})
+    # This is an actionable acceptance contract, not a numerical score. A
+    # passing file parser cannot attest ownership, factual accuracy, or sale.
+    acceptance = [
+        {"id": "artifact_integrity", "state": "measured", "evidence": "verified exact-source byte hash"},
+        {"id": "version_bound_rights", "state": "pending", "evidence": None},
+        {"id": "content_accuracy_and_originality", "state": "pending", "evidence": None},
+        {"id": "format_accessibility_and_usability", "state": "pending", "evidence": None},
+        {"id": "security_and_third_party_assets", "state": "pending", "evidence": None},
+        {"id": "commercial_offer_and_customer_value", "state": "pending", "evidence": None},
+        {"id": "authenticated_payment_and_private_delivery", "state": "pending", "evidence": None},
+    ]
     return {
         "schema": SCHEMA, "site": "mojplaywin.com", "product_id": ident,
         "product_title": row.get("product_title", ""),
         "source_store_product_id": ident, "current_product_stays_published": True,
         "source_file_sha256": row["original_sha256"], "factory_copy_sha256": digest(copy),
         "factory_copy_bytes": copy.stat().st_size, "source_receipt_is_private": True,
-        "inspection": facts, "quality_goal": 1000,
+        "inspection": facts, "quality_goal": "strict_evidence_based_quality",
+        "numeric_quality_threshold_required": False,
         "legal_dossier_status": "owner_confirmed_complete",
         "legal_execution_status": "active",
         "legal_dossier_reopened": False,
         "sku_version_mapping_status": "execution_in_progress",
-        "quality_policy": "saeit.factory.active-quality-1000.v3",
+        "quality_policy": "saeit.factory.strict-evidence-quality.v1",
+        "release_acceptance_criteria": acceptance,
+        "legacy_100_criteria_scorecard_nonblocking": True,
         "quality_criteria": [{"id": "Q%03d" % i, "professional_score": None, "approval": "PENDING_REAL_EVIDENCE"}
                              for i in range(1, 101)],
         "professional_quality_score": None, "quality_1000_verified": False,
@@ -191,7 +206,7 @@ def make_order(ident, row, copy, facts):
         "automatic_approval_for_existing_store": False,
         "can_replace_live_store_file": False,
         "paid_customer_orders_modified": False,
-        "state": "REWORK_1000_QUALITY_REQUIRED",
+        "state": "REWORK_REAL_QUALITY_EVIDENCE_REQUIRED",
         "rework_stages": stages
     }
 
@@ -241,6 +256,7 @@ def run(root=BASE):
                              "pdf_parser_failure": facts.get("pdfinfo_failure") or facts.get("python_parser_failure"),
                              "zip_crc_passed": facts.get("valid"),
                              "quality1000_verified": False,
+                             "quality1000_numeric_gate_required": False,
                              "rework_ticket_sha256": doc_hash})
         result.append({"sku": ident, "versions_in_factory": len(versions), "versions": versions})
     print("MPW_THREE_QA1000_INTAKE=" + json.dumps(result, sort_keys=True))
