@@ -1,0 +1,117 @@
+# Intentionally manual and independent from all game/publication workflows.
+# A safe pre-cutover off-host backup of the current, deployed Ramadan War only.
+name: Ramadan War production read-only off-host snapshot and restore drill
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ramadan-war-offhost-snapshot
+  cancel-in-progress: false
+jobs:
+  snapshot:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Read public, exact-version snapshot implementation
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish pinned GitHub runner to VPS to cPanel SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Inventory only the live public card and Ramadan War route
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          python3 -m py_compile games/ramadan-war/qa/offhost_snapshot.py
+          timeout 60s ssh -T -F "$d/config" host 'python3 - inspect' \
+            < games/ramadan-war/qa/offhost_snapshot.py \
+            > "$RUNNER_TEMP/ramadan-live-manifest.json"
+          python3 -m json.tool "$RUNNER_TEMP/ramadan-live-manifest.json" >/dev/null
+      - name: Stream immutable source files to runner without touching cPanel storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 150s ssh -T -F "$d/config" host 'python3 - pack' \
+            < games/ramadan-war/qa/offhost_snapshot.py \
+            > "$RUNNER_TEMP/ramadan-live-snapshot.tar.gz"
+          test "$(stat -c %s "$RUNNER_TEMP/ramadan-live-snapshot.tar.gz")" -lt 110000000
+          python3 games/ramadan-war/qa/offhost_snapshot.py verify \
+            "$RUNNER_TEMP/ramadan-live-manifest.json" \
+            "$RUNNER_TEMP/ramadan-live-snapshot.tar.gz" \
+            > "$RUNNER_TEMP/ramadan-restore-verification.json"
+          python3 -m json.tool "$RUNNER_TEMP/ramadan-restore-verification.json" >/dev/null
+          test "$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d["isolated_restore"])' "$RUNNER_TEMP/ramadan-restore-verification.json")" = PASS
+      - name: Transfer verified recovery set to a new private VPS directory
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] && [[ "$RUN_ATTEMPT" =~ ^[0-9]+$ ]]
+          archive="$RUNNER_TEMP/ramadan-live-snapshot.tar.gz"
+          manifest="$RUNNER_TEMP/ramadan-live-manifest.json"
+          verification="$RUNNER_TEMP/ramadan-restore-verification.json"
+          archive_sha="$(sha256sum "$archive" | awk '{print $1}')"
+          manifest_sha="$(sha256sum "$manifest" | awk '{print $1}')"
+          verification_sha="$(sha256sum "$verification" | awk '{print $1}')"
+          archive_size="$(stat -c %s "$archive")"
+          base=/home/githubops/.game-backups/ramadan-war-precutover
+          target="$base/run-${RUN_ID}-${RUN_ATTEMPT}"
+          ssh -T -F "$d/config" vps "install -d -m 700 '$base' && test ! -e '$target' && install -d -m 700 '$target'"
+          free_kib="$(ssh -T -F "$d/config" vps "df -Pk '$target' | tail -n 1" | awk '{print $4}')"
+          test "$free_kib" -gt "$((archive_size / 1024 + 262144))"
+          scp -F "$d/config" "$archive" "vps:$target/snapshot.tar.gz.pending"
+          scp -F "$d/config" "$manifest" "vps:$target/manifest.json.pending"
+          scp -F "$d/config" "$verification" "vps:$target/isolated-restore.json.pending"
+          timeout 120s ssh -T -F "$d/config" vps \
+            "DEST='$target' ARCHIVE_SHA='$archive_sha' MANIFEST_SHA='$manifest_sha' VERIFICATION_SHA='$verification_sha' bash -s" <<'VERIFY_REMOTE'
+          set -euo pipefail
+          cd "$DEST"
+          test -f snapshot.tar.gz.pending && test -f manifest.json.pending && test -f isolated-restore.json.pending
+          test "$(sha256sum snapshot.tar.gz.pending | awk '{print $1}')" = "$ARCHIVE_SHA"
+          test "$(sha256sum manifest.json.pending | awk '{print $1}')" = "$MANIFEST_SHA"
+          test "$(sha256sum isolated-restore.json.pending | awk '{print $1}')" = "$VERIFICATION_SHA"
+          tar -tzf snapshot.tar.gz.pending >/dev/null
+          mv -- snapshot.tar.gz.pending snapshot.tar.gz
+          mv -- manifest.json.pending manifest.json
+          mv -- isolated-restore.json.pending isolated-restore.json
+          test "$(sha256sum snapshot.tar.gz | awk '{print $1}')" = "$ARCHIVE_SHA"
+          test "$(sha256sum manifest.json | awk '{print $1}')" = "$MANIFEST_SHA"
+          test "$(sha256sum isolated-restore.json | awk '{print $1}')" = "$VERIFICATION_SHA"
+          printf 'RAMADAN_OFFHOST_COPY=VERIFIED\nRAMADAN_OFFHOST_ARCHIVE_SHA256=%s\n' "$ARCHIVE_SHA"
+          VERIFY_REMOTE
+          echo "OFFHOST_RECOVERY_PATH=$target" >> "$GITHUB_STEP_SUMMARY"
+          echo "OFFHOST_ARCHIVE_SHA256=$archive_sha" >> "$GITHUB_STEP_SUMMARY"
+          echo 'ISOLATED_RESTORE=PASS; LIVE_PUBLIC_HTML_MUTATIONS=NONE' >> "$GITHUB_STEP_SUMMARY"
+      - name: Discard temporary runner credentials and streamed files
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          if test -d "$d"; then
+            find "$d" -maxdepth 1 -type f -delete
+          fi
+          for p in ramadan-live-manifest.json ramadan-live-snapshot.tar.gz ramadan-restore-verification.json; do
+            if test -f "$RUNNER_TEMP/$p"; then
+              shred --remove -- "$RUNNER_TEMP/$p" || true
+            fi
+          done
