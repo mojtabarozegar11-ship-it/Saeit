@@ -99,7 +99,9 @@ class MainlinePlanOneContactGuards(unittest.TestCase):
         # tests; retain discoverability and a separate support fallback.
         self.assertIn("/moj-prop-intake/?format=html", self.doc.links)
         self.assertIn(
-            "/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx",
+            "/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx"
+            "&utm_source=moj_prop&utm_medium=onsite&utm_campaign=starter30_lead"
+            "&utm_content=free_terms",
             self.doc.links,
         )
         self.assertIn("/moj-prop/contact/", self.doc.links)
