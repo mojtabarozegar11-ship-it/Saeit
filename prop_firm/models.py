@@ -119,7 +119,7 @@ class PropAccount(models.Model):
             if not self.reference:
                 raise ValidationError({"reference": "Broker reference required for funded accounts"})
         else:
-            # Historical and unpurchased accounts retain their $100 baseline.
+            # Historical and unpurchased accounts retain their $1,000 baseline.
             # New accounts must use their immutable purchased plan's tier.
             plan = None
             if self.challenge_enrollment_id is not None:
@@ -524,7 +524,7 @@ class TronSettlementLedger(models.Model):
                 name="mp_tron_network_tx_unique",
             ),
             models.CheckConstraint(
-                condition=Q(amount_sun=30_000_000),
+                condition=Q(amount_sun__in=[18_000_000, 30_000_000]),
                 name="mp_tron_plan1_amount_exact",
             ),
         ]
@@ -537,9 +537,14 @@ class PropPlan1Invoice(models.Model):
         ("paid", "Paid"),
         ("expired", "Expired"),
     ]
+    PURCHASE_KIND_CHOICES = [
+        ("first", "First purchase"),
+        ("retry", "Eligible retry purchase"),
+    ]
     order_ref = models.CharField(max_length=96, unique=True)
     buyer_email = models.EmailField(max_length=254)
     product_code = models.CharField(max_length=16, default="MOJ-PROP-01")
+    purchase_kind = models.CharField(max_length=8, choices=PURCHASE_KIND_CHOICES, default="first")
     contract_version = models.CharField(max_length=32)
     network = models.CharField(max_length=24)
     amount_sun = models.PositiveBigIntegerField(default=30_000_000)
@@ -553,7 +558,10 @@ class PropPlan1Invoice(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                condition=Q(amount_sun=30_000_000),
+                condition=(
+                    (Q(purchase_kind="first") & Q(amount_sun=30_000_000))
+                    | (Q(purchase_kind="retry") & Q(amount_sun=18_000_000))
+                ),
                 name="mp_plan1_invoice_amount_exact",
             ),
         ]
@@ -568,3 +576,119 @@ class PropPlan1Receipt(models.Model):
         TronSettlementLedger, on_delete=models.PROTECT, related_name="receipt"
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class PropRewardReserveAllocation(models.Model):
+    """Durable reserve allocation created only after an attested paid invoice."""
+    invoice = models.OneToOneField(
+        PropPlan1Invoice, on_delete=models.PROTECT, related_name="reward_reserve"
+    )
+    settlement = models.OneToOneField(
+        TronSettlementLedger, on_delete=models.PROTECT, related_name="reward_reserve"
+    )
+    fee_sun = models.PositiveBigIntegerField()
+    reward_reserve_sun = models.PositiveBigIntegerField()
+    refund_reserve_sun = models.PositiveBigIntegerField()
+    operating_buffer_sun = models.PositiveBigIntegerField()
+    committed_reward_sun = models.PositiveBigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(fee_sun__in=[18_000_000, 30_000_000]),
+                name="mp_reward_fee_supported",
+            ),
+            models.CheckConstraint(
+                condition=Q(reward_reserve_sun__gt=0)
+                & Q(refund_reserve_sun__gte=0)
+                & Q(operating_buffer_sun__gte=0)
+                & Q(committed_reward_sun__gte=0),
+                name="mp_reward_reserve_nonnegative",
+            ),
+        ]
+
+
+class PropRewardCommitment(models.Model):
+    """Immutable audit row for a reward reserved against a settled sale."""
+    allocation = models.ForeignKey(
+        PropRewardReserveAllocation, on_delete=models.PROTECT,
+        related_name="commitments"
+    )
+    commitment_ref = models.CharField(max_length=96, unique=True)
+    amount_sun = models.PositiveBigIntegerField()
+    status = models.CharField(max_length=12, default="committed")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount_sun__gt=0),
+                name="mp_reward_commitment_positive",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["allocation", "-created_at"], name="mp_reward_alloc_created"),
+        ]
+
+
+class PropSimulationAccount(models.Model):
+    """Simulation-only entitlement; never a brokerage balance."""
+    invoice = models.OneToOneField(PropPlan1Invoice, on_delete=models.PROTECT,
+                                   related_name="simulation_account")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+                              related_name="prop_simulation_accounts")
+    starting_balance_usd = models.PositiveIntegerField(default=1000)
+    challenge_days = models.PositiveSmallIntegerField(default=60)
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=16, default="active")
+    event_head_sequence = models.PositiveBigIntegerField(default=0)
+    event_head_digest = models.CharField(max_length=64, default="0" * 64)
+
+
+class PropSimulationInvoiceOwner(models.Model):
+    """Persistent owner identity for a simulation invoice, independent of email changes."""
+    invoice = models.OneToOneField(PropPlan1Invoice, on_delete=models.PROTECT,
+                                  related_name="simulation_owner")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+                              related_name="prop_simulation_invoices")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class PropSimulationIdentity(models.Model):
+    """Dedicated email-verified nonstaff identity; never links existing staff accounts."""
+    owner = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+                                 related_name="prop_simulation_identity")
+    email = models.EmailField(unique=True, max_length=254)
+    verified_at = models.DateTimeField()
+
+
+class PropSimulationLoginChallenge(models.Model):
+    """Single outstanding email challenge; only the keyed digest is retained."""
+    email = models.EmailField(unique=True, max_length=254)
+    challenge_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    code_digest = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    sent_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    consumed = models.BooleanField(default=False)
+
+
+class PropSimulationEvent(models.Model):
+    """Append-only command evidence for deterministic reconstruction of one simulation."""
+    account = models.ForeignKey(PropSimulationAccount, on_delete=models.PROTECT,
+                                related_name="execution_events")
+    sequence = models.PositiveBigIntegerField()
+    command_id = models.UUIDField()
+    payload = models.JSONField()
+    prior_digest = models.CharField(max_length=64)
+    digest = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("sequence",)
+        constraints = [
+            models.UniqueConstraint(fields=["account", "sequence"], name="mp_sim_event_sequence_unique"),
+            models.UniqueConstraint(fields=["account", "command_id"], name="mp_sim_command_unique"),
+        ]

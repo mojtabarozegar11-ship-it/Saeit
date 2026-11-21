@@ -1,0 +1,25 @@
+{% extends "mojplaywin/site_base.html" %}
+{% block title %}MOJ PROP | My challenges{% endblock %}
+{% block page_head %}<meta name="robots" content="noindex,nofollow">{% endblock %}
+{% block content %}
+<main lang="en" class="mp-prop">
+<section class="mp-section">
+<h1>My MOJ PROP challenges</h1>
+<h2>Simulation accounts</h2>
+{% for account in accounts %}
+<article>
+<h3>Challenge {{ account.pk }}</h3>
+<p>Starting virtual balance: USD {{ account.starting_balance_usd }}. Duration: {{ account.challenge_days }} days.</p>
+<p>Entitlement status: {{ account.status }}. Virtual capital cannot be withdrawn.</p>
+<p><a href="{% url 'moj_prop_simulation_terminal' account_id=account.pk %}">Open simulation terminal</a>. Trading availability is checked independently. This account cannot trade real funds.</p>
+</article>
+{% empty %}<p>No purchased challenge accounts.</p>{% endfor %}
+<h2>My invoices</h2>
+{% for invoice in invoices %}
+<p><a href="{% url 'moj_prop_simulation_invoice' order_ref=invoice.order_ref %}">{{ invoice.order_ref }}</a> — {{ invoice.status }}</p>
+{% empty %}<p>No invoices.</p>{% endfor %}
+<a href="/moj-prop/">Return to MOJ PROP</a>
+<form method="post" action="{% url 'moj_prop_simulation_logout' %}">{% csrf_token %}<button type="submit">Sign out</button></form>
+</section>
+</main>
+{% endblock %}

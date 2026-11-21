@@ -41,7 +41,15 @@ def moj_prop_landing(request, lang="en"):
     except ValueError as error:
         raise Http404("Unsupported language") from error
     data["interest_copy"] = INTEREST_COPY.get(lang, INTEREST_COPY["en"])
-    response = render(request, "mojplaywin/moj_prop.html", data)
+    if lang == "en":
+        from prop_firm.simulation_checkout_views import checkout_page_context
+        data.update(checkout_page_context(request))
+        from prop_firm.simulation_identity_views import available
+        from prop_firm.simulation_identity import is_verified_simulation_user
+        data["simulation_identity_available"] = available(request)
+        data["simulation_identity_verified"] = is_verified_simulation_user(request.user) if available(request) else False
+    template = "mojplaywin/moj_prop_simulation.html" if lang == "en" else "mojplaywin/moj_prop.html"
+    response = render(request, template, data)
     # The CSRF token is per browser; shared caching can leak or break it.
     from django.utils.cache import patch_vary_headers
     patch_vary_headers(response, ("Cookie",))
@@ -77,6 +85,12 @@ def moj_prop_dashboard(request, lang="en"):
         response = redirect("/moj-prop/" if lang == "en" else f"/moj-prop/{lang}/")
         response["Cache-Control"] = "private, no-store"
         return response
+
+    if lang == "en":
+        from prop_firm.simulation_identity import is_verified_simulation_user
+        if is_verified_simulation_user(request.user):
+            from prop_firm.simulation_dashboard_views import simulation_dashboard
+            return simulation_dashboard(request)
 
     profile = PropTrader.objects.filter(user=request.user).first()
     accounts = [] if profile is None else list(

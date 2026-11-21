@@ -1,5 +1,7 @@
 """Regression coverage for the private, fail-closed replay registry."""
 import sqlite3
+from tempfile import TemporaryDirectory
+from pathlib import Path
 import unittest
 
 from prop_firm.plan1_private_review_replay import (
@@ -16,7 +18,10 @@ D = "d" * 64
 
 class ReviewReplayTests(unittest.TestCase):
     def setUp(self):
-        self.db = sqlite3.connect(":memory:")
+        self.directory = TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.db = sqlite3.connect(str(Path(self.directory.name) / "review.sqlite3"))
+        self.db.execute("PRAGMA synchronous=FULL")
         self.db.executescript(SCHEMA_SQL)
 
     def tearDown(self):
@@ -67,6 +72,21 @@ class ReviewReplayTests(unittest.TestCase):
                 with self.assertRaises(ReviewReplayClosed):
                     self.claim(ref, acceptance, attestation)
         self.assertEqual(self.db.execute("SELECT count(*) FROM prop1_review_claims").fetchone()[0], 0)
+
+    def test_claim_survives_reconnect(self):
+        self.claim()
+        self.db.close()
+        self.db = sqlite3.connect(str(Path(self.directory.name) / "review.sqlite3"))
+        with self.assertRaises(ReviewReplayClosed):
+            self.claim()
+
+    def test_memory_registry_refused_even_with_schema(self):
+        with sqlite3.connect(":memory:") as ephemeral:
+            ephemeral.executescript(SCHEMA_SQL)
+            with self.assertRaises(ReviewReplayClosed):
+                self.claim(db=ephemeral)
+            self.assertEqual(ephemeral.execute("SELECT count(*) FROM prop1_review_claims").fetchone()[0], 0)
+        ephemeral.close()
 
     def test_missing_schema_fails_closed(self):
         empty = sqlite3.connect(":memory:")

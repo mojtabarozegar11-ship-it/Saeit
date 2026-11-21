@@ -103,7 +103,7 @@ class FourWeekProofTests(TestCase):
                     "one-split-position" if same_position
                     else f"extra-position-{first_day}-{i}"
                 ),
-                execution_origin="bot" if i % 2 else "manual",
+                execution_origin="manual" if same_position else ("bot" if i % 2 else "manual"),
                 closed_at=START+timedelta(days=first_day+i%6, hours=13),
                 data_source="verified-ci", symbol="XAUUSD",
                 gross_realized_usd=Decimal("0.00"), total_fees_usd=0,
@@ -145,8 +145,17 @@ class FourWeekProofTests(TestCase):
                     )
 
     def test_purchase_identity_must_be_trusted(self):
+        from django.core.exceptions import ValidationError
         self.enrollment.settlement_verified=False
-        self.enrollment.save()
+        with self.assertRaises(ValidationError):
+            self.enrollment.save()
+        self.enrollment.refresh_from_db()
+        self.assertTrue(self.enrollment.settlement_verified)
+        # Simulate an untrusted historical database row to test the service independently.
+        from django.db import connection
+        table = connection.ops.quote_name(PropChallengeEnrollment._meta.db_table)
+        with connection.cursor() as cursor:
+            cursor.execute(f"UPDATE {table} SET settlement_verified = %s WHERE id = %s", [False, self.enrollment.pk])
         with self.assertRaises(SocialEvidenceRejected):
             self.submit()
 
@@ -294,10 +303,11 @@ class FourWeekProofTests(TestCase):
         self.assertTrue(phase_one["social_posting"].satisfied)
         self.assertTrue(phase_one["assessment"].passed)
         self.phase1.status=PropAccount.Status.PASSED
+        self.phase1.closed_at=START+timedelta(days=6)
         self.phase1.save()
         phase_two=account_projection(self.phase2)
         self.assertTrue(phase_two["social_posting"].satisfied)
-        self.assertTrue(phase_two["assessment"].passed)
+        self.assertTrue(phase_two["assessment"].passed, phase_two["assessment"].reasons)
         self.assertEqual(phase_two["challenge_trade_count"].valid_closed_positions,50)
         self.assertEqual(PropSocialEvidence.objects.count(),2)
 
@@ -309,6 +319,7 @@ class FourWeekProofTests(TestCase):
         self.review(self.submit("instagram"))
         self.review(self.submit("facebook"))
         self.phase1.status=PropAccount.Status.PASSED
+        self.phase1.closed_at=START+timedelta(days=6)
         self.phase1.save()
         result=account_projection(self.phase2)
         self.assertEqual(result["challenge_trade_count"].valid_closed_positions,49)
@@ -323,6 +334,7 @@ class FourWeekProofTests(TestCase):
         self.review(self.submit("instagram"))
         self.review(self.submit("facebook"))
         self.phase1.status=PropAccount.Status.PASSED
+        self.phase1.closed_at=START+timedelta(days=6)
         self.phase1.save()
         result=account_projection(self.phase2)
         self.assertEqual(result["challenge_trade_count"].valid_closed_positions,13)

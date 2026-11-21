@@ -222,7 +222,7 @@ class PropInterestIntakeTests(TestCase):
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
     })
     def test_landing_form_is_real_consent_only_and_not_shared_cached(self):
-        for path in ("/moj-prop/","/moj-prop/fa/","/moj-prop/ar/"):
+        for path in ("/moj-prop/fa/","/moj-prop/ar/"):
             with self.subTest(path=path):
                 response=self.client.get(path,HTTP_HOST="mojplaywin.com",secure=True)
                 self.assertEqual(response.status_code,200)
@@ -232,6 +232,15 @@ class PropInterestIntakeTests(TestCase):
                 self.assertContains(response,'href="#plan-one-interest"')
                 self.assertIn("private, no-store",response["Cache-Control"])
                 self.assertIn("Cookie",response.get("Vary",""))
+
+    def test_new_english_offer_does_not_collect_legacy_plan_consent(self):
+        response = self.client.get("/moj-prop/", HTTP_HOST="mojplaywin.com", secure=True)
+        self.assertContains(response, "60-day simulated trading challenge")
+        self.assertNotContains(response, 'action="/moj-prop-interest/"')
+        self.assertNotContains(response, 'Create 30 TRX invoice')
+        self.assertIn("private, no-store", response["Cache-Control"])
+        self.assertIn("Cookie", response.get("Vary", ""))
+        self.assertEqual(PropInterest.objects.count(), 0)
 
     def test_operator_inbox_is_registered_but_cannot_create_or_delete_lead(self):
         admin=site._registry[PropInterest]
