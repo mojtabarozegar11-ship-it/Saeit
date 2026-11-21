@@ -161,6 +161,23 @@ urlpatterns += [path("", include("config.mpw_commerce_urls"))]
 
 from django.conf import settings as _mojprop_settings
 
+# A source merge cannot expose the paid learner portal. All four independent
+# owner-verified production gates must be set explicitly; none defaults on.
+if all(
+    getattr(_mojprop_settings, flag, False) is True
+    for flag in (
+        "MPW_MOJPROP_BUYER_PORTAL_APPROVED",
+        "MPW_MOJPROP_BUYER_TRANSACTIONAL_EMAIL_APPROVED",
+        "MPW_MOJPROP_BUYER_SHARED_RATE_LIMIT_VERIFIED",
+        "MPW_MOJPROP_BUYER_DELIVERY_RECOVERY_VERIFIED",
+    )
+):
+    from prop_firm.customer_portal_views import buyer_portal
+
+    urlpatterns += [
+        path("mojprop-buyer-portal/", buyer_portal, name="mojprop_buyer_portal"),
+    ]
+
 if getattr(_mojprop_settings, "MPW_MOJPROP_STAGING_IDENTITY_ROUTE_ENABLED", False):
     from prop_firm.staging_identity_views import (
         staging_identity_activate,

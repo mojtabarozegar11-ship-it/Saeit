@@ -86,6 +86,22 @@ MPW_MOJPROP_LOGIN_CHALLENGE_TTL_SECONDS = env.int(
 MPW_MOJPROP_LOGIN_MAX_ATTEMPTS = env.int(
     "MPW_MOJPROP_LOGIN_MAX_ATTEMPTS", default=5
 )
+
+# Paid-simulation learner portal: independent four-part hold. No customer
+# emails, public account access or uploads until all owner release evidence
+# (including shared throttling and recoverability) is verified.
+MPW_MOJPROP_BUYER_PORTAL_APPROVED = env.bool(
+    "MPW_MOJPROP_BUYER_PORTAL_APPROVED", default=False
+)
+MPW_MOJPROP_BUYER_TRANSACTIONAL_EMAIL_APPROVED = env.bool(
+    "MPW_MOJPROP_BUYER_TRANSACTIONAL_EMAIL_APPROVED", default=False
+)
+MPW_MOJPROP_BUYER_SHARED_RATE_LIMIT_VERIFIED = env.bool(
+    "MPW_MOJPROP_BUYER_SHARED_RATE_LIMIT_VERIFIED", default=False
+)
+MPW_MOJPROP_BUYER_DELIVERY_RECOVERY_VERIFIED = env.bool(
+    "MPW_MOJPROP_BUYER_DELIVERY_RECOVERY_VERIFIED", default=False
+)
 MPW_MOJPROP_RECONCILIATION_SOURCE_ALIAS = env(
     "MPW_MOJPROP_RECONCILIATION_SOURCE_ALIAS", default=""
 )

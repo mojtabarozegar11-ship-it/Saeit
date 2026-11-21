@@ -125,7 +125,7 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         archive = root / "docs/mojprop/historical-static-evidence" / (old_pin + ".py.txt")
         current = root / "config/urls.py"
         self.assertEqual(exact_git_blob(archive.read_bytes()), old_pin)
-        self.assertEqual(exact_git_blob(current.read_bytes()), "cb4699964920ff9554a57f7588a9c16330c943c7")
+        self.assertEqual(exact_git_blob(current.read_bytes()), "325a9c358e94bed5ee3ba673fbd85f836f067c07")
         prior = iter(archive.read_text(encoding="utf-8").splitlines())
         expected_line = next(prior, None)
         additions = []
@@ -139,13 +139,30 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
             "from core.mpw_legacy_guest_checkout_redirect import legacy_guest_checkout",
             "from prop_firm.starter30_views import starter30_checkout, starter30_status",
             "from services.mpw_trx_public_pages import support_page, terms_page, privacy_page, cookies_page",
-            '    path("store/product/<int:product_id>/checkout/", legacy_guest_checkout, name="mpw_legacy_guest_checkout_redirect"),',
-            '    path("support/", support_page, name="mpw_support"),',
-            '    path("terms/", terms_page, name="mpw_terms"),',
-            '    path("privacy/", privacy_page, name="mpw_privacy"),',
-            '    path("cookies/", cookies_page, name="mpw_cookies"),',
-            '    path("mojprop-starter30-checkout/", starter30_checkout, name="mojprop_starter30_checkout"),',
-            '    path("mojprop-starter30-status/", starter30_status, name="mojprop_starter30_status"),',
+            "    path(\"store/product/<int:product_id>/checkout/\", legacy_guest_checkout, name=\"mpw_legacy_guest_checkout_redirect\"),",
+            "    path(\"support/\", support_page, name=\"mpw_support\"),",
+            "    path(\"terms/\", terms_page, name=\"mpw_terms\"),",
+            "    path(\"privacy/\", privacy_page, name=\"mpw_privacy\"),",
+            "    path(\"cookies/\", cookies_page, name=\"mpw_cookies\"),",
+            "    path(\"mojprop-starter30-checkout/\", starter30_checkout, name=\"mojprop_starter30_checkout\"),",
+            "    path(\"mojprop-starter30-status/\", starter30_status, name=\"mojprop_starter30_status\"),",
+            "# A source merge cannot expose the paid learner portal. All four independent",
+            "# owner-verified production gates must be set explicitly; none defaults on.",
+            "if all(",
+            "    getattr(_mojprop_settings, flag, False) is True",
+            "    for flag in (",
+            "        \"MPW_MOJPROP_BUYER_PORTAL_APPROVED\",",
+            "        \"MPW_MOJPROP_BUYER_TRANSACTIONAL_EMAIL_APPROVED\",",
+            "        \"MPW_MOJPROP_BUYER_SHARED_RATE_LIMIT_VERIFIED\",",
+            "        \"MPW_MOJPROP_BUYER_DELIVERY_RECOVERY_VERIFIED\",",
+            "    )",
+            "):",
+            "    from prop_firm.customer_portal_views import buyer_portal",
+            "",
+            "    urlpatterns += [",
+            "        path(\"mojprop-buyer-portal/\", buyer_portal, name=\"mojprop_buyer_portal\"),",
+            "    ]",
+            "",
         ])
         # Neither a source diff nor a matching historical fixture proves live
         # deployment. The original auditor still reports drift for new bytes.
