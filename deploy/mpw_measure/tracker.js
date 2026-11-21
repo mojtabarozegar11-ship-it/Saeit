@@ -16,6 +16,7 @@
     if (p === "/moj-prop/" || p === "/moj-prop/starter-30-trx/" ||
         p === "/moj-prop/payment/" || p === "/moj-prop/catalog/" ||
         p === "/moj-prop/rules/" || p === "/moj-prop/contact/" ||
+        p === "/moj-prop/signals/" ||
         p === "/mojprop-starter30-checkout/") return p;
     return "";
   }
@@ -76,7 +77,7 @@
     node.setAttribute("role", "region");
     node.setAttribute("aria-label", "Optional analytics consent");
     node.style.cssText = "position:fixed;z-index:2147483645;bottom:12px;left:12px;right:12px;max-width:660px;margin:auto;background:#17202b;color:#f6f2e9;border:1px solid #b8a470;border-radius:12px;padding:14px 16px;font:13px/1.5 system-ui;box-shadow:0 8px 30px #0009";
-    node.innerHTML = '<span>Allow optional anonymous visit and purchase-click measurement? No email, wallet, form content or payment details are collected. <a href="/privacy/" style="color:#a5ebdf">Privacy</a>.</span> ';
+    node.innerHTML = '<span>Allow optional anonymous visit and purchase-click measurement? No email, wallet, form content or payment details are collected. <a href="/mpw-measure/privacy.html" style="color:#a5ebdf">Privacy</a>.</span> ';
     var yes = document.createElement("button"), no = document.createElement("button");
     yes.type = no.type = "button";
     yes.textContent = "Allow"; no.textContent = "Decline";
