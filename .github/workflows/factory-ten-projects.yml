@@ -1,0 +1,65 @@
+name: Factory launch ten priority agriculture projects
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_ten_project_launcher.py
+      - tests/test_factory_ten_project_launcher.py
+      - deploy/install_factory_ten_projects.sh
+      - .github/workflows/factory-ten-projects.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_ten_project_launcher.py
+      - tests/test_factory_ten_project_launcher.py
+      - deploy/install_factory_ten_projects.sh
+      - .github/workflows/factory-ten-projects.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-ten-projects-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Stage-boundary and ten-project acceptance
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_factory_ten_project_launcher.py -v
+          bash -n deploy/install_factory_ten_projects.sh
+          python3 -B -c 'import ast;ast.parse(open("scripts/factory_ten_project_launcher.py",encoding="utf8").read())'
+  activate-private-vps:
+    needs: acceptance
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Activate exactly ten private project starts via SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$(mktemp -d)"
+          chmod 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo FACTORY_TEN_RELAY_HOST_PIN=PASS
+          printf 'Host ten-vps\n  HostName 178.239.147.150\n  User githubops\n  IdentityFile %s/key\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n  UserKnownHostsFile %s/known\n  BatchMode yes\n  ConnectTimeout 15\n' "$work" "$work" > "$work/config"
+          stage="/home/githubops/factory-runtime/operations/.ten-project-stage-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -F "$work/config" -T ten-vps "umask 077; mkdir -m 700 '$stage'"
+          scp -F "$work/config" scripts/factory_ten_project_launcher.py "ten-vps:$stage/launcher.py"
+          scp -F "$work/config" scripts/factory_stage1_handoff.py "ten-vps:$stage/stage1.py"
+          scp -F "$work/config" scripts/factory_stage2_research.py "ten-vps:$stage/stage2.py"
+          scp -F "$work/config" deploy/install_factory_ten_projects.sh "ten-vps:$stage/install.sh"
+          ssh -F "$work/config" -T ten-vps "bash -n '$stage/install.sh' && bash '$stage/install.sh' '$stage/launcher.py' '$stage/stage1.py' '$stage/stage2.py'"
