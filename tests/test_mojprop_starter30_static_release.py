@@ -38,8 +38,8 @@ class Starter30StaticReleaseTests(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def test_precisely_three_static_files(self):
-        self.assertEqual(set(rel.FILES), {"index.html", "journal-template.csv", "journal-guide.txt"})
+    def test_precisely_four_static_files(self):
+        self.assertEqual(set(rel.FILES), {"index.html", "journal-template.csv", "journal-guide.txt", "checkout-attribution.js"})
 
     def test_preflight_is_read_only(self):
         report = rel.preflight("123", COMMIT)
@@ -67,6 +67,65 @@ class Starter30StaticReleaseTests(unittest.TestCase):
         self.assertFalse((self.docroot / "core").exists())
         rel.rollback("123", COMMIT)
         self.assertFalse(any((self.target / name).exists() for name in rel.FILES))
+
+    def test_current_manifest_v2_pins_four_static_assets(self):
+        with patch.dict(os.environ, {"MOJPROP_STARTER30_OWNER_APPROVED": "static-only-approved"}):
+            rel.deploy("123", COMMIT)
+        manifest = json.loads((self.backup / "123/manifest.json").read_text("utf-8"))
+        self.assertEqual(manifest["schema"], "mojprop.starter30.static.v2")
+        self.assertEqual(set(manifest["files"]), set(rel.FILES))
+        self.assertEqual(manifest["reviewed_source_blobs"]["checkout-attribution.js"],
+                         rel.REVIEWED_GIT_BLOBS["checkout-attribution.js"])
+
+    def test_missing_reviewed_attribution_file_is_refused(self):
+        (self.stage / "checkout-attribution.js").unlink()
+        with self.assertRaises(RuntimeError):
+            rel.preflight("123", COMMIT)
+        self.assertFalse(self.target.exists())
+        self.assertFalse(self.backup.exists())
+
+    def test_tampered_attribution_file_is_refused(self):
+        asset = self.stage / "checkout-attribution.js"
+        asset.write_bytes(asset.read_bytes() + b"// changed bytes\n")
+        with self.assertRaisesRegex(RuntimeError, "do not match reviewed Git source"):
+            rel.preflight("123", COMMIT)
+        self.assertFalse(self.target.exists())
+
+    def test_v2_rollback_refuses_missing_script_manifest_entry(self):
+        with patch.dict(os.environ, {"MOJPROP_STARTER30_OWNER_APPROVED": "static-only-approved"}):
+            rel.deploy("123", COMMIT)
+        manifest_path = self.backup / "123/manifest.json"
+        payload = json.loads(manifest_path.read_text("utf-8"))
+        payload["files"].pop("checkout-attribution.js")
+        manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+        manifest_path.chmod(0o600)
+        with self.assertRaisesRegex(RuntimeError, "manifest cannot authorize rollback"):
+            rel.rollback("123", COMMIT)
+        self.assertTrue((self.target / "checkout-attribution.js").exists())
+
+    def test_legacy_three_file_v1_manifest_can_still_roll_back(self):
+        # Existing privately backed-up releases retain their original schema
+        # and exact filename list; a newer four-file release must not strand
+        # previously approved rollback evidence.
+        legacy = {name: (SOURCE / name).read_bytes() for name in rel.LEGACY_FILES}
+        self.target.mkdir(parents=True)
+        for name, content in legacy.items():
+            (self.target / name).write_bytes(content)
+        self.backup.mkdir(mode=0o700)
+        old = self.backup / "123"
+        old.mkdir(mode=0o700)
+        manifest = {
+            "schema": "mojprop.starter30.static.v1",
+            "run_id": "123",
+            "commit": COMMIT,
+            "files": {name: rel.sha(data) for name, data in legacy.items()},
+            "scope": "static-page-no-payment-execution-no-backend",
+        }
+        mf = old / "manifest.json"
+        mf.write_text(json.dumps(manifest), encoding="utf-8")
+        mf.chmod(0o600)
+        rel.rollback("123", COMMIT)
+        self.assertFalse(any((self.target / name).exists() for name in rel.LEGACY_FILES))
 
     def test_wrong_commit_refused_before_writes(self):
         with self.assertRaises(ValueError):

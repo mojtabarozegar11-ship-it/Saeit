@@ -43,9 +43,10 @@ class Starter30PublicOfferTests(unittest.TestCase):
                          "$1,000", "imaginary", "index,follow"):
             self.assertIn(required.lower(), page.lower())
 
-    def test_no_wallet_or_external_script(self):
+    def test_no_wallet_or_unreviewed_external_script(self):
         page = PUBLIC.read_text("utf-8")
-        self.assertNotIn("<script", page)
+        self.assertEqual(page.count("<script"), 1)
+        self.assertIn('<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>', page)
         self.assertNotIn("tronlink", page.lower())
         self.assertNotIn("tronweb", page.lower())
         self.assertNotIn("walletconnect", page.lower())
@@ -126,7 +127,7 @@ class Starter30PublicOfferTests(unittest.TestCase):
     def test_static_release_does_not_ship_account_or_payment_api(self):
         from scripts.mojprop_starter30_static_release import FILES
         self.assertEqual(set(FILES),
-                         {"index.html", "journal-template.csv", "journal-guide.txt"})
+                         {"index.html", "journal-template.csv", "journal-guide.txt", "checkout-attribution.js"})
 
     def test_starter30_is_in_manual_only_atomic_bundle_not_auto_deployed(self):
         from scripts.update_mojplaywin_moj_prop_catalog import FILES, MANIFEST_SCHEMA

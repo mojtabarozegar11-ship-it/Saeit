@@ -77,8 +77,10 @@ class Starter30SingleSkuTests(unittest.TestCase):
 
     def test_no_wallet_key_trading_or_payment_in_starter_detail(self):
         lower = self.detail.lower()
-        for blocked in ("<script", "tronweb", "walletconnect", "private key", "send trx now"):
+        for blocked in ("tronweb", "walletconnect", "private key", "send trx now"):
             self.assertNotIn(blocked, lower)
+        self.assertEqual(self.detail.count("<script"), 1)
+        self.assertIn('<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>', self.detail)
         self.assertIn("Pay only through the server-issued 30 TRX invoice", self.detail)
         self.assertNotIn("<form", lower)
         self.assertIn("No real funded account or customer capital is involved", self.detail)
