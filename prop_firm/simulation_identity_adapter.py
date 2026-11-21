@@ -42,6 +42,7 @@ _ALLOWED_PURPOSES = frozenset(
     {
         PropSimulationLoginChallenge.Purpose.LOGIN,
         PropSimulationLoginChallenge.Purpose.RECOVERY,
+        PropSimulationLoginChallenge.Purpose.CHECKOUT,
     }
 )
 
@@ -153,8 +154,11 @@ def issue_login_challenge(
             .select_for_update()
             .get(pk=identity_id)
         )
-        if identity.status != PropSimulationIdentity.Status.ACTIVE:
-            raise IdentityAdapterClosed("active identity required")
+        if identity.status != PropSimulationIdentity.Status.ACTIVE and not (
+            purpose == PropSimulationLoginChallenge.Purpose.CHECKOUT
+            and identity.status == PropSimulationIdentity.Status.PENDING
+        ):
+            raise IdentityAdapterClosed("identity is not eligible for this one-time code")
         PropSimulationLoginChallenge.objects.using(MOJPROP_DB_ALIAS).create(
             identity_id=identity.pk,
             challenge_ref=challenge_ref,
@@ -171,8 +175,9 @@ def consume_login_challenge(
     *,
     now=None,
     max_attempts: int | None = None,
+    expected_purpose: str | None = None,
 ) -> int:
-    """Atomically consume a valid code and return only the isolated identity ID."""
+    """Atomically consume a valid, optionally purpose-bound code."""
     _require_ref(challenge_ref, "challenge reference")
     if not isinstance(code, str) or not code:
         raise IdentityAdapterClosed("challenge code is required")
@@ -187,6 +192,8 @@ def consume_login_challenge(
             .select_for_update()
             .get(challenge_ref=challenge_ref)
         )
+        if expected_purpose is not None and challenge.purpose != expected_purpose:
+            raise IdentityAdapterClosed("challenge purpose does not match")
         if challenge.consumed_at is not None:
             raise IdentityAdapterClosed("challenge already consumed")
         if challenge.attempt_count >= max_attempts:

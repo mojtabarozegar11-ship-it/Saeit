@@ -28,18 +28,20 @@ class Starter30CheckoutBoundaryTests(SimpleTestCase):
                 self.assertNotContains(response, "<form")
 
     @override_settings(**OPEN)
-    def test_open_get_only_presents_disclosure_and_invoice_form(self):
+    def test_open_get_requires_verified_email_before_invoice_form(self):
         with patch("prop_firm.starter30_views.issue_invoice") as issue, \
              patch("prop_firm.starter30_views.settle_invoice") as settle, \
              patch("prop_firm.starter30_views.verify_pre_invoice_configuration") as preflight:
             response = self.client.get(PATH)
             self.assertEqual(response.status_code, 200)
-            self.assertContains(response, "Create 30 TRX invoice")
+            self.assertContains(response, "Email a one-time verification code")
+            self.assertNotContains(response, "Create 30 TRX invoice")
             self.assertContains(response, "30 TRX")
-            self.assertContains(response, "simulated trading")
-            self.assertContains(response, "no profit or pass result is guaranteed")
+            self.assertContains(response, "simulated challenge")
+            self.assertContains(response, "after verification under the published payout rules")
             self.assertContains(response, "Send only after this server issues your unique invoice")
             self.assertContains(response, "csrfmiddlewaretoken")
+            self.assertNotContains(response, "Send to:")
             issue.assert_not_called()
             settle.assert_not_called()
             preflight.assert_called_once_with()

@@ -272,7 +272,7 @@ def _verify_code(request) -> HttpResponse:
     if not ref or not isinstance(code, str) or len(code) > 128:
         return _login_page(request, note="Code invalid or expired.")
     try:
-        identity_id = consume_login_challenge(ref, code)
+        identity_id = consume_login_challenge(ref, code, expected_purpose=PropSimulationLoginChallenge.Purpose.LOGIN)
         if not _paid_learner_accounts(identity_id):
             raise IdentityAdapterClosed("settled entitlement required")
     except (IdentityAdapterClosed, ObjectDoesNotExist, ValueError,

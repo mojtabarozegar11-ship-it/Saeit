@@ -6,6 +6,7 @@ from html import escape
 from django.conf import settings
 from django.http import Http404, HttpResponse
 from django.middleware.csrf import get_token
+from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 def _record_funnel_event(request, event_name: str) -> None:
@@ -42,6 +43,11 @@ def _buyer_portal_link() -> str:
     return ""
 
 
+from .starter30_checkout_email import (
+    CheckoutEmailUnavailable,
+    consume_checkout_email_code,
+    request_checkout_email_code,
+)
 from .starter30_live import (
     Starter30PaymentRejected,
     Starter30ReleaseClosed,
@@ -50,6 +56,43 @@ from .starter30_live import (
     settle_invoice,
     verify_pre_invoice_configuration,
 )
+
+
+_EMAIL_CHALLENGE_SESSION = "mojprop_starter30_checkout_challenge_v1"
+_EMAIL_PROOF_SESSION = "mojprop_starter30_checkout_email_proof_v1"
+
+
+def _email_forms(request) -> str:
+    """No receiving address exists until an email OTP is consumed."""
+    token = escape(get_token(request))
+    form = (
+        "<form method='post' action='/mojprop-starter30-checkout/'>"
+        f"<input type='hidden' name='csrfmiddlewaretoken' value='{token}'>"
+        "<input type='hidden' name='action' value='request_email_code'>"
+        + _funnel_hidden_fields(request)
+        + "<label for='email-verification'>Email to verify before checkout</label>"
+        "<input id='email-verification' name='email' type='email' required "
+        "maxlength='254' autocomplete='email'>"
+        "<button type='submit'>Email a one-time verification code</button></form>"
+    )
+    if request.session.get(_EMAIL_CHALLENGE_SESSION):
+        form += (
+            "<form method='post' action='/mojprop-starter30-checkout/'>"
+            f"<input type='hidden' name='csrfmiddlewaretoken' value='{token}'>"
+            "<input type='hidden' name='action' value='verify_email_code'>"
+            + _funnel_hidden_fields(request)
+            + "<label for='email-code'>Verification code from email</label>"
+            "<input id='email-code' name='code' type='password' "
+            "required maxlength='128' autocomplete='one-time-code'>"
+            "<button type='submit'>Verify email and continue</button></form>"
+        )
+    if request.session.get(_EMAIL_PROOF_SESSION):
+        form += (
+            "<p class='ok'>Email verified in this browser for a short time. "
+            "Confirm the same email below to request your exact 30 TRX invoice.</p>"
+            + _form(request)
+        )
+    return form
 
 
 def _page(request, title: str, body: str) -> HttpResponse:
@@ -109,6 +152,7 @@ def _form(request, invoice_ref: str | None = None) -> str:
     )
 
 
+@csrf_protect
 @require_http_methods(["GET", "POST"])
 def starter30_checkout(request):
     if request.method == "GET":
@@ -128,17 +172,46 @@ def starter30_checkout(request):
                 "<p><strong>Cancellation and refund:</strong> before transaction verification, no payment is credited. "
                 "A verified payment that cannot be matched because of a server failure remains in manual review; "
                 "if the service cannot be delivered, refund is sent to the verified sending wallet.</p>"
-                + _form(request)
+                + _email_forms(request)
             )
         except Exception:
             return _closed(request)
     try:
         action = request.POST.get("action")
+        if action == "request_email_code":
+            ref = request_checkout_email_code(request.POST.get("email", ""))
+            request.session.pop(_EMAIL_PROOF_SESSION, None)
+            request.session[_EMAIL_CHALLENGE_SESSION] = ref
+            return _page(
+                request, "Check your email",
+                "<h1>Verify your email</h1><p>A one-time code was sent to "
+                "the requested address. No invoice or receiving address was "
+                "created. Enter the code below to continue.</p>"
+                + _email_forms(request),
+            )
+        if action == "verify_email_code":
+            ref = request.session.get(_EMAIL_CHALLENGE_SESSION, "")
+            if not ref:
+                raise Starter30PaymentRejected("request an email code before checkout")
+            proof = consume_checkout_email_code(
+                ref, request.POST.get("code", ""),
+            )
+            request.session.pop(_EMAIL_CHALLENGE_SESSION, None)
+            request.session.cycle_key()
+            request.session[_EMAIL_PROOF_SESSION] = proof
+            return _page(
+                request, "Email verified",
+                "<h1>Email verified</h1><p>Enter the same verified email "
+                "and review the simulated challenge terms before requesting "
+                "your 30 TRX invoice.</p>"
+                + _email_forms(request),
+            )
         if action == "issue":
             issued = issue_invoice(
                 email=request.POST.get("email", ""),
                 payer_address=request.POST.get("payer_address", "").strip(),
                 terms_accepted=request.POST.get("terms") == "yes",
+                email_proof=request.session.get(_EMAIL_PROOF_SESSION, ""),
             )
             _record_funnel_event(request, "invoice_created")
             return _page(
@@ -172,12 +245,14 @@ def starter30_checkout(request):
                 + _buyer_portal_link(),
             )
         raise Starter30PaymentRejected("unsupported checkout action")
-    except (Starter30PaymentRejected, Starter30ReleaseClosed, LookupError, ValueError) as error:
+    except (Starter30PaymentRejected, Starter30ReleaseClosed, CheckoutEmailUnavailable, LookupError, ValueError) as error:
         return _page(
             request,
             "Starter30 payment review",
             f"<h1>Payment not credited</h1><div class='warn'>{escape(str(error))}</div>"
-            "<p>No simulation account was created. Check the invoice and transaction ID.</p>",
+            "<p>No simulation account was created, and no payment has been credited. "
+            "If checkout email verification failed, request a new code below.</p>"
+            + _email_forms(request),
         )
 
 
