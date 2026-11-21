@@ -1,0 +1,118 @@
+name: Diagnose two tenant master bottlenecks from private live counters
+on:
+  push:
+    branches: [agents/two-sites-inquiries-orders-20261024]
+    paths: [.github/workflows/two-site-master-live-bottleneck-probe-20261024.yml]
+permissions: {contents: read}
+jobs:
+  verify:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Verify pinned VPS to cPanel SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/agents-ro.XXXXXX")"
+          echo "$d" > "$RUNNER_TEMP/agents-ro-path"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' \
+            "Host saeit-vps" "  HostName 178.239.147.150" "  User githubops" "  Port 22" \
+            "  IdentityFile $d/vps.key" "  UserKnownHostsFile $d/vps.known" \
+            "Host saeit-cpanel" "  HostName zohal.pws-dns.net" "  User zomorod2" "  Port 1396" \
+            "  IdentityFile $d/host.key" "  UserKnownHostsFile $d/host.known" "  ProxyJump saeit-vps" \
+            "Host *" "  StrictHostKeyChecking yes" "  IdentitiesOnly yes" "  BatchMode yes" \
+            "  ConnectTimeout 10" "  ConnectionAttempts 1" "  ForwardAgent no" \
+            > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo TWO_SITES_PINNED_SSH_RELAY=PASS
+          echo SITE_AGENT_RELAY_PINNED
+      - name: Inspect two tenant master queues and authentic order sources without PII
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import quote
+          import datetime,sqlite3,subprocess
+          home=Path.home()
+          assert home==Path("/home/zomorod2")
+          cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,check=True,timeout=10).stdout
+          cfg=(
+            ("zomorod",home/".private/zomorod-business","ZM_MASTER_CUSTOMER_INBOX_20261024"),
+            ("mojplaywin",home/".private_mojplaywin_main_agents","MPW_MASTER_CUSTOMER_INBOX_20261024"),
+          )
+          def readonly(file):
+              assert file.is_file() and not file.is_symlink()
+              db=sqlite3.connect("file:"+quote(str(file))+"?mode=ro",uri=True,timeout=12)
+              db.execute("PRAGMA query_only=ON")
+              return db
+          for tenant,root,marker in cfg:
+              assert root.is_dir() and not root.is_symlink()
+              matched=[x for x in cron.splitlines() if marker in x and not x.lstrip().startswith("#")]
+              print("MASTER_CRON_UNIQUE_"+tenant+"="+str(len(matched)==1))
+              worker=root/"master_customer_runtime_20261024.py"
+              print("MASTER_WORKER_PRESENT_"+tenant+"="+str(worker.is_file() and not worker.is_symlink()))
+              with readonly(root/"master_customer_inbox.sqlite3") as db:
+                  metrics=db.execute(
+                     "SELECT last_success_utc,queued,review,guidance,review_older_than_day "
+                     "FROM master_customer_worker_health WHERE tenant=?",(tenant,)).fetchone()
+                  print("MASTER_HEARTBEAT_PRESENT_"+tenant+"="+str(bool(metrics and metrics[0])))
+                  if metrics:
+                      print("MASTER_QUEUE_"+tenant+"=queued:"+str(metrics[1])+
+                            ",review:"+str(metrics[2])+",guidance:"+str(metrics[3])+
+                            ",review_older_day:"+str(metrics[4]))
+                  counts=db.execute("SELECT processing_status,COUNT(*) FROM customer_questions "
+                                    "WHERE tenant=? GROUP BY processing_status",(tenant,)).fetchall()
+                  print("MASTER_INBOX_COUNTS_"+tenant+"="+str(dict(counts)))
+                  events=db.execute("SELECT source,COUNT(*) FROM customer_order_events "
+                                    "WHERE tenant=? GROUP BY source",(tenant,)).fetchall()
+                  print("MASTER_ORDER_EVENTS_"+tenant+"="+str(dict(events)))
+                  orderq=db.execute("SELECT COUNT(*) FROM customer_questions "
+                                    "WHERE tenant=? AND kind='order_question'",(tenant,)).fetchone()[0]
+                  print("MASTER_ORDER_QUESTIONS_"+tenant+"="+str(orderq))
+                  unmatched=db.execute(
+                       "SELECT COUNT(*) FROM customer_questions q WHERE q.tenant=? "
+                       "AND q.kind='order_question' AND NOT EXISTS (SELECT 1 FROM customer_order_events e "
+                       "WHERE e.tenant=q.tenant AND e.source_id=q.claimed_order_ref)",
+                       (tenant,)).fetchone()[0]
+                  print("MASTER_ORDER_CLAIMS_UNMATCHED_"+tenant+"="+str(unmatched))
+          store=home/".private/zomorod-business/site_store.sqlite3"
+          with readonly(store) as db:
+              tables=set(row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'"))
+              for key in ("orders","customer_orders","store_orders","payment_state","products"):
+                  print("ZM_COMMERCE_TABLE_"+key+"="+str(key in tables))
+              for key in ("orders","customer_orders","store_orders"):
+                  if key in tables:
+                      fields=set(x[1] for x in db.execute('PRAGMA table_info("'+key+'")'))
+                      print("ZM_COMMERCE_ORDER_SCHEMA_"+key+"="+str({"id","status"}.issubset(fields)))
+          print("TWO_SITE_MASTER_RUNTIME_BOTTLENECK_PROBE=PASS")
+          PY
+      - name: Remove temporary SSH identity material
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/agents-ro-path"; then
+            d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+            if test -n "$d" && test -d "$d"; then
+              rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+              rmdir "$d" || true
+            fi
+            rm -f "$RUNNER_TEMP/agents-ro-path"
+          fi

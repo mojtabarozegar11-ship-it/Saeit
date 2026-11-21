@@ -1,0 +1,193 @@
+name: Inspect real two-site master pending work and offline response capacity
+on:
+  push:
+    branches: [agents/two-sites-inquiries-orders-20261024]
+    paths: [.github/workflows/two-site-master-customer-operations-inventory-20261024.yml]
+permissions: {contents: read}
+jobs:
+  inventory:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Verify pinned VPS to cPanel SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/agents-ro.XXXXXX")"
+          echo "$d" > "$RUNNER_TEMP/agents-ro-path"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' \
+            "Host saeit-vps" "  HostName 178.239.147.150" "  User githubops" "  Port 22" \
+            "  IdentityFile $d/vps.key" "  UserKnownHostsFile $d/vps.known" \
+            "Host saeit-cpanel" "  HostName zohal.pws-dns.net" "  User zomorod2" "  Port 1396" \
+            "  IdentityFile $d/host.key" "  UserKnownHostsFile $d/host.known" "  ProxyJump saeit-vps" \
+            "Host *" "  StrictHostKeyChecking yes" "  IdentitiesOnly yes" "  BatchMode yes" \
+            "  ConnectTimeout 10" "  ConnectionAttempts 1" "  ForwardAgent no" \
+            > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo TWO_SITES_PINNED_SSH_RELAY=PASS
+          echo SITE_AGENT_RELAY_PINNED
+      - name: Count unanswered questions, order events and offline engine without exposing customer data
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import json,sqlite3,shutil,importlib.util,subprocess,urllib.request
+          from pathlib import Path
+          home=Path.home()
+          targets=(
+            ("zomorod",home/".private/zomorod-business/master_customer_inbox.sqlite3","zomorodmelal.ir"),
+            ("mojplaywin",home/".private_mojplaywin_main_agents/master_customer_inbox.sqlite3","mojplaywin.com"))
+          for name,file,domain in targets:
+              assert file.is_file() and not file.is_symlink()
+              with sqlite3.connect("file:"+str(file)+"?mode=ro",uri=True,timeout=10) as db:
+                  q=db.execute("SELECT processing_status,kind,COUNT(*) FROM customer_questions WHERE tenant=? GROUP BY processing_status,kind",(name,)).fetchall()
+                  events=db.execute("SELECT source,COUNT(*) FROM customer_order_events WHERE tenant=? GROUP BY source",(name,)).fetchall()
+                  schema=db.execute("PRAGMA table_info(customer_questions)").fetchall()
+              print("MASTER_TICKET_COUNTS_"+name.upper()+"="+json.dumps(q))
+              print("MASTER_ORDER_SOURCE_COUNTS_"+name.upper()+"="+json.dumps(events))
+              print("MASTER_QUESTION_COLUMNS_"+name.upper()+"="+json.dumps([row[1] for row in schema]))
+              for route in ("/contact/","/support/","/ask-master/"):
+                  try:
+                      url="https://"+domain+route
+                      with urllib.request.urlopen(url,timeout=15) as resp:
+                          text=resp.read(180000).decode("utf8","replace").lower()
+                      print("SITE_NAV_LINK_"+name+"_"+route.replace("/","_")+"="+str("ask-master" in text))
+                  except Exception as error:
+                      print("SITE_NAV_LINK_"+name+"_"+route.replace("/","_")+"=unavailable")
+          # Only enumerate the exact customer-support entry paths (no file contents or secrets).
+          for site,web in (("zomorod",home/"public_html"),("mojplaywin",home/"mojplaywin.com")):
+              for segment in ("contact","support","help","ask-master"):
+                  directory=web/segment
+                  if directory.is_dir() and not directory.is_symlink():
+                      names=[e.name for e in directory.iterdir() if e.is_file() and
+                             e.name in ("index.php","index.html","index.htm","support.php","contact.php",".htaccess")]
+                      print("LIVE_SUPPORT_ROUTE_FILES_"+site+"_"+segment+"="+json.dumps(sorted(names)))
+                  else:
+                      print("LIVE_SUPPORT_ROUTE_FILES_"+site+"_"+segment+"=not_a_directory")
+              for file in (web/"contact.php",web/"support.php",web/".htaccess",web/"index.php"):
+                  if file.is_file() and not file.is_symlink() and file.stat().st_size<400000:
+                      print("LIVE_SUPPORT_ROOT_ENTRY_"+site+"_"+file.name+"=present")
+          # Examine only public HTML safe insertion points, without private files.
+          import hashlib,re
+          contact=home/"public_html/contact/index.html"
+          if contact.is_file() and not contact.is_symlink():
+              raw=contact.read_bytes()
+              html=raw.decode("utf8","replace")
+              print("ZM_CONTACT_HTML_SHA256="+hashlib.sha256(raw).hexdigest())
+              print("ZM_CONTACT_HTML_BYTES="+str(len(raw)))
+              print("ZM_CONTACT_MAIN_END="+str(html.lower().count("</main>")))
+              print("ZM_CONTACT_BODY_END="+str(html.lower().count("</body>")))
+              print("ZM_CONTACT_FINAL_PUBLIC_MARKUP="+json.dumps(html[-1000:],ensure_ascii=False))
+          with urllib.request.urlopen("https://mojplaywin.com/support/",timeout=18) as response:
+              content=response.read(120000).decode("utf8","replace")
+          print("MPW_SUPPORT_PUBLIC_HTML_BYTES="+str(len(content)))
+          print("MPW_SUPPORT_PUBLIC_ANCHORS="+json.dumps(re.findall(r'<a\\s+[^>]*?href=[\\"\\\']([^\\"\\\']+)',content,flags=re.I)[:20]))
+          print("MPW_SUPPORT_PUBLIC_END="+json.dumps(re.sub(r'\\s+',' ',content[-900:]),ensure_ascii=False))
+          mpw_root=home/"mojplaywin.com"
+          found=[]
+          for child in mpw_root.iterdir():
+              if child.is_file() and not child.is_symlink():
+                  name=child.name.lower()
+                  if (("shell" in name or "support" in name or "main" in name)
+                      and child.stat().st_size<2000000):
+                      found.append((child.name,child.stat().st_size))
+          print("MPW_MAIN_SUPPORT_CANDIDATES="+json.dumps(sorted(found)[:35]))
+          ht=mpw_root/".htaccess"
+          if ht.is_file() and not ht.is_symlink():
+              rules=[line.strip() for line in ht.read_text(errors="replace").splitlines()
+                     if line.strip().lower().startswith(("rewriterule","rewritecond")) and
+                     any(token in line.lower() for token in ("support","shell","index","php"))]
+              print("MPW_SUPPORT_ROUTE_REWRITE_HINTS="+json.dumps(rules[:12]))
+          ix=content.lower().find("<main")
+          print("MPW_SUPPORT_PUBLIC_MAIN_SNIPPET="+json.dumps(content[ix:ix+1100] if ix>=0 else "NO_MAIN",ensure_ascii=False))
+          zm=contact.read_text(errors="replace")
+          ix=zm.lower().find("<main")
+          print("ZM_CONTACT_PUBLIC_MAIN_SNIPPET="+json.dumps(zm[ix:ix+900] if ix>=0 else "NO_MAIN",ensure_ascii=False))
+          src=home/"mojplaywin.com/design-preview-20261017/_mpw_dynamic_main_shell_20261019.php"
+          if src.is_file() and not src.is_symlink():
+              raw=src.read_bytes()
+              txt=raw.decode("utf8","replace")
+              key="Need a direct channel?"
+              pos=txt.find(key)
+              print("MPW_SUPPORT_RENDERER_SHA256="+hashlib.sha256(raw).hexdigest())
+              print("MPW_SUPPORT_RENDERER_BYTES="+str(len(raw)))
+              print("MPW_SUPPORT_RENDERER_UNIQUE_ANCHOR="+str(txt.count(key)))
+              print("MPW_SUPPORT_RENDERER_ANCHOR_SNIPPET="+json.dumps(txt[pos-350:pos+580] if pos>=0 else "NOT_FOUND",ensure_ascii=False))
+          design=home/"mojplaywin.com/design-preview-20261017"
+          matches=[];inspected=0
+          for candidate in design.rglob("*"):
+              if inspected>=400: break
+              if not candidate.is_file() or candidate.is_symlink() or candidate.stat().st_size>250000:
+                  continue
+              inspected+=1
+              if candidate.suffix not in (".php",".html",".htm",".json",".txt"):continue
+              data=candidate.read_bytes()
+              if b"Need a direct channel?" in data or b"Game and account support will expand" in data:
+                  matches.append({"path":str(candidate.relative_to(design)),
+                         "sha256":hashlib.sha256(data).hexdigest(),
+                         "size":len(data),"exact_anchor_count":data.count(b"Need a direct channel?")})
+          print("MPW_SUPPORT_TEMPLATE_MATCHES="+json.dumps(matches[:15]))
+          print("MPW_SUPPORT_TEMPLATE_FILES_INSPECTED="+str(inspected))
+          zm=home/"public_html/contact/index.html"
+          mp=home/"mojplaywin.com/design-preview-20261017/support.html"
+          for site,path in (("zomorod",zm),("mojplaywin",mp)):
+              print("PUBLIC_SUPPORT_CURRENT_SHA_"+site+"="+hashlib.sha256(path.read_bytes()).hexdigest())
+          text=src.read_text(errors="replace")
+          for keyword in ("__mpw_template_route","support.html","file_get_contents"):
+              hits=[m.start() for m in re.finditer(re.escape(keyword),text,flags=re.I)]
+              print("SHELL_SOURCE_KEYWORD_"+keyword.replace("_","")+"="+str(len(hits)))
+              print("SHELL_SOURCE_CONTEXT_"+keyword.replace("_","")+"="+json.dumps(
+                  [text[max(0,i-250):i+430] for i in hits[:3]],ensure_ascii=False))
+          source=home/"mojplaywin.com/design-preview-20261017/mpw-ten-editorials-20261018/pages/support.html"
+          print("MPW_ACTUAL_SUPPORT_PAGE_EXISTS="+str(source.is_file() and not source.is_symlink()))
+          if source.is_file() and not source.is_symlink():
+              data=source.read_bytes()
+              print("MPW_ACTUAL_SUPPORT_PAGE_SHA256="+hashlib.sha256(data).hexdigest())
+              print("MPW_ACTUAL_SUPPORT_PAGE_BYTES="+str(len(data)))
+              print("MPW_ACTUAL_SUPPORT_PAGE_ANCHOR_COUNT="+str(data.count(b"Need a direct channel?")))
+              print("MPW_ACTUAL_SUPPORT_PAGE_LINK_PRESENT="+str(b"/ask-master/index.php" in data))
+          source_text=src.read_text(errors="replace")
+          for line in source_text.splitlines():
+              if ("support" in line.lower() and len(line)<260 and
+                  ("=>" in line or "pages/" in line or "$allowed" in line)):
+                  print("MPW_TEMPLATE_SUPPORT_MAPPING="+json.dumps(line.strip()))
+          shell=src.read_text(errors="replace")
+          print("MPW_SHELL_END_SOURCE_SNIPPET="+json.dumps(shell[-4700:],ensure_ascii=False))
+          print("MPW_SHELL_ROUTE_MAP_LINES="+json.dumps([
+              line.strip() for line in shell.splitlines()
+              if any(token in line for token in ("function rewrite", "function transform", "$body=", "$response=", "echo $", "$slug ==="))
+              ][:35],ensure_ascii=False))
+          print("LOCAL_OLLAMA_BIN="+str(bool(shutil.which("ollama"))))
+          print("LOCAL_LLAMA_SERVER_BIN="+str(bool(shutil.which("llama-server"))))
+          print("LOCAL_LLAMA_PYTHON="+str(importlib.util.find_spec("llama_cpp") is not None))
+          print("CUSTOMER_TICKET_OPERATIONAL_INVENTORY=PASS")
+          PY
+      - name: Remove temporary SSH identity material
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/agents-ro-path"; then
+            d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+            if test -n "$d" && test -d "$d"; then
+              rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+              rmdir "$d" || true
+            fi
+            rm -f "$RUNNER_TEMP/agents-ro-path"
+          fi

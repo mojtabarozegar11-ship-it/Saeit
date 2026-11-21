@@ -1,0 +1,153 @@
+name: Safely upgrade two live site masters with customer ticket progress
+# Second attempt: offline PHP fixture correctly mirrors public index.php co-location.
+on:
+  push:
+    branches: [agents/two-sites-inquiries-orders-20261024]
+    paths: [.github/workflows/two-site-master-customer-status-upgrade-20261024.yml]
+permissions: {contents: read}
+concurrency:
+  group: two-site-master-customer-status-upgrade
+  cancel-in-progress: false
+jobs:
+  upgrade:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3,mbstring
+      - name: Verify the customer status module, tenant isolation, and pinned prior portal
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l scripts/site_master_customer_ticket_status_20261024.php
+          php -l scripts/site_master_customer_portal_20261024.php
+          php tests/test_master_customer_status_20261024.php
+          python3 -m py_compile scripts/upgrade_two_site_master_customer_status_20261024.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,io,json,os,tarfile
+          old=Path("tests/fixtures/site_master_customer_portal_pretracking_20261024.php").read_bytes()
+          current=Path("scripts/site_master_customer_portal_20261024.php").read_bytes()
+          status=Path("scripts/site_master_customer_ticket_status_20261024.php").read_bytes()
+          assert b'/ask-master/status.php' not in old
+          assert b'/ask-master/status.php' in current
+          meta={"scope":"master_customer_tracking_only","sites":["zomorod","mojplaywin"],
+                "previous_portal_sha256":hashlib.sha256(old).hexdigest(),
+                "sha256":{"portal.php":hashlib.sha256(current).hexdigest(),
+                          "status.php":hashlib.sha256(status).hexdigest()}}
+          files={"portal.php":current,"status.php":status,"manifest.json":json.dumps(meta,sort_keys=True).encode()}
+          path=Path(os.environ["RUNNER_TEMP"])/"two_site_master_ticket_status.tgz"
+          with tarfile.open(path,"w:gz") as archive:
+              for name,raw in files.items():
+                  member=tarfile.TarInfo(name);member.size=len(raw);member.mode=0o600
+                  archive.addfile(member,io.BytesIO(raw))
+          assert path.stat().st_size<100000
+          print("TWO_SITE_STATUS_SOURCE_MANIFEST=PASS")
+          PY
+      - name: Verify pinned VPS to cPanel SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/agents-ro.XXXXXX")"
+          echo "$d" > "$RUNNER_TEMP/agents-ro-path"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' \
+            "Host saeit-vps" "  HostName 178.239.147.150" "  User githubops" "  Port 22" \
+            "  IdentityFile $d/vps.key" "  UserKnownHostsFile $d/vps.known" \
+            "Host saeit-cpanel" "  HostName zohal.pws-dns.net" "  User zomorod2" "  Port 1396" \
+            "  IdentityFile $d/host.key" "  UserKnownHostsFile $d/host.known" "  ProxyJump saeit-vps" \
+            "Host *" "  StrictHostKeyChecking yes" "  IdentitiesOnly yes" "  BatchMode yes" \
+            "  ConnectTimeout 10" "  ConnectionAttempts 1" "  ForwardAgent no" \
+            > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo TWO_SITES_PINNED_SSH_RELAY=PASS
+          echo SITE_AGENT_RELAY_PINNED
+      - name: Apply precisely scoped reversible public ticket status upgrade
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          controller="$(base64 -w0 scripts/upgrade_two_site_master_customer_status_20261024.py)"
+          timeout 170s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$controller\"))' upgrade" < "$RUNNER_TEMP/two_site_master_ticket_status.tgz"
+      - name: Verify real public ticket lookup for both sites with exact disposable private test records
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 165s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import http.cookiejar,secrets,sqlite3,urllib.error,urllib.parse,urllib.request,re
+          from pathlib import Path
+          home=Path.home()
+          for site,host,private in (
+              ("zomorod","zomorodmelal.ir",home/".private/zomorod-business"),
+              ("mojplaywin","mojplaywin.com",home/".private_mojplaywin_main_agents")):
+              opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+              url="https://"+host+"/ask-master/status.php"
+              html=opener.open(url,timeout=22).read().decode("utf8")
+              match=re.search(r'name="csrf" value="([a-f0-9]{48})"',html)
+              assert match,"CUSTOMER_STATUS_CSRF_MISSING:"+site
+              ticket=secrets.token_hex(12)
+              email="support-status-qa@example.com"
+              dbfile=private/"master_customer_inbox.sqlite3"
+              try:
+                  with sqlite3.connect(dbfile,timeout=10) as db:
+                      db.execute("INSERT INTO customer_questions(id,tenant,kind,full_name,email,question,claimed_order_ref,initial_reply,processing_status) VALUES(?,?,?,?,?,?,?,?,?)",
+                          (ticket,site,"order_question","Status QA",email,"SYNTHETIC_STATUS_QA_20261024","QA-ONLY","Please check with the official store ledger.","needs_review"))
+                      db.commit()
+                  params={"csrf":match.group(1),"website":"","ticket":ticket,"email":email}
+                  data=urllib.parse.urlencode(params).encode()
+                  result=opener.open(urllib.request.Request(url,data=data,headers={
+                      "Content-Type":"application/x-www-form-urlencoded",
+                      "Origin":"https://"+host}),timeout=25).read().decode("utf8")
+                  assert ("درخواست" in result if site=="zomorod" else "Individual review required" in result),"STATUS_NOT_VIEWABLE:"+site
+                  print("LIVE_CUSTOMER_STATUS_WITH_TICKET_AND_EMAIL="+site+":PASS")
+                  html=opener.open(url,timeout=20).read().decode("utf8")
+                  match=re.search(r'name="csrf" value="([a-f0-9]{48})"',html)
+                  params={"csrf":match.group(1),"website":"","ticket":ticket,"email":"someone-else@example.com"}
+                  try:
+                      opener.open(urllib.request.Request(url,data=urllib.parse.urlencode(params).encode(),
+                        headers={"Content-Type":"application/x-www-form-urlencoded",
+                                 "Origin":"https://"+host}),timeout=20)
+                  except urllib.error.HTTPError as exc:
+                      assert exc.code==422,"EMAIL_MISMATCH_WRONG_CODE:"+site
+                  else: raise AssertionError("EMAIL_MISMATCH_EXPOSED_TICKET:"+site)
+                  print("LIVE_TICKET_STATUS_EMAIL_PRIVACY="+site+":PASS")
+              finally:
+                  with sqlite3.connect(dbfile,timeout=10) as db:
+                      db.execute("DELETE FROM customer_questions WHERE id=? AND email=? AND question=?",
+                                 (ticket,email,"SYNTHETIC_STATUS_QA_20261024"))
+                      db.commit()
+          print("BOTH_LIVE_SITE_MASTERS_CUSTOMER_PROGRESS=PASS")
+          PY
+      - name: Remove temporary SSH identity material
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/agents-ro-path"; then
+            d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+            if test -n "$d" && test -d "$d"; then
+              rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+              rmdir "$d" || true
+            fi
+            rm -f "$RUNNER_TEMP/agents-ro-path"
+          fi

@@ -1,0 +1,106 @@
+name: Prove scheduled site masters handle real private question queue
+on:
+  push:
+    branches: [agents/two-sites-inquiries-orders-20261024]
+    paths: [.github/workflows/two-site-master-customer-cron-proof-20261024.yml]
+permissions:
+  contents: read
+concurrency:
+  group: two-site-customer-cron-proof
+  cancel-in-progress: false
+jobs:
+  proof:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Verify pinned VPS to cPanel SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/agents-ro.XXXXXX")"
+          echo "$d" > "$RUNNER_TEMP/agents-ro-path"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' \
+            "Host saeit-vps" "  HostName 178.239.147.150" "  User githubops" "  Port 22" \
+            "  IdentityFile $d/vps.key" "  UserKnownHostsFile $d/vps.known" \
+            "Host saeit-cpanel" "  HostName zohal.pws-dns.net" "  User zomorod2" "  Port 1396" \
+            "  IdentityFile $d/host.key" "  UserKnownHostsFile $d/host.known" "  ProxyJump saeit-vps" \
+            "Host *" "  StrictHostKeyChecking yes" "  IdentitiesOnly yes" "  BatchMode yes" \
+            "  ConnectTimeout 10" "  ConnectionAttempts 1" "  ForwardAgent no" \
+            > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo TWO_SITES_PINNED_SSH_RELAY=PASS
+          echo SITE_AGENT_RELAY_PINNED
+      - name: Prove tenant Cron actually consumes queued customer requests autonomously
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 175s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import json,secrets,sqlite3,subprocess,time
+          from pathlib import Path
+          home=Path.home()
+          cases=(("zomorod",home/".private/zomorod-business/master_customer_inbox.sqlite3"),
+                 ("mojplaywin",home/".private_mojplaywin_main_agents/master_customer_inbox.sqlite3"))
+          tickets={}
+          try:
+              for site,path in cases:
+                  assert path.is_file() and not path.is_symlink()
+                  ticket="cron-proof-"+secrets.token_hex(8)
+                  tickets[site]=(path,ticket)
+                  with sqlite3.connect(path,timeout=12) as db:
+                      db.execute("INSERT INTO customer_questions(id,tenant,kind,full_name,email,question,claimed_order_ref,initial_reply,processing_status) VALUES(?,?,?,?,?,?,?,?,?)",
+                          (ticket,site,"question","Cron QA","qa-cron@example.com","QA-CRON-20261024 unknown topic please review","","Needs review","queued"))
+                      db.commit()
+              deadline=time.monotonic()+100
+              states={}
+              while time.monotonic()<deadline:
+                  states={}
+                  for site,(path,ticket) in tickets.items():
+                      with sqlite3.connect(path,timeout=8) as db:
+                          row=db.execute("SELECT processing_status,master_processed_utc FROM customer_questions WHERE id=? AND tenant=?",(ticket,site)).fetchone()
+                          states[site]=bool(row and row[0]=="needs_review" and row[1])
+                  if all(states.values()):
+                      break
+                  time.sleep(5)
+              assert all(states.values()),"AUTONOMOUS_CRON_DID_NOT_ACK_BOTH_CUSTOMER_QUEUES:"+json.dumps(states)
+              cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=12,check=True).stdout
+              for site,marker in (("zomorod","ZM_MASTER_CUSTOMER_INBOX_20261024"),
+                                  ("mojplaywin","MPW_MASTER_CUSTOMER_INBOX_20261024")):
+                  assert sum(marker in line for line in cron.splitlines() if not line.lstrip().startswith("#"))==1
+                  print("AUTONOMOUS_CUSTOMER_MASTER_CRON_PROCESSING="+site+":PASS")
+              print("BOTH_SITES_CUSTOMER_MASTER_AUTONOMOUS_REAL=PASS")
+          finally:
+              for site,(path,ticket) in tickets.items():
+                  with sqlite3.connect(path,timeout=12) as db:
+                      db.execute("DELETE FROM customer_questions WHERE id=? AND tenant=? AND email=? AND question=?",
+                         (ticket,site,"qa-cron@example.com","QA-CRON-20261024 unknown topic please review"))
+                      db.commit()
+          PY
+      - name: Remove temporary SSH identity material
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/agents-ro-path"; then
+            d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+            if test -n "$d" && test -d "$d"; then
+              rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+              rmdir "$d" || true
+            fi
+            rm -f "$RUNNER_TEMP/agents-ro-path"
+          fi
