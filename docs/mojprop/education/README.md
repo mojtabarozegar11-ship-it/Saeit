@@ -1,5 +1,7 @@
 # Moj Prop — Simulated Trading Education Library
 
+**[Read the free English risk-management and simulated-challenge articles on the official MOJ PROP website](https://mojplaywin.com/moj-prop/education/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_launch_20261121).** The live article hub covers position sizing, drawdown, a 60-day practice plan, profit consistency and the limits of simulated execution; each article links back to the current program rules and product conditions. Site publication does not establish Google indexing, paid enrolment or an actual reward payout.
+
 **Five free educational guides about simulated trading, evaluation risk, and secure crypto invoicing.** These materials explain concepts; they are not investment advice, broker services, promises of profits, or guarantees of passing a challenge.
 
 ## Start here
