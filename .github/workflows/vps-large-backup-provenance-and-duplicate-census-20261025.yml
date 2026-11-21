@@ -1,0 +1,131 @@
+name: VPS backup provenance, bytewise duplicates and open handles READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/vps-large-backup-provenance-and-duplicate-census-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Determine site backup owners, transfer DB duplicates, model duplicates and leaked file holders
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import collections,hashlib,json,os,re,stat,subprocess,time,shutil
+          home=Path('/home/githubops')
+          rt=home/'factory-runtime'
+          roots={
+            'mpw_offhost':home/'.private-mojplaywin-offhost-backups',
+            'mpw_independent':home/'.mpw-independent-backups',
+            'zomorod_offsite':home/'offsite-zomorod-20261018/archive',
+            'zomorod_gzip':home/'offsite-zomorod-20261018-gzip/archive',
+            'factory_incoming':home/'factory-transfer-incoming/private-db',
+          }
+          if os.geteuid()==0 or os.environ.get('USER')!='githubops':raise SystemExit('MUST_RUN_NONROOT')
+          def safe_name(x):
+              if '@' in x or any(k in x.lower() for k in ('secret','credential','private-key','token','ssh')):return '[restricted-name]'
+              return x if re.fullmatch(r'[A-Za-z0-9._ -]{1,90}',x) else '[opaque-filename]'
+          def structure(p):
+              if p.is_symlink() or not p.is_dir():raise SystemExit('EXPECTED_USER_ARCHIVE_UNSAFE')
+              top=[x for x in p.iterdir() if not x.is_symlink()]
+              sizes=collections.Counter();total=0;files=dirs=symlinks=0
+              large=[]
+              for base,children,names in os.walk(p,followlinks=False):
+                  dirs+=len(children)
+                  for item in children+names:
+                      if (Path(base)/item).is_symlink():symlinks+=1
+                  for name in names:
+                      x=Path(base)/name
+                      if x.is_symlink() or not x.is_file():continue
+                      st=x.stat()
+                      files+=1;total+=st.st_size
+                      sizes[x.suffix.lower() or '[none]']+=1
+                      if st.st_size>=40*2**20:
+                          large.append({'relative_basename':safe_name(x.name),'bytes':st.st_size,'age_days':round((time.time()-st.st_mtime)/86400,1)})
+              large.sort(key=lambda x:-x['bytes'])
+              return {'top_count':len(top),'top_types':[{'name':safe_name(x.name),'type':'dir' if x.is_dir() else 'file'} for x in sorted(top,key=lambda x:x.name)[:25]],
+                     'regular_file_bytes':total,'regular_files':files,'directories':dirs,'symlinks':symlinks,
+                     'extensions_top':sizes.most_common(10),'large_files_top':large[:15]}
+          structures={k:structure(p) for k,p in roots.items()}
+          def sha(p):
+              h=hashlib.sha256()
+              with p.open('rb') as f:
+                  for chunk in iter(lambda:f.read(2**20),b''):h.update(chunk)
+              return h.hexdigest()
+          # Identify exact, bytewise duplicate factory transfer databases before considering any removal.
+          incoming=roots['factory_incoming']
+          incoming_files=[p for p in incoming.iterdir() if p.is_file() and not p.is_symlink()]
+          db_local=[rt/'private/factory-fresh-isolated.sqlite3',rt/'private/factory-isolated.sqlite3']
+          db_pairs=[]
+          for src in incoming_files:
+              if src.stat().st_size<50*2**20:continue
+              for dst in db_local:
+                  if not dst.is_symlink() and dst.is_file() and src.stat().st_size==dst.stat().st_size:
+                      db_pairs.append({'incoming_name':safe_name(src.name),'live_name':dst.name,
+                                       'bytes':src.stat().st_size,'sha256_equal':sha(src)==sha(dst)})
+          models=[
+           rt/'operations/toolchain-source-39232784800-1/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf',
+           rt/'operations/build-toolchain/versions/f7b1913a9c01411393cf28316cd7bb34f8a7165f/models/coder.gguf'
+          ]
+          model_comparison={'both_exist':all(x.is_file() and not x.is_symlink() for x in models)}
+          if model_comparison['both_exist']:
+              model_comparison.update({'model_sizes':[p.stat().st_size for p in models],
+                                       'hashes_equal':sha(models[0])==sha(models[1])})
+          # Avoid exposing paths and command arguments of running agents.
+          ps=subprocess.run(['ps','-u','githubops','-o','args='],capture_output=True,text=True,timeout=15)
+          model_comparison['source_model_explicitly_referenced_by_process']=ps.returncode==0 and models[0].name in ps.stdout
+          model_comparison['installed_model_explicitly_referenced_by_process']=ps.returncode==0 and str(models[1]) in ps.stdout
+          print('VPS_BACKUP_PROVENANCE_PRE_LSOF='+json.dumps({'archives':structures,'factory_transfer_matching':db_pairs,'model_duplicate':model_comparison,'mutations':0},sort_keys=True),flush=True)
+          # Deleted-but-open file holders: show only sanitized basename/category, no actual arguments.
+          opened=[]
+          if shutil.which('lsof'):
+              cp=subprocess.run(['lsof','-nP','+L1','-u','githubops','-Fpcfnsit'],capture_output=True,text=True,timeout=35)
+              if cp.returncode in (0,1):
+                  current_process='unknown';current_pid='';entry={'inode':None,'size':0,'name':''}
+                  def append_current():
+                      if entry['size']>=30*2**20:
+                          n=entry['name']
+                          p=Path(n.replace(' (deleted)',''))
+                          try:label=str(p.relative_to(home)) if n.startswith('/') else '[nonabsolute]'
+                          except ValueError:label='[outside-user-home]'
+                          if any(t in label.lower() for t in ('secret','credential','ssh','token')):label='[sensitive-path]'
+                          opened.append({'process':current_process[:40],'pid':current_pid,'inode':entry['inode'],'bytes':entry['size'],'path_category':label[:130]})
+                  for line in cp.stdout.splitlines():
+                      if line.startswith('p'):
+                          append_current();current_pid=line[1:];current_process='unknown';entry={'inode':None,'size':0,'name':''}
+                      elif line.startswith('c'):current_process=line[1:]
+                      elif line.startswith('f'):
+                          append_current();entry={'inode':None,'size':0,'name':''}
+                      elif line.startswith('i'):entry['inode']=line[1:]
+                      elif line.startswith('s'):
+                          try:entry['size']=int(line[1:])
+                          except ValueError:pass
+                      elif line.startswith('n'):entry['name']=line[1:]
+                  append_current()
+          unique={}
+          for x in opened:
+              k=(x['pid'],x['inode'])
+              if k not in unique or unique[k]['bytes']<x['bytes']:unique[k]=x
+          print('VPS_BACKUP_PROVENANCE_DUPLICATE_OPENFD='+json.dumps({
+              'archives':structures,'factory_transfer_matching':db_pairs,'incoming_large_file_count':sum(x.stat().st_size>=50*2**20 for x in incoming_files),
+              'model_duplicate':model_comparison,'deleted_open_largest':sorted(unique.values(),key=lambda x:-x['bytes'])[:15],
+              'mutations':0,'read_only':True},sort_keys=True),flush=True)
+
+          PY
+          echo VPS_BACKUP_PROVENANCE_READONLY=PASS

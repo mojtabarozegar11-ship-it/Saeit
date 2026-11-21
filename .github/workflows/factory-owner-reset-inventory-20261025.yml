@@ -1,0 +1,238 @@
+name: Factory owner-authorized data reset forensic inventory READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/factory-owner-reset-inventory-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Read-only classify factory data versus engines, stores, and customer records
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import collections, hashlib, json, os, re, shutil, subprocess
+          home=Path('/home/githubops')
+          runtime=home/'factory-runtime'
+          private=runtime/'private/autonomous-product-cycle'
+          area=private/'production-instructions'
+          ops=runtime/'operations'
+          backups=ops/'backups'
+          for p in (home,runtime,private,area,ops,backups,area/'orders'):
+              if p.is_symlink() or not p.is_dir():
+                  raise SystemExit('REQUIRED_FACTORY_ROOT_NOT_SAFE:'+p.name)
+          if os.geteuid()==0 or os.getenv('USER')!='githubops':
+              raise SystemExit('MUST_BE_NONROOT_FACTORY_ACCOUNT')
+          order_dir=area/'orders'
+          orders=sorted(order_dir.iterdir())
+          dig=hashlib.sha256()
+          status=collections.Counter()
+          origin=collections.Counter()
+          protected=collections.Counter()
+          invalid=[]
+          for p in orders:
+              if p.is_symlink() or not p.is_file() or not re.fullmatch(r'WO-[0-9]{8}\.json',p.name):
+                  invalid.append('unexpected_filename_or_filetype')
+                  continue
+              b=p.read_bytes()
+              dig.update(p.name.encode()+hashlib.sha256(b).digest())
+              try: x=json.loads(b)
+              except Exception: invalid.append('bad_json'); continue
+              if not isinstance(x,dict) or x.get('id')!=p.stem:
+                  invalid.append('bad_order_identity');continue
+              status[str(x.get('status','MISSING'))]+=1
+              origin[str(x.get('origin','MISSING'))]+=1
+              for key in ('requires_customer_order','manufacturing_qa_passed','warehouse_goods_created','technical_product_release','publication_approved','public_distribution_allowed'):
+                  if x.get(key) is True: protected[key]+=1
+          families=[
+             'production-instructions','production-order-inputs','production-state.json',
+             'production-warehouse','product-lifecycle','customer-packs',
+             'customer-extracted-acceptance','digital-products',
+             'build-50','quality-excellence','quality-return-candidates',
+             'research-dossiers','research-rework','research-triage',
+             'native-candidate-evidence','generated-product-recipes',
+             'generated-source-revisions','design-intake','design-state',
+             'engineering-intake','engineering-gaps','owner500-autonomous-production',
+             'product-planning','product-commercial-pilots','qa-rework',
+             'f41-blockchain-token','f41-multiproduct','f41-solidity-finality',
+             'tool-router','production-toolkit','production-toolkit-3000',
+             'production-family-management','code-self-upgrade','activation40',
+             'commercial40','merchant-rails'
+          ]
+          present=[private/f for f in families if (private/f).exists()]
+          if any(p.is_symlink() for p in present):
+              raise SystemExit('SYMLINK_TOP_LEVEL_FAMILY')
+          du=subprocess.run(['du','-sx','-B1','--']+[str(p) for p in present],
+                            capture_output=True,text=True,timeout=210)
+          if du.returncode!=0:raise SystemExit('DU_INVENTORY_FAILED')
+          sizes={}
+          for line in du.stdout.splitlines():
+              n,p=line.split('\t',1)
+              sizes[Path(p).name]=int(n)
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=8)
+          if cron.returncode:raise SystemExit('CRON_NOT_READABLE')
+          active=[x for x in cron.stdout.splitlines() if x.strip() and not x.lstrip().startswith('#')]
+          classified=collections.Counter()
+          for line in active:
+              if 'SAEIT_' in line or 'factory-runtime' in line:
+                  classified['factory_marked']+=1
+              else:classified['nonfactory_or_unmarked']+=1
+          ps=subprocess.run(['ps','-u','githubops','-o','args='],capture_output=True,text=True,timeout=12)
+          if ps.returncode:raise SystemExit('PROCESS_LIST_UNAVAILABLE')
+          processes=[line for line in ps.stdout.splitlines() if 'factory-runtime/' in line]
+          timers=subprocess.run(['systemctl','--user','list-timers','--all','--no-legend','--no-pager'],capture_output=True,text=True,timeout=12)
+          back_children=list(backups.iterdir())
+          back_kind=collections.Counter()
+          for p in back_children:
+              if p.is_symlink():back_kind['symlink']+=1
+              elif p.is_dir():back_kind['directory']+=1
+              elif p.is_file():back_kind['file']+=1
+              else:back_kind['special']+=1
+          import datetime as dt
+          cron_markers=[]
+          for line in active:
+              m=re.findall(r'SAEIT_[A-Z0-9_]+|MPW_[A-Z0-9_]+|ASTRA_[A-Z0-9_]+',line)
+              cron_markers.append(m[-1] if m else 'UNMARKED_OR_OTHER')
+          process_scripts=collections.Counter()
+          for line in processes:
+              names=re.findall(r'(?:factory|mpw|saeit|vps)_[a-z0-9_]+\.py',line)
+              process_scripts[names[-1] if names else 'UNKNOWN_FACTORY_PATH_PROCESS']+=1
+          backup_classes=collections.Counter()
+          backup_recent=collections.Counter()
+          for p in back_children:
+              name=p.name
+              if name.startswith('native-master-'):family='native-master'
+              elif 'factory' in name:family='other-factory-marked'
+              elif 'rollback' in name:family='rollback'
+              elif 'stage' in name:family='stage'
+              elif 'qc' in name or 'quality' in name:family='quality'
+              else:family='unclassified'
+              backup_classes[family]+=1
+              if p.stat().st_mtime > (dt.datetime.now(dt.timezone.utc).timestamp()-86400):
+                  backup_recent[family]+=1
+          # Aggregate metadata only; never print order bodies or customer fields.
+          suspect_fields=collections.Counter()
+          origin_suspect=collections.Counter()
+          for p in orders:
+              x=json.loads(p.read_text())
+              keys=set()
+              def collect_keys(obj,depth=0):
+                  if depth>5:return
+                  if isinstance(obj,dict):
+                      for k,v in obj.items():
+                          keys.add(str(k))
+                          collect_keys(v,depth+1)
+                  elif isinstance(obj,list):
+                      for v in obj[:20]:collect_keys(v,depth+1)
+              collect_keys(x)
+              found=sorted(k for k in keys if re.search(r'customer|buyer|payment|invoice|billing|checkout|purchas|email|contact|wallet|transaction|shipping',k,re.I))
+              for k in found:suspect_fields[k]+=1
+              if found: origin_suspect[str(x.get('origin','MISSING'))]+=1
+          print('OWNER_RESET_ORDER_FIELD_KEYS='+json.dumps({'sensitive_key_counts':dict(suspect_fields),'orders_with_sensitive_keys_by_origin':dict(origin_suspect),'mutations':0},sort_keys=True))
+          b_du=subprocess.run(['du','-sx','-B1','--']+[str(p) for p in back_children if not p.is_symlink()],capture_output=True,text=True,timeout=220)
+          if b_du.returncode:raise SystemExit('BACKUP_DU_FAILURE')
+          b_sizes={}
+          for line in b_du.stdout.splitlines():
+              sz,pth=line.split(None,1)
+              b_sizes[Path(pth).name]=int(sz)
+          print('OWNER_RESET_BACKUP_TOP='+json.dumps({'largest':sorted(b_sizes.items(),key=lambda x:-x[1])[:35], 'sum_bytes':sum(b_sizes.values()), 'mutations':0},sort_keys=True))
+          # Schema-only SQLite census: never emit table contents or customer values.
+          import sqlite3
+          db_rows=[]
+          samples=[runtime/'private/factory-isolated.sqlite3',runtime/'private/factory-fresh-isolated.sqlite3']
+          samples.extend(backups/n for n in ['master-before-20261024T000721Z.sqlite3','master-before-20261023T181806Z.sqlite3','factory-before-owner-20261014T065724Z.sqlite3'])
+          for p in samples:
+              if p.is_symlink() or not p.is_file():raise SystemExit('EXPECTED_DATABASE_NOT_REGULAR')
+              try:
+                  conn=sqlite3.connect('file:'+str(p)+'?mode=ro&immutable=1',uri=True,timeout=5)
+                  names=[x[0] for x in conn.execute("select name from sqlite_master where type='table' order by name")]
+                  conn.close()
+                  db_rows.append({'name':p.name,'tables':names[:110],'table_count':len(names),'truncated':len(names)>110})
+              except sqlite3.Error as exc:db_rows.append({'name':p.name,'schema_read_error':type(exc).__name__})
+          print('OWNER_RESET_SQLITE_SCHEMAS='+json.dumps(db_rows,sort_keys=True))
+          cron_scripts=[]
+          for line in active:
+              py=re.findall(r'[a-z0-9_-]+\\.py',line,re.I)
+              cron_scripts.append(py[-1] if py else 'NO_PY_SCRIPT')
+          # Count protected business entities in live and historical factory DBs; never inspect row values.
+          sensitive_tables=('core_order','core_orderitem','core_paymentintent','core_paymentwebhookevent','core_walletconnection','core_ledgerentry','core_companyinquiry','core_chatmessage','core_cryptopaymentintent','core_product','core_factoryartifact','core_factoryrun','core_factoryevidence')
+          db_extra=[backups/'native-master-20261022T100951Z-2216076/sqlite-before.sqlite3',backups/'f41-master-20261022T101121Z-2216944/sqlite-before.sqlite3']
+          table_counts=[]
+          for p in samples+db_extra:
+              if p.is_symlink() or not p.is_file():raise SystemExit('DB_COUNT_PATH_NOT_REGULAR')
+              cc=sqlite3.connect('file:'+str(p)+'?mode=ro&immutable=1',uri=True,timeout=8)
+              have=set(x[0] for x in cc.execute("select name from sqlite_master where type='table'"))
+              rows={}
+              for tbl in sensitive_tables:
+                  if tbl in have:rows[tbl]=cc.execute('select count(*) from "'+tbl+'"').fetchone()[0]
+              cc.close()
+              table_counts.append({'name':p.parent.name+'/'+p.name if p.parent!=backups and p.parent!=runtime/'private' else p.name,'row_counts':rows})
+          print('OWNER_RESET_PROTECTED_DATABASE_COUNTS='+json.dumps(table_counts,sort_keys=True))
+          print('OWNER_RESET_SCHEDULER_SCRIPT_BASENAMES='+json.dumps(cron_scripts))
+          backup_folder_summaries=[]
+          for name in ['native-master-20261022T100951Z-2216076','f41-master-20261022T101121Z-2216944']:
+              p=backups/name
+              if p.is_symlink() or not p.is_dir():continue
+              backup_folder_summaries.append({'name':name,'top_child_names':sorted(x.name for x in p.iterdir())[:70]})
+          print('OWNER_RESET_BACKUP_DIR_SHAPE='+json.dumps(backup_folder_summaries,sort_keys=True))
+          print('OWNER_RESET_DEPENDENCY_DETAIL='+json.dumps({
+             'cron_markers':cron_markers,
+             'factory_process_script_classes':dict(process_scripts),
+             'backup_name_classes':dict(backup_classes),
+             'backup_modified_within_24h':dict(backup_recent),
+             'no_mutations':True
+          },sort_keys=True))
+          def tree_sizes(folder):
+              if folder.is_symlink() or not folder.is_dir():raise SystemExit('UNSAFE_RUNTIME_ROOT')
+              children=[p for p in folder.iterdir() if not p.is_symlink()]
+              if len(children)>2500:raise SystemExit('EXCESSIVE_RUNTIME_ROOT_CHILDREN')
+              cmd=subprocess.run(['du','-sx','-B1','--']+[str(p) for p in children],
+                                 capture_output=True,text=True,timeout=170)
+              if cmd.returncode:raise SystemExit('RUNTIME_DU_FAILURE')
+              sizes={}
+              for x in cmd.stdout.splitlines():
+                  b,n=x.split('\t',1)
+                  sizes[Path(n).name]=int(b)
+              return sorted(sizes.items(),key=lambda x:-x[1])[:35]
+          sys_timers=subprocess.run(['systemctl','list-timers','--all','--no-legend','--no-pager'],capture_output=True,text=True,timeout=15)
+          print('OWNER_RESET_RUNTIME_TREES='+json.dumps({
+             'private_top':tree_sizes(runtime/'private'),
+             'operations_top':tree_sizes(ops),
+             'runtime_top':tree_sizes(runtime),
+             'system_timer_scan_available':sys_timers.returncode==0,
+             'system_timer_factory_mentions':sum('factory' in x.lower() or 'saeit' in x.lower() for x in sys_timers.stdout.splitlines()) if sys_timers.returncode==0 else None,
+             'mutations':0
+          },sort_keys=True))
+          print('OWNER_RESET_FORENSIC_READ_ONLY='+json.dumps({
+             'order_files':len(orders),'order_sha256':dig.hexdigest(),
+             'order_statuses':dict(status),'order_origins':origin.most_common(15),
+             'protected_order_flags':dict(protected),'invalid_order_entries':dict(collections.Counter(invalid)),
+             'data_family_sizes':sizes,'private_root_bytes':sum(sizes.values()),
+             'operation_worker_files':len([p for p in (ops/'production-instructions').iterdir() if p.is_file()]) if (ops/'production-instructions').is_dir() else None,
+             'active_cron':len(active),'cron_classes':dict(classified),
+             'factory_path_process_lines':len(processes),
+             'user_timer_inventory_available':timers.returncode==0,
+             'user_timer_count':len(timers.stdout.splitlines()) if timers.returncode==0 else None,
+             'backup_entries':len(back_children),'backup_types':dict(back_kind),
+             'vps_free_gib':round(shutil.disk_usage(private).free/2**30,3),
+             'mutations':0,'customer_data_excluded':True,
+             'site_paths_examined_for_deletion':False
+          },sort_keys=True))
+          PY
+          echo FACTORY_OWNER_RESET_INVENTORY_ONLY=PASS

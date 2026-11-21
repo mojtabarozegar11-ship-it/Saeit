@@ -1,0 +1,72 @@
+name: Factory owner reset POSTDELETE health and reaccumulation READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/factory-owner-purge-postcheck-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Verify no regenerated internal WOs, clean customer isolation, space and core code
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import collections,json,os,re,shutil,subprocess
+          runtime=Path('/home/githubops/factory-runtime')
+          root=runtime/'private/autonomous-product-cycle'
+          orders=root/'production-instructions/orders'
+          records=root/'product-lifecycle/records'
+          backups=runtime/'operations/backups'
+          for p in (runtime,root,orders,records,backups,runtime/'django-app/core'):
+              if p.is_symlink() or not p.is_dir():raise SystemExit('POSTDELETE_PROTECTED_ROOT_MISSING')
+          order_list=sorted(orders.iterdir())
+          orders_by_origin=collections.Counter()
+          unsafe=0
+          for p in order_list:
+              if p.is_symlink() or not p.is_file() or not re.fullmatch(r'WO-[0-9]{8}\.json',p.name):
+                  unsafe+=1;continue
+              x=json.loads(p.read_text())
+              orders_by_origin[str(x.get('origin'))]+=1
+          record_list=[p for p in records.iterdir() if p.name.startswith('WO-')]
+          marker_orders=runtime/'operations/.owner-orphan-workorder-purge-20261025.done'
+          marker_backups=backups/'.owner-factory-historical-backups-deleted-20261025.done'
+          if not marker_orders.is_file() or not marker_backups.is_file():
+              raise SystemExit('OWNER_PURGE_SUCCESS_MARKERS_NOT_FOUND')
+          mk_o=json.loads(marker_orders.read_text())
+          mk_b=json.loads(marker_backups.read_text())
+          chrono=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=12)
+          if chrono.returncode:raise SystemExit('ACTIVE_CRON_UNREADABLE')
+          active=sum(1 for s in chrono.stdout.splitlines() if s.strip() and not s.lstrip().startswith('#'))
+          back_entries=[p for p in backups.iterdir() if not p.name.startswith('.owner-')]
+          print('OWNER_FACTORY_POSTDELETE_VERIFICATION='+json.dumps({
+              'orders_now':len(order_list),'orders_by_origin':dict(orders_by_origin),
+              'lifecycle_workorder_records_now':len(record_list),
+              'order_lifecycle_file_name_sets_equal':set(p.name for p in order_list)==set(p.name for p in record_list),
+              'order_file_unsafe_entries':unsafe,'customer_packs_preserved':(root/'customer-packs').is_dir(),
+              'warehouse_preserved':(root/'production-warehouse').is_dir(),
+              'live_engine_code_preserved':(runtime/'django-app/core').is_dir(),
+              'factory_operations_worker_dir_preserved':(runtime/'operations/production-instructions').is_dir(),
+              'old_purge_recorded_orders':mk_o.get('removed_internal_order_records'),
+              'old_purge_recorded_backup_count':mk_b.get('removed_factory_backup_snapshots'),
+              'vps_free_gib':round(shutil.disk_usage(root).free/2**30,3),
+              'remaining_backup_top_level_entries':len(back_entries),
+              'active_cron_lines':active,'mutations':0},sort_keys=True),flush=True)
+
+          PY
+          echo OWNER_FACTORY_POSTDELETE_READONLY=PASS

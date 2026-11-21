@@ -1,0 +1,70 @@
+name: VPS historical factory transfer databases retention triage READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/vps-old-transfer-db-personal-data-triage-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Classify historical SQLite transfer content and live references without reading rows
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import json,os,sqlite3,subprocess,re,shutil,stat,time
+          home=Path('/home/githubops')
+          folder=home/'factory-transfer-incoming'/'private-db'
+          names=['factory-fresh-20261010.sqlite3','factory-migration-snapshot.sqlite3']
+          if os.geteuid()==0 or os.environ.get('USER')!='githubops' or folder.is_symlink() or not folder.is_dir():
+              raise SystemExit('UNSAFE_TRANSFER_DB_ROOT')
+          files=list(folder.iterdir())
+          if len(files)!=2 or sorted(x.name for x in files)!=sorted(names) or any(x.is_symlink() or not x.is_file() for x in files):
+              raise SystemExit('UNEXPECTED_TRANSFER_DB_FILES')
+          report=[]
+          for p in files:
+              item={'name':p.name,'size':p.stat().st_size,'age_days':round((time.time()-p.stat().st_mtime)/86400,1)}
+              c=sqlite3.connect('file:'+str(p)+'?mode=ro&immutable=1',uri=True,timeout=10)
+              try:
+                  c.execute('PRAGMA query_only=ON')
+                  tbl=sorted(x[0] for x in c.execute("SELECT name FROM sqlite_master WHERE type='table'"))
+                  item['total_tables']=len(tbl)
+                  item['table_names']=tbl[:100]
+                  flagged=[]
+                  for name in tbl:
+                      if re.search('order|customer|buyer|payment|invoice|contact|lead|client|transact|email|sale|purchase|billing|subscription|user|account',name,re.I):
+                          quoted='"'+name.replace('"','""')+'"'
+                          try:n=int(c.execute('SELECT COUNT(*) FROM '+quoted).fetchone()[0])
+                          except Exception:n=None
+                          flagged.append({'table':name[:100],'rows':n})
+                  item['customer_or_order_related_table_counts']=flagged[:100]
+              finally:c.close()
+              report.append(item)
+          refs=[]
+          if shutil.which('rg'):
+              roots=[home/'factory-runtime'/'operations',home/'factory-runtime'/'django-app']
+              p=subprocess.run(['rg','-l','--no-messages','-g','*.py','-g','*.sh','-g','*.json','factory-fresh-20261010.sqlite3|factory-migration-snapshot.sqlite3']+[str(x) for x in roots],capture_output=True,text=True,timeout=90)
+              refs=[x[:180] for x in p.stdout.splitlines()[:30]] if p.returncode in (0,1) else ['scan-error']
+          open_check={'available':False}
+          if shutil.which('lsof'):
+              p=subprocess.run(['lsof','-nP','-Fpcfn','--']+[str(folder/x) for x in names],capture_output=True,text=True,timeout=30)
+              open_check={'available':p.returncode in (0,1),'open_match':bool(p.stdout.strip())}
+          print('VPS_OLD_TRANSFER_DB_RETENTION_TRIAGE='+json.dumps({'databases':report,'code_reference_files':refs,'open_handle_check':open_check,'mutations':0,'read_only':True},sort_keys=True),flush=True)
+
+          PY
+          echo VPS_OLD_TRANSFER_DB_READONLY=PASS
