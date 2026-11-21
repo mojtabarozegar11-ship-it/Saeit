@@ -19,6 +19,7 @@ SPEC.loader.exec_module(census)
     ("0\n", "0"),
     ("10000\n", "10000"),
     ("max\n", "max"),
+    ("max 100000\n", "max 100000"),
     ("50000 100000\n", "50000 100000"),
     ("\n", None),
     ("no-value", None),
