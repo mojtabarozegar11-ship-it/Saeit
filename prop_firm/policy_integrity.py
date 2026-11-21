@@ -9,6 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from .rules import LEVELS, POLICY
 from .plans import CHALLENGE_PLANS, ALL_PLANS_SELLABLE
+from .simulation_policy import SIMULATION_POLICY
 
 
 CANONICAL_CONTRACT_ID = "2026-11-21/simulation-v2"
@@ -54,6 +55,15 @@ def policy_drift_defects() -> tuple[str, ...]:
         "immutable_new_contract_v2": POLICY.version == CANONICAL_CONTRACT_ID,
         "simulated_only": POLICY.account_mode == "simulated" and POLICY.real_orders_enabled is False,
         "no_virtual_principal_withdrawal": POLICY.virtual_principal_withdrawable is False,
+        "owner_approved_profit_request_cadence": (
+            SIMULATION_POLICY.first_profit_request_after_days == 14
+            and SIMULATION_POLICY.subsequent_profit_request_interval_days == 14
+            and SIMULATION_POLICY.minimum_profit_request_usd == Decimal("10")
+        ),
+        "owner_funds_fee_and_first_successful_fee_refund": (
+            SIMULATION_POLICY.company_pays_payout_network_fees is True
+            and SIMULATION_POLICY.refund_initial_entry_on_first_successful_profit_payout is True
+        ),
         "payments_and_orders_not_enabled": (
             POLICY.real_orders_enabled is False
             and POLICY.trx_checkout_enabled is False
@@ -79,7 +89,7 @@ def policy_integrity_report() -> dict:
         "canonical_contract_id": CANONICAL_CONTRACT_ID,
         "policy_source": "prop_firm.rules.POLICY",
         "plan_source": "prop_firm.plans.CHALLENGE_PLANS",
-        "checked_invariants": 21,
+        "checked_invariants": 23,
         "defects": list(defects),
         "source_policy_consistent": not defects,
         "external_funding_or_broker_verified": False,
