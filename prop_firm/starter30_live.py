@@ -47,7 +47,7 @@ from services.mpw_trx_walletless_core import PaymentHold
 from services.mojtaba_tron_owner_receiver import approved_recipient
 
 NETWORK = "tron-mainnet"
-TERMS_REF = "starter30-simulation-v1"
+TERMS_REF = SIMULATION_POLICY.contract_version  # Invoice terms bind immutable v2 policy.
 _RELEASE_FLAGS = (
     "MPW_MOJPROP_PRODUCTION_RELEASE_APPROVED",
     "MPW_MOJPROP_TRX_RELEASE_ENABLED",
@@ -326,6 +326,16 @@ def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
             PropSimulationPayment.Status.EXPIRED,
         ):
             raise Starter30PaymentRejected("invoice is not awaiting payment")
+        # Never silently reinterpret a previously issued v1 invoice under
+        # newly approved v2 risk/payout terms. Old invoices require an
+        # explicitly version-aware review and support path.
+        if (
+            payment.invoice_owner.contract_version != TERMS_REF
+            or payment.terms_acceptance_ref != TERMS_REF
+        ):
+            raise Starter30PaymentRejected(
+                "invoice contract version is not supported for new settlement"
+            )
         # A wrong/out-of-window txid can expire an invoice even though a genuine
         # in-window transfer may still be awaiting independent confirmation.
         # Accept only the original invoice-window proof, never a late transfer.
