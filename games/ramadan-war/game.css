@@ -13,6 +13,7 @@
 #reticle.hit i:before,#reticle.hit i:after,#reticle.hit:before,#reticle.hit:after{background:#ff6e5b;box-shadow:0 0 7px #ff4738}#reticle.headshot i:before,#reticle.headshot i:after,#reticle.headshot:before,#reticle.headshot:after{background:#ffd16a;box-shadow:0 0 10px #ffb52e}#reticle.headshot b{background:#fff0ac;box-shadow:0 0 9px #ffc44d}.arsenal{max-width:calc(100% - 18px);justify-content:center;flex-wrap:wrap;gap:5px 10px;white-space:normal}.arsenal span{white-space:nowrap}
 @media(min-width:700px){#game{max-width:none;left:0;transform:none;box-shadow:none}}
 @media(orientation:landscape) and (max-height:600px){.arsenal{top:60px;max-width:70%;font-size:9px;padding:4px 8px}.move-zone #stick{width:82px;height:82px}.move-zone #knob{left:23px;top:23px;width:34px;height:34px}.button.fire{height:62px;min-width:72px}.aux-actions .button{height:41px}.special{bottom:calc(env(safe-area-inset-bottom) + 96px)}#game.playing #weaponArt{max-height:62vh;width:min(60vw,650px)}.vitals{width:min(38vw,220px)}}
+ .sound-toggle{position:absolute;left:104px;top:calc(env(safe-area-inset-top) + 9px);width:38px;height:38px;font-size:20px;z-index:6;pointer-events:auto}
 .fullscreen{position:absolute;left:58px;top:calc(env(safe-area-inset-top) + 9px);width:38px;height:38px;font-size:21px;line-height:1;z-index:6;pointer-events:auto}
 @media(orientation:landscape) and (max-height:600px){#game.playing.scope-mode #missionBackdrop{background-size:cover}}
 
