@@ -1,0 +1,318 @@
+{
+  "schema": "saeit.brand-24-coins.registry.v1",
+  "created_utc": "2026-11-13",
+  "stage": "OFFLINE_PROPOSAL_NOT_ISSUED",
+  "owner_scope": "Zomorod Melal and MojPlayWin",
+  "standard": "TRC-20",
+  "prototype_network": "shasta",
+  "mainnet_network": null,
+  "decimals": 18,
+  "deployment": {
+    "mainnet_enabled": false,
+    "testnet_broadcast_enabled": false,
+    "public_sale_enabled": false,
+    "liquidity_enabled": false,
+    "payments_performed": false,
+    "revenue_verified": false
+  },
+  "release_gates": [
+    "owner_approves_network_and_fees",
+    "name_and_trademark_review",
+    "independent_security_review",
+    "legal_and_tax_review",
+    "tokenomics_and_supply_approval",
+    "ownership_and_wallet_verification",
+    "audited_compilation",
+    "deployment_and_chain_receipt_verification"
+  ],
+  "brands": [
+    {
+      "brand_slug": "saman",
+      "brand_fa": "سمن",
+      "tokens": [
+        {
+          "role": "service_learning",
+          "name": "Saman Study Coin",
+          "symbol": "ZMSMST",
+          "proposed_supply_tokens": "1000000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        },
+        {
+          "role": "community_game",
+          "name": "Saman Play Coin",
+          "symbol": "ZMSMPL",
+          "proposed_supply_tokens": "100000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        }
+      ]
+    },
+    {
+      "brand_slug": "zahra",
+      "brand_fa": "زهرا",
+      "tokens": [
+        {
+          "role": "service_learning",
+          "name": "Zahra Insight Coin",
+          "symbol": "ZMZHIN",
+          "proposed_supply_tokens": "1000000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        },
+        {
+          "role": "community_game",
+          "name": "Zahra Bloom Coin",
+          "symbol": "ZMZHBL",
+          "proposed_supply_tokens": "100000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        }
+      ]
+    },
+    {
+      "brand_slug": "zhila",
+      "brand_fa": "ژیلا",
+      "tokens": [
+        {
+          "role": "service_learning",
+          "name": "Zhila Logic Coin",
+          "symbol": "ZMZLLO",
+          "proposed_supply_tokens": "1000000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        },
+        {
+          "role": "community_game",
+          "name": "Zhila Nova Coin",
+          "symbol": "ZMZLNV",
+          "proposed_supply_tokens": "100000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        }
+      ]
+    },
+    {
+      "brand_slug": "marzieh",
+      "brand_fa": "مرضیه",
+      "tokens": [
+        {
+          "role": "service_learning",
+          "name": "Marzieh Terra Coin",
+          "symbol": "ZMMZTR",
+          "proposed_supply_tokens": "1000000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        },
+        {
+          "role": "community_game",
+          "name": "Marzieh Spark Coin",
+          "symbol": "ZMMZSP",
+          "proposed_supply_tokens": "100000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        }
+      ]
+    },
+    {
+      "brand_slug": "maryam",
+      "brand_fa": "مریم",
+      "tokens": [
+        {
+          "role": "service_learning",
+          "name": "Maryam Atlas Coin",
+          "symbol": "ZMMYAT",
+          "proposed_supply_tokens": "1000000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        },
+        {
+          "role": "community_game",
+          "name": "Maryam Muse Coin",
+          "symbol": "ZMMYMU",
+          "proposed_supply_tokens": "100000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        }
+      ]
+    },
+    {
+      "brand_slug": "marjan",
+      "brand_fa": "مرجان",
+      "tokens": [
+        {
+          "role": "service_learning",
+          "name": "Marjan Pearl Coin",
+          "symbol": "ZMMJPE",
+          "proposed_supply_tokens": "1000000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        },
+        {
+          "role": "community_game",
+          "name": "Marjan Tide Coin",
+          "symbol": "ZMMJTI",
+          "proposed_supply_tokens": "100000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        }
+      ]
+    },
+    {
+      "brand_slug": "mohammad",
+      "brand_fa": "محمد",
+      "tokens": [
+        {
+          "role": "service_learning",
+          "name": "Mohammad Build Coin",
+          "symbol": "ZMMHBU",
+          "proposed_supply_tokens": "1000000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        },
+        {
+          "role": "community_game",
+          "name": "Mohammad Forge Coin",
+          "symbol": "ZMMHFO",
+          "proposed_supply_tokens": "100000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        }
+      ]
+    },
+    {
+      "brand_slug": "mostafa",
+      "brand_fa": "مصطفی",
+      "tokens": [
+        {
+          "role": "service_learning",
+          "name": "Mostafa Nexus Coin",
+          "symbol": "ZMMSNE",
+          "proposed_supply_tokens": "1000000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        },
+        {
+          "role": "community_game",
+          "name": "Mostafa Pulse Coin",
+          "symbol": "ZMMSPU",
+          "proposed_supply_tokens": "100000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        }
+      ]
+    },
+    {
+      "brand_slug": "farnaz",
+      "brand_fa": "فرناز",
+      "tokens": [
+        {
+          "role": "service_learning",
+          "name": "Farnaz Art Coin",
+          "symbol": "ZMFNAR",
+          "proposed_supply_tokens": "1000000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        },
+        {
+          "role": "community_game",
+          "name": "Farnaz Bloom Coin",
+          "symbol": "ZMFNBL",
+          "proposed_supply_tokens": "100000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        }
+      ]
+    },
+    {
+      "brand_slug": "faremah",
+      "brand_fa": "فریماه",
+      "tokens": [
+        {
+          "role": "service_learning",
+          "name": "Faremah Care Coin",
+          "symbol": "ZMFMCA",
+          "proposed_supply_tokens": "1000000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        },
+        {
+          "role": "community_game",
+          "name": "Faremah Glow Coin",
+          "symbol": "ZMFMGL",
+          "proposed_supply_tokens": "100000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        }
+      ]
+    },
+    {
+      "brand_slug": "taniya",
+      "brand_fa": "تانیا",
+      "tokens": [
+        {
+          "role": "service_learning",
+          "name": "Taniya Cake Coin",
+          "symbol": "ZMTNCA",
+          "proposed_supply_tokens": "1000000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        },
+        {
+          "role": "community_game",
+          "name": "Taniya Quest Coin",
+          "symbol": "ZMTNQU",
+          "proposed_supply_tokens": "100000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        }
+      ]
+    },
+    {
+      "brand_slug": "raham",
+      "brand_fa": "رهام",
+      "tokens": [
+        {
+          "role": "service_learning",
+          "name": "Raham Jungle Coin",
+          "symbol": "ZMRHJU",
+          "proposed_supply_tokens": "1000000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        },
+        {
+          "role": "community_game",
+          "name": "Raham Runner Coin",
+          "symbol": "ZMRHRU",
+          "proposed_supply_tokens": "100000000",
+          "contract_address": null,
+          "deployment_txid": null,
+          "status": "offline_spec_only"
+        }
+      ]
+    }
+  ]
+}
