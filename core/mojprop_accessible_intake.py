@@ -69,14 +69,15 @@ def _safe_service_prefill(request, *, allow_starter30_post_retry=False):
             # not a SKU-authenticated paid order or funded enrollment.
             return service, (
                 "Prelaunch interest only: MOJ-PROP-01 (two-stage proprietary "
-                "funded-trading CHALLENGE; proposed 30 native TRX fee is "
+                "SIMULATED trading CHALLENGE; proposed 30 native TRX fee is "
                 "NOT payable at this time).\n"
                 "Please send legal eligibility, country availability, "
                 "risk rules, KYC and refund terms for MOJ-PROP-01. "
-                "I understand the evaluation is simulated and an actual "
-                "company-funded initial USD 100 account after passing "
-                "requires independent capital, broker agreement and "
-                "legal approval; no payment, account or return is promised."
+                "I understand the challenge and post-pass funded stage are "
+                "both simulated with no real funded trading account. "
+                "Selection for a separate paid company trading role requires "
+                "independent written eligibility and a separate agreement; "
+                "no payment, account or return is promised."
             )
         if packages != ["starter-30-trx"]:
             return None, ""
@@ -191,12 +192,13 @@ def request_form(request, *, error=None, status=200):
               if is_starter30 else ACTION)
     if prefill_notes.startswith("Prelaunch interest only: MOJ-PROP-01"):
         message += (
-            '<p><strong>MOJ-PROP-01 funded-trading challenge — PRELAUNCH.</strong> '
+            '<p><strong>MOJ-PROP-01 simulated trading challenge — PRELAUNCH.</strong> '
             '30 TRX is a proposed future challenge fee, not a purchase today. '
-            'The two evaluation stages are simulated. A real funded account '
-            'is conditional on a verified broker, company capital, legal '
-            'eligibility and written customer terms. This form takes no '
-            'payment and creates no challenge registration.</p>'
+            'Both challenge and post-pass funded stages use simulated capital. '
+            'A separate real-money company trading role may be offered only '
+            'after independent selection and written employment terms; it is '
+            'not part of this product. This form takes no payment and '
+            'creates no challenge registration.</p>'
         )
     elif is_starter30:
         message += ('<p>Starter30 is a <strong>free request for written terms only</strong>; '
