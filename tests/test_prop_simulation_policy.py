@@ -193,6 +193,25 @@ class SimulationPolicyTests(unittest.TestCase):
         self.assertFalse(result.allowed)
         self.assertIn("real_execution_disabled", result.reasons)
 
+    def test_simulation_preflight_rejects_execution_request(self):
+        base = dict(
+            account_capital=D("1000"),
+            equity=D("1000"),
+            day_open_equity=D("1000"),
+            risk_at_stop=D("20"),
+            open_risk_before=D("0"),
+            broker_minimum_risk=D("1"),
+            verified_stop=True,
+            authoritative_snapshot=True,
+            mode="challenge",
+        )
+        self.assertTrue(authorize_order(**base, execution_authorized=False).allowed)
+        for value in (True, None, 1, "yes"):
+            with self.subTest(value=value):
+                decision = authorize_order(**base, execution_authorized=value)
+                self.assertFalse(decision.allowed)
+                self.assertIn("execution_request_not_supported", decision.reasons)
+
     def test_reward_reserve_is_included_in_net_model(self):
         result = simulated_cohort_economics(
             applicants=100,
