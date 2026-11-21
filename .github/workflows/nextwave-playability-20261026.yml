@@ -1,0 +1,21 @@
+name: Nextwave five-game playability regression
+on:
+  pull_request:
+    paths:
+      - 'site_releases/mojplaywin/ten-lab-20261023-next/**'
+      - 'scripts/verify_nextwave_playability_20261026.cjs'
+      - '.github/workflows/nextwave-playability-20261026.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  nextwave:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Execute Nextwave five-game regression
+        run: node scripts/verify_nextwave_playability_20261026.cjs
