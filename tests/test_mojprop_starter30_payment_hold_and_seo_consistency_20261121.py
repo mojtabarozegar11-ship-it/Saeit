@@ -59,7 +59,9 @@ class Starter30ClosedPaymentContract(unittest.TestCase):
             with self.subTest(page=key):
                 self.assertIn("payment currently unavailable", source.lower())
                 self.assertIn("do not send trx", source.lower())
-                self.assertNotIn('href="/mojprop-starter30-checkout/"', source)
+                self.assertNotIn("/mojprop-starter30-checkout/", [
+                    link for link in self.pages[key].links if link
+                ])
                 self.assertNotIn("walletconnect", source.lower())
                 self.assertNotIn("tronweb.trx.sendtransaction", source.lower())
         self.assertIn("no invoice is being issued", self.sources["home"].lower())
