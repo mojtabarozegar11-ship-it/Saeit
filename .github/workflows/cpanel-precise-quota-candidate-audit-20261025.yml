@@ -1,0 +1,85 @@
+name: cPanel precise storage candidate inventory (read-only)
+on:
+  pull_request:
+    paths:
+      - .github/workflows/cpanel-precise-quota-candidate-audit-20261025.yml
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - name: Read-only precise account quota, backup subtrees and safe candidates
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 380s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import os,subprocess,json,time,hashlib,stat,collections
+          from pathlib import Path
+          h=Path("/home/zomorod2")
+          assert h.is_dir() and not h.is_symlink() and Path.home()==h
+          def du(paths,timeout=155):
+              if not paths:return {}
+              x=subprocess.run(["du","-sx","-B1","--"]+[str(p) for p in paths],capture_output=True,text=True,timeout=timeout)
+              if x.returncode not in (0,1):raise SystemExit("DU_COMMAND_FAILED")
+              out={}
+              for line in x.stdout.splitlines():
+                  if "\t" in line:
+                      b,n=line.split("\t",1)
+                      if b.isdecimal():out[n]=int(b)
+              return out
+          def label(p):
+              return hashlib.sha256(str(p.relative_to(h)).encode()).hexdigest()[:12]
+          def safe_children(p):
+              return [q for q in p.iterdir() if not q.is_symlink() and (q.is_file() or q.is_dir())]
+          q=subprocess.run(["uapi","--output=json","Quota","get_quota_info"],capture_output=True,text=True,timeout=28)
+          if q.returncode:raise SystemExit("QUOTA_INVENTORY_FAILED")
+          datum=json.loads(q.stdout).get("result",{}).get("data",{})
+          print("ACCOUNT_QUOTA="+json.dumps({k:datum.get(k) for k in ("megabytes_used","megabyte_limit","megabytes_remain","under_quota_overall")},sort_keys=True))
+          children=safe_children(h)
+          sizes=du(children,210)
+          ranked=sorted(children,key=lambda x:sizes.get(str(x),0),reverse=True)
+          print("ACCOUNT_LARGEST="+json.dumps([{"family":p.name if p.is_dir() else "file:"+p.suffix.lower(),"size":sizes.get(str(p),-1)} for p in ranked[:35]],sort_keys=True))
+          for relative in (".backups","Saeit-staging","Saeit","virtualenv","mojtaba_personal","saeit_v91",".local","tmp","logs",".cpanel","public_html","mojplaywin.com"):
+              p=h/relative
+              if p.is_symlink() or not p.is_dir():continue
+              entries=safe_children(p)
+              sm=du(entries,160)
+              ranked=sorted(entries,key=lambda x:sm.get(str(x),0),reverse=True)
+              print("SUBDIR_INVENTORY="+json.dumps({"family":relative,"total":du([p],100).get(str(p),-1),"largest":[{"name":x.name if x.is_dir() and relative not in (".backups","Saeit-staging","virtualenv") else label(x),"kind":"dir" if x.is_dir() else "file:"+x.suffix.lower(),"size":sm.get(str(x),-1),"age_days":round((time.time()-x.stat().st_mtime)/86400,1)} for x in ranked[:24]]},sort_keys=True))
+          backup=h/".backups"
+          if backup.is_dir() and not backup.is_symlink():
+              largest=[];suffix=collections.Counter();count=0
+              for root,dirs,files in os.walk(backup,followlinks=False):
+                  dirs[:]=[d for d in dirs if not (Path(root)/d).is_symlink()]
+                  for n in files:
+                      p=Path(root)/n
+                      if p.is_symlink() or not p.is_file():continue
+                      z=p.stat(); count+=1; suffix[p.suffix.lower() or "(none)"]+=z.st_size
+                      if z.st_size>=25*1024*1024:
+                          largest.append({"id":label(p),"bytes":z.st_size,"age_days":round((time.time()-z.st_mtime)/86400,1),"suffix":p.suffix.lower(),"nlink":z.st_nlink})
+              print("BACKUP_FILES="+json.dumps({"count":count,"largest":sorted(largest,key=lambda x:-x["bytes"])[:32],"suffix_bytes":suffix.most_common(20)},sort_keys=True))
+          print("INVENTORY_READONLY_DONE=yes")
+          PY
+          rm -rf "$d"
