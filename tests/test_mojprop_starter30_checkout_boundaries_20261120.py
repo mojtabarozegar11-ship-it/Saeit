@@ -60,7 +60,9 @@ class Starter30CheckoutBoundaryTests(SimpleTestCase):
         self.assertContains(response, 'href="/mojprop-starter30-checkout/"')
         self.assertContains(response, "No real funded account or customer capital is involved")
         self.assertContains(response, "server-issued 30 TRX invoice")
-        self.assertNotContains(response, "<form")
+        self.assertContains(response, '<form action="/mojprop-starter30-status/" method="get"')
+        self.assertNotContains(response, 'method="post"')
+        self.assertNotContains(response, 'name="txid"')
         self.assertNotContains(response, "private key")
         self.assertNotContains(response, "tronweb")
 
