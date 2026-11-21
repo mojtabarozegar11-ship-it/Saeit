@@ -169,7 +169,7 @@ def request_form(request, *, error=None, status=200):
         '<form method="post" action="' + action + '" '
         'enctype="application/x-www-form-urlencoded">'
         '<input type="hidden" name="csrfmiddlewaretoken" value="' + csrf + '">'
-        + _attribution_hidden_fields(request)'
+        + _attribution_hidden_fields(request) +
         '<p><label>Your name <input name="name" autocomplete="name" '
         'required minlength="2" maxlength="200"></label></p>'
         '<p><label>Contact email <input type="email" name="email" '
