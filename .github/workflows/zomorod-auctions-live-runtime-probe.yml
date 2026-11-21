@@ -1,0 +1,185 @@
+name: ZM auction ephemeral live PHP runtime probe (self-cleaning)
+
+on:
+  push:
+    branches:
+      - feature/zomorod-auction-management-private-20261031
+    paths:
+      - .github/workflows/zomorod-auctions-live-runtime-probe.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zm-auction-live-runtime-probe
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 8a93511adbcddb6b228b93d9c5d46064b8ea1a09
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: sqlite3,fileinfo
+          coverage: none
+      - name: Verify exact approved auction source and local syntax
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 8a93511adbcddb6b228b93d9c5d46064b8ea1a09
+          php -l content/zomorod-business/auctions.php
+          python3 scripts/test_zomorod_auctions.py
+      - name: Probe live PHP runtime via single random temporary route, then remove it
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$GITHUB_RUN_ID" -gt 0
+          d="$RUNNER_TEMP/zomorod-auction-host-preflight"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 15
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          target=""
+          for host in saeit-cpanel saeit-cpanel-direct; do
+            if timeout 55s ssh -F "$d/config" "$host" 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/business/index.php && test -d /home/zomorod2/.private/zomorod-business' >/dev/null; then
+              target="$host"
+              break
+            fi
+          done
+          test -n "$target"
+          ssh -F "$d/config" "$target" 'python3 -B -' <<'PY'
+          import json,os,pathlib,secrets,urllib.request,urllib.error,ssl
+          web=pathlib.Path('/home/zomorod2/public_html/business')
+          if not web.is_dir() or web.is_symlink() or not (web/'index.php').is_file():
+              raise SystemExit('AUCTION_WEB_RUNTIME_PROBE=BLOCKED_UNSAFE_ROOT')
+          nonce=secrets.token_hex(24)
+          route=web/('_zm_runtime_probe_'+nonce+'.php')
+          source="""<?php
+          header('Content-Type: application/json; charset=utf-8');
+          header('Cache-Control: no-store');
+          header('X-Robots-Tag: noindex, nofollow');
+          header('X-Content-Type-Options: nosniff');
+          echo json_encode(['nonce'=>'"""+nonce+"""','version'=>PHP_VERSION,
+              'sapi'=>PHP_SAPI,'sqlite3'=>class_exists('SQLite3'),
+              'fileinfo'=>class_exists('finfo'),'sessions'=>extension_loaded('session'),
+              'upload_max'=>ini_get('upload_max_filesize')]);
+          """
+          created=False
+          try:
+              fd=os.open(str(route),os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o644)
+              created=True
+              os.fchmod(fd,0o644)
+              with os.fdopen(fd,'w',encoding='utf-8') as f:f.write(source)
+              request=urllib.request.Request('https://zomorodmelal.ir/business/'+route.name,
+                                             headers={'User-Agent':'Zomorod-Private-PHP-Compat-Audit'})
+              try:
+                  with urllib.request.urlopen(request,timeout=20,context=ssl.create_default_context()) as response:
+                      raw=response.read(2048)
+                  payload=json.loads(raw.decode('utf-8'))
+                  if payload.get('nonce')!=nonce:raise ValueError('probe nonce mismatch')
+                  version=str(payload.get('version','unknown'))
+                  if not version[:1].isdigit() or len(version)>35:raise ValueError('invalid version')
+                  print('AUCTION_LIVE_WEB_PHP_VERSION='+version)
+                  print('AUCTION_LIVE_WEB_PHP_SAPI='+str(payload.get('sapi','unknown'))[:30])
+                  for extension in ('sqlite3','fileinfo','sessions'):
+                      print('AUCTION_LIVE_WEB_'+extension.upper()+'='+('PASS' if payload.get(extension) is True else 'BLOCKED'))
+                  ok=payload.get('sqlite3') is True and payload.get('fileinfo') is True and payload.get('sessions') is True
+                  try:ok=ok and tuple(map(int,version.split('.')[:2]))>=(8,1)
+                  except ValueError:ok=False
+                  print('AUCTION_LIVE_WEB_RUNTIME='+('COMPATIBLE' if ok else 'INCOMPATIBLE'))
+              except (urllib.error.URLError,ValueError,UnicodeError,TimeoutError,KeyError,ssl.SSLError) as e:
+                  print('AUCTION_LIVE_WEB_RUNTIME=UNVERIFIED')
+                  print('AUCTION_LIVE_WEB_RUNTIME_ERROR_TYPE='+type(e).__name__)
+          finally:
+              if created and route.exists() and not route.is_symlink():
+                  route.unlink()
+              print('AUCTION_TRANSIENT_WEB_PROBE_REMOVED='+str(not route.exists()))
+              print('AUCTION_MODULE_DEPLOY_OR_DB_MUTATIONS=NONE')
+          # Per-directory override test: scope a single temporary directory, never the site root.
+          subdir=web/('_zm_83probe_'+secrets.token_hex(20))
+          local_nonce=secrets.token_hex(24)
+          index=subdir/'index.php'
+          override=subdir/'.htaccess'
+          made=False
+          try:
+              os.mkdir(subdir,0o755)
+              made=True
+              os.chmod(subdir,0o755)
+              with open(override,'x',encoding='utf-8') as f:
+                  f.write('<IfModule mime_module>\nAddHandler application/x-httpd-ea-php83 .php\n</IfModule>\n')
+              os.chmod(override,0o644)
+              with open(index,'x',encoding='utf-8') as f:
+                  f.write(source.replace(nonce,local_nonce))
+              os.chmod(index,0o644)
+              request=urllib.request.Request('https://zomorodmelal.ir/business/'+subdir.name+'/index.php',
+                                             headers={'User-Agent':'Zomorod-Private-PHP83-Override-Audit'})
+              try:
+                  with urllib.request.urlopen(request,timeout=20,context=ssl.create_default_context()) as response:
+                      raw=response.read(2048)
+                  payload=json.loads(raw.decode('utf-8'))
+                  if payload.get('nonce')!=local_nonce:raise ValueError('PHP handler override mismatch')
+                  print('AUCTION_DIRECTORY_PHP_VERSION='+str(payload.get('version','unknown'))[:35])
+                  print('AUCTION_DIRECTORY_PHP_SAPI='+str(payload.get('sapi','unknown'))[:30])
+                  for extension in ('sqlite3','fileinfo','sessions'):
+                      print('AUCTION_DIRECTORY_'+extension.upper()+'='+('PASS' if payload.get(extension) is True else 'BLOCKED'))
+                  print('AUCTION_DIRECTORY_PHP83_HANDLER='+('PASS' if str(payload.get('version','')).startswith('8.3.') and payload.get('fileinfo') is True else 'BLOCKED'))
+              except (urllib.error.URLError,ValueError,UnicodeError,TimeoutError,KeyError,ssl.SSLError) as e:
+                  print('AUCTION_DIRECTORY_PHP83_HANDLER=UNVERIFIED')
+                  print('AUCTION_DIRECTORY_OVERRIDE_ERROR_TYPE='+type(e).__name__)
+          finally:
+              if made:
+                  for item in (index,override):
+                      if item.is_file() and not item.is_symlink():item.unlink()
+                  os.rmdir(subdir)
+              print('AUCTION_DIRECTORY_OVERRIDE_PROBE_REMOVED='+str(not subdir.exists()))
+              print('AUCTION_PRODUCTION_PHP_CONFIGURATION_UNCHANGED=YES')
+          PY

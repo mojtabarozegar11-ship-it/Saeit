@@ -1,0 +1,127 @@
+name: ZM auction private cPanel stage and PHP 8.3 lint (no live deploy)
+
+on:
+  push:
+    branches:
+      - feature/zomorod-auction-management-private-20261031
+    paths:
+      - .github/workflows/zomorod-auctions-private-stage.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zm-auction-private-stage
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 8a93511adbcddb6b228b93d9c5d46064b8ea1a09
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: sqlite3,fileinfo
+      - name: Verify exact immutable source and isolated workflow
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 8a93511adbcddb6b228b93d9c5d46064b8ea1a09
+          php -l content/zomorod-business/auctions.php
+          python3 scripts/test_zomorod_auctions.py
+      - name: Create isolated immutable auction staging copy (not public_html)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$GITHUB_RUN_ID" -gt 0
+          d="$RUNNER_TEMP/zomorod-auction-private-stage"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 15
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          target=""
+          for host in saeit-cpanel saeit-cpanel-direct; do
+            if timeout 55s ssh -F "$d/config" "$host" 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/business/index.php && test -d /home/zomorod2/.private/zomorod-business' >/dev/null; then
+              target="$host"
+              break
+            fi
+          done
+          test -n "$target"
+          ssh -F "$d/config" "$target" 'set -eu
+          base=/home/zomorod2/.backups
+          parent="$base/zomorod-auctions-staged"
+          stage="$parent/8a93511adbcddb6b228b93d9c5d46064b8ea1a09"
+          test -d "$base" && test ! -L "$base"
+          if test ! -e "$parent" && test ! -L "$parent"; then mkdir -m 700 "$parent"; fi
+          test -d "$parent" && test ! -L "$parent" && test "$(stat -c %a "$parent")" = 700
+          test ! -e "$stage" && test ! -L "$stage"
+          mkdir -m 700 "$stage"
+          test -d "$stage" && test ! -L "$stage"
+          test ! -e /home/zomorod2/public_html/business/auctions/index.php
+          '
+          scp -F "$d/config" -q content/zomorod-business/auctions.php "$target:/home/zomorod2/.backups/zomorod-auctions-staged/8a93511adbcddb6b228b93d9c5d46064b8ea1a09/index.php"
+          ssh -F "$d/config" "$target" 'set -eu
+          src=/home/zomorod2/.backups/zomorod-auctions-staged/8a93511adbcddb6b228b93d9c5d46064b8ea1a09/index.php
+          chmod 600 "$src"
+          test -f "$src" && test ! -L "$src" && test "$(stat -c %a "$src")" = 600
+          /opt/cpanel/ea-php83/root/usr/bin/php -l "$src"
+          sha256sum "$src"
+          test ! -e /home/zomorod2/public_html/business/auctions/index.php
+          '
+          local_sha="$(sha256sum content/zomorod-business/auctions.php | awk '{print $1}')"
+          remote_sha="$(ssh -F "$d/config" "$target" 'sha256sum /home/zomorod2/.backups/zomorod-auctions-staged/8a93511adbcddb6b228b93d9c5d46064b8ea1a09/index.php' | awk '{print $1}')"
+          test "$local_sha" = "$remote_sha"
+          echo AUCTION_STAGE_SHA256_MATCH=PASS
+          echo AUCTION_STAGE_PHP83_LINT=PASS
+          echo AUCTION_STAGE_DIRECTORY=PRIVATE_NONPUBLIC
+          echo AUCTION_LIVE_CODE_MUTATIONS=NONE
+          echo AUCTION_LIVE_DB_MUTATIONS=NONE
+          echo AUCTION_RELEASE_AUTHORIZED=NO
