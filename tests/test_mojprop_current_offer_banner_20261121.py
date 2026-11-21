@@ -12,7 +12,7 @@ class MojPropCurrentOfferBannerTest(unittest.TestCase):
         self.assertIn('id="starter30-current-offer"', before_plan1)
         self.assertIn("Starter30 — 60-day simulated challenge; listed entry fee 30 TRX", before_plan1)
         self.assertIn('href="/moj-prop/starter-30-trx/"', before_plan1)
-        self.assertIn('href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"', before_plan1)
+        self.assertIn('href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx&amp;utm_source=moj_prop&amp;utm_medium=onsite&amp;utm_campaign=starter30_lead&amp;utm_content=free_terms"', before_plan1)
 
     def test_legal_prelaunch_disclosure_remains_present(self):
         text = PAGE.read_text(encoding="utf-8")
@@ -23,10 +23,10 @@ class MojPropCurrentOfferBannerTest(unittest.TestCase):
     def test_meta_description_matches_current_offer(self):
         text = PAGE.read_text(encoding="utf-8")
         self.assertIn(
-            "Moj Prop English Starter30: a 60-day simulated trading challenge",
+            "Moj Prop Starter30: 60-day simulated trading challenge",
             text,
         )
-        self.assertIn("MOJ-PROP-01 remains prelaunch.", text)
+        self.assertIn("MOJ-PROP-01 prelaunch.", text)
 
 
 if __name__ == "__main__":
