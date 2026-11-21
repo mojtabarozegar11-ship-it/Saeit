@@ -36,10 +36,24 @@ test -f "$staged" && test ! -L "$staged" && test ! -L "$operations" || {
 actual_sha="$(sha256sum "$staged" | awk '{print $1}')"
 test "$actual_sha" = "$expected_sha" || { echo MOJTRADE_SOURCE_SHA_MISMATCH; exit 2; }
 test ! -L "$target" || { echo MOJTRADE_TARGET_SYMLINK_REJECTED; exit 2; }
-free_mb="$(df -Pm "$base" | awk 'NR==2 {print $4}')"
-[[ "$free_mb" =~ ^[0-9]+$ ]] && (( free_mb >= 500 )) || {
-  echo MOJTRADE_INSUFFICIENT_FREE_SPACE; exit 2;
-}
+# Recheck both possible mount points after transport; do not trust an older
+# workflow-side measurement or allow the former 500 MiB activation threshold.
+for storage_path in "$operations" "$base/private"; do
+  test -d "$storage_path" && test ! -L "$storage_path" || {
+    echo MOJTRADE_STORAGE_PATH_UNSAFE; exit 2;
+  }
+  free_kib="$(df -Pk "$storage_path" | awk 'NR==2 {print $4}')"
+  free_inodes="$(df -Pi "$storage_path" | awk 'NR==2 {print $4}')"
+  [[ "$free_kib" =~ ^[0-9]+$ && "$free_inodes" =~ ^[0-9]+$ ]] || {
+    echo MOJTRADE_STORAGE_METRICS_INVALID; exit 2;
+  }
+  (( free_kib >= 2113536 )) || {
+    echo MOJTRADE_INSUFFICIENT_FREE_SPACE_2GIB_PLUS_16MIB; exit 2;
+  }
+  (( free_inodes >= 16 )) || {
+    echo MOJTRADE_INSUFFICIENT_FREE_INODES; exit 2;
+  }
+done
 
 install -d -m 700 "$operations" "$private"
 test "$(stat -c %a "$private")" = 700 || { echo MOJTRADE_PRIVATE_DIR_INSECURE; exit 2; }
