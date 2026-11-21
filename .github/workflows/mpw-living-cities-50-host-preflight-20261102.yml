@@ -1,0 +1,81 @@
+name: MPW Living Cities 50 careers 250 cast release host preflight
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'secure-artifacts/mpw-living-cities-50-57f8de80-encrypted.b64'
+      - '.github/workflows/mpw-living-cities-50-host-preflight-20261102.yml'
+permissions: {contents: read}
+jobs:
+  verify-candidate-and-host:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Validate encrypted exact source contract before any SSH connection
+        run: |
+          python3 - <<'PY'
+          import base64,json
+          from pathlib import Path
+          p=Path("secure-artifacts/mpw-living-cities-50-57f8de80-encrypted.b64")
+          assert p.is_file() and 300000 < p.stat().st_size < 800000
+          b=base64.b64decode(p.read_bytes().strip(),validate=True)
+          j=json.loads(b)
+          assert j["source_commit"]=="57f8de80f45cbc8bec52c687bd6141d5cefc2d03"
+          assert j["schema"]==1 and j["algorithm"]=="RSA3072-OAEP-SHA256+A256GCM"
+          assert base64.b64decode(j["aad"])==b"living-cities-20261101:"+bytes.fromhex(j["source_commit"])
+          assert len(base64.b64decode(j["ciphertext"]))>10000
+          print("MPW_50_ENCRYPTED_EXACT_SOURCE=PASS")
+          print("MPW_50_SOURCE_SHA="+j["source_commit"])
+          print("MPW_50_PLAINTEXT_EXPOSED=NO")
+          PY
+      - name: Establish existing host-key-pinned VPS and cPanel link
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Read only current MojPlayWin game ownership and rollback prerequisites
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 50s ssh -T -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          import os,shutil,hashlib
+          h=Path("/home/zomorod2")
+          root=h/"mojplaywin.com"
+          game=root/"living-cities"
+          assert root.is_dir() and not root.is_symlink()
+          assert game.is_dir() and not game.is_symlink()
+          marker=game/"LC-OWNER.txt"
+          assert marker.is_file() and not marker.is_symlink()
+          owner=marker.read_text().strip()
+          assert owner.startswith("MPW-LIVING-CITIES-")
+          assert os.geteuid()==h.stat().st_uid
+          print("MPW_CURRENT_GAME_OWNER="+owner)
+          print("MPW_CURRENT_BROWSER_EDITION="+str(
+              b'data-lc-edition="browser"' in (game/"play/index.html").read_bytes()))
+          for rel in ("play/index.html","static/living_cities/app.mjs",
+                      "static/living_cities/tycoon-panel.mjs"):
+              p=game/rel
+              assert p.is_file() and not p.is_symlink()
+              print("MPW_EXISTING_FILE="+rel+" SHA256="+hashlib.sha256(p.read_bytes()).hexdigest())
+          print("MPW_GAME_FREE_MIB="+str(shutil.disk_usage(str(root)).free//1048576))
+          print("MPW_GAME_PREPARE_ONLY=PASS")
+          PY
+          timeout 45s ssh -T -F "$d/config" vps 'python3 -' <<'PY'
+          from pathlib import Path
+          p=Path.home()/".private/living-cities-transport/private.pem"
+          print("MPW_PRIVATE_RECIPIENT_KEY_EXISTS="+str(p.is_file() and not p.is_symlink()))
+          print("MPW_OFFHOST_GAME_STORAGE_EXISTS="+str(p.parent.is_dir()))
+          print("MPW_VPS_INSPECTION_READ_ONLY=PASS")
+          PY
+          echo MPW_PUBLIC_RELEASE_WRITES=NONE
+      - name: Erase temporary runner SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
