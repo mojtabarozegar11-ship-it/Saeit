@@ -101,6 +101,11 @@ def request_form(request, *, error=None, status=200):
     csrf = escape(get_token(request), quote=True)
     selected, prefill_notes = _safe_service_prefill(request)
     message = ('<p role="alert">' + escape(error) + '</p>') if error else ''
+    # Retain the fixed product hint on the form POST, including validation
+    # failures, without reflecting untrusted campaign data or buyer PII.
+    is_starter30 = prefill_notes.startswith("Requested canonical product: MOJPROP-STARTER30 ")
+    action = (ACTION + "&amp;service=blueprint&amp;package=starter-30-trx"
+              if is_starter30 else ACTION)
     if prefill_notes.startswith("Prelaunch interest only: MOJ-PROP-01"):
         message += (
             '<p><strong>MOJ-PROP-01 funded-trading challenge — PRELAUNCH.</strong> '
@@ -110,14 +115,15 @@ def request_form(request, *, error=None, status=200):
             'eligibility and written customer terms. This form takes no '
             'payment and creates no challenge registration.</p>'
         )
-    elif prefill_notes:
-        message += ('<p>Starter30 is a <strong>request for written terms only</strong>; '
-                    'no payment, challenge or funded trading account is available.</p>')
+    elif is_starter30:
+        message += ('<p>Starter30 is a <strong>free request for written terms only</strong>; '
+                    'this form does not issue an invoice, collect a fee, enroll a '
+                    'challenge or activate a trading account.</p>')
     form = (
         '<p>Request a written, manually reviewed service proposal. '
         'No payment, live account or return is promised.</p>'
         + message +
-        '<form method="post" action="' + ACTION + '" '
+        '<form method="post" action="' + action + '" '
         'enctype="application/x-www-form-urlencoded">'
         '<input type="hidden" name="csrfmiddlewaretoken" value="' + csrf + '">'
         '<p><label>Your name <input name="name" autocomplete="name" '
