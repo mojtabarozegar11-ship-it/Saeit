@@ -54,7 +54,7 @@ def stream_segment_is_acceptable(body, minimum=300):
     lowered = safety_view.casefold()
     if any(marker in lowered for marker in (
             "<think", "</think", "<|im_start|>", "<|im_end|>",
-            "<|assistant", "[/inst]", "[inst]")):
+            "<|assistant", "<|endoftext|>", "[/inst]", "[inst]")):
         return False
     prose_lines = [line.strip() for line in body.splitlines()
                    if line.strip() and not line.lstrip().startswith(("#", "|"))]
