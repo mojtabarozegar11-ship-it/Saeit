@@ -2,6 +2,9 @@
 import fcntl
 import importlib.util
 import json
+import re
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -170,6 +173,66 @@ class SequentialCaseworkTests(unittest.TestCase):
             self.assertEqual(result["source_attempts"],0)
             self.assertEqual(result["result"],"STORAGE_RESERVE_HOLD_WITH_SOURCE_REWORK_PENDING")
             self.assertEqual(result["qc1000_approvals"],0)
+
+
+class CronInstallerPreflightTests(unittest.TestCase):
+    """Test the actual installer preflight in isolation, never touching crontab."""
+
+    def test_install_does_not_work_a_product_before_cron_audit(self):
+        script = (ROOT / "deploy/install_factory_sequential_scientific_casework_v1.sh").read_text()
+        self.assertLess(script.index('python3 - "$cron_backup"'),
+                        script.index('install_checked "$source_engine"'))
+        self.assertNotIn('timeout 90s "$py" -B "$case_worker" --factory-private', script)
+        self.assertIn('flock -w 20 9', script)
+        self.assertIn('systemctl list-timers --all', script)
+        self.assertIn('CASEWORK_CONCURRENT_CRON_EDIT', script)
+        self.assertIn('/usr/bin/flock -n', script)
+        self.assertIn('CRON_CONFIGURED_NOT_QC1000', script)
+        syntax = subprocess.run(["bash", "-n", str(ROOT / "deploy/install_factory_sequential_scientific_casework_v1.sh")],
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+
+    def test_competing_minute_scheduler_is_rejected_before_any_product_work(self):
+        script = (ROOT / "deploy/install_factory_sequential_scientific_casework_v1.sh").read_text()
+        match = re.search(
+            r'python3 - "\$cron_backup" "\$old_marker" "\$new_marker" "\$case_worker" <<\x27PY\x27\n([\s\S]*?)\nPY\n',
+            script)
+        self.assertIsNotNone(match)
+        preflight = match.group(1)
+        old = "SAEIT_LICENSED_PRIMARY_SOURCE_ACQUISITION_20261024"
+        new = "SAEIT_SEQUENTIAL_SCIENCE_CASEWORK_20261025"
+        worker = "/opt/production-instructions/sequential-scientific-casework-v1.py"
+        old_row = f"* * * * * /usr/bin/python3 /opt/license-safe-primary-fulltext-acquisition.py # {old}"
+        new_row = f"* * * * * /usr/bin/flock -n /tmp/lock /usr/bin/python3 {worker} # {new}"
+        other = "*/5 * * * * /bin/bash /opt/owner500/runner.sh # SAEIT_OWNER500_AUTONOMOUS_F28_V1"
+        cases = [
+            ("", True, "PREFLIGHT_PASS"),
+            (other, True, "PREFLIGHT_PASS"),
+            (old_row, True, "PREFLIGHT_PASS"),
+            (new_row, True, "PREFLIGHT_PASS"),
+            ("# " + "* * * * * /bin/bash /opt/run-minute-cycle.sh", True, "PREFLIGHT_PASS"),
+            (f"* * * * * /bin/bash /opt/run-minute-cycle.sh # SAEIT_FACTORY_EVERY_MINUTE_V1",
+             False, "COMPETING_MINUTE_PIPELINE"),
+            (f"* * * * * python3 /opt/agri200-autonomous-closed-loop.py # SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1",
+             False, "COMPETING_MINUTE_PIPELINE"),
+            ("* * * * * python3 /opt/custom-factory-cycle.py", False, "COMPETING_MINUTE_PIPELINE"),
+            ("* * * * * python3 /opt/strict-serial-fullcycle-v1.py # SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025",
+             False, "COMPETING_MINUTE_PIPELINE"),
+            (new_row + "\n" + new_row, False, "DUPLICATE_OR_CONFLICTING_MARKERS"),
+            (new_row + "\n" + old_row, False, "DUPLICATE_OR_CONFLICTING_MARKERS"),
+            (old_row.replace("* * * * *", "*/5 * * * *"), False, "UNRECOGNIZED_OLD_SCHEDULER"),
+            (new_row.replace(worker, "/opt/untrusted.py"), False, "UNRECOGNIZED_NEW_SCHEDULER"),
+        ]
+        with tempfile.TemporaryDirectory() as d:
+            cron = Path(d) / "prior.cron"
+            for value, allowed, message in cases:
+                with self.subTest(cron=value):
+                    cron.write_text(value + "\n")
+                    outcome = subprocess.run(
+                        [sys.executable, "-", str(cron), old, new, worker],
+                        input=preflight, text=True, capture_output=True, timeout=5)
+                    self.assertEqual(outcome.returncode == 0, allowed, outcome.stderr)
+                    self.assertIn(message, outcome.stdout + outcome.stderr)
 
 
 if __name__ == "__main__":

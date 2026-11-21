@@ -70,17 +70,85 @@ install_checked() {
   if [ "$state" = 'case' ]; then case_changed=1; else engine_changed=1; fi
 }
 
+# Audit before any executable or private case is changed. This installer is
+# NOT a whole-factory QC1000 orchestrator and must never create a parallel
+# minute pipeline beside #866 (factory), #998 (AGRI200), or another caseworker.
+command -v flock >/dev/null
+command -v crontab >/dev/null
+command -v systemctl >/dev/null
+exec 9>"$ops/.sequential-casework-install.lock"
+flock -w 20 9 || { echo CASEWORK_INSTALL_LOCK_BUSY >&2; exit 1; }
+if ! systemctl is-active --quiet cron 2>/dev/null && ! systemctl is-active --quiet crond 2>/dev/null; then
+  echo CASEWORK_MINUTE_CRON_INACTIVE >&2
+  exit 1
+fi
+if ! systemctl is-enabled --quiet cron 2>/dev/null && ! systemctl is-enabled --quiet crond 2>/dev/null; then
+  echo CASEWORK_MINUTE_CRON_BOOT_DISABLED >&2
+  exit 1
+fi
+timers="$(systemctl list-timers --all --no-legend --no-pager 2>/dev/null)" || {
+  echo CASEWORK_SYSTEMD_TIMER_AUDIT_FAILED >&2
+  exit 1
+}
+if printf '%s\n' "$timers" | grep -Eiq '(factory|agri200|qc1000|sequential|production|warehouse).*\.timer'; then
+  echo CASEWORK_COMPETING_SYSTEMD_TIMER >&2
+  exit 1
+fi
+test ! -e "$cron_backup"
+cron_error="$backups/.sequential-cron-$run_tag.stderr"
+test ! -e "$cron_error"
+if crontab -l > "$cron_backup" 2> "$cron_error"; then
+  :
+elif grep -Eqi '^no crontab for ' "$cron_error"; then
+  :
+else
+  echo CASEWORK_CRONTAB_READ_FAILED >&2
+  exit 1
+fi
+rm -f -- "$cron_error"
+chmod 600 "$cron_backup"
+python3 - "$cron_backup" "$old_marker" "$new_marker" "$case_worker" <<'PY'
+import sys
+from pathlib import Path
+
+path, old, new, worker = sys.argv[1:]
+lines = Path(path).read_text(encoding="utf-8").splitlines()
+active = [line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")]
+old_rows = [line for line in active if old in line]
+new_rows = [line for line in active if new in line]
+if len(old_rows) > 1 or len(new_rows) > 1 or (old_rows and new_rows):
+    raise SystemExit("CASEWORK_DUPLICATE_OR_CONFLICTING_MARKERS")
+for line in active:
+    minute = line.split()[:5] == ["*"] * 5
+    if line in old_rows:
+        if not minute or "license-safe-primary-fulltext-acquisition.py" not in line:
+            raise SystemExit("CASEWORK_UNRECOGNIZED_OLD_SCHEDULER")
+    elif line in new_rows:
+        if not minute or worker not in line:
+            raise SystemExit("CASEWORK_UNRECOGNIZED_NEW_SCHEDULER")
+    elif ("SAEIT_FACTORY_EVERY_MINUTE_V1" in line
+          or "SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1" in line
+          or "SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025" in line
+          or (minute and any(word in line.lower() for word in
+              ("factory", "agri200", "qc1000", "product", "production",
+               "warehouse", "sequential", "run-minute-cycle.sh")))):
+        raise SystemExit("CASEWORK_COMPETING_MINUTE_PIPELINE")
+print("CASEWORK_CRON_PREFLIGHT_PASS_ONLY_NO_FULL_QC1000_CLAIM")
+PY
+
 # Preserve the existing global worker and cron until the isolated pair passes.
 install_checked "$source_engine" "$case_engine" "$engine_backup" engine
 install_checked "$source_case" "$case_worker" "$case_backup" case
 timeout 30s "$py" -B "$case_worker" --factory-private "$root" --dry-run
-timeout 90s "$py" -B "$case_worker" --factory-private "$root" --max-source-attempts 2
+# No real product is touched during installation; the protected VPS cron owns ticks.
 
 # Replace only the known previous scientific-source cron; preserve every other
 # factory scheduler and keep a complete rollback copy of the crontab.
-test ! -e "$cron_backup"
-(crontab -l 2>/dev/null || true) > "$cron_backup"
-chmod 600 "$cron_backup"
+# Detect any concurrent crontab modification since the read-only preflight.
+test "$(crontab -l 2>/dev/null | sha256sum | awk '{print $1}')" = "$(sha256sum "$cron_backup" | awk '{print $1}')" || {
+  echo CASEWORK_CONCURRENT_CRON_EDIT >&2
+  exit 1
+}
 new_count="$(grep -Fc "$new_marker" "$cron_backup" || true)"
 old_count="$(grep -Fc "$old_marker" "$cron_backup" || true)"
 test "$new_count" -le 1 && test "$old_count" -le 1
@@ -90,20 +158,21 @@ fi
 if [ "$new_count" -eq 1 ]; then
   grep -F "$new_marker" "$cron_backup" | grep -Fq "$case_worker"
 fi
-if [ "$new_count" -eq 1 ] && [ "$old_count" -eq 0 ]; then
-  grep -F "$new_marker" "$cron_backup" | grep -Fq "$case_worker"
+expected_cron="* * * * * /usr/bin/flock -n '$ops/.sequential-science-casework-cron.lock' /usr/bin/timeout 90s '$py' -B '$case_worker' --factory-private '$root' --max-source-attempts 2 >> '$ops/sequential-scientific-casework.log' 2>&1 # $new_marker"
+if [ "$new_count" -eq 1 ] && [ "$old_count" -eq 0 ] && grep -Fxq "$expected_cron" "$cron_backup"; then
+  :
 else
   temp_cron="$(mktemp "$ops/.sequential-cron.XXXXXX")"
   awk -v old="$old_marker" -v new="$new_marker" \
     'index($0, "# " old) == 0 && index($0, "# " new) == 0 {print}' "$cron_backup" > "$temp_cron"
-  printf '%s\n' "* * * * * /usr/bin/timeout 90s '$py' -B '$case_worker' --factory-private '$root' --max-source-attempts 2 >> '$ops/sequential-scientific-casework.log' 2>&1 # $new_marker" >> "$temp_cron"
+  printf '%s\n' "$expected_cron" >> "$temp_cron"
   crontab "$temp_cron"
   cron_changed=1
   rm -f -- "$temp_cron"
 fi
 crontab -l | grep -F "$new_marker"
 complete=1
-printf '%s\n' 'SEQUENTIAL_ONE_PRODUCT_PER_TICK=ACTIVE' \
+printf '%s\n' 'SEQUENTIAL_SCIENTIFIC_SOURCE_ONLY=CRON_CONFIGURED_NOT_QC1000' \
   'INDEPENDENT_SCIENTIFIC_REVIEW=MANDATORY' \
   'QC1000_AUTO_APPROVALS=0' 'PUBLIC_RELEASES=0' \
   "CRON_ROLLBACK_BACKUP=$cron_backup"
