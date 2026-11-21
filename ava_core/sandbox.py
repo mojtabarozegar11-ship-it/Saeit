@@ -1,8 +1,9 @@
 """Fail-closed, disposable local evaluator for AVA code-review bundles.
 
-Linux-only. An empty network namespace is created by ``unshare -Urn`` before
-``bwrap`` constructs a read-only, allowlisted filesystem. Generated code is
-never executed directly by the host Python process. No implicit fallback.
+Linux-only. A restricted Bubblewrap process creates private user, network,
+PID, IPC and UTS namespaces and a read-only allowlisted filesystem. Generated
+code never executes directly in the host Python interpreter. No fallback to
+unisolated execution is permitted.
 """
 
 from __future__ import annotations
@@ -82,7 +83,7 @@ class IsolatedReviewRunner:
 
     @staticmethod
     def _validate_runner() -> None:
-        for executable in ("/usr/bin/unshare", "/usr/bin/bwrap", "/usr/bin/python3"):
+        for executable in ("/usr/bin/bwrap", "/usr/bin/python3"):
             if not Path(executable).is_file() or not os.access(executable, os.X_OK):
                 raise IsolationUnavailable(f"Required isolation tool is unavailable: {executable}")
         if not Path("/usr/lib").is_dir() or not Path("/usr/lib64").is_dir():
@@ -139,11 +140,13 @@ class IsolatedReviewRunner:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(source, encoding="utf-8")
 
-            # unshare provides an empty network namespace without invoking
-            # bwrap's blocked loopback-network configuration path.
+            # Bubblewrap itself establishes all namespaces. A host must
+            # explicitly provide a confined, rootless userns-capable bwrap;
+            # never disable AppArmor or fall back to shared-network execution.
             command = [
-                "/usr/bin/unshare", "-Urn", "/usr/bin/bwrap",
-                "--share-net", "--unshare-pid", "--unshare-ipc", "--unshare-uts",
+                "/usr/bin/bwrap",
+                "--unshare-user", "--unshare-net", "--unshare-pid",
+                "--unshare-ipc", "--unshare-uts",
                 "--die-with-parent", "--new-session",
                 "--ro-bind", "/usr", "/usr",
                 "--symlink", "usr/lib", "/lib",
@@ -198,7 +201,7 @@ class IsolatedReviewRunner:
             duration_ms = round((time.monotonic() - began) * 1000)
             evidence = CheckEvidence(
                 review_id=review.review_id, passed=passed, isolated=True,
-                tests_run=test_count, runner="linux-unshare-bwrap-v1",
+                tests_run=test_count, runner="linux-bwrap-nonet-v2",
                 details=(f"exit={exit_code}; elapsed_ms={duration_ms}; "
                          f"stdout_sha256={hashlib.sha256(stdout).hexdigest()}; "
                          f"stderr_sha256={hashlib.sha256(stderr).hexdigest()}"),
