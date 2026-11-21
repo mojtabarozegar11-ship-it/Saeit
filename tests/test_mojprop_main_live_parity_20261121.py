@@ -1,6 +1,7 @@
-"""Preserve approved live official English MOJ PROP source parity.
+"""Protect exact reviewed official English MOJ PROP source bytes.
 
-Offline only: no network, page deployment, database, payment or customer data.
+This offline source hash is not an attestation of live server deployment.
+No network, page deployment, database, payment or customer data.
 """
 import hashlib
 from html.parser import HTMLParser
@@ -8,8 +9,8 @@ from pathlib import Path
 import unittest
 
 PAGE=Path(__file__).resolve().parents[1]/"templates"/"moj-prop-v4"/"index.html"
-SHA256="abe683212f89af0375347167fe2414d392df1643a926e7ec9e2ab19829c20619"
-BLOB="bbaf6d9a19c90ce63a62db163f5a8f92c2d1dbf6"
+SHA256="029d2493c80480afd0b8d01683254c63a236a4d930c6cc43410def81906848e5"
+BLOB="fea39dbc409ba8c4c30a807313a20b8d4db19283"
 
 class Scan(HTMLParser):
     def __init__(self):

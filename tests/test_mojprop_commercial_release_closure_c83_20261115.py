@@ -116,6 +116,30 @@ class CommercialBackendClosureTests(unittest.TestCase):
             check_schema_closure(self.live, SOURCE)
         self.assertEqual(target.read_bytes(), before)
 
+    def test_reviewed_0048_choice_migration_allows_source_selftest_only(self):
+        # A source-tree review is not permission for the manual 0047 installer
+        # to reverse a newer live schema. Preserve this distinction.
+        audit = check_schema_closure(SOURCE, SOURCE)
+        self.assertEqual(audit["source_chain"][-1], "0047_mpw_guest_email_recovery")
+        self.assertFalse(audit["manual_deploy_authorized"])
+        self.assertFalse(audit["live_db_restored"])
+
+    def test_existing_live_0048_still_blocks_manual_0047_downgrade(self):
+        source = SOURCE / "core/migrations/0048_alter_commercefunnelevent_event_name.py"
+        destination = self.live / "core/migrations" / source.name
+        destination.write_bytes(source.read_bytes())
+        original = destination.read_bytes()
+        with self.assertRaisesRegex(RuntimeError, "unreviewed later or conflicting core migration"):
+            check_schema_closure(self.live, SOURCE)
+        self.assertEqual(destination.read_bytes(), original)
+
+    def test_source_selftest_requires_exact_reviewed_0048_blob(self):
+        with patch("scripts.mojprop_schema_preflight_c83.REVIEWED_SELFTEST_ONLY_LATER", {
+            "0048_alter_commercefunnelevent_event_name": "0" * 40
+        }):
+            with self.assertRaisesRegex(RuntimeError, "unreviewed later"):
+                check_schema_closure(SOURCE, SOURCE)
+
     def test_unknown_live_schema_revision_is_denied_before_migration(self):
         path = self.live / "core/migrations/0046_unreviewed_feature.py"
         path.write_text("class Migration: pass\n", encoding="utf-8")

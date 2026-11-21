@@ -112,11 +112,31 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         for relative, expected in EXPECTED.items():
             with self.subTest(source=relative):
                 source = root / relative
-                if relative in ("config/urls.py", "core/mojprop_accessible_intake.py"):
+                if relative in ("config/urls.py", "core/mojprop_accessible_intake.py",
+                                "core/mojprop_views.py"):
                     source = root / "docs/mojprop/historical-static-evidence" / (expected + ".py.txt")
                 self.assertTrue(source.is_file(), relative)
                 self.assertFalse(source.is_symlink(), relative)
                 self.assertEqual(exact_git_blob(source.read_bytes()), expected)
+
+    def test_current_intake_view_is_separately_reviewed_without_moving_c95_pin(self):
+        # The immutable C95 cPanel evidence still points to its original bytes.
+        # A newer source file containing bounded UTM fields and first-party
+        # conversion tracking is inspected separately, not called deployed.
+        root = Path(__file__).resolve().parents[1]
+        old_pin = EXPECTED["core/mojprop_views.py"]
+        archive = root / "docs/mojprop/historical-static-evidence" / (old_pin + ".py.txt")
+        current = root / "core/mojprop_views.py"
+        self.assertEqual(exact_git_blob(archive.read_bytes()), old_pin)
+        self.assertEqual(exact_git_blob(current.read_bytes()),
+                         "c3b582dd5a0e5a97d10e91444173014238aad21a")
+        self.assertNotEqual(exact_git_blob(current.read_bytes()), old_pin)
+        src = current.read_text(encoding="utf-8")
+        self.assertIn("utm_source", src)
+        self.assertIn("utm_campaign", src)
+        self.assertIn("record_funnel_event(request, \"lead_submit\")", src)
+        self.assertIn("@csrf_protect", src)
+        self.assertIn("The endpoint records a request for manual review only.", src)
 
     def test_current_lead_form_source_references_reviewed_snapshot_without_moving_c95_pin(self):
         root = Path(__file__).resolve().parents[1]
@@ -128,7 +148,7 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         # original production comparison; the new PR is NOT a cPanel release.
         # New branch preserves only the exact public Facebook organic UTM
         # labels on free form POST; historical C95 production fixture is fixed.
-        self.assertEqual(exact_git_blob(current.read_bytes()), "d3a624db671f737ef1ba5c5a968bfb7eb0fc1f67")
+        self.assertEqual(exact_git_blob(current.read_bytes()), "643cc15291c136e48e26dfa3bca591f14ee8d985")
         self.assertNotEqual(exact_git_blob(current.read_bytes()), old_ref)
 
     def test_current_url_source_exact_delta_without_changing_historical_auditor(self):

@@ -1,4 +1,4 @@
-"""Moj Prop genuine funded Plan1 no-JS prelaunch identity, not checkout.
+"""Moj Prop simulated Plan1 no-JS prelaunch identity, not checkout.
 
 This suite is read-only: request factory only, no database rows, no invoices,
 no authentication or email, no actual customer contact and no cryptocurrency.
@@ -14,11 +14,11 @@ class MojPropPlanOneNoJsPrelaunchTests(SimpleTestCase):
     def _request(self, suffix="format=html&service=blueprint&package=moj-prop-01"):
         return self.factory.get("/moj-prop-intake/?" + suffix, secure=True)
 
-    def test_01_correct_funded_plan1_code_and_not_educational_report(self):
+    def test_01_correct_simulated_plan1_code_and_not_educational_report(self):
         service, notes = _safe_service_prefill(self._request())
         self.assertEqual(service, "blueprint")
         self.assertIn("MOJ-PROP-01", notes)
-        self.assertIn("funded-trading CHALLENGE", notes)
+        self.assertIn("SIMULATED trading CHALLENGE", notes)
         self.assertNotIn("MOJPROP-STARTER30", notes)
 
     def test_02_prelaunch_does_not_imply_paid_order(self):
@@ -26,10 +26,11 @@ class MojPropPlanOneNoJsPrelaunchTests(SimpleTestCase):
         for term in ("NOT payable", "no payment", "no payment, account or return is promised"):
             self.assertIn(term, notes)
 
-    def test_03_no_capital_guarantee(self):
+    def test_03_no_real_account_or_broker_promise(self):
         _, notes = _safe_service_prefill(self._request())
-        self.assertIn("USD 100 account after passing", notes)
-        self.assertIn("independent capital, broker agreement", notes)
+        self.assertIn("both simulated with no real funded trading account", notes)
+        self.assertIn("separate paid company trading role", notes)
+        self.assertNotIn("company-funded initial USD 100", notes)
 
     def test_04_actual_newline_for_readability(self):
         _, notes = _safe_service_prefill(self._request())
@@ -40,7 +41,7 @@ class MojPropPlanOneNoJsPrelaunchTests(SimpleTestCase):
         response = request_form(self._request())
         html = response.content.decode("utf-8")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("MOJ-PROP-01 funded-trading challenge", html)
+        self.assertIn("MOJ-PROP-01 simulated trading challenge", html)
         self.assertIn('name="csrfmiddlewaretoken"', html)
         self.assertIn('action="/moj-prop-intake/?format=html"', html)
         self.assertIn('name="consent"', html)
@@ -50,7 +51,7 @@ class MojPropPlanOneNoJsPrelaunchTests(SimpleTestCase):
         html = request_form(self._request()).content.decode("utf-8")
         self.assertNotIn("Starter30 is a", html)
         self.assertNotIn("ten-session simulated journal", html)
-        self.assertIn("two evaluation stages are simulated", html)
+        self.assertIn("Both challenge and post-pass funded stages use simulated capital", html)
 
     def test_07_private_no_store_and_no_index(self):
         response = request_form(self._request())
@@ -97,7 +98,7 @@ class MojPropPlanOneNoJsPrelaunchTests(SimpleTestCase):
     def test_13_other_general_manual_requests_not_mislabeled(self):
         response = request_form(self._request("format=html&service=blueprint"))
         html = response.content.decode("utf-8")
-        self.assertNotIn("MOJ-PROP-01 funded-trading challenge", html)
+        self.assertNotIn("MOJ-PROP-01 simulated trading challenge", html)
 
     def test_14_starter_educational_query_never_becomes_plan1(self):
         service, notes = _safe_service_prefill(
