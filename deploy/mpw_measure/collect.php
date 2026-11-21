@@ -56,6 +56,7 @@ $pages = [
     '/moj-prop/catalog/' => 'prop',
     '/moj-prop/rules/' => 'prop',
     '/moj-prop/contact/' => 'prop',
+    '/moj-prop/signals/' => 'prop',
     '/mojprop-starter30-checkout/' => 'prop',
 ];
 $event = $x['event'] ?? null;
