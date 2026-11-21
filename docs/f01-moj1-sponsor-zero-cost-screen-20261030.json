@@ -1,0 +1,63 @@
+{
+  "schema": "f01-moj1-audit-sponsor-eligibility.v1",
+  "as_of_utc": "2026-10-29T22:40:00Z",
+  "project": {
+    "chain": "TRON/TVM",
+    "cash_budget_usd": 0,
+    "owner_liability_allowed": false,
+    "mainnet_allowed": false
+  },
+  "decisions": [
+    {
+      "id": "KANN_2026_BATCH1",
+      "official_source": "https://kannaudits.com/audit-grants",
+      "published_requirement": "Approved projects pay $250 participation fee",
+      "decision": "INELIGIBLE_ZERO_OWNER_CASH",
+      "already_contacted": true,
+      "do_not_repeat_contact": true
+    },
+    {
+      "id": "ARBITRUM_ASP_2026",
+      "official_source": "https://blog.arbitrum.foundation/introducing-the-arbitrum-security-program-apply-to-secure-your-smart-contracts/",
+      "published_requirement": "For projects building on Arbitrum ecosystem",
+      "decision": "INELIGIBLE_TRON_ONLY",
+      "already_contacted": false,
+      "do_not_contact_for_TRON_only": true
+    },
+    {
+      "id": "ZEALYNX_SEASON2",
+      "official_source": "https://grants.zealynx.io/grants/season-2",
+      "published_requirement": "Season 2 applications closed 4 October 2026",
+      "decision": "CLOSED_NO_NEW_APPLICATION",
+      "already_contacted": true,
+      "do_not_repeat_contact": true
+    },
+    {
+      "id": "GUARDIAN_EMAIL_ONLY",
+      "official_source": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/853",
+      "published_requirement": "Await asynchronous email-only response to prior grant request",
+      "decision": "PENDING_WRITTEN_REPLY_NOT_FUNDED",
+      "already_contacted": true,
+      "do_not_repeat_contact": true
+    },
+    {
+      "id": "INTERFI_PRO_BONO",
+      "official_source": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1395",
+      "published_requirement": "Await written response to 29 Oct independent TRON/TVM review inquiry",
+      "decision": "PENDING_WRITTEN_REPLY_NOT_AUDITED",
+      "already_contacted": true,
+      "do_not_repeat_contact": true
+    }
+  ],
+  "hard_gates": [
+    "NO_OWNER_FEE_OR_DEPOSIT",
+    "NO_CONTINGENT_LIABILITY",
+    "AUDITOR_IDENTITY_VERIFIED",
+    "SPONSOR_DIRECT_TO_AUDITOR",
+    "INDEPENDENT_HUMAN_AUDIT",
+    "LEGAL_AND_KEY_SECURITY_REVIEW",
+    "NO_MAINNET_OR_SALE"
+  ],
+  "outcome": "NO_QUALIFIED_SIGNED_ZERO_COST_SPONSOR_CONFIRMED",
+  "evidence_notes": "Official program pages support exclusion criteria. Contact history checked against connected Gmail; no new messages sent. This file contains no customer data, credentials, or financial commitments."
+}

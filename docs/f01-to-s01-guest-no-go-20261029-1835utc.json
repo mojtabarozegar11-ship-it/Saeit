@@ -1,0 +1,49 @@
+{
+  "schema": "f01-to-s01-shared-vps-release-gate.v1",
+  "owner": "F-01",
+  "recipient": "S-01",
+  "source_run": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40931604373",
+  "guest_observed_utc": "2026-10-29T18:35:02.485359+00:00",
+  "source_head": "1977a763fea82f97e0fd8d23794c927517f1daf7",
+  "verified": {
+    "ssh_host_pin": true,
+    "ssh_auth_attempt": 3,
+    "cpu_count": 3,
+    "mem_total_kib": 4030372,
+    "mem_available_kib": 2386332,
+    "load_1min": 138.52,
+    "ext4_total_bytes": 42184536064,
+    "ext4_free_blocks_bytes": 2159009792,
+    "ext4_available_to_nonroot_bytes": 0,
+    "all_process_D": 31,
+    "factory_process_name_matches": 217,
+    "init_parent_factory_children": 142,
+    "init_parent_factory_age_1h_to_1d": 142,
+    "factory_per_minute_cron_entries": 3,
+    "queue_entries_at_least": 69,
+    "diagnostic_tests_passed": 32
+  },
+  "not_verified": [
+    "off_host_backup_restored",
+    "production_worker_executed",
+    "DB_integrity",
+    "passenger_effective_DB_identity",
+    "site_checkout_end_to_end",
+    "paid_RAM_upgrade_applied",
+    "cron_causation",
+    "SKU879_queue_hold_deployed"
+  ],
+  "release_decision": "NO_GO",
+  "required_before_S_deploy": [
+    "Authenticated off-host restore with recoverable receipt",
+    "Guest nonroot writable disk reserve and acceptable process pressure",
+    "Verify actual VPS RAM entitlement without unapproved reboot",
+    "Prove application DB identity and rollback",
+    "Owner S-01 confirms site release gates"
+  ],
+  "limits": [
+    "No guest write, cleanup, restart or deployment authorized",
+    "No inference that init-parented process fanout was caused by cron",
+    "No modification to SKU72/225/879, sites or payment"
+  ]
+}
