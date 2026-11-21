@@ -219,7 +219,7 @@ def check_schema_closure(live_root, staged_root):
             if live_root == staged_root and path.stem in REVIEWED_SELFTEST_ONLY_LATER:
                 data = path.read_bytes()
                 git_blob = hashlib.sha1(
-                    b"blob " + str(len(data)).encode("ascii") + b"\\x00" + data
+                    b"blob " + str(len(data)).encode("ascii") + b"\x00" + data
                 ).hexdigest()
                 if len(data) <= 4096 and git_blob == REVIEWED_SELFTEST_ONLY_LATER[path.stem]:
                     continue
