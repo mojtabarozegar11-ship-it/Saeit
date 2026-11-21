@@ -13,7 +13,7 @@ import secrets
 import string
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from config.mojprop_db_router import MOJPROP_DB_ALIAS
@@ -24,6 +24,12 @@ from prop_firm.models import (
     PropSimulationPayment,
 )
 from prop_firm.simulation_identity_adapter import normalize_email, _identity_keys
+from prop_firm.starter30_receiver_pool import (
+    InvoiceAttributionUnavailable,
+    attested_receivers,
+    require_payment_binding,
+    select_unused_receiver,
+)
 from prop_firm.simulation_policy import SIMULATION_POLICY
 from services.mojprop_starter30_tron_settlement import (
     NATIVE_AMOUNT_SUN,
@@ -121,6 +127,7 @@ def verify_pre_invoice_configuration() -> None:
     try:
         _provider_pair()
         _hex_recipient(approved_recipient())
+        attested_receivers()
     except (PaymentHold, ValueError, TypeError) as exc:
         raise Starter30PaymentRejected(
             "TRON verification configuration is unavailable; no invoice may be issued"
@@ -128,49 +135,73 @@ def verify_pre_invoice_configuration() -> None:
 
 
 def issue_invoice(*, email: str, payer_address: str | None = None, terms_accepted: bool) -> IssuedStarter30Invoice:
+    """Atomically reserve one *never reused* owner-attested on-chain receiver.
+
+    Database uniqueness on payment.recipient is the concurrency arbiter. If
+    another request wins the same free address, restart the whole transaction;
+    never expose an uncommitted invoice or a shared receiving address.
+    """
     require_release()
     if terms_accepted is not True:
         raise Starter30PaymentRejected("simulation disclosure must be accepted")
     verify_pre_invoice_configuration()
+    receivers = attested_receivers()
     normalized = normalize_email(email)
     payer_hex41 = _payer_hex(payer_address) if payer_address and payer_address.strip() else None
     subject_key, email_digest = _identity_keys(normalized)
-    now = timezone.now()
-    expires_at = now + timedelta(hours=24)
-    with transaction.atomic(using=MOJPROP_DB_ALIAS):
-        identity, _ = PropSimulationIdentity.objects.using(MOJPROP_DB_ALIAS).get_or_create(
-            provider="email",
-            subject_key=subject_key,
-            defaults={
-                "email_digest": email_digest,
-                "status": PropSimulationIdentity.Status.PENDING,
-            },
-        )
-        if identity.email_digest != email_digest or identity.status == PropSimulationIdentity.Status.BLOCKED:
-            raise Starter30PaymentRejected("email identity is unavailable")
-        invoice_ref = _token("MOJPROP30-")
-        payment_ref = _token("PAY-")
-        owner = PropSimulationInvoiceOwner.objects.using(MOJPROP_DB_ALIAS).create(
-            identity=identity,
-            invoice_ref=invoice_ref,
-            buyer_email_digest=email_digest,
-            settlement_verified=False,
-            contract_version=TERMS_REF,
-        )
-        PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS).create(
-            invoice_owner=owner,
-            payment_ref=payment_ref,
-            product=PRODUCT,
-            network=NETWORK,
-            recipient=approved_recipient(),
-            amount_sun=NATIVE_AMOUNT_SUN,
-            payer_hex41=payer_hex41,
-            issued_at=now,
-            expires_at=expires_at,
-            terms_acceptance_ref=TERMS_REF,
-            status=PropSimulationPayment.Status.AWAITING,
-        )
-    return IssuedStarter30Invoice(payment_ref, invoice_ref, approved_recipient(), NATIVE_AMOUNT_SUN, expires_at)
+    for _ in range(min(len(receivers) + 1, 8)):
+        try:
+            with transaction.atomic(using=MOJPROP_DB_ALIAS):
+                used = set(
+                    PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS)
+                    .filter(recipient__in=receivers)
+                    .values_list("recipient", flat=True)
+                )
+                recipient = select_unused_receiver(receivers, used)
+                identity, _ = PropSimulationIdentity.objects.using(MOJPROP_DB_ALIAS).get_or_create(
+                    provider="email",
+                    subject_key=subject_key,
+                    defaults={
+                        "email_digest": email_digest,
+                        "status": PropSimulationIdentity.Status.PENDING,
+                    },
+                )
+                if identity.email_digest != email_digest or identity.status == PropSimulationIdentity.Status.BLOCKED:
+                    raise Starter30PaymentRejected("email identity is unavailable")
+                invoice_ref = _token("MOJPROP30-")
+                payment_ref = _token("PAY-")
+                now = timezone.now()
+                expires_at = now + timedelta(hours=24)
+                owner = PropSimulationInvoiceOwner.objects.using(MOJPROP_DB_ALIAS).create(
+                    identity=identity,
+                    invoice_ref=invoice_ref,
+                    buyer_email_digest=email_digest,
+                    settlement_verified=False,
+                    contract_version=TERMS_REF,
+                )
+                PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS).create(
+                    invoice_owner=owner,
+                    payment_ref=payment_ref,
+                    product=PRODUCT,
+                    network=NETWORK,
+                    recipient=recipient,
+                    amount_sun=NATIVE_AMOUNT_SUN,
+                    payer_hex41=payer_hex41,
+                    issued_at=now,
+                    expires_at=expires_at,
+                    terms_acceptance_ref=TERMS_REF,
+                    status=PropSimulationPayment.Status.AWAITING,
+                )
+                return IssuedStarter30Invoice(payment_ref, invoice_ref, recipient, NATIVE_AMOUNT_SUN, expires_at)
+        except IntegrityError:
+            # Concurrent reservation / identity conflict: the atomic block
+            # rolled back. Re-read free receivers; never double-assign one.
+            continue
+        except InvoiceAttributionUnavailable as exc:
+            raise Starter30PaymentRejected(str(exc)) from exc
+    raise Starter30PaymentRejected(
+        "invoice receiver could not be exclusively allocated; retry later"
+    )
 
 
 def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
@@ -198,8 +229,8 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
         or transfer_b.solidified is not True
     ):
         raise Starter30PaymentRejected("two provider proofs disagree")
-    if transfer_a.recipient != approved_recipient() or transfer_a.amount_sun != NATIVE_AMOUNT_SUN:
-        raise Starter30PaymentRejected("exact 30 TRX transfer to the approved receiver is required")
+    if transfer_a.amount_sun != NATIVE_AMOUNT_SUN:
+        raise Starter30PaymentRejected("exact 30 native TRX transfer is required")
     outcome = _settle_verified_invoice(invoice_ref=invoice_ref, transfer_a=transfer_a)
     if outcome is _EXPIRED_INVOICE:
         raise Starter30PaymentRejected("invoice has expired")
@@ -218,6 +249,15 @@ def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
             .select_related("invoice_owner", "invoice_owner__identity")
             .get(invoice_owner__invoice_ref=invoice_ref)
         )
+        # An on-chain txid is public. Only the exclusive invoice recipient
+        # identifies which buyer's invoice this transfer actually pays.
+        try:
+            require_payment_binding(
+                recorded_recipient=payment.recipient,
+                onchain_recipient=transfer_a.recipient,
+            )
+        except InvoiceAttributionUnavailable as exc:
+            raise Starter30PaymentRejected(str(exc)) from exc
         now = timezone.now()  # sample clock only AFTER the locked row is acquired
         if payment.status == PropSimulationPayment.Status.PAID:
             if payment.txid == transfer_a.tx_hash:
