@@ -1,0 +1,59 @@
+name: F-01 encrypted off-host rehearsal (synthetic SQLite only)
+on:
+  push:
+    branches: [ops/offhost-backup-target-preflight-20261030]
+    paths:
+      - scripts/f01_encrypt_offhost_backup_v1.py
+      - security/f01_factory_backup_encryption_public_20261030.pem
+      - .github/workflows/f01-encrypted-backup-synthetic-20261030.yml
+permissions:
+  contents: read
+jobs:
+  synthetic-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install runner-only encryption dependency
+        run: python3 -m pip install --user 'cryptography==46.0.4'
+      - name: Generate fake SQLite and encrypt with recipient public key
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/f01-synthetic-encryption"
+          mkdir -p "$d"
+          python3 - "$d/input.sqlite3" <<'PY'
+          import sqlite3,sys
+          db=sqlite3.connect(sys.argv[1])
+          db.execute("create table synthetic (id integer primary key, label text)")
+          db.executemany("insert into synthetic (id,label) values (?,?)", [(i,"FAKE_RECORD_"+str(i)) for i in range(250)])
+          db.commit()
+          assert db.execute("pragma integrity_check").fetchone()==("ok",)
+          db.close()
+          PY
+          python3 scripts/f01_encrypt_offhost_backup_v1.py \
+            --source "$d/input.sqlite3" \
+            --target "$d/isolated-synthetic.f01enc" \
+            --public-key security/f01_factory_backup_encryption_public_20261030.pem
+          python3 - "$d/isolated-synthetic.f01enc" <<'PY'
+          import sys,os
+          p=sys.argv[1]
+          with open(p,"rb") as f:
+              assert f.read(28)==b"F01ENC-RSA3072-AES256GCM-V1\n"
+          assert os.stat(p).st_size>4096
+          print("ENCRYPTED_SYNTHETIC_ONLY=PASS")
+          PY
+          rm -f -- "$d/input.sqlite3"
+          echo "LIVE_VPS_READ=NO"
+          echo "PRIVATE_KEY_PRESENT=NO"
+          echo "OFFHOST_RESTORE_PROVEN=NO"
+      - name: Upload encrypted artifact ONLY (public repository safe)
+        uses: actions/upload-artifact@v4
+        with:
+          name: f01-synthetic-encrypted-20261030
+          path: ${{ runner.temp }}/f01-synthetic-encryption/isolated-synthetic.f01enc
+          retention-days: 3
+          if-no-files-found: error

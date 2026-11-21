@@ -1,0 +1,25 @@
+name: F-01 offhost transfer admission offline tests (no live backup)
+on:
+  push:
+    branches: [ops/offhost-backup-target-preflight-20261030]
+    paths:
+      - scripts/f01_offhost_transfer_admission_20261030.py
+      - tests/test_f01_offhost_transfer_admission_20261030.py
+      - .github/workflows/f01-offhost-transfer-admission-test-20261030.yml
+permissions:
+  contents: read
+jobs:
+  offline-test:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Run no-write fail-closed backup gate tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_offhost_transfer_admission_20261030.py' -v
+          echo "REAL_BACKUP_TRANSFER=NOT_PERFORMED"
+          echo "RESTART=NOT_AUTHORIZED"
