@@ -26,6 +26,10 @@ class LiveSignalsStaticCTAPatchTests(unittest.TestCase):
         self.assertEqual(changed.replace(m.REPLACEMENT, m.ORIGINAL, 1), self.ORIGINAL)
         self.assertEqual(changed.count(b"service=signals"), 1)
         self.assertIn(b"Request a free written signal proposal", changed)
+        self.assertEqual(changed.count(b"utm_source=moj_prop"), 1)
+        self.assertEqual(changed.count(b"utm_medium=onsite"), 1)
+        self.assertIn(b"utm_campaign=signals_education_lead_20261121", changed)
+        self.assertIn(b"utm_content=signal_nav", changed)
         self.assertIn(b'<script defer src="/mpw-measure/tracker.js"></script>', changed)
         self.assertNotIn(b'/mojprop-starter30-checkout/', changed)
 
@@ -52,7 +56,7 @@ class LiveSignalsStaticCTAPatchTests(unittest.TestCase):
         self.assertEqual(m.SOURCE_SHA256,
             "34b05a98ec6fa1eee9d8c340c7cc72a400e109aa712cc113da446f28661720b0")
         self.assertEqual(m.CANDIDATE_SHA256,
-            "88cc091c8238da7362da4cea957773edcaf503bf4f7fbaacf92b3b7e42d253c0")
+            "7ebd4931efb3594f334ee5867ab5974db4275742c11b277ae918b94dd32df4c6")
         self.assertNotIn("open(", m.generate_candidate.__code__.co_names)
         with self.assertRaises(TypeError):
             m.generate_candidate("not raw bytes")
