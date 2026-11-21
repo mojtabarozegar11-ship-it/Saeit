@@ -15,7 +15,7 @@ class CatalogPaidAdmissionFailClosedTest(unittest.TestCase):
         self.assertIn(FREE, page)
         self.assertNotIn('href="/mojprop-starter30-checkout/"', page)
         self.assertIn("Pay only after the secure server issues an invoice", page)
-        self.assertIn("No real broker connection", page)
+        self.assertIn("no real broker connection", page)
 
     def test_catalog_retains_other_distinct_services(self):
         page = PAGE.read_text("utf-8")
