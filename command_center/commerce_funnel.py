@@ -7,6 +7,55 @@ from django.utils import timezone
 from core.models import CommerceFunnelEvent
 
 
+# Server-side events describe backend observations, not proof of a human visitor.
+# In particular, begin_checkout is created by a checkout GET and can include
+# crawlers, uptime checks and internal verification requests.
+EVENT_SEMANTICS = {
+    "view_store": {
+        "classification": "request_level",
+        "human_evidence": False,
+        "sale_evidence": False,
+        "note": "Backend request; do not treat as a unique human visit.",
+    },
+    "view_item": {
+        "classification": "request_level",
+        "human_evidence": False,
+        "sale_evidence": False,
+        "note": "Backend request; do not treat as a unique human visit.",
+    },
+    "begin_checkout": {
+        "classification": "request_level",
+        "human_evidence": False,
+        "sale_evidence": False,
+        "note": "Checkout GET; may include bots, monitoring and internal verification.",
+    },
+    "invoice_created": {
+        "classification": "server_business_event",
+        "human_evidence": False,
+        "sale_evidence": False,
+        "note": "Invoice issuance only; no payment or revenue claim.",
+    },
+    "payment_confirmed": {
+        "classification": "server_business_event",
+        "human_evidence": False,
+        "sale_evidence": "payment_event_only",
+        "note": "Correlate with the authoritative payment and settlement ledger.",
+    },
+    "delivery_success": {
+        "classification": "server_business_event",
+        "human_evidence": False,
+        "sale_evidence": "delivery_event_only",
+        "note": "Delivery event only; do not infer a unique human from it.",
+    },
+    "delivery_failure": {
+        "classification": "server_business_event",
+        "human_evidence": False,
+        "sale_evidence": False,
+        "note": "Delivery failure event only.",
+    },
+}
+
+
 @staff_member_required
 def commerce_funnel_api(request):
     """Read-only funnel summary for staff; never exposes visitor identifiers."""
@@ -32,5 +81,6 @@ def commerce_funnel_api(request):
         "window_days": 30,
         "read_only": True,
         "events": by_event,
+        "event_semantics": EVENT_SEMANTICS,
         "products": products,
     })
