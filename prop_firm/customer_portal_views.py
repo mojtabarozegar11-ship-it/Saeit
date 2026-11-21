@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from hashlib import sha256
+from smtplib import SMTPException
 from html import escape
 import json
 import re
@@ -16,7 +17,7 @@ import uuid
 
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.models import Max
 from django.http import Http404, HttpResponse
 from django.middleware.csrf import get_token, rotate_token
@@ -151,13 +152,15 @@ def _request_code(request) -> HttpResponse:
     )
     # Always provide a verification form, including for unknown emails, without
     # exposing whether the submitted address had an actual paid account.
-    pending_ref = secrets.token_urlsafe(24)
     now = timezone.now()
     last = request.session.get(_SESSION_THROTTLE, 0)
-    request.session[_SESSION_CHALLENGE] = pending_ref
-    request.session[_SESSION_THROTTLE] = int(now.timestamp())
     if type(last) is int and now.timestamp() - last < 60:
+        # Preserve a legitimate code issued moments ago on accidental retries.
+        if not request.session.get(_SESSION_CHALLENGE):
+            request.session[_SESSION_CHALLENGE] = secrets.token_urlsafe(24)
         return _login_page(request, note=message)
+    request.session[_SESSION_CHALLENGE] = secrets.token_urlsafe(24)
+    request.session[_SESSION_THROTTLE] = int(now.timestamp())
 
     try:
         normalized = normalize_email(request.POST.get("email", ""))
@@ -210,7 +213,8 @@ def _request_code(request) -> HttpResponse:
             )
             if sent == 1:
                 request.session[_SESSION_CHALLENGE] = challenge.challenge_ref
-    except (IdentityAdapterClosed, ValueError, TypeError, LookupError):
+    except (IdentityAdapterClosed, DatabaseError, SMTPException, OSError,
+            ValueError, TypeError, LookupError):
         pass
     # A transport or DB outage must fail closed (never issue a browser login).
     # Deliberately no email addresses, codes or invoice refs in HTTP errors.
@@ -218,7 +222,7 @@ def _request_code(request) -> HttpResponse:
 
 
 def _verify_code(request) -> HttpResponse:
-    ref = request.session.pop(_SESSION_CHALLENGE, None)
+    ref = request.session.get(_SESSION_CHALLENGE)
     code = request.POST.get("code", "")
     if not ref or not isinstance(code, str) or len(code) > 128:
         return _login_page(request, note="Code invalid or expired.")
@@ -229,6 +233,7 @@ def _verify_code(request) -> HttpResponse:
     except (IdentityAdapterClosed, ValueError, TypeError, LookupError):
         return _login_page(request, note="Code invalid or expired.")
     request.session.cycle_key()
+    request.session.pop(_SESSION_CHALLENGE, None)
     request.session[_SESSION_ID] = identity_id
     request.session.set_expiry(1800)
     rotate_token(request)
@@ -347,7 +352,13 @@ def _journal(request) -> HttpResponse:
             since = now - timedelta(days=1)
             if journals.filter(created_at__gte=since).count() >= 3:
                 raise InvalidJournal("Daily educational journal limit reached")
-            seq = journals.aggregate(last=Max("sequence_no"))["last"] or 0
+            # Sequence is unique per account across *all* event sources;
+            # journaling must never reuse the numbering of risk/other events.
+            seq = (
+                PropSimulationEvent.objects.using(MOJPROP_DB_ALIAS)
+                .filter(account=account)
+                .aggregate(last=Max("sequence_no"))["last"] or 0
+            )
             case_ref = "MPS30-" + secrets.token_hex(10).upper()
             payload = {
                 "schema": "mojprop.starter30.buyer_education.v1",
