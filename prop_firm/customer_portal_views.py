@@ -33,6 +33,7 @@ from prop_firm.models import (
     PropSimulationEvent,
     PropSimulationIdentity,
     PropSimulationLoginChallenge,
+    PropSimulationPayment,
 )
 from prop_firm.simulation_identity_adapter import (
     IdentityAdapterClosed,
@@ -40,9 +41,8 @@ from prop_firm.simulation_identity_adapter import (
     consume_login_challenge,
     issue_login_challenge,
     normalize_email,
-    settled_accounts,
 )
-from prop_firm.starter30_live import release_is_open
+from prop_firm.starter30_live import PRODUCT, release_is_open
 from scripts.mojprop_starter30 import assess_journal, InvalidJournal
 from scripts.mojprop_starter30_journal_csv import MAX_BYTES, parse_journal_csv
 from scripts.mojprop_starter30_scorecard import render_private_scorecard
@@ -70,6 +70,31 @@ def _require_authorized_release() -> None:
         or getattr(settings, "CSRF_COOKIE_SECURE", False) is not True
     ):
         raise Http404
+
+
+def _paid_learner_accounts(identity_id: int) -> list[dict]:
+    """Verify the original exact Starter30 SKU, PAID status and same owner.
+
+    A settled account from any other program must never inherit Starter30
+    journal access or generate a customer-login email.
+    """
+    if type(identity_id) is not int or identity_id < 1:
+        return []
+    return list(
+        PropSimulationAccount.objects.using(MOJPROP_DB_ALIAS)
+        .filter(
+            identity_id=identity_id,
+            invoice_owner__identity_id=identity_id,
+            invoice_owner__settlement_verified=True,
+            invoice_owner__payment__product=PRODUCT,
+            invoice_owner__payment__status=PropSimulationPayment.Status.PAID,
+        )
+        .order_by("-created_at")
+        .values(
+            "id", "account_ref", "kind", "status",
+            "starting_capital_usd", "policy_version",
+        )[:25]
+    )
 
 
 def _secured(response: HttpResponse) -> HttpResponse:
@@ -177,7 +202,7 @@ def _request_code(request) -> HttpResponse:
             )
             .first()
         )
-        if identity is not None and settled_accounts(identity.pk):
+        if identity is not None and _paid_learner_accounts(identity.pk):
             # Database row lock prevents parallel code requests for an account
             # from defeating the per-identity rolling 15-minute issuance limit.
             with transaction.atomic(using=MOJPROP_DB_ALIAS):
@@ -230,7 +255,7 @@ def _verify_code(request) -> HttpResponse:
         return _login_page(request, note="Code invalid or expired.")
     try:
         identity_id = consume_login_challenge(ref, code)
-        if not settled_accounts(identity_id):
+        if not _paid_learner_accounts(identity_id):
             raise IdentityAdapterClosed("settled entitlement required")
     except (IdentityAdapterClosed, ObjectDoesNotExist, ValueError,
             TypeError, LookupError):
@@ -253,7 +278,7 @@ def _dashboard(request, *, note: str = "") -> HttpResponse:
     identity_id = _session_identity(request)
     if identity_id is None:
         return _login_page(request)
-    accounts = settled_accounts(identity_id)
+    accounts = _paid_learner_accounts(identity_id)
     if not accounts:
         request.session.pop(_SESSION_ID, None)
         return _login_page(request, note="No active paid simulation entitlement.")
@@ -274,7 +299,8 @@ def _dashboard(request, *, note: str = "") -> HttpResponse:
             f"<li>Simulation account <strong>{ref}</strong>: {status}, virtual "
             f"starting reference USD {starting}."
         )
-        if account["status"] == PropSimulationAccount.Status.ACTIVE:
+        if (account["status"] == PropSimulationAccount.Status.ACTIVE
+                and account["kind"] == PropSimulationAccount.Kind.CHALLENGE):
             row_html += (
                 f"<form method='post' action='{ROOT}' enctype='multipart/form-data'>"
                 + _csrf_field(request)
@@ -309,6 +335,8 @@ def _dashboard(request, *, note: str = "") -> HttpResponse:
             account__identity_id=identity_id,
             account__invoice_owner__identity_id=identity_id,
             account__invoice_owner__settlement_verified=True,
+            account__invoice_owner__payment__product=PRODUCT,
+            account__invoice_owner__payment__status=PropSimulationPayment.Status.PAID,
             source=_JOURNAL_SOURCE,
         )
         .order_by("-created_at")
@@ -346,10 +374,13 @@ def _journal(request) -> HttpResponse:
                     identity_id=identity_id,
                     invoice_owner__identity_id=identity_id,
                     invoice_owner__settlement_verified=True,
+                    invoice_owner__payment__product=PRODUCT,
+                    invoice_owner__payment__status=PropSimulationPayment.Status.PAID,
                 )
             )
             if (
                 account.status != PropSimulationAccount.Status.ACTIVE
+                or account.kind != PropSimulationAccount.Kind.CHALLENGE
                 or account.opened_at is None
                 or now < account.opened_at
                 or now >= account.opened_at + timedelta(days=60)
@@ -409,6 +440,8 @@ def _report(request, case_ref: str) -> HttpResponse:
                 account__identity_id=identity_id,
                 account__invoice_owner__identity_id=identity_id,
                 account__invoice_owner__settlement_verified=True,
+                account__invoice_owner__payment__product=PRODUCT,
+                account__invoice_owner__payment__status=PropSimulationPayment.Status.PAID,
             )
         )
     except PropSimulationEvent.DoesNotExist:
