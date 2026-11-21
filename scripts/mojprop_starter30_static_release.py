@@ -19,14 +19,16 @@ HOME = Path("/home/zomorod2")
 ROOT = HOME / "mojplaywin.com"
 TARGET = ROOT / "moj-prop/starter-30-trx"
 BACKUP = HOME / ".mojprop-starter30-backups"
-FILES = ("index.html", "journal-template.csv", "journal-guide.txt")
+LEGACY_FILES = ("index.html", "journal-template.csv", "journal-guide.txt")
+FILES = LEGACY_FILES + ("checkout-attribution.js",)
 # Exact Git blob identities read from the current reviewed main source.
 # The owner must explicitly review/re-pin any revision; do not trust staged
 # tarballs or a caller-supplied commit string as proof of identical bytes.
 REVIEWED_GIT_BLOBS = {
-    "index.html": "cb860afb6b0e011b9d4613a598c0cd2ec91566f2",
+    "index.html": "0453939e3b40304d542a7e8e75f4bef6a9f99280",
     "journal-template.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
     "journal-guide.txt": "1e02213de4bed3fc9211e388b3f8b135ef2c0f0a",
+    "checkout-attribution.js": "dbf6035a9cfeb65dd92995d1302081123ebfbe5c",
 }
 MAX_STAGE_FILE_BYTES = 90_000
 RUN_ID_RE = re.compile(r"[1-9][0-9]{0,18}\Z")
@@ -170,16 +172,20 @@ def _stage_bytes(run_id: str) -> dict[str, bytes]:
     if (not all(mark in page for mark in (
             "MOJPROP-STARTER30", "Checkout available · 30 TRX",
             "server-issued 30 TRX invoice", "never send to another address",
-            "100% of every profit earned", "No real funded account"))
+            "100% of every profit earned", "No real funded account",
+            '<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>'))
             or 'index,follow' not in page
-            or b"session,closing_equity_usd,risk_plan_recorded,reflection_recorded" not in out["journal-template.csv"]):
+            or b"session,closing_equity_usd,risk_plan_recorded,reflection_recorded" not in out["journal-template.csv"]
+            or b"utm_source" not in out["checkout-attribution.js"]
+            or b"utm_content" not in out["checkout-attribution.js"]
+            or b"/mojprop-starter30-checkout/" not in out["checkout-attribution.js"]):
         raise RuntimeError("staged product does not meet the static commercial scope")
     return out
 
 
 def _manifest(run_id: str, commit: str, source: dict[str, bytes]) -> dict:
     _safe_id(run_id, commit)
-    return {"schema": "mojprop.starter30.static.v1", "run_id": run_id,
+    return {"schema": "mojprop.starter30.static.v2", "run_id": run_id,
             "commit": commit, "files": {name: sha(data) for name, data in source.items()},
             "reviewed_source_blobs": {
                 name: REVIEWED_GIT_BLOBS[name] for name in FILES
@@ -238,9 +244,16 @@ def rollback(run_id: str, commit: str) -> None:
     if (location.stat().st_mode & 0o077) or (manifest_path.stat().st_mode & 0o077):
         raise RuntimeError("unprotected backup manifest")
     manifest = json.loads(manifest_path.read_text("utf-8"))
-    if (manifest.get("schema") != "mojprop.starter30.static.v1"
-            or manifest.get("run_id") != run_id or manifest.get("commit") != commit
-            or set(manifest.get("files", {})) != set(FILES)
+    listed = manifest.get("files")
+    schema = manifest.get("schema")
+    if not isinstance(listed, dict):
+        raise RuntimeError("manifest cannot authorize rollback")
+    acceptable = (
+        (schema == "mojprop.starter30.static.v1" and set(listed) == set(LEGACY_FILES))
+        or (schema == "mojprop.starter30.static.v2" and set(listed) == set(FILES))
+    )
+    if (not acceptable or manifest.get("run_id") != run_id
+            or manifest.get("commit") != commit
             or manifest.get("scope") != "static-page-no-payment-execution-no-backend"):
         raise RuntimeError("manifest cannot authorize rollback")
     for name, expected in manifest["files"].items():
@@ -250,7 +263,7 @@ def rollback(run_id: str, commit: str) -> None:
             raise RuntimeError("unsafe symlink during rollback")
         if path.exists() and (not path.is_file() or sha(path.read_bytes()) != expected):
             raise RuntimeError("live asset changed; refuse to delete")
-    for name in FILES:
+    for name in listed:
         (TARGET / name).unlink(missing_ok=True)
     print("STARTER30_STATIC_ROLLBACK=PASS; DB=UNTOUCHED")
 
