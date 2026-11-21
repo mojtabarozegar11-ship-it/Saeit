@@ -66,6 +66,8 @@ class OwnerManifestTests(unittest.TestCase):
     def test_restricted_handle_phishing_and_unsafe_schemes_blocked(self):
         for public_url in [
             "https://www.instagram.com/dr.mojtaba.rozegar/",
+            "https://www.instagram.com/dr%2Emojtaba%2Erozegar/",
+            "https://www.instagram.com/dr%252Emojtaba%252Erozegar/",
             "https://evil.example/official",
             "http://t.me/verifiedsample",
             "https://t.me.evil.example/verifiedsample",
