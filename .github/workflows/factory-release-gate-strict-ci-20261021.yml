@@ -1,0 +1,38 @@
+name: Factory versioned release gate offline regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_quality_release_gate_20261021.py
+      - scripts/test_factory_quality_release_gate_20261021.py
+      - scripts/factory_quality_signed_approval_v1.py
+      - .github/workflows/factory-release-gate-strict-ci-20261021.yml
+  push:
+    branches: [fix/quality-gate-negative-tests-20261021]
+    paths:
+      - scripts/factory_quality_release_gate_20261021.py
+      - scripts/test_factory_quality_release_gate_20261021.py
+      - scripts/factory_quality_signed_approval_v1.py
+      - .github/workflows/factory-release-gate-strict-ci-20261021.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: factory-strict-version-gate-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  strict-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Static Python compilation and independent negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_quality_release_gate_20261021.py scripts/test_factory_quality_release_gate_20261021.py scripts/factory_quality_signed_approval_v1.py
+          python3 -B scripts/test_factory_quality_release_gate_20261021.py
+          python3 -B -m unittest discover -s tests -p test_factory_quality_signed_approval_v1.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_commercial_quality_release_guard_v1.py -v
+          echo FACTORY_SIGNED_RELEASE_NEGATIVE_TESTS=PASS
+          echo FACTORY_COMMERCIAL_PUBLICATION=BLOCKED_WITHOUT_VERIFIED_INDEPENDENT_SIGNATURES
