@@ -33,7 +33,7 @@
 
 - Page views: successful opt-in client page events, **not** all humans or all requests.
 - Qualified/engaged session: opt-in session with an interaction or purchase-intent event. This is a **human-interest proxy**, not proof of a unique person; sophisticated bots can simulate clicks. Excludes unconsenting users, browser blockers and some legitimate passive visits.
-- Buy click: same-origin link selected from public store to /commerce/book/:id/ or from MOJ PROP to Starter30 information/checkout.
+- Buy click: same-origin link selected from public store to /commerce/book/:id/ or from MOJ PROP to the actual /mojprop-starter30-checkout/ form. A link to the Starter30 **information page** is counted as plan_click, never as buy_click. Clicking a checkout link does not prove form submission, invoice issuance, payment, delivery, or a verified human.
 - Drop-off proxy: opted-in engaged entry sessions without a later observed buy-click in the same browser tab. **Not** proof of customer abandonment and not a site-wide bounce rate.
 - Checkout, invoice issuance, TRX payment, settlement and delivery: **not** inferred from a client click. Django checkout pages deliberately retain restrictive CSP and are not instrumented by this script. Authoritative server-side order/invoice/chain reconciliation is separately required before claiming actual conversions. The CLI report uses null (unknown) rather than zero for paid orders or uninstrumented checkout.
 - Sources: UTM labels are meaningful only when campaign links contain safe UTM parameters; no visitor identity is retained in reports.
