@@ -119,10 +119,11 @@ class IssuedStarter30Invoice:
 
 
 def verify_pre_invoice_configuration() -> None:
-    """Reject invoice creation until two independent RPCs and receiver are configured.
+    """Reject new invoices unless RPC, contract, reward and schema gates pass.
 
-    This is a local configuration preflight, NOT a live RPC connectivity or
-    payout-settlement attestation. No database access or value transfer.
+    This checks local configuration and performs read-only isolated payment
+    table UNIQUE-index introspection. It is NOT live RPC connectivity, verified
+    cash custody, a buyer transfer, full database backup or a payout receipt.
     """
     require_release()
     try:
@@ -141,8 +142,12 @@ def verify_pre_invoice_configuration() -> None:
     # payout capability. No NEW invoice is allowed until the actual evaluator,
     # immutable owner terms and externally verified cash reserve/rail all match.
     # Historical invoices are handled by separate reconciliation, not this gate.
-    from prop_firm.starter30_paid_admission import require_paid_admission_readiness
+    from prop_firm.starter30_paid_admission import (
+        require_paid_admission_readiness,
+        require_live_unique_invoice_recipient_schema,
+    )
     require_paid_admission_readiness()
+    require_live_unique_invoice_recipient_schema()
 
 
 def issue_invoice(
