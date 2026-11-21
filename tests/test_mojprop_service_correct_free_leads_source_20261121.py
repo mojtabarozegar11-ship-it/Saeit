@@ -28,7 +28,7 @@ class ServiceCorrectFunnelStaticSourceTests(unittest.TestCase):
         self.assertNotIn('href="/mojprop-starter30-checkout/"', page)
         self.assertNotIn('service=blueprint&amp;package=starter-30-trx', page)
         self.assertIn("No live trading calls", page)
-        self.assertIn("No automatic", page)
+        self.assertIn("Reviewable education, not an active checkout.", page)
 
 
 if __name__ == "__main__":
