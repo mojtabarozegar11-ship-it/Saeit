@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Optional analytics privacy | MojPlayWin</title>
+<meta name="robots" content="noindex,nofollow">
+<style>body{max-width:760px;margin:32px auto;padding:0 18px;color:#ecf0ed;background:#111b22;font:16px/1.65 system-ui}a{color:#a0e4d7}button{padding:9px 16px;border-radius:7px;background:#ead089;border:0;cursor:pointer}</style>
+</head><body>
+<p><a href="/store/">MojPlayWin Store</a> · <a href="/moj-prop/">Moj Prop</a></p>
+<h1>Optional website measurement</h1>
+<p>We ask permission before collecting optional visit and purchase-click events. Declining does not limit browsing or checkout.</p>
+<p>If you opt in, this website sends only the page category, event type (such as viewing a page or clicking the buy link), short campaign labels, a random browser-tab session token and server-side time to the website's own measurement endpoint.</p>
+<p>No form field values, purchase emails, wallet addresses, transaction IDs, complete URLs, IP addresses or account identifiers are written to this analytics event file. Routine web-server access logs may be generated separately for operations and security. No third-party analytics provider receives these events.</p>
+<p>Consent is stored in your browser until changed. A random session ID is stored in browser session storage, with a 30-minute activity window; it is not a payment or login identifier. The private measurement files are accessible only to the site operator. Their maximum operational retention target is 30 days, subject to the operator's backup and deletion controls. Statistics are approximate: browser or bot activity can misclassify visits. Only verified server settlement counts as a sale.</p>
+<p><button id="decline" type="button">Turn off optional measurement</button>
+<button id="accept" type="button">Allow optional measurement</button></p>
+<p id="status" role="status"></p>
+<script>
+(function () {
+  function set(v) {
+    try {
+      localStorage.setItem("mpw_measure_consent_v1", v);
+      if (v === "no") sessionStorage.removeItem("mpw_measure_session_v1");
+      document.getElementById("status").textContent = v === "yes" ? "Optional measurement allowed." : "Optional measurement disabled.";
+    } catch (e) {
+      document.getElementById("status").textContent = "Browser preference could not be stored.";
+    }
+  }
+  document.getElementById("decline").addEventListener("click", function () { set("no"); });
+  document.getElementById("accept").addEventListener("click", function () { set("yes"); });
+})();
+</script></body></html>
