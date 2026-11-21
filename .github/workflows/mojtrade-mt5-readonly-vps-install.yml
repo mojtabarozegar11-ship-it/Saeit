@@ -2,9 +2,6 @@ name: MojTrade MT5 read-only VPS installation
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/mojtrade-mt5-readonly-vps-install.yml
 
 permissions:
   contents: read
