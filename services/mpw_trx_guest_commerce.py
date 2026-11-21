@@ -260,7 +260,7 @@ def patch_public(namespace):
                 'Never share a wallet recovery phrase or private key.</p>'
                 '<p><a href="/commerce/trx-easy/recover/">Recover with purchase email</a></p>'
                 '<p><a href="/store/">Return to store</a> | '
-                '<a href="mailto:support@mojplaywin.com">Purchase support</a></p>'
+                '<a href="mailto:mojplaywin@gmail.com?subject=MojPlayWin%20Purchase%20Support">Purchase support</a></p>'
                 '</main></body></html>',
                 content_type="text/html; charset=utf-8",
                 status=200,

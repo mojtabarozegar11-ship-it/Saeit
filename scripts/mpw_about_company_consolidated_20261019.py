@@ -16,11 +16,11 @@ ROUTES=ROOT/".htaccess"
 MARK="MPW_ABOUT_COMPANY_SEMANTIC_20261019_V2"
 LOGO="/static/site/mojplaywin-coin-logo.420e0d1f954b.png"
 HERO="/static/site/heroes/platform-home.4dd3ab6a401d.webp"
-MAIL="support@mojplaywin.com"
+MAIL="mojplaywin@gmail.com"
 BUSINESS='''<aside id="mpw-business-contact-20261019" class="mpw-business-contact" aria-label="Business and collaboration enquiries">
 <h2>Business partnerships and collaboration</h2>
 <p>For business proposals, licensing enquiries and professional collaboration, use our published contact channel. Include <strong>Business Partnership — MojPlayWin</strong> in the subject and describe your project and requested next step. Availability and response times are not guaranteed.</p>
-<a href="mailto:support@mojplaywin.com?subject=Business%20Partnership%20-%20MojPlayWin">Email a business proposal →</a>
+<a href="mailto:mojplaywin@gmail.com?subject=Business%20Partnership%20-%20MojPlayWin">Email a business proposal →</a>
 </aside>'''
 GLOBAL_STYLES='''<style id="mpw-about-company-align-20261019">
 .mpw-business-contact{box-sizing:border-box;margin:24px auto;padding:clamp(20px,3.5vw,38px);border:1px solid #d6ad55;border-radius:18px;max-width:1240px;background:linear-gradient(135deg,#12140f,#282011);color:#f5f0e4;box-shadow:0 16px 42px #0005}
