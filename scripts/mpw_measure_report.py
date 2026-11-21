@@ -23,6 +23,7 @@ PAGE_SETS = {
     "prop": {
         "/moj-prop/", "/moj-prop/starter-30-trx/", "/moj-prop/payment/",
         "/moj-prop/catalog/", "/moj-prop/rules/", "/moj-prop/contact/",
+        "/moj-prop/signals/",
         "/mojprop-starter30-checkout/",
     },
 }
