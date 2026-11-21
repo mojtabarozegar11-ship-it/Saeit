@@ -270,7 +270,6 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         owner.identity = MagicMock()
         owner.invoice_ref = "invoice-1"
         owner.contract_version = m.TERMS_REF
-        owner.contract_version = m.TERMS_REF
         self.payment.invoice_owner = owner
         self.mock_accounts.return_value.account_ref = "MOJPROP30-ACC-recovered"
         self.mock_manager.using.return_value.filter.return_value.exists.return_value = False
