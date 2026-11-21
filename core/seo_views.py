@@ -77,6 +77,7 @@ def robots_txt(request):
             "Disallow: /mojprop-starter30-checkout/\n"
             "Disallow: /mojprop-starter30-status/\n"
             "Sitemap: https://mojplaywin.com/sitemap.xml\n"
+            "Sitemap: https://mojplaywin.com/moj-prop/education/sitemap.xml\n"
         )
     else:
         body = (
@@ -111,6 +112,12 @@ def sitemap_xml(request):
             "/moj-prop/", "/moj-prop/starter-30-trx/",
             "/moj-prop/rules/", "/moj-prop/signals/",
             "/moj-prop/payment/", "/moj-prop/contact/", "/moj-prop/catalog/",
+            "/moj-prop/education/",
+            "/moj-prop/education/risk-management/",
+            "/moj-prop/education/drawdown-and-position-sizing/",
+            "/moj-prop/education/sixty-day-simulated-challenge/",
+            "/moj-prop/education/best-day-consistency/",
+            "/moj-prop/education/simulated-versus-live/",
         ]
         origin = "https://mojplaywin.com"
     else:
