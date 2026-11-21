@@ -32,6 +32,7 @@ from prop_firm.starter30_receiver_pool import (
     select_unused_receiver,
 )
 from prop_firm.simulation_policy import SIMULATION_POLICY
+from prop_firm.policy_integrity import policy_drift_defects
 from services.mojprop_starter30_tron_settlement import (
     NATIVE_AMOUNT_SUN,
     PRODUCT,
@@ -125,6 +126,13 @@ def verify_pre_invoice_configuration() -> None:
     payout-settlement attestation. No database access or value transfer.
     """
     require_release()
+    # Never issue a new chargeable invoice when source policy and typed
+    # customer terms contradict each other. Do not expose internal defects
+    # in the browser error response.
+    if policy_drift_defects():
+        raise Starter30PaymentRejected(
+            "Starter30 simulation policy verification is unavailable"
+        )
     try:
         _provider_pair()
         _hex_recipient(approved_recipient())
