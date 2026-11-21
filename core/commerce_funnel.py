@@ -7,7 +7,7 @@ from .models import CommerceFunnelEvent, Product
 
 
 def _value(request, name: str, limit: int) -> str:
-    value = request.GET.get(name, "")
+    value = request.GET.get(name, "") or request.POST.get(name, "")
     return value.strip()[:limit] if isinstance(value, str) else ""
 
 
