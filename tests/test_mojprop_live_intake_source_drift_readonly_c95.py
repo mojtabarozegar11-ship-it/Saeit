@@ -112,11 +112,22 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         for relative, expected in EXPECTED.items():
             with self.subTest(source=relative):
                 source = root / relative
-                if relative == "config/urls.py":
+                if relative in ("config/urls.py", "core/mojprop_accessible_intake.py"):
                     source = root / "docs/mojprop/historical-static-evidence" / (expected + ".py.txt")
                 self.assertTrue(source.is_file(), relative)
                 self.assertFalse(source.is_symlink(), relative)
                 self.assertEqual(exact_git_blob(source.read_bytes()), expected)
+
+    def test_current_lead_form_source_references_reviewed_snapshot_without_moving_c95_pin(self):
+        root = Path(__file__).resolve().parents[1]
+        old_ref = EXPECTED["core/mojprop_accessible_intake.py"]
+        historical = root / "docs/mojprop/historical-static-evidence" / (old_ref + ".py.txt")
+        current = root / "core/mojprop_accessible_intake.py"
+        self.assertEqual(exact_git_blob(historical.read_bytes()), old_ref)
+        # The archived C95 reference remains the true source used for the
+        # original production comparison; the new PR is NOT a cPanel release.
+        self.assertEqual(exact_git_blob(current.read_bytes()), "bc51dcdd2a53c891071010c1a661a81981cb8a44")
+        self.assertNotEqual(exact_git_blob(current.read_bytes()), old_ref)
 
     def test_current_url_source_exact_delta_without_changing_historical_auditor(self):
         root = Path(__file__).resolve().parents[1]
