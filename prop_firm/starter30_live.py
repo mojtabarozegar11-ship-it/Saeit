@@ -137,6 +137,12 @@ def verify_pre_invoice_configuration() -> None:
         raise Starter30PaymentRejected(
             "TRON verification configuration is unavailable; no invoice may be issued"
         ) from exc
+    # A configured TRON receiver and working RPCs do not prove 100%-of-profit
+    # payout capability. No NEW invoice is allowed until the actual evaluator,
+    # immutable owner terms and externally verified cash reserve/rail all match.
+    # Historical invoices are handled by separate reconciliation, not this gate.
+    from prop_firm.starter30_paid_admission import require_paid_admission_readiness
+    require_paid_admission_readiness()
 
 
 def issue_invoice(
