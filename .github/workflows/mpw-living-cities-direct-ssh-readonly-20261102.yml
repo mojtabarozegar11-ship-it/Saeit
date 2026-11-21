@@ -1,0 +1,56 @@
+name: MojPlayWin Living Cities pinned direct cPanel readiness
+on:
+  pull_request:
+    branches: [main]
+    paths: [.github/workflows/mpw-living-cities-direct-ssh-readonly-20261102.yml]
+permissions: {contents: read}
+jobs:
+  direct-cpanel-readonly:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Test the dedicated direct host identity and existing game assets
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY" || { echo CPANEL_SECRET_UNAVAILABLE; exit 1; }
+          umask 077
+          d="$RUNNER_TEMP/mpw-direct-only"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/known_hosts"
+          test "$(ssh-keygen -lf "$d/known_hosts" -E sha256 | awk '{print $2}')" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 75s ssh -T -F /dev/null \
+            -i "$d/key" \
+            -o "UserKnownHostsFile=$d/known_hosts" \
+            -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes \
+            -o BatchMode=yes -o ConnectTimeout=18 \
+            -o ConnectionAttempts=1 -o ForwardAgent=no \
+            -p 1396 zomorod2@178.239.147.125 \
+            'python3 -' <<'PY'
+          import os
+          from pathlib import Path
+          h=Path("/home/zomorod2")
+          root=h/"mojplaywin.com"
+          game=root/"living-cities"
+          assert os.geteuid()==h.stat().st_uid
+          assert root.is_dir() and not root.is_symlink()
+          assert game.is_dir() and not game.is_symlink()
+          m=game/"LC-OWNER.txt"
+          assert m.is_file() and not m.is_symlink()
+          marker=m.read_text().strip()
+          assert marker.startswith("MPW-LIVING-CITIES-")
+          print("DIRECT_HOST_AUTHENTICATED=PASS")
+          print("PUBLIC_GAME_OWNER="+marker)
+          for rel in ("play/index.html","static/living_cities/app.mjs","static/living_cities/tycoon-panel.mjs"):
+              print("GAME_PATH="+rel+" PRESENT="+str((game/rel).is_file()))
+          print("HOST_CHECK_READ_ONLY=PASS")
+          PY
+          echo DIRECT_CPANEL_VIA_VPS=NO
+          echo PRODUCTION_WRITES=NONE
