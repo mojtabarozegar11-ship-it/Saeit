@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git hash-object -- deploy/mojtaba_vps_sandbox_prereq_readonly_20261121.py)" = "441ee41b3fba353485830b60c92be634b1b61138"
-          PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile deploy/mojtaba_vps_sandbox_prereq_readonly_20261121.py
+          python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("deploy/mojtaba_vps_sandbox_prereq_readonly_20261121.py").read_text(encoding="utf-8"))'
           echo "MOJTABA_VPS_SECURITY_AUDITOR_PIN=verified"
 
       - name: Read only VPS prerequisites through existing pinned SSH loopback
