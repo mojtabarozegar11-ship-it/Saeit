@@ -1,0 +1,89 @@
+name: Factory owner500 autonomous safe production (five-minute VPS scheduler)
+on:
+  push:
+    branches: [feature/factory-demand-500-20261022]
+    paths:
+      - scripts/factory_owner500_autonomous_engine.py
+      - tests/test_factory_owner500_autonomous_engine.py
+      - factory_config/owner500_autonomous_f28_formulas.json
+      - deploy/install_owner500_autonomous_private.sh
+      - .github/workflows/factory-owner500-autonomous-vps-20261022.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-owner500-autonomous-private-canary
+  cancel-in-progress: false
+jobs:
+  test-autonomous-selection-and-repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Test autonomous real source-backed products and rework gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_owner500_autonomous_private.sh
+          python3 -B -m py_compile scripts/factory_owner500_autonomous_engine.py
+          PYTHONPATH=scripts python3 -B -m unittest discover -s tests -p 'test_factory_owner500_autonomous_engine.py' -v
+          PYTHONPATH=scripts python3 -B -m unittest discover -s tests -p 'test_factory_owner500_f28_real_builder.py' -v
+          echo OWNER500_AUTONOMOUS_REAL_PRODUCTION_REGRESSIONS=PASS
+  private-vps-autonomous-scheduler:
+    needs: test-autonomous-selection-and-repair
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/factory-demand-500-20261022'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pin VPS host, transfer checked modules, execute product canary, install guarded recurring cron
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d)"
+          chmod 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          stage="/home/githubops/factory-runtime/operations/.owner500-autonomy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 35s ssh -T "${opts[@]}" "$host" "set -eu; test \"\$(id -un)\" = githubops; test ! -e '$stage'; install -d -m 700 '$stage'"
+          files=(
+            scripts/factory_owner500_autonomous_engine.py
+            scripts/factory_design_intake.py
+            scripts/factory_recipe_designer.py
+            scripts/factory_product_maker.py
+            scripts/factory_verified_customer_cycle_20261021.py
+            scripts/factory_personal_owner_passport_policy_20261020.py
+            factory_config/owner_demand_500_20261022.json
+            factory_config/owner500_autonomous_f28_formulas.json
+            deploy/install_owner500_autonomous_private.sh
+          )
+          for src in "${files[@]}"; do
+            name="${src##*/}"
+            scp -q "${opts[@]}" "$src" "$host:$stage/$name"
+            expected="$(sha256sum "$src" | cut -d' ' -f1)"
+            actual="$(timeout 45s ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$name' | cut -d' ' -f1")"
+            test "$expected" = "$actual"
+          done
+          echo OWNER500_AUTONOMY_TRANSFER_CONTENT_HASHES=PASS
+          timeout 480s ssh -T "${opts[@]}" "$host" "bash -n '$stage/install_owner500_autonomous_private.sh'; /bin/bash '$stage/install_owner500_autonomous_private.sh' '$stage'"
+          echo OWNER500_AUTONOMY_PRIVATE_SCHEDULED_CANARY=PASS
+          echo OWNER500_AUTONOMY_STORE_PUBLICATION=DISABLED
+          echo OWNER500_AUTONOMY_PAYMENTS=UNTOUCHED
+          timeout 45s ssh -T "${opts[@]}" "$host" "rm -f -- '$stage/factory_owner500_autonomous_engine.py' '$stage/factory_design_intake.py' '$stage/factory_recipe_designer.py' '$stage/factory_product_maker.py' '$stage/factory_verified_customer_cycle_20261021.py' '$stage/factory_personal_owner_passport_policy_20261020.py' '$stage/owner_demand_500_20261022.json' '$stage/owner500_autonomous_f28_formulas.json' '$stage/install_owner500_autonomous_private.sh'; rmdir '$stage'"

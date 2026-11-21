@@ -1,0 +1,546 @@
+{
+  "schema": "saeit.factory.owner-500-autonomous-formula-queue.v1",
+  "description": "Owner-initiated, manually specified arithmetic formula briefs; not market validation. No product release approvals.",
+  "technical_review_required": true,
+  "commercial_publication_allowed": false,
+  "formulas": [
+    {
+      "owner_item_id": "PD-0082",
+      "family_id": "F28",
+      "definition": {
+        "title": "Cloud Compute Hours Budget Calculator",
+        "problem": "Calculate total variable compute cost from planned compute hours and specified cost per hour; excludes all other infrastructure charges.",
+        "expression": "compute_hours * price_per_hour",
+        "output_unit": "currency",
+        "inputs": [
+          {
+            "name": "compute_hours",
+            "unit": "hours",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "price_per_hour",
+            "unit": "currency/hour",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0083",
+      "family_id": "F28",
+      "definition": {
+        "title": "Cold Chain Holding Time Cost Calculator",
+        "problem": "Calculate a theoretical storage charge from charged storage days and a stated daily price; excludes temperature excursions.",
+        "expression": "holding_days * daily_charge",
+        "output_unit": "currency",
+        "inputs": [
+          {
+            "name": "holding_days",
+            "unit": "days",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "daily_charge",
+            "unit": "currency/day",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0084",
+      "family_id": "F28",
+      "definition": {
+        "title": "Compost Carbon Nitrogen Ratio Scenario Calculator",
+        "problem": "Calculate a measured carbon to nitrogen mass ratio, not a chemical or biological compost maturity assessment.",
+        "expression": "carbon_mass_g / nitrogen_mass_g",
+        "output_unit": "ratio",
+        "inputs": [
+          {
+            "name": "carbon_mass_g",
+            "unit": "g",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "nitrogen_mass_g",
+            "unit": "g",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0085",
+      "family_id": "F28",
+      "definition": {
+        "title": "Crop Seed Spacing Density Calculator",
+        "problem": "Calculate nominal planting positions from area divided by the product of row and in-row spacing; excludes borders, geometry and losses.",
+        "expression": "plot_area_m2 / (row_spacing_m * plant_spacing_m)",
+        "output_unit": "positions",
+        "inputs": [
+          {
+            "name": "plot_area_m2",
+            "unit": "m2",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "row_spacing_m",
+            "unit": "m",
+            "minimum": 1,
+            "maximum": 100
+          },
+          {
+            "name": "plant_spacing_m",
+            "unit": "m",
+            "minimum": 1,
+            "maximum": 100
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0088",
+      "family_id": "F28",
+      "definition": {
+        "title": "Farm Logistics Vehicle Load Utilization Tool",
+        "problem": "Calculate reported vehicle load as a fraction of declared maximum payload without making any legal road-weight certification.",
+        "expression": "loaded_kg / payload_capacity_kg",
+        "output_unit": "fraction",
+        "inputs": [
+          {
+            "name": "loaded_kg",
+            "unit": "kg",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "payload_capacity_kg",
+            "unit": "kg",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0089",
+      "family_id": "F28",
+      "definition": {
+        "title": "Farm Reservoir Daily Capacity Arithmetic Estimator",
+        "problem": "Calculate days of nominal water supply from stored volume and measured average daily need; excludes recharge and evaporation.",
+        "expression": "stored_litres / consumed_litres_per_day",
+        "output_unit": "days",
+        "inputs": [
+          {
+            "name": "stored_litres",
+            "unit": "litres",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          {
+            "name": "consumed_litres_per_day",
+            "unit": "litres/day",
+            "minimum": 1,
+            "maximum": 1000000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0091",
+      "family_id": "F28",
+      "definition": {
+        "title": "Game Level Reward Balance Calculator",
+        "problem": "Calculate average reward points per played game level under a simple fixed reward budget assumption.",
+        "expression": "available_points / planned_levels",
+        "output_unit": "points/level",
+        "inputs": [
+          {
+            "name": "available_points",
+            "unit": "points",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "planned_levels",
+            "unit": "levels",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0092",
+      "family_id": "F28",
+      "definition": {
+        "title": "Genomic Sequence Read Storage Estimator",
+        "problem": "Calculate uncompressed raw read bytes from read count times declared bytes per read; excludes metadata and file headers.",
+        "expression": "read_count * average_bytes_per_read",
+        "output_unit": "bytes",
+        "inputs": [
+          {
+            "name": "read_count",
+            "unit": "reads",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          {
+            "name": "average_bytes_per_read",
+            "unit": "bytes/read",
+            "minimum": 1,
+            "maximum": 1000000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0093",
+      "family_id": "F28",
+      "definition": {
+        "title": "Greenhouse Labor Shift Staffing Arithmetic Calculator",
+        "problem": "Calculate planned employee-hours from headcount and hours per person; excludes absences, breaks and regulations.",
+        "expression": "worker_count * hours_per_worker",
+        "output_unit": "worker_hours",
+        "inputs": [
+          {
+            "name": "worker_count",
+            "unit": "workers",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "hours_per_worker",
+            "unit": "hours/worker",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0095",
+      "family_id": "F28",
+      "definition": {
+        "title": "Lab Consumable Inventory Runway Calculator",
+        "problem": "Calculate nominal days of remaining lab consumable units at a stated steady daily consumption rate.",
+        "expression": "available_units / units_per_day",
+        "output_unit": "days",
+        "inputs": [
+          {
+            "name": "available_units",
+            "unit": "units",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          {
+            "name": "units_per_day",
+            "unit": "units/day",
+            "minimum": 1,
+            "maximum": 1000000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0097",
+      "family_id": "F28",
+      "definition": {
+        "title": "Quality Inspection Defect Rate Scenario Calculator",
+        "problem": "Calculate inspected defective item count divided by total inspected count, not a statistical process-control certification.",
+        "expression": "defective_items / inspected_items",
+        "output_unit": "defect_fraction",
+        "inputs": [
+          {
+            "name": "defective_items",
+            "unit": "items",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "inspected_items",
+            "unit": "items",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0098",
+      "family_id": "F28",
+      "definition": {
+        "title": "Research Sample Pooling Volume Calculator",
+        "problem": "Calculate total pooling microlitres from equal per-sample aliquots and sample count; excludes pipetting losses.",
+        "expression": "aliquot_ul * number_of_samples",
+        "output_unit": "uL",
+        "inputs": [
+          {
+            "name": "aliquot_ul",
+            "unit": "uL",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "number_of_samples",
+            "unit": "samples",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0099",
+      "family_id": "F28",
+      "definition": {
+        "title": "Solar Greenhouse Energy Budget Calculator",
+        "problem": "Calculate unconstrained nominal kilowatt-hour solar output from rated kilowatts and effective sunshine hours; excludes actual weather.",
+        "expression": "panel_kw * sunshine_hours",
+        "output_unit": "kWh",
+        "inputs": [
+          {
+            "name": "panel_kw",
+            "unit": "kW",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "sunshine_hours",
+            "unit": "hours",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0100",
+      "family_id": "F28",
+      "definition": {
+        "title": "Website Asset Transfer Cost Calculator",
+        "problem": "Calculate volume-dependent transfer costs from transferable gigabytes and provider price per gigabyte.",
+        "expression": "transferred_gb * price_per_gb",
+        "output_unit": "currency",
+        "inputs": [
+          {
+            "name": "transferred_gb",
+            "unit": "GB",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "price_per_gb",
+            "unit": "currency/GB",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0191",
+      "family_id": "F28",
+      "definition": {
+        "title": "Cold Storage Capacity Calculator",
+        "problem": "Calculate theoretical whole-bin space capacity by dividing usable volume by volume per bin; rounding and packing must be reviewed.",
+        "expression": "usable_volume_m3 / bin_volume_m3",
+        "output_unit": "bins",
+        "inputs": [
+          {
+            "name": "usable_volume_m3",
+            "unit": "m3",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "bin_volume_m3",
+            "unit": "m3/bin",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0194",
+      "family_id": "F28",
+      "definition": {
+        "title": "Game Economy Balance Arithmetic Tool",
+        "problem": "Calculate average issued virtual currency per active player from a user-supplied internal game economy.",
+        "expression": "issued_currency / active_players",
+        "output_unit": "currency/player",
+        "inputs": [
+          {
+            "name": "issued_currency",
+            "unit": "game_tokens",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "active_players",
+            "unit": "players",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0195",
+      "family_id": "F28",
+      "definition": {
+        "title": "Genome Coverage Arithmetic Calculator",
+        "problem": "Calculate nominal sequencing depth from aligned base count and reference size, without accounting for mapping biases.",
+        "expression": "sequenced_bases / reference_bases",
+        "output_unit": "coverage_x",
+        "inputs": [
+          {
+            "name": "sequenced_bases",
+            "unit": "bases",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          {
+            "name": "reference_bases",
+            "unit": "bases",
+            "minimum": 1,
+            "maximum": 1000000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0198",
+      "family_id": "F28",
+      "definition": {
+        "title": "Research Time Budget Calculator",
+        "problem": "Calculate planned work-hours for repeated research tasks with stated average time per task.",
+        "expression": "task_count * hours_per_task",
+        "output_unit": "hours",
+        "inputs": [
+          {
+            "name": "task_count",
+            "unit": "tasks",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "hours_per_task",
+            "unit": "hours/task",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0199",
+      "family_id": "F28",
+      "definition": {
+        "title": "Scientific Sample Dilution Calculator",
+        "problem": "Calculate ideal concentration after a dilution by applying mass conservation to a well-mixed sample; actual protocols need specialist review.",
+        "expression": "(stock_conc_mg_ml * stock_volume_ml) / final_volume_ml",
+        "output_unit": "mg/mL",
+        "inputs": [
+          {
+            "name": "stock_conc_mg_ml",
+            "unit": "mg/mL",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "stock_volume_ml",
+            "unit": "mL",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "final_volume_ml",
+            "unit": "mL",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    },
+    {
+      "owner_item_id": "PD-0200",
+      "family_id": "F28",
+      "definition": {
+        "title": "Solar Farm Energy Yield Scenario Calculator",
+        "problem": "Calculate theoretical solar energy from rated power, reference sun hours and a bounded performance factor; not a field yield prediction.",
+        "expression": "(rated_power_kw * sun_hours) * performance_factor",
+        "output_unit": "kWh",
+        "inputs": [
+          {
+            "name": "rated_power_kw",
+            "unit": "kW",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "sun_hours",
+            "unit": "hours",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          {
+            "name": "performance_factor",
+            "unit": "fraction",
+            "minimum": 0.2,
+            "maximum": 1
+          }
+        ]
+      },
+      "knowledge_boundary": "declared arithmetic only",
+      "domain_quality_approved": false
+    }
+  ]
+}
