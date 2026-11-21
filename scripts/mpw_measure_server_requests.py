@@ -15,10 +15,24 @@ import json
 from pathlib import Path
 import re
 
-LOGS = (
-    Path("/home/zomorod2/access-logs/mojplaywin.com.zomorodmelal.ir-ssl_log"),
-    Path("/home/zomorod2/logs/mojplaywin.com.zomorodmelal.ir-ssl_log-Nov-2026.gz"),
-)
+CURRENT_LOG = Path("/home/zomorod2/access-logs/mojplaywin.com.zomorodmelal.ir-ssl_log")
+ARCHIVE_DIR = Path("/home/zomorod2/logs")
+ARCHIVE_PREFIX = "mojplaywin.com.zomorodmelal.ir-ssl_log-"
+
+
+def discover_logs(now, days):
+    """Pinned domain, rolling calendar months; no directory-wide log crawling."""
+    start = now - timedelta(days=days + 2)  # cover local-month offset
+    month = datetime(start.year, start.month, 1, tzinfo=timezone.utc)
+    end = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    paths = [CURRENT_LOG]
+    while month <= end:
+        paths.append(ARCHIVE_DIR / (ARCHIVE_PREFIX + month.strftime("%b-%Y") + ".gz"))
+        year, m = (month.year + 1, 1) if month.month == 12 else (month.year, month.month + 1)
+        month = datetime(year, m, 1, tzinfo=timezone.utc)
+        if len(paths) > 5:
+            raise ValueError("TOO_MANY_LOG_MONTHS")
+    return tuple(paths)
 REQUEST = re.compile(r'^([A-Z]+) ([^ ]+) HTTP/[0-9.]+$')
 TIMESTAMP = re.compile(r'\[([0-9]{2}/[A-Za-z]{3}/[0-9]{4}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+-][0-9]{4})\]')
 AUTOMATION = re.compile(
@@ -91,8 +105,10 @@ def parse_line(line: str):
     return occurred, match[0], match[1], method, code, category
 
 
-def summarize(logs=LOGS, days=7, now=None):
+def summarize(logs=None, days=7, now=None):
     now = now or datetime.now(timezone.utc)
+    if logs is None:
+        logs = discover_logs(now, days)
     since = now - timedelta(days=days)
     counts = defaultdict(Counter)
     statuses = defaultdict(Counter)
