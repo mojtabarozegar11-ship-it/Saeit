@@ -1,0 +1,321 @@
+name: Zomorod-only hosted backup and template inventory (READ ONLY)
+on:
+  push:
+    branches: [audit/zm-host-cleanup-inventory-20261101]
+    paths: [".github/workflows/zm-host-cleanup-inventory-20261101.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-host-cleanup-inventory-20261101
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Audit ONLY Zomorod backup roots and template roots without modifying host files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import os, stat, json, time, hashlib
+          from pathlib import Path
+          HOME=Path.home()
+          assert HOME==Path("/home/zomorod2"), "Unexpected account"
+          now=time.time()
+          backup_roots=[
+              ("canonical", HOME/"Saeit/backups"),
+              ("private", HOME/".backups"),
+              ("staging", HOME/"Saeit-staging/zomorod_json_admin_stage/backups"),
+              ("staging-backups", HOME/"Saeit-staging/backups"),
+          ]
+          template_roots=[
+              ("saeit", HOME/"Saeit/core/templates"),
+              ("staging", HOME/"Saeit-staging/core/templates"),
+              ("published", HOME/"public_html"),
+          ]
+          def entries(root, max_depth=12, cap=80000):
+              if not root.is_dir() or root.is_symlink():
+                  return [],"missing"
+              result=[]
+              for directory, dirnames, filenames in os.walk(root, followlinks=False):
+                  d=Path(directory)
+                  depth=len(d.relative_to(root).parts)
+                  dirnames[:]=sorted(name for name in dirnames
+                                     if not (d/name).is_symlink()) if depth<max_depth else []
+                  for filename in sorted(filenames):
+                      p=d/filename
+                      try:
+                          st=p.lstat()
+                      except OSError:
+                          continue
+                      if not stat.S_ISREG(st.st_mode):
+                          continue
+                      result.append((p,st.st_size,st.st_mtime))
+                      if len(result)>=cap:
+                          return result,"capped"
+              return result,"complete"
+          def safe_name(p, root):
+              return str(p.relative_to(root))[:180]
+          allbackups=[]
+          for label,root in backup_roots:
+              data,state=entries(root)
+              total=sum(x[1] for x in data)
+              print("BACKUP_ROOT="+json.dumps({"name":label,"status":state,"files":len(data),
+                  "mib":round(total/1048576,1),"older_30d":sum(now-m>30*86400 for _,_,m in data),
+                  "older_90d":sum(now-m>90*86400 for _,_,m in data)},ensure_ascii=True))
+              for p,size,mtime in data:
+                  allbackups.append((label,root,p,size,mtime))
+          top=sorted(allbackups,key=lambda x:x[3],reverse=True)[:35]
+          for label,root,p,size,mtime in top:
+              print("LARGE_BACKUP="+json.dumps({"root":label,"file":safe_name(p,root),
+                   "mib":round(size/1048576,2),"age_days":round(max(0,now-mtime)/86400,1)},ensure_ascii=True))
+          old=sorted((x for x in allbackups if now-x[4]>30*86400),key=lambda x:x[4])[:25]
+          for label,root,p,size,mtime in old:
+              print("OLD_BACKUP_CANDIDATE="+json.dumps({"root":label,"file":safe_name(p,root),
+                   "mib":round(size/1048576,2),"age_days":round((now-mtime)/86400,1)},ensure_ascii=True))
+          # Per-lineage inventory is restricted to Zomorod-named backup families.
+          # File ages are informational; mtime alone is not grounds for deletion.
+          buckets={}
+          other={"files":0,"bytes":0}
+          for label,root,p,size,mtime in allbackups:
+              if label!="private":
+                  continue
+              first=p.relative_to(root).parts[0]
+              if first.startswith(("zomorod","zm-","ZM-")):
+                  b=buckets.setdefault(first,{"files":0,"bytes":0,"oldest_mtime":mtime,
+                                                "latest_mtime":mtime})
+                  b["files"]+=1
+                  b["bytes"]+=size
+                  b["oldest_mtime"]=min(b["oldest_mtime"],mtime)
+                  b["latest_mtime"]=max(b["latest_mtime"],mtime)
+              else:
+                  other["files"]+=1
+                  other["bytes"]+=size
+          for name,b in sorted(buckets.items(),key=lambda kv:kv[1]["bytes"],reverse=True)[:60]:
+              print("ZM_BACKUP_FAMILY="+json.dumps({
+                  "family":name,"files":b["files"],"mib":round(b["bytes"]/1048576,2),
+                  "oldest_file_age_days":round((now-b["oldest_mtime"])/86400,1),
+                  "newest_file_age_days":round((now-b["latest_mtime"])/86400,1)},ensure_ascii=True))
+          print("PRIVATE_NON_ZM_PROTECTED="+json.dumps({
+              "files":other["files"],"mib":round(other["bytes"]/1048576,1)},ensure_ascii=True))
+          # Independently confirm prior recoverable public-preview cleanup.
+          quarantine=HOME/".backups/zomorod-quarantined-old-previews-20261101"
+          if quarantine.is_dir() and not quarantine.is_symlink():
+              names=sorted(p.name for p in quarantine.iterdir() if p.is_dir() and not p.is_symlink())
+              live=HOME/"public_html"
+              all_absent=all(not (live/name).exists() for name in names)
+              print("QUARANTINE_POSTCHECK="+json.dumps({"folders":len(names),
+                  "absent_from_live":all_absent,"has_manifest":(quarantine/"manifest.json").is_file()},
+                  ensure_ascii=True))
+          # Identify whole historical release snapshots (not individual static assets).
+          # A repeated asset inside separate restore points is NOT safe to prune alone.
+          releases={}
+          for label,root,p,size,mtime in allbackups:
+              if label!="private":
+                  continue
+              rel=p.relative_to(root).parts
+              if len(rel)<2 or rel[0] not in ("zomorodmelal-complete","zomorodmelal-app"):
+                  continue
+              if len(rel)>=3 and len(rel[1])==40 and all(c in "0123456789abcdef" for c in rel[1]):
+                  key="/".join(rel[:3])
+              else:
+                  key="/".join(rel[:2])
+              b=releases.setdefault(key,{"files":0,"bytes":0,"oldest":mtime,"newest":mtime})
+              b["files"]+=1
+              b["bytes"]+=size
+              b["oldest"]=min(b["oldest"],mtime)
+              b["newest"]=max(b["newest"],mtime)
+          for key,b in sorted(releases.items(),key=lambda kv:kv[1]["bytes"],reverse=True)[:45]:
+              print("RELEASE_SNAPSHOT="+json.dumps({
+                  "snapshot":key,"files":b["files"],"mib":round(b["bytes"]/1048576,2),
+                  "oldest_file_days":round((now-b["oldest"])/86400,1),
+                  "newest_file_days":round((now-b["newest"])/86400,1)},ensure_ascii=True))
+          # Hash only same-size non-database archive candidates; never expose contents.
+          archives=(".zip",".tar",".tgz",".tar.gz",".gz",".7z",".rar")
+          bysize={}
+          for item in allbackups:
+              _,_,p,size,_=item
+              if 0<size<=64*1048576 and p.name.lower().endswith(archives):
+                  bysize.setdefault(size,[]).append(item)
+          spent=0
+          groups=[]
+          for size,items in sorted(bysize.items()):
+              if len(items)<2 or spent+size*len(items)>512*1048576:
+                  continue
+              hashes={}
+              for item in items:
+                  h=hashlib.sha256()
+                  try:
+                      with item[2].open("rb") as fh:
+                          for chunk in iter(lambda: fh.read(1024*1024),b""):
+                              h.update(chunk)
+                  except OSError:
+                      continue
+                  spent+=size
+                  hashes.setdefault(h.hexdigest(),[]).append(item)
+              for digest,dupes in hashes.items():
+                  if len(dupes)>1:
+                      groups.append({"files":[{"root":i[0],"file":safe_name(i[2],i[1])} for i in dupes],
+                                     "mib_each":round(size/1048576,2),"sha256_prefix":digest[:16]})
+          for group in groups[:20]:
+              print("EXACT_BACKUP_DUPLICATES="+json.dumps(group,ensure_ascii=True))
+          print("BACKUP_DUPLICATE_GROUPS_FOUND="+str(len(groups)))
+          # Source and staging templates can both be active. List only: NEVER remove.
+          for label,root in template_roots:
+              data,state=entries(root,4,6000)
+              if label=="published":
+                  html=[x for x in data if x[0].suffix.lower() in (".html",".htm") and
+                         len(x[0].relative_to(root).parts)<=3]
+              else:
+                  html=[x for x in data if x[0].suffix.lower() in (".html",".htm")]
+              print("TEMPLATE_ROOT="+json.dumps({"root":label,"status":state,
+                "html_files":len(html),"html_mib":round(sum(x[1] for x in html)/1048576,2)},ensure_ascii=True))
+              for p,size,mtime in sorted(html,key=lambda x:x[1],reverse=True)[:12]:
+                  print("TEMPLATE_SAMPLE="+json.dumps({"root":label,"file":safe_name(p,root),
+                    "bytes":size,"age_days":round(max(0,now-mtime)/86400,1)},ensure_ascii=True))
+          # Only review/playground URLs under Zomorod's document root are candidates.
+          web=HOME/"public_html"
+          named=[]
+          if web.is_dir() and not web.is_symlink():
+              for child in sorted(web.iterdir()):
+                  if child.is_dir() and not child.is_symlink() and child.name.startswith("__zm_"):
+                      files,state=entries(child,3,300)
+                      idx=child/"index.html"
+                      h=""
+                      if idx.is_file() and not idx.is_symlink() and idx.stat().st_size<4*1048576:
+                          h=hashlib.sha256(idx.read_bytes()).hexdigest()[:20]
+                      named.append((child,files,state,h))
+              reference_files=[]
+              for p,size,mtime in entries(web,4,9000)[0]:
+                  if any(bit.startswith("__zm_") for bit in p.relative_to(web).parts):
+                      continue
+                  if p.suffix.lower() not in (".html",".htm",".js",".css",".xml",".json") and p.name!=".htaccess":
+                      continue
+                  if size>4*1048576:
+                      continue
+                  reference_files.append(p)
+              for child,files,state,digest in named:
+                  hits=[]
+                  needle=child.name.encode("utf-8")
+                  for p in reference_files:
+                      try:
+                          if needle in p.read_bytes():
+                              hits.append(str(p.relative_to(web))[:120])
+                      except OSError:
+                          continue
+                  print("REMAINING_ZM_EXTRA_DIRECTORY="+json.dumps({
+                      "directory":child.name,"files":len(files),"scan":state,
+                      "mib":round(sum(v[1] for v in files)/1048576,2),
+                      "index_sha256_prefix":digest,
+                      "referenced_by_live_documents":hits[:15],
+                      "references_total":len(hits)},ensure_ascii=True))
+          print("REMAINING_ZM_EXTRA_DIRECTORIES="+str(len(named)))
+          # Exact whole-tree equality proof for failed release copies; no mutation.
+          import hashlib
+          release_root=HOME/".backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b"
+          fingerprints={}
+          if release_root.is_dir() and not release_root.is_symlink():
+              candidates=sorted(p for p in release_root.iterdir()
+                                if p.is_dir() and not p.is_symlink() and
+                                (p.name.startswith("failed-app-") or p.name.startswith("release-candidate-")))
+              for candidate in candidates:
+                  whole=hashlib.sha256()
+                  n=0
+                  volume=0
+                  unsafe=0
+                  for directory,dirs,files in os.walk(candidate,followlinks=False):
+                      d=Path(directory)
+                      unsafe+=sum((d/name).is_symlink() for name in dirs)
+                      dirs[:]=[name for name in dirs if not (d/name).is_symlink()]
+                      for name in sorted(files):
+                          p=d/name
+                          if not p.is_file() or p.is_symlink():
+                              unsafe+=1
+                              continue
+                          relative=str(p.relative_to(candidate))
+                          inner=hashlib.sha256()
+                          try:
+                              with p.open("rb") as fp:
+                                  for chunk in iter(lambda:fp.read(1048576),b""):
+                                      inner.update(chunk)
+                          except OSError:
+                              unsafe+=1
+                              continue
+                          whole.update(relative.encode("utf-8")+b"\x00"+inner.digest()+b"\x00")
+                          n+=1
+                          volume+=p.stat().st_size
+                  digest=whole.hexdigest()
+                  if not unsafe:
+                      fingerprints.setdefault(digest,[]).append(candidate.name)
+                  print("WHOLE_SNAPSHOT_FINGERPRINT="+json.dumps({
+                      "name":candidate.name,"files":n,"mib":round(volume/1048576,2),
+                      "sha256":digest,"nonregular_or_symlinks":unsafe,
+                      "safe_for_exact_tree_comparison":unsafe==0},ensure_ascii=True))
+          for digest,names in fingerprints.items():
+              if len(names)>1:
+                  print("WHOLE_SNAPSHOT_EXACT_DUPLICATES="+json.dumps({
+                      "sha256":digest,"names":names},ensure_ascii=True))
+          print("HOST_CHANGES=none")
+          print("DELETION_AUTHORIZED_THIS_RUN=no")
+          PY
+          REMOTE
+      - name: Clear SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+
+# Owner-requested read-only backup and archive inventory, 2026-10-28.
