@@ -8,6 +8,7 @@ on:
       - "content/zomorod-v11/store_index.php"
       - "content/zomorod-v11/free-products/wheat-seed-rate-planner-v1/index.html"
       - "tests/test_zomorod_free_seed_product.py"
+      - "tests/test_zomorod_store_sales_contact_fallback_20261114.py"
       - ".github/workflows/zomorod-free-wheat-tool-qa-20261019.yml"
   pull_request:
     paths:
@@ -16,6 +17,7 @@ on:
       - "content/zomorod-v11/store_index.php"
       - "content/zomorod-v11/free-products/wheat-seed-rate-planner-v1/index.html"
       - "tests/test_zomorod_free_seed_product.py"
+      - "tests/test_zomorod_store_sales_contact_fallback_20261114.py"
       - ".github/workflows/zomorod-free-wheat-tool-qa-20261019.yml"
 permissions: {contents: read}
 jobs:
@@ -37,4 +39,5 @@ jobs:
           php -l content/zomorod-v11/store_index.php
           python3 -m py_compile scripts/zomorod_free_wheat_release.py
           python3 -m unittest discover -s tests -p 'test_zomorod_free_seed_product.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_store_sales_contact_fallback_20261114.py' -v
           echo ZOMOROD_ORIGINAL_WHEAT_FREE_PRODUCT_QA=PASS

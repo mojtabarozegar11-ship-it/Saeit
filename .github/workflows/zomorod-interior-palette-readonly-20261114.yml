@@ -1,0 +1,91 @@
+name: Zomorod current interior olive palette read-only census
+on:
+  pull_request:
+    paths:
+      - 'scripts/zomorod_interior_background_palette_readonly_20261114.cjs'
+      - 'scripts/zomorod_interior_census_policy_20261114.cjs'
+      - 'tests/zomorod_interior_census_policy_20261114.test.cjs'
+      - 'tests/test_zomorod_inner_live_attestation_reliability_20261114.py'
+      - 'scripts/zomorod_interior_olive_rehearsal_20261114.cjs'
+      - 'scripts/zomorod_conversion_inquiry_isolated_browser_20261114.cjs'
+      - 'tests/test_zomorod_interior_olive_source_20261114.py'
+      - 'public/tala/index.html'
+      - 'public/amozeshgah/index.html'
+      - 'public/ghanadi/index.html'
+      - 'public/ghanadi/cafe-shiraz/index.html'
+      - 'core/templates/core/ghanadi.html'
+      - 'core/templates/core/auctions.html'
+      - 'tests/test_zomorod_interiors_olive_expanded_20261114.py'
+      - 'scripts/zomorod_inner_live_css_attestation_20261114.py'
+      - 'content/zomorod-v7/inner-v7.css'
+      - '.github/workflows/zomorod-interior-palette-readonly-20261114.yml'
+permissions:
+  contents: read
+jobs:
+  read-only-palette:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare temporary browser on runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+      - name: Regression tests for existing page structures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_zomorod_interior_olive_source_20261114.py' -v
+      - name: Verify Ghanadi, cafe and auctions existing-page color invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_zomorod_interiors_olive_expanded_20261114.py' -v
+      - name: Verify offline census policy invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/zomorod_interior_census_policy_20261114.cjs
+          node --check scripts/zomorod_interior_background_palette_readonly_20261114.cjs
+          node --test tests/zomorod_interior_census_policy_20261114.test.cjs
+      - name: Verify GET-only attestation retry and failure semantics offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_zomorod_inner_live_attestation_reliability_20261114.py' -v
+      - name: GET-only public CSS marker visibility check (no deploy)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/zomorod_inner_live_css_attestation_20261114.py
+      - name: Verify existing B2B conversion with synthetic localhost forms only
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/zomorod_conversion_inquiry_isolated_browser_20261114.cjs
+          node scripts/zomorod_conversion_inquiry_isolated_browser_20261114.cjs
+      - name: Simulate uniform olive CSS in browser ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/zomorod_interior_olive_rehearsal_20261114.cjs
+      - name: Measure existing live secondary-page background and full-width bands
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/zomorod_interior_background_palette_readonly_20261114.cjs
+      - name: Preserve palette evidence without changing site
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zm-live-interior-olive-palette-readonly
+          path: |
+            ${{ runner.temp }}/zm-interior-olive-palette-readonly/
+            ${{ runner.temp }}/zm-interior-palette-rehearsal/
+            ${{ runner.temp }}/zm-interior-css-attestation/
+          retention-days: 7
+          if-no-files-found: warn
