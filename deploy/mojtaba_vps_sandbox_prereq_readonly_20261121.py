@@ -84,7 +84,7 @@ def trusted_system_binary_present(name: str, path: Path) -> bool:
     try:
         if name == "python3" and path == BINS["python3"] and path.is_symlink():
             link = os.readlink(path)
-            if not re.fullmatch(r"python3\\.[0-9]{1,2}", link):
+            if not re.fullmatch(r"python3\.[0-9]{1,2}", link):
                 return False
             target = path.parent / link
             return regular_file_present(target) and os.access(target, os.X_OK)
