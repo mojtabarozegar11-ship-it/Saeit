@@ -31,11 +31,13 @@ class MasterAgentChat:
 
         ChatMessage.objects.create(session=session, role="user", content=text)
 
-        # Explicit operational language becomes a structured operation.
-        # The owner chat executes synchronously; all other users remain queued
-        # behind the existing approval lifecycle.
+        # Explicit operational language creates only a pending operation.
+        # Merely chatting as a superuser is NOT an independent authorization to
+        # perform deployment, external writes, or other privileged side effects.
+        # ApprovalService decides separately; the approved-operation executor
+        # retains its idempotent, auditable one-shot claim.
         from .operation_planner import approval_reason, plan_chat_operation
-        from .models import ApprovalRequest, AuditLog
+        from .models import ApprovalRequest
 
         operation = plan_chat_operation(text)
         if operation is not None:
@@ -60,42 +62,16 @@ class MasterAgentChat:
                 target_id=operation.operation_id,
                 reason=approval_reason(operation),
                 risk=operation.risk,
-                status="approved" if direct_owner else "pending",
-                decision_note="direct_owner_chat_execution" if direct_owner else "",
+                status="pending",
+                decision_note="separate_owner_decision_required",
                 requested_by=session.user,
             )
-            if direct_owner:
-                from .operation_executor import execute_approved_chat_operation
-                import json
-                try:
-                    result = execute_approved_chat_operation(approval)
-                    reply = (
-                        "اجرا انجام شد. "
-                        f"عملیات: {operation.action} | "
-                        + json.dumps(result.get("result", result), ensure_ascii=False, default=str)[:3500]
-                    )
-                    execution = "direct_owner_chat_executed"
-                except Exception as exc:
-                    # The executor owns terminal states. Never reset an already
-                    # claimed action to "approved" or hide an ambiguous outcome.
-                    AuditLog.objects.create(
-                        actor_type="owner_chat",
-                        actor_id=str(session.user.pk),
-                        action="chat_operation_failed",
-                        target_type="ApprovalRequest",
-                        target_id=str(approval.pk),
-                        after_state={"operation": operation.action, "error": type(exc).__name__},
-                        trace_id="chat-operation-failed-" + operation.operation_id,
-                    )
-                    reply = "اجرای مستقیم ناموفق بود و هیچ موفقیتی گزارش نشده است: " + type(exc).__name__
-                    execution = "direct_owner_chat_failed"
-            else:
-                reply = (
-                    "درخواست عملیاتی ثبت شد و هنوز اجرا نشده است. "
-                    f"شماره تأیید: {approval.pk} | عملیات: {operation.action} | "
-                    "این درخواست فقط پس از تأیید مالک اجرا می‌شود."
-                )
-                execution = "approval_required"
+            reply = (
+                "درخواست مدیریتی ثبت شد، اما هنوز هیچ عملیاتی اجرا نشده است. "
+                f"شناسه تأیید: {approval.pk} | عملیات: {operation.action}. "
+                "ابتدا تصمیم مستقل مالک در سامانه تأییدات لازم است. "
+                "تا زمان تأیید و اجرای کنترل‌شده، استقرار یا تغییر داده انجام نمی‌شود."
+            )
             ChatMessage.objects.create(
                 session=session,
                 role="assistant",
@@ -105,7 +81,7 @@ class MasterAgentChat:
                     "capability_pack": "1.0.0",
                     "operation_id": operation.operation_id,
                     "approval_id": approval.pk,
-                    "execution": execution,
+                    "execution": "approval_required",
                 },
             )
             return reply
