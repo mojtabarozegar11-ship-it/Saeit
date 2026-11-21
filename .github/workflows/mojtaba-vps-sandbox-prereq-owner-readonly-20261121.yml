@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git hash-object -- deploy/mojtaba_vps_sandbox_prereq_readonly_20261121.py)" = "441ee41b3fba353485830b60c92be634b1b61138"
+          test "$(git hash-object -- deploy/mojtaba_vps_sandbox_prereq_readonly_20261121.py)" = "2c8cf01db9481b9e6800c0a794a0190ccae45650"
           python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("deploy/mojtaba_vps_sandbox_prereq_readonly_20261121.py").read_text(encoding="utf-8"))'
           echo "MOJTABA_VPS_SECURITY_AUDITOR_PIN=verified"
 
