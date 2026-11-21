@@ -137,9 +137,17 @@ def assess_risk(*, account_capital, equity, day_open_equity):
         reasons.append("total_loss_floor_reached")
     return RiskDecision(not reasons, tuple(reasons), daily_floor, total_floor)
 
-def _consistency_reasons(*, verified_profit, max_profitable_day):
+def _consistency_reasons(*, verified_profit, max_profitable_day, contract_version=None):
+    """Apply the immutable best-day cap the customer actually accepted."""
+    from .social_policy import (
+        LEGACY_CONTRACT_VERSION, PREVIOUS_CONTRACT_VERSION, NEW_CONTRACT_VERSION,
+    )
+    version = POLICY.version if contract_version is None else contract_version
+    if version not in (LEGACY_CONTRACT_VERSION, PREVIOUS_CONTRACT_VERSION, NEW_CONTRACT_VERSION):
+        raise ValueError("Unknown immutable challenge contract version")
     maximum = _nonnegative(max_profitable_day, "max_profitable_day")
-    if verified_profit <= 0 or maximum > percent(verified_profit, POLICY.best_day_share_pct):
+    limit = POLICY.best_day_share_pct if version == NEW_CONTRACT_VERSION else D("32")
+    if verified_profit <= 0 or maximum > percent(verified_profit, limit):
         return ("profit_consistency_not_met",)
     return ()
 
@@ -178,7 +186,10 @@ def assess_challenge(*, phase, account_capital, realized_net_profit,
         reasons.append("minimum_trading_days_not_met")
     if profit < goal:
         reasons.append("profit_target_not_met")
-    reasons.extend(_consistency_reasons(verified_profit=profit, max_profitable_day=max_profitable_day))
+    reasons.extend(_consistency_reasons(
+        verified_profit=profit, max_profitable_day=max_profitable_day,
+        contract_version=version,
+    ))
     return ChallengeDecision(not reasons, tuple(dict.fromkeys(reasons)), goal, profit)
 
 def assess_promotion(*, level_index, realized_monthly_profit, trading_days,
