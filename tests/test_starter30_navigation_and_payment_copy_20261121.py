@@ -13,7 +13,7 @@ class Starter30NavigationAndPaymentCopyTests(unittest.TestCase):
         source = HOME.read_text(encoding="utf-8")
         self.assertIn('href="/moj-prop/starter-30-trx/"', source)
         self.assertIn('href="/mojprop-starter30-checkout/"', source)
-        self.assertIn("id="starter30-featured"", source)
+        self.assertIn('id="starter30-featured"', source)
 
     def test_moj_prop_separates_plan1_prelaunch_from_starter30_payment(self):
         source = MOJ_PROP.read_text(encoding="utf-8")
