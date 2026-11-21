@@ -6,10 +6,9 @@ No real account, email, financial backend, HTTP or live database is touched.
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from django.test import override_settings
+from django.test import SimpleTestCase, override_settings
 
 from prop_firm.simulation_identity_adapter import (
     IdentityAdapterClosed,
@@ -26,7 +25,7 @@ RIGHT_CODE = "0123456789abcdef0123456789abcdef"
 
 
 @override_settings(MPW_MOJPROP_IDENTITY_DIGEST_SECRET=SECRET)
-class LoginFailedAttemptAtomicRegressionTests(TestCase):
+class LoginFailedAttemptAtomicRegressionTests(SimpleTestCase):
     def setUp(self):
         digest = _scoped_digest(SECRET.encode(), "challenge", REF + ":" + RIGHT_CODE)
         self.row = SimpleNamespace(
