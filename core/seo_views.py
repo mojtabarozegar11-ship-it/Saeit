@@ -109,6 +109,9 @@ def sitemap_xml(request):
     if host in {"mojplaywin.com", "www.mojplaywin.com"}:
         urls = [
             "/", "/store/",
+            # Public TRX catalog SKUs: expose only the approved, rights-cleared
+            # product detail pages; checkout/invoice routes remain excluded.
+            *[f"/store/product/{pk}/" for pk in (72, 225, 879)],
             "/moj-prop/", "/moj-prop/starter-30-trx/",
             "/moj-prop/rules/", "/moj-prop/signals/",
             "/moj-prop/payment/", "/moj-prop/contact/", "/moj-prop/catalog/",
