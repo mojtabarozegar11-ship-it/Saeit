@@ -14,7 +14,7 @@ D = Decimal
 
 @dataclass(frozen=True)
 class SimulationPolicy:
-    contract_version: str = "2026-11-19/simulation-v1"
+    contract_version: str = "2026-11-21/simulation-v2"
     account_mode: str = "simulated"
     payout_mode: str = "real_performance_reward"
     starting_balance_usd: Decimal = D("1000")
@@ -23,8 +23,8 @@ class SimulationPolicy:
     total_loss_limit_pct: Decimal = D("8")
     max_risk_per_trade_pct: Decimal = D("3")
     max_open_risk_pct: Decimal = D("4")
-    canonical_best_day_share_pct: Decimal = D("32")
-    proposed_best_day_share_pct: Decimal = D("50")
+    canonical_best_day_share_pct: Decimal = D("50")
+    proposed_best_day_share_pct: Decimal = D("50")  # Historical proposal, now adopted
     entry_fee_trx: Decimal = D("30")
     retry_fee_trx: Decimal = D("18")
     retry_discount_pct: Decimal = D("40")
