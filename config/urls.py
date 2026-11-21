@@ -20,6 +20,7 @@ from core.academy_views import (
     education_certificate, education_issue_certificate,
 )
 from core.services_views import services
+from core.mojtaba_bot_portal import mojtaba_bot_portal
 from core.zomorod_public_views import agriculture_index, agriculture_guide, zomorod_hero_image
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
 from core.faremah_views import faremah_home
@@ -29,6 +30,7 @@ from services.mpw_trx_public_pages import support_page, terms_page, privacy_page
 
 urlpatterns = [
     path("", services, name="home"),
+    path("mojtaba.bot.ai/", mojtaba_bot_portal, name="mojtaba_bot_portal"),
     path("authors/mojtaba-rozegar/", persian_author_profile, name="mojtaba_roozegar_author_profile"),
     path("ghanadi/", TemplateView.as_view(template_name="core/ghanadi.html"), name="ghanadi"),
     path("faremah/", faremah_home, name="faremah_home"),
