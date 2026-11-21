@@ -95,16 +95,56 @@ def _safe_service_prefill(request, *, allow_starter30_post_retry=False):
     return service, ""
 
 
+# Campaign IDs are navigation/marketing labels, never customer identity or
+# billing evidence. Unknown GET/POST UTM and PII must NEVER be echoed to HTML.
+_PUBLIC_CAMPAIGNS = (
+    (
+        "blueprint", "starter-30-trx",
+        (("utm_source", "facebook"), ("utm_medium", "organic_social"),
+         ("utm_campaign", "starter30_qualified_enquiry_20261121")),
+    ),
+    (
+        "blueprint", "starter-30-trx",
+        (("utm_source", "moj_prop"), ("utm_medium", "onsite"),
+         ("utm_campaign", "starter30_lead"), ("utm_content", "free_terms")),
+    ),
+    (
+        "signals", "",
+        (("utm_source", "moj_prop"), ("utm_medium", "onsite"),
+         ("utm_campaign", "signals_education_lead_20261121"),
+         ("utm_content", "signal_nav")),
+    ),
+)
+
+
 def _attribution_hidden_fields(request):
-    """Carry bounded campaign attribution through the HTML POST without PII."""
-    fields = []
-    for name in ("utm_source", "utm_medium", "utm_campaign", "utm_content"):
-        value = request.GET.get(name, "") or request.POST.get(name, "")
-        fields.append(
-            '<input type="hidden" name="' + escape(name, quote=True) +
-            '" value="' + escape(str(value).strip()[:80], quote=True) + '">'
+    """Only render the server-reviewed campaign tuple, never arbitrary UTM."""
+    service_values = request.GET.getlist("service")
+    package_values = request.GET.getlist("package")
+    # The signals form uses a plain POST action; its selected service remains
+    # editable, and source attribution is not proof of a paid or qualified lead.
+    if not service_values and request.method == "POST":
+        service_values = request.POST.getlist("service")
+    if len(service_values) != 1 or len(package_values) > 1:
+        return ""
+    service = service_values[0]
+    package = package_values[0] if package_values else ""
+    source = (request.GET if any(k.startswith("utm_") for k in request.GET)
+              else request.POST)
+    keys = tuple(k for k in source if k.startswith("utm_"))
+    for intended_service, intended_package, approved in _PUBLIC_CAMPAIGNS:
+        if (service, package) != (intended_service, intended_package):
+            continue
+        if set(keys) != {k for k, _ in approved}:
+            continue
+        if any(source.getlist(k) != [v] for k, v in approved):
+            continue
+        return "".join(
+            '<input type="hidden" name="' + key +
+            '" value="' + value + '">'
+            for key, value in approved
         )
-    return "".join(fields)
+    return ""
 
 
 def _options(choices, *, selected=None):
