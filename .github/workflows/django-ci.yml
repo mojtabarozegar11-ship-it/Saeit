@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,6 +22,45 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Verify restricted AVA Bubblewrap isolation on Ubuntu 24.04
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$(lsb_release -rs)" != "24.04" ]; then
+            echo "::error::AVA isolation requires pinned Ubuntu 24.04"; exit 1
+          fi
+          # Read existing host policy; never lower any kernel or AppArmor setting.
+          policy=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [ ! -r "$policy" ]; then
+            echo "::error::AppArmor namespace policy unavailable"; exit 1
+          fi
+          echo "Existing AppArmor userns policy: $(cat "$policy") (unchanged)"
+          profile=/usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+          if [ ! -x /usr/bin/bwrap ] || [ ! -r "$profile" ]; then
+            echo "Installing distro Bubblewrap and restrictive AppArmor profile on ephemeral CI VM"
+            sudo apt-get update -qq
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends bubblewrap apparmor-profiles
+          fi
+          if [ ! -x /usr/bin/bwrap ] || [ ! -x /usr/bin/python3 ] || [ ! -r "$profile" ]; then
+            echo "::error::Required distro sandbox dependency not installed"; exit 1
+          fi
+          if [ -e /etc/apparmor.d/bwrap-userns-restrict ]; then
+            if ! cmp -s "$profile" /etc/apparmor.d/bwrap-userns-restrict; then
+              echo "::error::Existing Bubblewrap AppArmor profile conflicts with distro source"; exit 1
+            fi
+          else
+            sudo install -m 0644 "$profile" /etc/apparmor.d/bwrap-userns-restrict
+          fi
+          sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+          echo "Running actual rootless network and filesystem isolation assertions"
+          # Execute real assertions INSIDE the rootless, networkless sandbox.
+          # A missing namespace, readable host /etc, or network path fails CI.
+          /usr/bin/bwrap --unshare-user --unshare-net --unshare-pid --unshare-ipc --unshare-uts \
+            --die-with-parent --new-session \
+            --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 \
+            --symlink usr/bin /bin --proc /proc --dev /dev --tmpfs /tmp \
+            --chdir /tmp --clearenv --setenv PATH /usr/bin \
+            /usr/bin/python3 -c 'import os,socket; assert not os.path.exists("/etc/passwd"); s=socket.socket(); s.settimeout(1); assert s.connect_ex(("1.1.1.1",53))!=0; s.close()'
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
       - name: Install hash-pinned PDF parser in isolated target for shared tests
