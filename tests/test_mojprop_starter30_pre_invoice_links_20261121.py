@@ -51,6 +51,9 @@ class Starter30PreInvoiceInformationTests(SimpleTestCase):
         request = self.factory.post(
             "/mojprop-starter30-checkout/", data={"action": "unsupported"}
         )
+        # This test isolates invalid-action handling; CSRF is protected at the
+        # real HTTP boundary and tested separately with the Django client.
+        request._dont_enforce_csrf_checks = True
         with patch("prop_firm.starter30_views._email_forms",
                    return_value="<p>RECOVERY-EMAIL-FORM</p>"):
             response = starter30_checkout(request)
