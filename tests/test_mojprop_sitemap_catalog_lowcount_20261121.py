@@ -1,4 +1,4 @@
-"""Exact MojPlayWin PHP low-count sitemap catalog addition.
+"""MojPlayWin PHP low-count sitemap and independently verified canonical parity.
 
 Source-only contract; never changes the live PHP handler or .htaccess.
 """
@@ -10,13 +10,17 @@ import unittest
 
 PHP = (Path(__file__).resolve().parents[1] /
        "ops/cpanel/mojplaywin/sitemap/_mpw_sitemap_three_indexable_20261017.php")
-EXPECTED=(
+# Preserve the original four route positions while deriving the complete
+# English-only list from the independently published canonical XML sitemap.
+# This avoids freezing a pre-publication five-page expectation in CI.
+ORIGINAL_PREFIX=(
     "/moj-prop/rules/",
     "/moj-prop/signals/",
     "/moj-prop/payment/",
     "/moj-prop/contact/",
-    "/moj-prop/catalog/",
 )
+ENGLISH_XML=(Path(__file__).resolve().parents[1] / "templates/moj-prop/sitemap.xml")
+DJANGO_BASE={"/moj-prop/", "/moj-prop/starter-30-trx/"}
 
 class CatalogSitemapSourceTests(unittest.TestCase):
     @classmethod
@@ -27,8 +31,17 @@ class CatalogSitemapSourceTests(unittest.TestCase):
         matches=re.findall(r"\$mojPropPaths\s*=\s*\[([^]]+)\];",self.src)
         self.assertEqual(len(matches),1)
         paths=re.findall(r"'(/[^']+/)'",matches[0])
-        self.assertEqual(tuple(paths),EXPECTED)
         self.assertEqual(len(paths),len(set(paths)))
+        self.assertEqual(tuple(paths[:4]), ORIGINAL_PREFIX)
+        self.assertEqual(paths[-1], "/moj-prop/catalog/")
+        from urllib.parse import urlsplit
+        from xml.etree import ElementTree
+        xml=ElementTree.fromstring(ENGLISH_XML.read_text("utf-8"))
+        locs=[node.text for node in xml.findall(".//{http://www.sitemaps.org/schemas/sitemap/0.9}loc")]
+        self.assertEqual(len(locs),14)
+        self.assertEqual(len(locs),len(set(locs)))
+        expected={urlsplit(url).path for url in locs}-DJANGO_BASE
+        self.assertEqual(set(paths),expected)
 
     def test_fallback_and_separation_remain_present(self):
         for phrase in (
