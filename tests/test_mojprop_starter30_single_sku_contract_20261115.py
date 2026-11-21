@@ -50,7 +50,7 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertIn("package=starter-30-trx#request", starter)
         self.assertIn("30 TRX", self.detail)
         self.assertIn("server-issued 30 TRX invoice", self.detail)
-        self.assertIn('href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"', self.detail)
+        self.assertIn('href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx&amp;utm_source=moj_prop&amp;utm_medium=onsite&amp;utm_campaign=starter30_lead&amp;utm_content=free_terms"', self.detail)
         self.assertNotIn('href="/mojprop-starter30-checkout/"', self.detail)
 
     def test_single_consent_based_crm_route_and_no_unmarked_149_dollar_quote(self):
@@ -81,7 +81,8 @@ class Starter30SingleSkuTests(unittest.TestCase):
         lower = self.detail.lower()
         for blocked in ("tronweb", "walletconnect", "private key", "send trx now"):
             self.assertNotIn(blocked, lower)
-        self.assertEqual(self.detail.count("<script"), 2)
+        self.assertEqual(self.detail.count("<script"), 3)
+        self.assertEqual(self.detail.count('<script type="application/ld+json">'), 1)
         self.assertIn('<script defer src="/mpw-measure/tracker.js"></script>', self.detail)
         self.assertIn('<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>', self.detail)
         self.assertIn("Pay only through the server-issued 30 TRX invoice", self.detail)

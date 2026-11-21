@@ -1,5 +1,6 @@
-"""Production-exact Starter30 static template is protected from source regressions.
+"""Reviewed Starter30 static template source is protected from regressions.
 
+These SHA/Git pins are offline, not a claim of current server deployment.
 No deployment, live network, invoice, Django DB or TRON transfer.
 """
 import hashlib
@@ -10,8 +11,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "templates/moj-prop-v4/starter-30-trx/index.html"
 PIN = ROOT / "scripts/mojprop_starter30_static_release.py"
-APPROVED_LIVE_SHA256 = "0edb94e2c12a27f994916eedc4be2d81d1f4d53166c11b924105a4921acedc6e"
-APPROVED_LIVE_GIT_BLOB = "2101b9aed43b8d5c78fb94c7785f844903cf5755"
+APPROVED_LIVE_SHA256 = "90b86d2a2e45eca70e0d2356a231433b50b8f638d0665e019631589673fb7202"
+APPROVED_LIVE_GIT_BLOB = "24c927a46c86fc2a4691028fde79edcbb57696db"
 
 
 class Scan(HTMLParser):
@@ -55,7 +56,7 @@ class OfficialStarter30LiveSourceTests(unittest.TestCase):
         self.assertEqual(page.h1_count, 1)
         self.assertEqual(page.canonical, ["https://mojplaywin.com/moj-prop/starter-30-trx/"])
         self.assertEqual(page.ctas.count("/mojprop-starter30-checkout/"), 0)
-        self.assertEqual(page.ctas.count("/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx"), 3)
+        self.assertEqual(page.ctas.count("/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx&utm_source=moj_prop&utm_medium=onsite&utm_campaign=starter30_lead&utm_content=free_terms"), 3)
         status = [x for x in page.forms if x.get("method") == "get"
                   and x.get("action") == "/mojprop-starter30-status/"]
         self.assertEqual(len(status), 1)

@@ -69,14 +69,15 @@ def _safe_service_prefill(request, *, allow_starter30_post_retry=False):
             # not a SKU-authenticated paid order or funded enrollment.
             return service, (
                 "Prelaunch interest only: MOJ-PROP-01 (two-stage proprietary "
-                "funded-trading CHALLENGE; proposed 30 native TRX fee is "
+                "SIMULATED trading CHALLENGE; proposed 30 native TRX fee is "
                 "NOT payable at this time).\n"
                 "Please send legal eligibility, country availability, "
                 "risk rules, KYC and refund terms for MOJ-PROP-01. "
-                "I understand the evaluation is simulated and an actual "
-                "company-funded initial USD 100 account after passing "
-                "requires independent capital, broker agreement and "
-                "legal approval; no payment, account or return is promised."
+                "I understand the challenge and post-pass funded stage are "
+                "both simulated with no real funded trading account. "
+                "Selection for a separate paid company trading role requires "
+                "independent written eligibility and a separate agreement; "
+                "no payment, account or return is promised."
             )
         if packages != ["starter-30-trx"]:
             return None, ""
@@ -93,6 +94,58 @@ def _safe_service_prefill(request, *, allow_starter30_post_retry=False):
             "live trade, payment or profit guarantee."
         )
     return service, ""
+
+
+# Campaign IDs are navigation/marketing labels, never customer identity or
+# billing evidence. Unknown GET/POST UTM and PII must NEVER be echoed to HTML.
+_PUBLIC_CAMPAIGNS = (
+    (
+        "blueprint", "starter-30-trx",
+        (("utm_source", "facebook"), ("utm_medium", "organic_social"),
+         ("utm_campaign", "starter30_qualified_enquiry_20261121")),
+    ),
+    (
+        "blueprint", "starter-30-trx",
+        (("utm_source", "moj_prop"), ("utm_medium", "onsite"),
+         ("utm_campaign", "starter30_lead"), ("utm_content", "free_terms")),
+    ),
+    (
+        "signals", "",
+        (("utm_source", "moj_prop"), ("utm_medium", "onsite"),
+         ("utm_campaign", "signals_education_lead_20261121"),
+         ("utm_content", "signal_nav")),
+    ),
+)
+
+
+def _attribution_hidden_fields(request):
+    """Only render the server-reviewed campaign tuple, never arbitrary UTM."""
+    service_values = request.GET.getlist("service")
+    package_values = request.GET.getlist("package")
+    # The signals form uses a plain POST action; its selected service remains
+    # editable, and source attribution is not proof of a paid or qualified lead.
+    if not service_values and request.method == "POST":
+        service_values = request.POST.getlist("service")
+    if len(service_values) != 1 or len(package_values) > 1:
+        return ""
+    service = service_values[0]
+    package = package_values[0] if package_values else ""
+    source = (request.GET if any(k.startswith("utm_") for k in request.GET)
+              else request.POST)
+    keys = tuple(k for k in source if k.startswith("utm_"))
+    for intended_service, intended_package, approved in _PUBLIC_CAMPAIGNS:
+        if (service, package) != (intended_service, intended_package):
+            continue
+        if set(keys) != {k for k, _ in approved}:
+            continue
+        if any(source.getlist(k) != [v] for k, v in approved):
+            continue
+        return "".join(
+            '<input type="hidden" name="' + key +
+            '" value="' + value + '">'
+            for key, value in approved
+        )
+    return ""
 
 
 def _options(choices, *, selected=None):
@@ -139,12 +192,13 @@ def request_form(request, *, error=None, status=200):
               if is_starter30 else ACTION)
     if prefill_notes.startswith("Prelaunch interest only: MOJ-PROP-01"):
         message += (
-            '<p><strong>MOJ-PROP-01 funded-trading challenge — PRELAUNCH.</strong> '
+            '<p><strong>MOJ-PROP-01 simulated trading challenge — PRELAUNCH.</strong> '
             '30 TRX is a proposed future challenge fee, not a purchase today. '
-            'The two evaluation stages are simulated. A real funded account '
-            'is conditional on a verified broker, company capital, legal '
-            'eligibility and written customer terms. This form takes no '
-            'payment and creates no challenge registration.</p>'
+            'Both challenge and post-pass funded stages use simulated capital. '
+            'A separate real-money company trading role may be offered only '
+            'after independent selection and written employment terms; it is '
+            'not part of this product. This form takes no payment and '
+            'creates no challenge registration.</p>'
         )
     elif is_starter30:
         message += ('<p>Starter30 is a <strong>free request for written terms only</strong>; '
@@ -157,6 +211,7 @@ def request_form(request, *, error=None, status=200):
         '<form method="post" action="' + action + '" '
         'enctype="application/x-www-form-urlencoded">'
         '<input type="hidden" name="csrfmiddlewaretoken" value="' + csrf + '">'
+        + _attribution_hidden_fields(request) +
         '<p><label>Your name <input name="name" autocomplete="name" '
         'required minlength="2" maxlength="200"></label></p>'
         '<p><label>Contact email <input type="email" name="email" '

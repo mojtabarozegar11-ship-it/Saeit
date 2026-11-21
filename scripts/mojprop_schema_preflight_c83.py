@@ -5,6 +5,7 @@ call this BEFORE backing up/writing model, migration, URL or admin source.
 A successful source audit does NOT prove an independently restorable database.
 """
 import ast
+import hashlib
 from pathlib import Path
 
 
@@ -17,6 +18,14 @@ MIGRATIONS = (
     "0046_signal_free_subscription",
     "0047_mpw_guest_email_recovery",
 )
+# A post-0047 choice-only migration exists in the reviewed repository.
+# C83's manual installer still targets 0047: this exception is ONLY for its
+# source-tree selftest when both paths refer to the same tree. Existing cPanel
+# live trees with 0048 must still refuse an implicit migration downgrade.
+REVIEWED_SELFTEST_ONLY_LATER = {
+    "0048_alter_commercefunnelevent_event_name":
+        "b78d4233482f03e080cbe0bd30a92abec4a272bd",
+}
 MODELS = ("MojPropRequest", "MojPropOffer", "MojPropDeliveryEvidence")
 ADMINS = ("MojPropRequestAdmin", "MojPropOfferAdmin", "MojPropDeliveryEvidenceAdmin")
 LEGACY_BASELINES = {
@@ -204,6 +213,16 @@ def check_schema_closure(live_root, staged_root):
             raise RuntimeError("unsafe live core migration symlink")
         head = path.stem.split("_", 1)[0]
         if head.isdigit() and int(head) >= 41 and path.stem not in known:
+            # This is NOT a production deployment exemption. In particular,
+            # a separate live root with 0048 installed must still block a
+            # targeted migrate to 0047 that could reverse an owner's schema.
+            if live_root == staged_root and path.stem in REVIEWED_SELFTEST_ONLY_LATER:
+                data = path.read_bytes()
+                git_blob = hashlib.sha1(
+                    b"blob " + str(len(data)).encode("ascii") + b"\x00" + data
+                ).hexdigest()
+                if len(data) <= 4096 and git_blob == REVIEWED_SELFTEST_ONLY_LATER[path.stem]:
+                    continue
             raise RuntimeError("unreviewed later or conflicting core migration: " + path.stem)
 
     # Owner-preserved signal modules cannot be silently replaced with an
