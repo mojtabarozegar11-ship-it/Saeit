@@ -1,0 +1,21 @@
+name: Orbit Switch state integrity
+on:
+  pull_request:
+    paths:
+      - 'mpw-editorial/nextwave/20261023/orbit-switch/index.html'
+      - 'scripts/verify_orbit_switch_state_20261026.cjs'
+      - '.github/workflows/orbit-switch-state-20261026.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  state:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Execute Orbit Switch campaign state regression
+        run: node scripts/verify_orbit_switch_state_20261026.cjs
