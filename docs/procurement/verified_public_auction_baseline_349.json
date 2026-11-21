@@ -1,0 +1,31 @@
+{
+  "purpose": "Evidence for continuing Zomorod Melal auction advertisement serials without reusing older official numbers",
+  "highest_visible_published_ad_number": 349,
+  "next_proposed_public_ad_number": 350,
+  "new_ad_count": 72,
+  "supply_range": {"start": 350, "end": 385, "count": 36},
+  "equipment_range": {"start": 386, "end": 421, "count": 36},
+  "official_live_sources": [
+    "https://www.zomorodmelal.ir/auctions/",
+    "https://www.zomorodmelal.ir/auctions/346/",
+    "https://www.zomorodmelal.ir/auctions/347/",
+    "https://www.zomorodmelal.ir/auctions/348/",
+    "https://www.zomorodmelal.ir/auctions/349/",
+    "https://www.zomorodmelal.ir/sitemap-auctions.xml"
+  ],
+  "verified_negative_probe": {
+    "url": "https://www.zomorodmelal.ir/auctions/350/",
+    "observed_http_status": 404,
+    "interpretation": "No live page at this path when checked; this alone does not prove no unpublished/off-sitemap entries."
+  },
+  "github_sources": [
+    "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2223",
+    "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2224",
+    "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2226",
+    "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2228",
+    "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2231",
+    "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2234"
+  ],
+  "limit": "The last publicly visible notice is 349. Before reserving on the production database, recheck the live register for higher numbers and prevent concurrent legacy allocation; these proposed serials have not been reserved or deployed.",
+  "status": "documented_live_evidence_not_production_reservation"
+}
