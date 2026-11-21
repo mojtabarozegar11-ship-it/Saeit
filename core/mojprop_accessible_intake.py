@@ -104,6 +104,25 @@ def _options(choices, *, selected=None):
     )
 
 
+def _verified_public_campaign_suffix(request):
+    """Preserve one known public organic campaign in the POST URL only.
+
+    These are marketing labels, NOT identity evidence, payment authority or
+    conversion proof. Reject duplicates and all arbitrary campaign parameters.
+    Never echo user-supplied values, emails, token, referrer or customer PII.
+    """
+    fixed = (
+        ("utm_source", "facebook"),
+        ("utm_medium", "organic_social"),
+        ("utm_campaign", "starter30_qualified_enquiry_20261121"),
+    )
+    if any(request.GET.getlist(key) != [expected] for key, expected in fixed):
+        return ""
+    if any(key.startswith("utm_") and key not in dict(fixed) for key in request.GET):
+        return ""
+    return "".join("&amp;" + key + "=" + expected for key, expected in fixed)
+
+
 def request_form(request, *, error=None, status=200):
     """Always provide a fresh CSRF-protected form; never echo PII on errors."""
     csrf = escape(get_token(request), quote=True)
@@ -116,6 +135,7 @@ def request_form(request, *, error=None, status=200):
     # failures, without reflecting untrusted campaign data or buyer PII.
     is_starter30 = prefill_notes.startswith("Requested canonical product: MOJPROP-STARTER30 ")
     action = (ACTION + "&amp;service=blueprint&amp;package=starter-30-trx"
+              + _verified_public_campaign_suffix(request)
               if is_starter30 else ACTION)
     if prefill_notes.startswith("Prelaunch interest only: MOJ-PROP-01"):
         message += (
