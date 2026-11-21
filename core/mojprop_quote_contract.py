@@ -39,7 +39,7 @@ def _text(value, name, minimum, maximum):
                 or ord(ch) in range(0x202A, 0x202F)
                 or ord(ch) in range(0x2066, 0x206A)):
             raise QuoteContractError("unsafe invisible quote formatting in " + name)
-    if name == "title" and any(ch in value for ch in ("\n", "\t", "\u2028", "\u2029")):
+    if name == "title" and any(ch in value for ch in ("\n", "\t", "\u0085", "\u2028", "\u2029")):
         raise QuoteContractError("title must not inject a second proposal line")
     return value.strip()
 
@@ -124,7 +124,9 @@ def make_quote_snapshot(offer, *, now=None):
         "title": title,
         "scope": scope,
         "exclusions": exclusions,
-        "amount": format(amount, "f"),
+        # Normalize valid whole/tenth Decimal values to the exact two-decimal
+        # public price contract, preventing a valid quote from returning 404.
+        "amount": format(amount.quantize(Decimal("0.01")), "f"),
         "currency": currency,
         "delivery_days": delivery_days,
         "status": status,
@@ -136,3 +138,81 @@ def make_quote_snapshot(offer, *, now=None):
         "revenue_status": "not_received",
         "payable": False,
     }
+
+
+def render_public_quote(
+    snapshot: dict, *, service_route: str, product_id: int | None,
+) -> str:
+    """Display a checked, unpaid quote without spoofable top-level headings.
+
+    No financial operation occurs. The caller must independently validate
+    the current issued offer by calling make_quote_snapshot first.
+    """
+    required = {
+        "schema", "reference", "version", "title", "scope", "exclusions",
+        "amount", "currency", "delivery_days", "status", "reviewed_at",
+        "issued_at", "expires_at", "payment_status", "delivery_status",
+        "revenue_status", "payable",
+    }
+    if type(snapshot) is not dict or set(snapshot) != required:
+        raise QuoteContractError("invalid public quote snapshot shape")
+    if (snapshot["schema"] != "mojprop.quote.v1"
+            or snapshot["status"] not in ("issued", "accepted")
+            or snapshot["payment_status"] != "not_collected"
+            or snapshot["delivery_status"] != "not_delivered"
+            or snapshot["revenue_status"] != "not_received"
+            or snapshot["payable"] is not False):
+        raise QuoteContractError("public quote cannot attest payment or fulfillment")
+    if (type(service_route) is not str or service_route not in
+            ("blueprint", "signals", "brief", "audit", "digital")):
+        raise QuoteContractError("unrecognized customer service route")
+    if (product_id is not None and
+            (type(product_id) is not int or product_id <= 0)):
+        raise QuoteContractError("invalid catalog product identity")
+    if service_route == "digital" and product_id is None:
+        raise QuoteContractError("digital product quote requires a catalog product id")
+    reference = snapshot["reference"]
+    if type(reference) is not str or _REFERENCE.fullmatch(reference) is None:
+        raise QuoteContractError("invalid buyer request reference")
+    version = snapshot["version"]
+    days = snapshot["delivery_days"]
+    if (type(version) is not int or not 1 <= version <= 999
+            or type(days) is not int or not 1 <= days <= 90):
+        raise QuoteContractError("invalid public quote version or delivery")
+    title = _text(snapshot["title"], "title", 3, 180)
+    scope = _text(snapshot["scope"], "scope", 50, 10000)
+    exclusions = _text(snapshot["exclusions"], "exclusions", 10, 5000)
+    amount = snapshot["amount"]
+    currency = snapshot["currency"]
+    if (type(amount) is not str
+            or re.fullmatch(r"(?:0|[1-9][0-9]{0,9})\.[0-9]{2}", amount) is None
+            or Decimal(amount) <= 0
+            or type(currency) is not str or currency not in _CURRENCIES):
+        raise QuoteContractError("invalid public quote price")
+    for name in ("reviewed_at", "issued_at", "expires_at"):
+        value = snapshot[name]
+        if type(value) is not str or len(value) > 40 or "\n" in value:
+            raise QuoteContractError("invalid public quote timestamp")
+
+    def quote_lines(value: str) -> list[str]:
+        # A newline (including Unicode U+0085) in scope must never create
+        # a forged 'Quoted amount:' or 'Payment received:' top-level header.
+        return ["  | " + line.replace("\t", "    ") for line in value.splitlines()]
+
+    lines = [
+        "MOJ PROP / mojtaba.bot.ai - MANUAL PROPOSAL (NOT A PAYMENT INVOICE)",
+        f"Reference: {reference} / version {version}",
+        f"Service route: {service_route}",
+        f"Catalog product ID: {product_id if product_id is not None else 'n/a'}",
+        f"Deliverable: {title}",
+        "Scope (quoted customer terms):",
+        *quote_lines(scope),
+        "Exclusions (quoted customer terms):",
+        *quote_lines(exclusions),
+        f"Quoted amount: {amount} {currency}",
+        f"Target delivery: {days} day(s) after a separate agreement.",
+        f"Proposal status: {snapshot['status']}; expires: {snapshot['expires_at']}",
+        "No payment has been collected; a lawful payment route and written agreement are required.",
+        "No service has been delivered; this quote is not proof of a paid order.",
+    ]
+    return "\n".join(lines) + "\n"

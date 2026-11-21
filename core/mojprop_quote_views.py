@@ -14,6 +14,7 @@ from django.views.decorators.http import require_GET
 from core.models import MojPropOffer
 from core.mojprop_quote_contract import (
     QuoteContractError, validate_acceptance_reference, make_quote_snapshot,
+    render_public_quote,
 )
 
 SALT = "mojprop.quote.read.v1"
@@ -51,7 +52,11 @@ def quote_read_token(offer):
     # The same audited quote contract must protect token issue and buyer reads,
     # even if a Django model row was modified without full_clean().
     try:
-        make_quote_snapshot(offer)
+        render_public_quote(
+            make_quote_snapshot(offer),
+            service_route=offer.lead.route,
+            product_id=offer.lead.product_id,
+        )
     except QuoteContractError as exc:
         raise ValueError("quote contract is not valid for public delivery") from exc
     if MojPropOffer.objects.filter(
@@ -105,13 +110,17 @@ def customer_quote(request, token):
             raise Http404
         # Signed links must not bypass the independently validated commercial
         # terms, currency, acceptance evidence or current quote validity.
-        make_quote_snapshot(offer)
+        snapshot = make_quote_snapshot(offer)
+        rendered = render_public_quote(
+            snapshot, service_route=offer.lead.route,
+            product_id=offer.lead.product_id,
+        )
     except (signing.BadSignature, signing.SignatureExpired, QuoteContractError,
             TypeError, ValueError):
         raise Http404 from None
     # This intentionally excludes name, email, internal notes and IP metadata.
     response = HttpResponse(
-        offer.manual_quote_text,
+        rendered,
         content_type="text/plain; charset=utf-8",
     )
     response["Cache-Control"] = "private, no-store, max-age=0"
