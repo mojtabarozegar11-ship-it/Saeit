@@ -34,11 +34,11 @@ class MojPropSingleTruthfulReleaseGateTests(unittest.TestCase):
         for flag in required:
             self.assertIn(f'env.bool(\n    "{flag}", default=False\n)', source)
 
-    def test_landing_page_does_not_claim_open_paid_checkout(self):
-        page = (ROOT / "templates" / "moj-prop-v4" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("payment admission currently on hold", page)
-        self.assertIn("Do not send TRX", page)
-        self.assertNotIn("pay only against the server-issued 30 TRX invoice", page)
+    def test_closed_checkout_copy_does_not_invite_transfer(self):
+        source = (ROOT / "prop_firm" / "starter30_views.py").read_text(encoding="utf-8")
+        self.assertIn("Payment is not available at this moment", source)
+        self.assertIn("This request does not issue an invoice, collect TRX, or open an account.", source)
+        self.assertIn("No transfer should be sent", source)
 
 
 if __name__ == "__main__":
