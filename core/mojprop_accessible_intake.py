@@ -37,16 +37,22 @@ def _private_html(title, body, *, status=200):
     return response
 
 
-def _safe_service_prefill(request):
+def _safe_service_prefill(request, *, allow_starter30_post_retry=False):
     """Accept bounded, untrusted Plan 1 prelaunch navigation without a checkout.
 
     Query strings are untrusted navigation hints, never prices, accepted
     contract terms, a customer identity, payment proof or persisted records.
     """
-    # During a failed HTML POST, the same fixed query hints are needed to
-    # render a safe retry form. They remain untrusted navigation only.
-    if request.method not in ("GET", "POST"):
-        return None, ""
+    # Preserve the original GET-only contract for normal callers. The form
+    # renderer may explicitly recover *only* the fixed Starter30 navigation
+    # hint after a failed POST; it never feeds these hints to the CRM writer.
+    if request.method != "GET":
+        if not (
+            allow_starter30_post_retry
+            and request.method == "POST"
+            and request.GET.getlist("package") == ["starter-30-trx"]
+        ):
+            return None, ""
     services = request.GET.getlist("service")
     packages = request.GET.getlist("package")
     if len(services) > 1 or len(packages) > 1:
@@ -101,7 +107,10 @@ def _options(choices, *, selected=None):
 def request_form(request, *, error=None, status=200):
     """Always provide a fresh CSRF-protected form; never echo PII on errors."""
     csrf = escape(get_token(request), quote=True)
-    selected, prefill_notes = _safe_service_prefill(request)
+    selected, prefill_notes = _safe_service_prefill(
+        request,
+        allow_starter30_post_retry=(request.method == "POST" and error is not None),
+    )
     message = ('<p role="alert">' + escape(error) + '</p>') if error else ''
     # Retain the fixed product hint on the form POST, including validation
     # failures, without reflecting untrusted campaign data or buyer PII.
