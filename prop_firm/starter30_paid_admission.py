@@ -110,6 +110,45 @@ def paid_admission_defects(*, check_attestations: bool = True) -> tuple[str, ...
     return tuple(dict.fromkeys(defects))
 
 
+def _has_unique_recipient_index(constraints: dict) -> bool:
+    """Require single-column exact uniqueness, not only unique txid or a pair."""
+    if type(constraints) is not dict:
+        return False
+    return any(
+        record.get("unique") is True
+        and record.get("columns") == ["recipient"]
+        for record in constraints.values()
+        if type(record) is dict
+    )
+
+
+def require_live_unique_invoice_recipient_schema() -> None:
+    """Read-only SHOW/introspection on the EFFECTIVE isolated payment database.
+
+    This runs only after the source, owner-terms, actual reserve and payout-rail
+    holds pass. The new GitHub ORM field `unique=True` or an un-applied
+    migration file is NEVER proof of a unique index on cPanel MariaDB.
+    """
+    try:
+        from config.mojprop_db_router import MOJPROP_DB_ALIAS
+        from django.db import connections
+        from prop_firm.models import PropSimulationPayment
+
+        conn = connections[MOJPROP_DB_ALIAS]
+        with conn.cursor() as cursor:
+            constraints = conn.introspection.get_constraints(
+                cursor, PropSimulationPayment._meta.db_table,
+            )
+    except Exception as exc:
+        raise Starter30PaidAdmissionHold(
+            "Starter30 payment database uniqueness cannot be verified"
+        ) from exc
+    if not _has_unique_recipient_index(constraints):
+        raise Starter30PaidAdmissionHold(
+            "Starter30 requires a UNIQUE receiving address for every invoice"
+        )
+
+
 def require_paid_admission_readiness() -> None:
     """Reject a NEW invoice before touching an identity, DB or blockchain."""
     errors = paid_admission_defects()
