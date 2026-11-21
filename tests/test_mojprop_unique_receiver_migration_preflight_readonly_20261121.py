@@ -116,6 +116,106 @@ class MojPropUniqueReceiverPreflightTests(SimpleTestCase):
             archive.write_bytes(blob + b"tampered")
             self.assertFalse(audit._verify_local_backup_manifest(str(file))["verified"])
 
+    def test_digest_valid_cross_database_restore_is_never_accepted(self):
+        """A private dump with CREATE DATABASE / USE is not restore-safe."""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            hostile_fragments = (
+                b"CREATE DATABASE \x60old_live\x60;\nUSE \x60old_live\x60;\n",
+                b"USE old_live;\n",
+                b"/*!40101 USE old_live */;\n",
+                b"CREATE TABLE \x60old_live\x60.\x60b\x60 (x int);\n",
+                b"DROP TABLE IF EXISTS \x60b\x60;\n",
+                b"SOURCE /tmp/external.sql\n",
+                b"SELECT 1 INTO OUTFILE '/tmp/leak';\n",
+                b"CREATE USER 'other'@'localhost';\n",
+            )
+            for fragment in hostile_fragments:
+                with self.subTest(directive=fragment[:25]):
+                    sql = b"CREATE TABLE \x60a\x60 (x int);\n" + fragment
+                    self.assertTrue(audit._restore_scope_defects(sql))
+                    archive = root / "mojprop-full-logical.sql.gz"
+                    zipped = gzip.compress(sql)
+                    archive.write_bytes(zipped)
+                    manifest = {
+                        "gzip_sha256": hashlib.sha256(zipped).hexdigest(),
+                        "sql_sha256": hashlib.sha256(sql).hexdigest(),
+                        "compressed_bytes": len(zipped),
+                        "uncompressed_bytes": len(sql),
+                        "tables_in_live_schema": 1 + int(fragment.startswith(b"CREATE TABLE")),
+                        "create_table_statements": 1 + int(fragment.startswith(b"CREATE TABLE")),
+                        "isolated_restore_verified": True,
+                    }
+                    (root / "manifest.json").write_text(
+                        json.dumps(manifest), encoding="utf-8"
+                    )
+                    outcome = audit._verify_local_backup_manifest(
+                        str(root / "manifest.json")
+                    )
+                    self.assertFalse(outcome["verified"])
+                    self.assertFalse(outcome["restore_verified"])
+
+    def test_unscoped_single_db_dump_can_pass_digest_but_not_restore_proof(self):
+        sql = (
+            b"/*!40101 SET NAMES utf8mb4 */;\n"
+            b"CREATE TABLE \x60a\x60 (x int);\n"
+            b"INSERT INTO \x60a\x60 VALUES (1);\n"
+        )
+        self.assertEqual(audit._restore_scope_defects(sql), ())
+
+
+    def test_derived_private_dump_is_byte_proven_but_not_restored(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            sql = (
+                b"CREATE TABLE \x60a\x60 (x int);\n"
+                b"INSERT INTO \x60a\x60 VALUES (1);\n"
+            )
+            original = (
+                b"CREATE DATABASE \x60original\x60;\n"
+                b"USE \x60original\x60;\n" + sql
+            )
+            old_zip = gzip.compress(original)
+            derived_zip = gzip.compress(sql)
+            (root / "mojprop-full-logical.sql.gz").write_bytes(old_zip)
+            (root / "mojprop-target-neutral.sql.gz").write_bytes(derived_zip)
+            data = {
+                "schema": "mojprop.target-neutral-backup-review.v1",
+                "source_archive_sha256": hashlib.sha256(old_zip).hexdigest(),
+                "source_sql_sha256": hashlib.sha256(original).hexdigest(),
+                "derived_archive_sha256": hashlib.sha256(derived_zip).hexdigest(),
+                "derived_sql_sha256": hashlib.sha256(sql).hexdigest(),
+                "derived_gzip_bytes": len(derived_zip),
+                "derived_sql_bytes": len(sql),
+                "database_definition_lines_removed": 1,
+                "database_selector_lines_removed": 1,
+                "scope_command_scan_clear": True,
+                "legacy_source_unchanged": True,
+                "standalone_restore_verified": False,
+                "tables_preserved": 1,
+                "insert_statements_preserved": 1,
+            }
+            path = root / "target-neutral-manifest.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            found = audit._verify_local_backup_manifest(str(path))
+            self.assertTrue(found["verified"])
+            self.assertFalse(found["restore_verified"])
+
+            # A self-signed but non-proven additional insert must be refused.
+            malicious_sql = sql + b"INSERT INTO \x60a\x60 VALUES (2);\n"
+            malicious_zip = gzip.compress(malicious_sql)
+            (root / "mojprop-target-neutral.sql.gz").write_bytes(malicious_zip)
+            data.update(
+                derived_archive_sha256=hashlib.sha256(malicious_zip).hexdigest(),
+                derived_sql_sha256=hashlib.sha256(malicious_sql).hexdigest(),
+                derived_gzip_bytes=len(malicious_zip),
+                derived_sql_bytes=len(malicious_sql),
+            )
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertFalse(
+                audit._verify_local_backup_manifest(str(path))["verified"]
+            )
+
     def test_no_backup_or_fake_restore_receipt_can_authorize_release(self):
         self.assertEqual(
             audit._verify_local_backup_manifest(None),

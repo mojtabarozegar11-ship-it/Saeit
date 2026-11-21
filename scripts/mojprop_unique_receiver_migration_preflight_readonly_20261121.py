@@ -75,6 +75,82 @@ def _exact_recipient_unique(constraints: dict) -> bool:
     )
 
 
+def _restore_scope_defects(sql: bytes) -> tuple[str, ...]:
+    """Reject SQL dump commands able to redirect an isolated restore.
+
+    A digest-valid no-DROP dump may still CREATE DATABASE and USE an old
+    production DB. Conservative read-only scanner: unfamiliar SQL should
+    be separately reviewed, never executed or silently sanitized here.
+    No SQL contents, user data or database names are printed.
+    """
+    if type(sql) is not bytes:
+        return ("sql_archive_is_not_bytes",)
+    patterns = (
+        ("database_definition", rb"(?im)^[ \t]*(?:CREATE|DROP|ALTER)[ \t]+(?:DATABASE|SCHEMA)\b"),
+        ("database_switch", rb"(?im)^[ \t]*USE[ \t]+"),
+        ("destructive_table", rb"(?im)^[ \t]*(?:DROP|TRUNCATE)[ \t]+TABLE\b"),
+        ("table_rename", rb"(?im)^[ \t]*RENAME[ \t]+TABLE\b"),
+        ("user_definition", rb"(?im)^[ \t]*(?:CREATE|DROP)[ \t]+USER\b"),
+        ("privilege_change", rb"(?im)^[ \t]*(?:GRANT|REVOKE)[ \t]+"),
+        ("importer_directive", rb"(?im)^[ \t]*(?:SOURCE[ \t]+|\\\.[ \t]+|DELIMITER\b)"),
+        ("global_setting", rb"(?im)^[ \t]*SET[ \t]+(?:@@GLOBAL\.|GLOBAL\b)"),
+        ("file_export", rb"(?im)\bINTO[ \t]+(?:OUTFILE|DUMPFILE)\b"),
+        ("cross_database_table", rb"(?im)^[ \t]*(?:(?:CREATE|ALTER|DROP|TRUNCATE)[ \t]+TABLE|(?:INSERT|REPLACE)[ \t]+INTO|UPDATE[ \t]+|DELETE[ \t]+FROM)[ \t]+(?:\x60[^\x60]+\x60|[A-Za-z_][\w$]*)[ \t]*\.[ \t]*"),
+        ("mysql_executable_database_comment", rb"(?is)/\*!\d{5,6}[ \t]*(?:(?:CREATE|DROP|ALTER)[ \t]+(?:DATABASE|SCHEMA)\b|USE[ \t]+|(?:DROP|TRUNCATE)[ \t]+TABLE\b)"),
+    )
+    return tuple(reason for reason, pattern in patterns if re.search(pattern, sql))
+
+
+def _neutral_derivation_proven(directory: Path, data: dict, candidate: bytes) -> bool:
+    """Compare every SQL byte with the immutable original except two selectors."""
+    original_archive = directory / "mojprop-full-logical.sql.gz"
+    if original_archive.is_symlink() or not original_archive.is_file():
+        return False
+    if original_archive.stat().st_size > 256 * 1024 * 1024:
+        return False
+    if not (
+        data.get("schema") == "mojprop.target-neutral-backup-review.v1"
+        and data.get("database_definition_lines_removed") == 1
+        and data.get("database_selector_lines_removed") == 1
+        and data.get("scope_command_scan_clear") is True
+        and data.get("standalone_restore_verified") is False
+        and data.get("legacy_source_unchanged") is True
+    ):
+        return False
+    compressed = original_archive.read_bytes()
+    if hashlib.sha256(compressed).hexdigest() != data.get("source_archive_sha256"):
+        return False
+    with gzip.open(original_archive, "rb") as stream:
+        original = stream.read(512 * 1024 * 1024 + 1)
+    if len(original) > 512 * 1024 * 1024:
+        return False
+    if hashlib.sha256(original).hexdigest() != data.get("source_sql_sha256"):
+        return False
+    removed_creates, removed_uses, pieces = [], [], []
+    for line in original.splitlines(keepends=True):
+        if re.match(rb"^[ \t]*CREATE[ \t]+DATABASE\b", line, flags=re.I):
+            name = re.search(rb"\x60([^\x60]+)\x60", line)
+            if name is None or not line.rstrip().endswith(b";"):
+                return False
+            removed_creates.append(name.group(1))
+        elif re.match(rb"^[ \t]*USE[ \t]+", line, flags=re.I):
+            name = re.fullmatch(
+                rb"[ \t]*USE[ \t]+\x60([^\x60]+)\x60;[ \t]*(?:\r?\n)?",
+                line, flags=re.I,
+            )
+            if name is None:
+                return False
+            removed_uses.append(name.group(1))
+        else:
+            pieces.append(line)
+    return (
+        len(removed_creates) == 1
+        and len(removed_uses) == 1
+        and removed_creates[0] == removed_uses[0]
+        and b"".join(pieces) == candidate
+    )
+
+
 def _verify_local_backup_manifest(raw: str | None) -> dict:
     """Digest/checksize verification only; never claims an import worked."""
     if not raw:
@@ -85,7 +161,13 @@ def _verify_local_backup_manifest(raw: str | None) -> dict:
     try:
         manifest_path = original.resolve(strict=True)
         data = json.loads(manifest_path.read_text(encoding="utf-8"))
-        archive = manifest_path.parent / "mojprop-full-logical.sql.gz"
+        is_neutral = data.get("schema") == "mojprop.target-neutral-backup-review.v1"
+        if data.get("schema") not in (None, "mojprop.target-neutral-backup-review.v1"):
+            return {"verified": False, "restore_verified": False}
+        archive = manifest_path.parent / (
+            "mojprop-target-neutral.sql.gz" if is_neutral
+            else "mojprop-full-logical.sql.gz"
+        )
         if archive.is_symlink() or not archive.is_file():
             return {"verified": False, "restore_verified": False}
         if archive.stat().st_size > 256 * 1024 * 1024:
@@ -95,18 +177,35 @@ def _verify_local_backup_manifest(raw: str | None) -> dict:
             plain = stream.read(512 * 1024 * 1024 + 1)
         if len(plain) > 512 * 1024 * 1024:
             return {"verified": False, "restore_verified": False}
+        if is_neutral:
+            provenance = _neutral_derivation_proven(manifest_path.parent, data, plain)
+            gzip_hash = data.get("derived_archive_sha256")
+            sql_hash = data.get("derived_sql_sha256")
+            compressed_bytes = data.get("derived_gzip_bytes")
+            plain_bytes = data.get("derived_sql_bytes")
+            schema_tables = data.get("tables_preserved")
+            statement_count = data.get("tables_preserved")
+        else:
+            provenance = True
+            gzip_hash = data.get("gzip_sha256")
+            sql_hash = data.get("sql_sha256")
+            compressed_bytes = data.get("compressed_bytes")
+            plain_bytes = data.get("uncompressed_bytes")
+            schema_tables = data.get("tables_in_live_schema")
+            statement_count = data.get("create_table_statements")
     except (OSError, ValueError, TypeError, json.JSONDecodeError, EOFError):
         return {"verified": False, "restore_verified": False}
     exists = (
-        hashlib.sha256(blob).hexdigest() == data.get("gzip_sha256")
-        and hashlib.sha256(plain).hexdigest() == data.get("sql_sha256")
-        and len(blob) == data.get("compressed_bytes")
-        and len(plain) == data.get("uncompressed_bytes")
+        provenance
+        and hashlib.sha256(blob).hexdigest() == gzip_hash
+        and hashlib.sha256(plain).hexdigest() == sql_hash
+        and len(blob) == compressed_bytes
+        and len(plain) == plain_bytes
         and len(re.findall(rb"(?m)^CREATE TABLE ", plain))
-        == data.get("tables_in_live_schema")
-        == data.get("create_table_statements")
-        and data.get("tables_in_live_schema", 0) > 0
-        and not re.search(rb"(?im)^\s*(DROP|TRUNCATE)\s+TABLE\s", plain)
+        == schema_tables == statement_count
+        and isinstance(schema_tables, int)
+        and schema_tables > 0
+        and not _restore_scope_defects(plain)
     )
     # A readable archive is NOT a restored database. Never infer this from
     # a user-controlled flag or even an SQL checksum.
