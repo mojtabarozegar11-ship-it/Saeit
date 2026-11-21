@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 import tempfile
 
@@ -21,6 +22,20 @@ CYCLE=re.compile(r"^(?P<day>[0-9]{4}-[0-9]{2}-[0-9]{2})(?:-r(?P<run>[0-9]{5,20})
 ID=re.compile(r"^WO-[0-9]+$")
 FAMILY=re.compile(r"^F(?:0[1-9]|[1-3][0-9]|40)$")
 SHA=re.compile(r"^[a-f0-9]{64}$")
+
+
+def _safe_lock(path):
+    """Open a real lock file, never following a redirected link."""
+    if path.is_symlink() or not hasattr(os, "O_NOFOLLOW"):
+        raise RuntimeError("SITE_BRIDGE_LOCK_UNSAFE")
+    try:
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    except OSError as exc:
+        raise RuntimeError("SITE_BRIDGE_LOCK_UNSAFE") from exc
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise RuntimeError("SITE_BRIDGE_LOCK_UNSAFE")
+    return os.fdopen(fd, "a+b")
 
 
 def read_module(path,name):
@@ -59,7 +74,7 @@ def orders_once(root,engine,profiles,cycle,*,dry_run=False,max_active=300):
     engine.ensure_private(receipt_dir)
     receipt=receipt_dir/(cycle+".json")
     lock=area/".orders.lock"
-    with lock.open("a+b") as stream:
+    with _safe_lock(lock) as stream:
         fcntl.flock(stream.fileno(),fcntl.LOCK_EX)
         existing=[]
         for file in sorted(orderdir.iterdir()):
@@ -72,6 +87,8 @@ def orders_once(root,engine,profiles,cycle,*,dry_run=False,max_active=300):
         slots={v.get("bridge_slot") for v in ours}
         if len(slots)!=len(ours) or any(s not in (1,2,3) for s in slots):
             raise RuntimeError("SITE_BRIDGE_EXISTING_ORDER_CONFLICT")
+        if receipt.is_symlink() or (receipt.exists() and not receipt.is_file()):
+            raise RuntimeError("SITE_BRIDGE_RECEIPT_UNSAFE")
         if receipt.is_file():
             value=json.loads(receipt.read_text(encoding="utf8"))
             confirmed=[r["id"] for r in sorted(ours,key=lambda x:x["bridge_slot"])]
@@ -163,7 +180,7 @@ def stage_three_requests(root,engine,profiles,cycle,*,max_cycles=120):
     path=intake/(cycle+".json")
     if path.is_symlink():raise RuntimeError("SITE_INTAKE_UNSAFE_ENTRY")
     # Serialized site-only intake and reconciliation across concurrent bridge runs.
-    with (intake/".intake.lock").open("a+b") as lock:
+    with _safe_lock(intake/".intake.lock") as lock:
         fcntl.flock(lock.fileno(),fcntl.LOCK_EX)
         valid_files=[]
         for entry in sorted(intake.iterdir()):
@@ -218,7 +235,7 @@ def reconcile_site_intake(root,engine,profiles,*,max_admit_cycles=1,max_active=3
     lock_path=intake/".intake.lock"
     result={"admitted_cycles":0,"orders":[],"capacity_blocked":False,
         "waiting_cycles":0}
-    with lock_path.open("a+b") as lock:
+    with _safe_lock(lock_path) as lock:
         fcntl.flock(lock.fileno(),fcntl.LOCK_EX)
         files=[]
         for p in sorted(intake.iterdir(),key=lambda x:x.name):
@@ -441,7 +458,8 @@ if __name__=="__main__":
             "CYCLE_ID_INVALID","FACTORY_PRIVATE_ROOT_INVALID",
             "FACTORY_NATIVE_ORDER_QUEUE_NOT_READY","FACTORY_NATIVE_ORDER_ENTRY_UNSAFE",
             "SITE_BRIDGE_DUPLICATE_ORDERS","SITE_BRIDGE_EXISTING_ORDER_CONFLICT",
-            "SITE_BRIDGE_RECEIPT_MISMATCH","FACTORY_PENDING_CAPACITY_REACHED",
+            "SITE_BRIDGE_RECEIPT_MISMATCH","SITE_BRIDGE_RECEIPT_UNSAFE",
+            "SITE_BRIDGE_LOCK_UNSAFE","FACTORY_PENDING_CAPACITY_REACHED",
             "FACTORY_SITE_ORDER_ALREADY_EXISTS_WITH_DIFFERENT_CYCLE",
             "ORDER_ID_COLLISION","NOT_EXACTLY_THREE",
             "ORDERS_EXISTING_RECORD_INVALID","ORDERS_EXISTING_RECORD_UNSAFE",

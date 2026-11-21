@@ -23,6 +23,37 @@ class BridgeTests(unittest.TestCase):
   (self.root/"production-instructions"/"orders").mkdir(parents=True)
   self.families=[{"id":f"F{i:02d}","slug":f"family_{i:02d}","name_fa":f"محصول تخصصی {i}"} for i in range(1,41)]
  def tearDown(self):self.tmp.cleanup()
+ def test_order_lock_symlink_rejected_before_mutation(self):
+  area=self.root/"production-instructions"
+  outside=self.root/"protected.txt";outside.write_text("unchanged")
+  (area/".orders.lock").symlink_to(outside)
+  with self.assertRaisesRegex(RuntimeError,"SITE_BRIDGE_LOCK_UNSAFE"):
+   bridge.orders_once(self.root,orders,self.families,"2026-10-20")
+  self.assertEqual(outside.read_text(),"unchanged")
+  self.assertEqual(list((area/"orders").glob("WO-*.json")),[])
+
+ def test_intake_lock_symlink_rejected_before_mutation(self):
+  intake=self.root/"production-instructions"/"zomorod-site-intake"
+  intake.mkdir()
+  outside=self.root/"protected.txt";outside.write_text("unchanged")
+  (intake/".intake.lock").symlink_to(outside)
+  with self.assertRaisesRegex(RuntimeError,"SITE_BRIDGE_LOCK_UNSAFE"):
+   bridge.stage_three_requests(self.root,orders,self.families,"2026-10-20")
+  with self.assertRaisesRegex(RuntimeError,"SITE_BRIDGE_LOCK_UNSAFE"):
+   bridge.reconcile_site_intake(self.root,orders,self.families)
+  self.assertEqual(outside.read_text(),"unchanged")
+  self.assertEqual(list(intake.glob("*.json")),[])
+
+ def test_order_receipt_symlink_rejected_before_mutation(self):
+  area=self.root/"production-instructions"
+  receipts=area/"zomorod-site-order-receipts";receipts.mkdir()
+  outside=self.root/"protected.json";outside.write_text("{}")
+  (receipts/"2026-10-20.json").symlink_to(outside)
+  with self.assertRaisesRegex(RuntimeError,"SITE_BRIDGE_RECEIPT_UNSAFE"):
+   bridge.orders_once(self.root,orders,self.families,"2026-10-20")
+  self.assertEqual(outside.read_text(),"{}")
+  self.assertEqual(list((area/"orders").glob("WO-*.json")),[])
+
  def test_issue_exactly_three_and_replay_safe(self):
   first=bridge.orders_once(self.root,orders,self.families,"2026-10-19")
   self.assertEqual(first["new"],3)
