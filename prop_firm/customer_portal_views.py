@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from hashlib import sha256
+import hmac
 from smtplib import SMTPException
 from html import escape
 import json
@@ -269,17 +270,23 @@ def _dashboard(request, *, note: str = "") -> HttpResponse:
         ref = escape(str(account["account_ref"]))
         status = escape(str(account["status"]))
         starting = escape(str(account["starting_capital_usd"]))
-        items.append(
+        row_html = (
             f"<li>Simulation account <strong>{ref}</strong>: {status}, virtual "
             f"starting reference USD {starting}."
-            f"<form method='post' action='{ROOT}' enctype='multipart/form-data'>"
-            + _csrf_field(request)
-            + "<input type='hidden' name='action' value='journal'>"
-            f"<input type='hidden' name='account_id' value='{account_pk}'>"
-            "<label>My educational 10-session CSV journal "
-            "<input type='file' name='journal_csv' accept='.csv,text/csv' required></label>"
-            "<button type='submit'>Save private journal and produce scorecard</button></form></li>"
         )
+        if account["status"] == PropSimulationAccount.Status.ACTIVE:
+            row_html += (
+                f"<form method='post' action='{ROOT}' enctype='multipart/form-data'>"
+                + _csrf_field(request)
+                + "<input type='hidden' name='action' value='journal'>"
+                f"<input type='hidden' name='account_id' value='{account_pk}'>"
+                "<label>My educational 10-session CSV journal "
+                "<input type='file' name='journal_csv' accept='.csv,text/csv' required></label>"
+                "<button type='submit'>Save private journal and produce scorecard</button></form>"
+            )
+        else:
+            row_html += "<p class='note'>This simulation is no longer open for new learning journals.</p>"
+        items.append(row_html + "</li>")
     if not items:
         return _login_page(request, note="No accessible settled accounts.")
     text = (
@@ -413,6 +420,12 @@ def _report(request, case_ref: str) -> HttpResponse:
         or payload.get("verified_trade_evidence") is not False
         or payload.get("payout_eligibility") is not False
     ):
+        raise Http404
+    # Detect accidental payload corruption before presenting a private report.
+    # This digest is a consistency check, not a proof of commercial eligibility.
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    observed = sha256(canonical.encode()).hexdigest()
+    if not hmac.compare_digest(event.payload_digest, observed):
         raise Http404
     rows = payload.get("sessions")
     try:
