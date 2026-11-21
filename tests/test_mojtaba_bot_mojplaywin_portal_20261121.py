@@ -25,6 +25,22 @@ class MojtabaSiteEntryTests(SimpleTestCase):
         )
         return mojtaba_bot_portal(request)
 
+    def test_public_seo_has_exact_canonical_but_no_private_content(self):
+        """Allow indexing of public Starter30 copy without exposing owner chat."""
+        with patch("prop_firm.starter30_live.release_is_open", return_value=False):
+            response = self._get(authenticated=False)
+        body = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('<meta name="robots" content="index,follow', body)
+        self.assertIn('<link rel="canonical" href="https://mojplaywin.com/mojtaba.bot.ai/">', body)
+        self.assertEqual(body.count('rel="canonical"'), 1)
+        self.assertNotIn("noindex", body)
+        self.assertIn("simulated Moj Prop Starter30", body)
+        self.assertNotIn('id="chat-form"', body)
+        self.assertNotIn("csrf_for_chat", body)
+        self.assertNotIn("OPENAI_API_KEY", body)
+        self.assertNotIn('href="/mojprop-starter30-checkout/"', body)
+
     def test_checkout_link_only_when_real_release_preflight_passes(self):
         with patch("prop_firm.starter30_live.release_is_open", return_value=True), \
              patch("prop_firm.starter30_live.verify_pre_invoice_configuration") as preflight:
