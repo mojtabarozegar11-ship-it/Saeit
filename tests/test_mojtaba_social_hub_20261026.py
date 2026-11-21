@@ -116,11 +116,27 @@ class PlatformAdapterTests(unittest.TestCase):
                  "image_url":"https://attacker.example/image.jpg"},"token123",m)
 
     def test_instagram_two_stage_verified_media_only(self):
-        m,c=respond(ok({"id":"container789"}),ok({"id":"post123"}))
+        m,c=respond(ok({"id":"123456","username":"approved_ig_business"}),
+                    ok({"id":"container789"}),ok({"id":"post123"}))
         out=send(account("instagram","123456"),{"text":"My professional study",
             "image_url":"https://mojplaywin.com/media/photo.jpg"},"token123",m)
         self.assertEqual(out.remote_id,"post123")
-        self.assertEqual(len(c),2)
+        self.assertEqual(len(c),3)
+        self.assertEqual(c[0][0],"GET")
+        self.assertTrue(c[1][1].endswith("/media"))
+
+    def test_instagram_live_provider_identity_blocks_prohibited_username(self):
+        for remote in ({"id":"123456","username":"Dr.Mojtaba.Rozegar"},
+                       {"id":"123456","username":""},
+                       {"id":"999999","username":"approved_ig_business"}):
+            with self.subTest(remote=remote):
+                m,c=respond(ok(remote))
+                with self.assertRaises(Blocked):
+                    send(account("instagram","123456"),{
+                         "text":"Ordinary permitted content",
+                         "image_url":"https://mojplaywin.com/media/photo.jpg"},
+                         "token123",m)
+                self.assertEqual([row[0] for row in c],["GET"])
 
     def test_tiktok_explicit_consent_and_submitted_state(self):
         info=ok({"data":{"privacy_level_options":["SELF_ONLY"]},"error":{"code":"ok"}})
