@@ -132,6 +132,17 @@ MPW_MOJPROP_TRX_RELEASE_ENABLED = env.bool(
 MPW_MOJPROP_TRX_RPC_ATTESTED = env.bool(
     "MPW_MOJPROP_TRX_RPC_ATTESTED", default=False
 )
+# A private offline-custody attested pool of public per-invoice TRON addresses.
+# Fail closed by default. Never place owner wallet seeds or private keys here.
+MPW_MOJPROP_INVOICE_ADDRESS_POOL_VERIFIED = env.bool(
+    "MPW_MOJPROP_INVOICE_ADDRESS_POOL_VERIFIED", default=False
+)
+MPW_MOJPROP_INVOICE_ADDRESS_POOL_JSON = env(
+    "MPW_MOJPROP_INVOICE_ADDRESS_POOL_JSON", default=""
+)
+MPW_MOJPROP_INVOICE_ADDRESS_CONTROL_REF = env(
+    "MPW_MOJPROP_INVOICE_ADDRESS_CONTROL_REF", default=""
+)
 MPW_MOJPROP_RPC_A_SOURCE_ID = env("MPW_MOJPROP_RPC_A_SOURCE_ID", default="")
 MPW_MOJPROP_RPC_A_OPERATOR_ID = env("MPW_MOJPROP_RPC_A_OPERATOR_ID", default="")
 MPW_MOJPROP_RPC_A_ENDPOINT = env("MPW_MOJPROP_RPC_A_ENDPOINT", default="")
