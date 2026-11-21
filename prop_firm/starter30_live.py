@@ -194,6 +194,13 @@ def issue_invoice(
                     .first()
                 )
                 if previous is not None:
+                    if (
+                        previous.invoice_owner.contract_version != TERMS_REF
+                        or previous.terms_acceptance_ref != TERMS_REF
+                    ):
+                        raise Starter30PaymentRejected(
+                            "existing invoice contract version requires support"
+                        )
                     if previous.recipient not in receivers:
                         raise Starter30PaymentRejected("previous invoice requires support")
                     if (previous.payer_hex41 or None) != payer_hex41:
