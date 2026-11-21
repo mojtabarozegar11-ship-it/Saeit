@@ -45,7 +45,8 @@ class Starter30PublicOfferTests(unittest.TestCase):
 
     def test_no_wallet_or_unreviewed_external_script(self):
         page = PUBLIC.read_text("utf-8")
-        self.assertEqual(page.count("<script"), 2)
+        self.assertEqual(page.count("<script"), 3)
+        self.assertEqual(page.count('<script type="application/ld+json">'), 1)
         self.assertIn('<script defer src="/mpw-measure/tracker.js"></script>', page)
         self.assertIn('<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>', page)
         self.assertNotIn("tronlink", page.lower())
@@ -67,7 +68,7 @@ class Starter30PublicOfferTests(unittest.TestCase):
     def test_current_exact_price_and_invoice_boundary(self):
         page = PUBLIC.read_text("utf-8")
         for required in ("30 TRX", "one-time simulated access",
-                         'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"',
+                         'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx&amp;utm_source=moj_prop&amp;utm_medium=onsite&amp;utm_campaign=starter30_lead&amp;utm_content=free_terms"',
                          "server-issued 30 TRX invoice",
                          "A public checkout page alone is not evidence"):
             self.assertIn(required, page)
