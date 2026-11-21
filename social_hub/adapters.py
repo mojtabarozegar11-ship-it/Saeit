@@ -11,7 +11,7 @@ import json
 import re
 from urllib.parse import urlsplit, urlencode
 
-from .catalog import BRANDS, MEDIA_HOSTS, RESTRICTED_HANDLES, platform
+from .catalog import BRANDS, MEDIA_HOSTS, RESTRICTED_HANDLES, platform, restricted_profile_in
 
 class Blocked(ValueError):
     pass
@@ -120,6 +120,11 @@ def send(account: dict, content: dict, token: str, transport) -> DispatchOutcome
     destination = account.get("destination")
     if not isinstance(destination, str) or not destination or len(destination) > 180:
         raise Blocked("Destination missing")
+    # A legacy or externally imported account may bypass initial registration.
+    # Deny before transport, even if its numeric provider ID looks valid.
+    if restricted_profile_in(destination, account.get("public_url"),
+                             account.get("profile_handle"), account.get("provider_identity")):
+        raise Blocked("Restricted account cannot be a publishing destination")
     text = content.get("text", "")
     if any(x in json.dumps(content, ensure_ascii=False).casefold() for x in RESTRICTED_HANDLES):
         raise Blocked("Restricted account may not be promoted")
@@ -200,6 +205,29 @@ def send(account: dict, content: dict, token: str, transport) -> DispatchOutcome
         return DispatchOutcome("published", _id(resp.payload.get("name")))
     if key == "instagram":
         _require(destination, r"[0-9]{5,30}", "Instagram Professional account")
+        # Numeric IDs alone cannot identify the prohibited owner username.
+        # Re-check the exact authenticated Graph account BEFORE any media POST.
+        try:
+            identity = transport("GET", "https://graph.facebook.com/v24.0/" +
+                                 destination + "?fields=id,username", None, _auth(token))
+        except Exception:
+            raise Uncertain("Instagram identity preflight unavailable") from None
+        if (not isinstance(identity, Response) or identity.status != 200
+                or not isinstance(identity.payload, dict)
+                or str(identity.payload.get("id", "")) != destination):
+            raise Blocked("Instagram provider identity mismatch or unavailable")
+        username = identity.payload.get("username")
+        if not isinstance(username, str) or not re.fullmatch(r"[A-Za-z0-9._]{1,30}", username):
+            raise Blocked("Instagram verified username missing")
+        if restricted_profile_in(username):
+            raise Blocked("Restricted Instagram identity refused")
+        published_profile = account.get("public_url")
+        if published_profile:
+            profile_url = urlsplit(published_profile)
+            if (profile_url.scheme != "https" or profile_url.hostname not in
+                    ("instagram.com", "www.instagram.com") or
+                    profile_url.path.strip("/").casefold() != username.casefold()):
+                raise Blocked("Instagram approved profile and remote identity differ")
         image = _media_url(content.get("image_url"))
         container = _post(transport, "https://graph.facebook.com/v24.0/" + destination + "/media",
                           {"image_url": image, "caption": _text(content, limit=2200)}, token)
