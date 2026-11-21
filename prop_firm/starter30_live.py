@@ -223,14 +223,22 @@ def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
             if payment.txid == transfer_a.tx_hash:
                 return _paid_result(payment)
             raise Starter30PaymentRejected("invoice is already settled")
-        if payment.status != PropSimulationPayment.Status.AWAITING:
+        if payment.status not in (
+            PropSimulationPayment.Status.AWAITING,
+            PropSimulationPayment.Status.EXPIRED,
+        ):
             raise Starter30PaymentRejected("invoice is not awaiting payment")
-        # Transfer timestamp controls whether a transfer was on time; provider
-        # confirmation may arrive after expiry without penalizing the buyer.
+        # A wrong/out-of-window txid can expire an invoice even though a genuine
+        # in-window transfer may still be awaiting independent confirmation.
+        # Accept only the original invoice-window proof, never a late transfer.
+        # An early admin expiration is not automatically reversible.
+        if payment.status == PropSimulationPayment.Status.EXPIRED and now < payment.expires_at:
+            raise Starter30PaymentRejected("invoice is not awaiting payment")
         transfer_in_window = payment.issued_at <= transfer_a.block_time < payment.expires_at
         if now >= payment.expires_at and not transfer_in_window:
-            payment.status = PropSimulationPayment.Status.EXPIRED
-            payment.save(using=MOJPROP_DB_ALIAS, update_fields=["status", "updated_at"])
+            if payment.status == PropSimulationPayment.Status.AWAITING:
+                payment.status = PropSimulationPayment.Status.EXPIRED
+                payment.save(using=MOJPROP_DB_ALIAS, update_fields=["status", "updated_at"])
             return _EXPIRED_INVOICE
         if not transfer_in_window:
             raise Starter30PaymentRejected("payment is outside the invoice window")
