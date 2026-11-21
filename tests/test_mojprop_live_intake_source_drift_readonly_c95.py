@@ -136,7 +136,7 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         archive = root / "docs/mojprop/historical-static-evidence" / (old_pin + ".py.txt")
         current = root / "config/urls.py"
         self.assertEqual(exact_git_blob(archive.read_bytes()), old_pin)
-        self.assertEqual(exact_git_blob(current.read_bytes()), "325a9c358e94bed5ee3ba673fbd85f836f067c07")
+        self.assertEqual(exact_git_blob(current.read_bytes()), "25dbbeebe87a63473d022f604da6d47dca27b456")
         prior = iter(archive.read_text(encoding="utf-8").splitlines())
         expected_line = next(prior, None)
         additions = []
@@ -148,8 +148,10 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         self.assertIsNone(expected_line)
         self.assertEqual(additions, [
             "from core.mpw_legacy_guest_checkout_redirect import legacy_guest_checkout",
+            "from core.mojtaba_bot_portal import mojtaba_bot_portal",
             "from prop_firm.starter30_views import starter30_checkout, starter30_status",
             "from services.mpw_trx_public_pages import support_page, terms_page, privacy_page, cookies_page",
+            "    path(\"mojtaba.bot.ai/\", mojtaba_bot_portal, name=\"mojtaba_bot_portal\"),",
             "    path(\"store/product/<int:product_id>/checkout/\", legacy_guest_checkout, name=\"mpw_legacy_guest_checkout_redirect\"),",
             "    path(\"support/\", support_page, name=\"mpw_support\"),",
             "    path(\"terms/\", terms_page, name=\"mpw_terms\"),",
