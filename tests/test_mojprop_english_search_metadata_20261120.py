@@ -76,7 +76,15 @@ def check_pages(root, pages):
             assert parser.meta[key] == [desc]
         assert parser.meta["og:url"] == [url]
         assert parser.meta["robots"] == ["index,follow,max-image-preview:large"]
-        assert parser.meta["twitter:card"] == ["summary"]
+        if "og:image" in parser.meta:
+            # A verified first-party preview illustration uses a large image card.
+            assert len(parser.meta["og:image"]) == 1
+            assert parser.meta["twitter:image"] == parser.meta["og:image"]
+            assert parser.meta["twitter:card"] == ["summary_large_image"]
+        else:
+            # Other legacy informational pages without a share image retain
+            # the original small-card contract.
+            assert parser.meta["twitter:card"] == ["summary"]
         schemas = [s for s in parser.schemas if s.get("@type") in ("WebPage", "ContactPage")]
         assert len(schemas) == 1
         assert schemas[0]["url"] == url
