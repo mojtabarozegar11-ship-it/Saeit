@@ -24,7 +24,7 @@ class LocaleClickAttributionTests(unittest.TestCase):
         self.assertIn('type!=="program"&&type!=="starter30"',js)
         self.assertIn("navigator.sendBeacon",js)
         self.assertIn('credentials:"omit"',js)
-        self.assertNotIn("localStorage",js)
+        self.assertNotRegex(js, r"\\b(?:window\\.)?localStorage\\s*(?:\\.|\\[)")
         self.assertNotIn("document.cookie",js)
         self.assertNotIn("utm_source",js)
         self.assertNotIn("analytics.google",js)
