@@ -55,10 +55,21 @@ def evidence_file(root,item):
         return False
     path=Path(name)
     if path.is_absolute() or ".." in path.parts or not path.parts or len(name)>240:return False
-    p=root/path
-    if p.is_symlink() or not p.is_file():return False
-    if not 64<=p.stat().st_size<=MAX_EVIDENCE:return False
-    return sha256(p.read_bytes())==digest
+    try:
+        # Resolve the whole path: checking only the final component would
+        # follow a symlinked parent into another product or outside the VPS.
+        private_root=Path(root)
+        if private_root.is_symlink():return False
+        private_root=private_root.resolve(strict=True)
+        real=(private_root/path).resolve(strict=True)
+        if private_root not in real.parents or not real.is_file():return False
+        # An internal symlink is still not immutable product-owned evidence.
+        if any((private_root/Path(*path.parts[:i])).is_symlink()
+               for i in range(1,len(path.parts)+1)):return False
+        if not 64<=real.stat().st_size<=MAX_EVIDENCE:return False
+        return sha256(real.read_bytes())==digest
+    except (OSError,ValueError,RuntimeError):
+        return False
 
 def load_registry(path):
     path=Path(path)

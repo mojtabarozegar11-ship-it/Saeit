@@ -90,29 +90,29 @@ jobs:
           artifact_sha="7ba2168c90617b236d10ee4542ec9fd276f3f524809ddd001f18f5a5634fc553"
           timeout 190s ssh -T -F "$d/config" factory-vps \
             "python3 -B '$stage/measure.py' --factory-root '$root' --source-sha256 '$source_sha' --artifact-sha256 '$artifact_sha' --criteria '$stage/criteria.json'"
-          timeout 40s ssh -T -F "$d/config" factory-vps python3 - "$root" "$artifact_sha" <<'PY'
+          runner_sha="$(sha256sum scripts/factory_f28_measured_quality_evidence_20261021.py | cut -d' ' -f1)"
+          timeout 40s ssh -T -F "$d/config" factory-vps python3 - "$root" "$artifact_sha" "$runner_sha" <<'PY'
           import json,sys
           from pathlib import Path
-          root=Path(sys.argv[1]); artifact=sys.argv[2]
+          root=Path(sys.argv[1]); artifact=sys.argv[2]; runner_sha=sys.argv[3]
           base=root/"quality-excellence/private-measured-evidence/F28"/artifact
-          files=sorted(base.glob("technical-*.json"))
-          assert files
-          for file in files:
-              if file.is_symlink():continue
-              data=json.loads(file.read_text(encoding="utf8"))
-              if data.get("artifact_sha256")!=artifact:continue
-              assert data["valid_real_customer_cli_scenarios_oracle_checked"]==160
-              assert data["invalid_customer_cli_scenarios_rejected"]==64
-              assert data["quality_criteria_total"]==100
-              assert data["professional_1000_quality_points"] is None
-              assert data["professional_1000_quality_approved"] is False
-              assert data["customer_publication_allowed"] is False
-              print("VPS_F28_REAL_PRODUCT_QUALITY_DOSSIER_READBACK=PASS")
-              print("VPS_F28_QUALITY_1000_INDEPENDENT_APPROVAL=PENDING")
-              print("VPS_F28_REAL_ARTIFACT_SHA256="+artifact)
-              break
-          else:
-              raise RuntimeError("NO_VERIFIED_F28_EVIDENCE")
+          file=base/("technical-"+runner_sha+".json")
+          assert file.is_file() and not file.is_symlink()
+          data=json.loads(file.read_text(encoding="utf8"))
+          assert data["evidence_runner_sha256"]==runner_sha
+          assert data["artifact_sha256"]==artifact
+          assert data["valid_real_customer_cli_scenarios_oracle_checked"]==160
+          assert data["invalid_customer_cli_scenarios_rejected"]==64
+          assert data["metamorphic_customer_scenario_pairs_checked"]==128
+          assert len(data["metamorphic_properties"])==4
+          assert data["quality_criteria_total"]==100
+          assert data["professional_1000_quality_points"] is None
+          assert data["professional_1000_quality_approved"] is False
+          assert data["customer_publication_allowed"] is False
+          print("VPS_F28_REAL_PRODUCT_QUALITY_DOSSIER_READBACK=PASS")
+          print("VPS_F28_METAMORPHIC_TECHNICAL_PROPERTIES=128")
+          print("VPS_F28_QUALITY_1000_INDEPENDENT_APPROVAL=PENDING")
+          print("VPS_F28_REAL_ARTIFACT_SHA256="+artifact)
           PY
       - name: Delete ephemeral SSH credentials
         if: always()

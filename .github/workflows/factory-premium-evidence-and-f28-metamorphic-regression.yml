@@ -1,0 +1,30 @@
+name: Factory quality evidence integrity and F28 metamorphic regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_global_premium_quality_gate.py
+      - tests/test_factory_global_premium_quality_gate.py
+      - scripts/factory_f28_measured_quality_evidence_20261021.py
+      - .github/workflows/f28-vps-measured-quality-evidence-20261021.yml
+      - .github/workflows/factory-premium-evidence-and-f28-metamorphic-regression.yml
+permissions: {contents: read}
+jobs:
+  offline-reproducible-quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Compile scoped factory quality code
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/factory_global_premium_quality_gate.py scripts/factory_f28_measured_quality_evidence_20261021.py
+      - name: Reject escaped evidence and preserve all forty fail-closed gates
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_factory_global_premium_quality_gate.py' -v
+      - name: Execute genuine F28 CLI measurement and 128 behavioral checks
+        run: |
+          set -euo pipefail
+          python3 -B scripts/factory_f28_measured_quality_evidence_20261021.py --selftest
