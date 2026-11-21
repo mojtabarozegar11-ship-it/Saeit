@@ -52,7 +52,7 @@ if (strlen($original) < 250 || strlen($original) > 950000
     || substr_count($original, '<loc>') > 3000
     || strpos($original, 'https://mojplaywin.com/') === false
     || strpos($original, 'https://zomorodmelal.ir/') !== false) fallbackSitemap();
-$mojPropPaths = ['/moj-prop/rules/', '/moj-prop/signals/', '/moj-prop/payment/', '/moj-prop/contact/', '/moj-prop/catalog/'];
+$mojPropPaths = ['/moj-prop/rules/', '/moj-prop/signals/', '/moj-prop/payment/', '/moj-prop/contact/', '/moj-prop/selected-traders/', '/moj-prop/education/', '/moj-prop/education/risk-management/', '/moj-prop/education/drawdown-and-position-sizing/', '/moj-prop/education/sixty-day-simulated-challenge/', '/moj-prop/education/best-day-consistency/', '/moj-prop/education/simulated-versus-live/', '/moj-prop/catalog/'];
 $locCount = substr_count($original, '<loc>');
 if ($locCount < 20) {
     preg_match_all('~<loc>([^<]+)</loc>~', $original, $matchedLocs);
