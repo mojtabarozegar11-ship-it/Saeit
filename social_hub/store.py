@@ -13,7 +13,12 @@ import stat
 import uuid
 
 from .adapters import Blocked
-from .catalog import BRANDS, RESTRICTED_HANDLES, platform
+from .catalog import BRANDS, RESTRICTED_HANDLES, platform, restricted_profile_in
+
+
+def _reject_restricted_account(account):
+    if restricted_profile_in(account.get('destination'), account.get('public_url')):
+        raise Blocked('Restricted account cannot be approved or dispatched')
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -127,7 +132,7 @@ class Store:
             raise Blocked("Invalid account destination")
         if not isinstance(public_url, str) or len(public_url) > 500:
             raise Blocked("Invalid public URL")
-        if any(k in (destination + " " + public_url).casefold() for k in RESTRICTED_HANDLES):
+        if restricted_profile_in(destination, public_url):
             raise Blocked("Restricted account")
         if public_url and not public_url.startswith("https://"):
             raise Blocked("Public account URL must be HTTPS")
@@ -155,6 +160,7 @@ class Store:
             account = self.account(account_id)
             if not account:
                 raise Blocked("Account not found")
+            _reject_restricted_account(account)
             if not platform(account["platform"]).sendable:
                 # Scientific and commerce profiles may have no sanctioned posting
                 # API, but can still be owner-attested and listed publicly.
@@ -245,6 +251,7 @@ class Store:
         account = self.account(account_id)
         if not account:
             raise Blocked("Unknown account")
+        _reject_restricted_account(account)
         if not platform(account["platform"]).sendable:
             raise Blocked("Platform cannot publish via the generic API")
         if not isinstance(content, dict) or not content or len(json.dumps(content,ensure_ascii=False)) > 180000:
@@ -275,6 +282,7 @@ class Store:
             account = self.account(post["account_id"])
             if not account or not account["verified"]:
                 raise Blocked("Cannot approve unverified account")
+            _reject_restricted_account(account)
             now = utc_now()
             self.db.execute("UPDATE posts SET state='approved',approved_by=?,approved_at=?,updated_at=? WHERE id=?",
                             (_safe(actor),now,now,post_id))
@@ -296,6 +304,7 @@ class Store:
             account = self.account(post["account_id"])
             if not account or account["brand"] != post["brand"] or not account["verified"]:
                 raise Blocked("Account not verified")
+            _reject_restricted_account(account)
             # No automatic retry, including after a crash between external send and receipt.
             self.db.execute("UPDATE posts SET state='dispatching',updated_at=? WHERE id=?",
                             (utc_now(),post_id))
