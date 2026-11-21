@@ -1,0 +1,113 @@
+name: Mojtaba bot VPS sandbox prerequisites — owner read-only
+
+# No push, PR, schedule, or generic dispatch: one exact owner comment on
+# the dedicated production blocker issue can invoke this audit.
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtaba-vps-sandbox-prerequisites-owner-readonly
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.issue.number == 2869 &&
+      !github.event.issue.pull_request &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'MOJTABA-VPS-SANDBOX-PREREQ-READONLY-20261121'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted reviewed code without stored token
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Confirm immutable audit source and parse contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object -- deploy/mojtaba_vps_sandbox_prereq_readonly_20261121.py)" = "441ee41b3fba353485830b60c92be634b1b61138"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile deploy/mojtaba_vps_sandbox_prereq_readonly_20261121.py
+          echo "MOJTABA_VPS_SECURITY_AUDITOR_PIN=verified"
+
+      - name: Read only VPS prerequisites through existing pinned SSH loopback
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "${VPS_KEY:-}" ]]; then
+            echo "::error::Existing scoped VPS SSH key not available; no fallback"
+            exit 1
+          fi
+          d="$(mktemp -d "$RUNNER_TEMP/mojtaba-vps-prereq.XXXXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; v=sys.stdin.read(); print(v.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          if ! ssh-keygen -y -P '' -f "$d/key" >/dev/null 2>&1; then
+            echo "::error::Existing SSH key is invalid; no auth fallback"
+            exit 1
+          fi
+          if ! timeout 12s ssh-keyscan -T 7 -p 22 -t rsa 127.0.0.1 > "$d/known" 2>"$d/scan.err"; then
+            echo "::error::Existing VPS loopback SSH endpoint unavailable"
+            exit 1
+          fi
+          actual="$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)"
+          if [[ "$actual" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]]; then
+            echo "::error::Pinned VPS host identity mismatch; connection refused"
+            exit 1
+          fi
+          echo "MOJTABA_VPS_EXISTING_SSH_IDENTITY=verified"
+          if ! timeout 55s ssh -T -i "$d/key" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" \
+            -o ConnectTimeout=9 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 \
+            -o ForwardAgent=no -o ClearAllForwardings=yes \
+            -p 22 githubops@127.0.0.1 \
+            'test "$(id -un)" = githubops && exec python3 -B -' \
+            < deploy/mojtaba_vps_sandbox_prereq_readonly_20261121.py \
+            > "$d/result" 2>"$d/ssh.err"; then
+            echo "::error::VPS read-only SSH command failed; no fallback"
+            exit 1
+          fi
+          python3 - "$d/result" <<'PY'
+          import json,sys
+          from pathlib import Path
+          lines=Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+          prefix="MOJTABA_VPS_SANDBOX_CAPABILITY_READONLY="
+          assert len(lines)==1 and lines[0].startswith(prefix), "Invalid sanitized receipt"
+          result=json.loads(lines[0][len(prefix):])
+          assert result["schema"]=="mojtaba.bot.ai.vps-sandbox-prerequisites.readonly.v1"
+          assert result["host_role"]=="vps"
+          assert result["read_only"] is True and result["expected_user_verified"] is True
+          assert all(v is False for v in result["attestation"].values())
+          assert result["security_prerequisites"]["rootless_networkless_sandbox_attested"] is False
+          assert result["security_prerequisites"]["host_secrets_hidden_attested"] is False
+          # Whitelisted sanitized summary only; no subprocess arguments or secrets.
+          safe={
+            "schema":result["schema"],
+            "captured_at_utc":result["captured_at_utc"],
+            "binaries_present":result["security_prerequisites"]["binaries_present"],
+            "kernel_limits":result["security_prerequisites"]["kernel_limits_observed"],
+            "cgroup_limits":result["security_prerequisites"]["cgroup_limits_observed"],
+            "namespace_capacity_indicated_not_proven":result["security_prerequisites"]["namespace_capacity_indicated_not_proven"],
+            "source_presence_not_running_workers":result["source_presence_not_running_workers"],
+            "factory_runtime_disk_free_gib":result["factory_runtime_disk_free_gib"],
+            "rootless_networkless_sandbox_attested":False,
+            "factory_started_or_stopped":False,
+          }
+          print("MOJTABA_VPS_SANDBOX_SAFE_SUMMARY="+json.dumps(safe,sort_keys=True))
+          PY
