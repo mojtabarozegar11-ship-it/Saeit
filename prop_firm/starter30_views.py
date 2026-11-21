@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from html import escape
 
+from django.conf import settings
 from django.http import Http404, HttpResponse
 from django.middleware.csrf import get_token
 from django.views.decorators.http import require_http_methods
@@ -27,6 +28,20 @@ def _funnel_hidden_fields(request) -> str:
     return "".join(fields)
 
 
+def _buyer_portal_link() -> str:
+    """Only show private learning access when all independent owner holds pass."""
+    flags = (
+        "MPW_MOJPROP_BUYER_PORTAL_APPROVED",
+        "MPW_MOJPROP_BUYER_TRANSACTIONAL_EMAIL_APPROVED",
+        "MPW_MOJPROP_BUYER_SHARED_RATE_LIMIT_VERIFIED",
+        "MPW_MOJPROP_BUYER_DELIVERY_RECOVERY_VERIFIED",
+    )
+    if all(getattr(settings, flag, False) is True for flag in flags):
+        return ("<p><a href='/mojprop-buyer-portal/'>"
+                "Access your verified private Starter30 learning account</a></p>")
+    return ""
+
+
 from .starter30_live import (
     Starter30PaymentRejected,
     Starter30ReleaseClosed,
@@ -45,7 +60,8 @@ def _page(request, title: str, body: str) -> HttpResponse:
         f"<title>{escape(title)} | Moj Prop</title>"
         "<style>body{background:#080d13;color:#f7f3e9;font:16px/1.6 system-ui;max-width:820px;margin:40px auto;padding:0 20px}"
         "main{background:#131c27;border:1px solid #344251;border-radius:16px;padding:28px}"
-        "label{display:block;margin:14px 0 6px}input{width:100%;padding:11px;border-radius:8px;border:1px solid #667;background:#0d141d;color:#fff;box-sizing:border-box}"
+        "label{display:block;margin:14px 0 6px}input:not([type=checkbox]){width:100%;padding:11px;border-radius:8px;border:1px solid #667;background:#0d141d;color:#fff;box-sizing:border-box}"
+        "input[type=checkbox]{width:auto;vertical-align:middle;margin-right:8px;accent-color:#e9c57b}"
         "button{margin-top:18px;padding:12px 18px;border:0;border-radius:24px;background:#e9c57b;font-weight:800}"
         ".warn{background:#352621;padding:14px;border-left:4px solid #f7c3aa}.ok{background:#173b2c;padding:14px;border-left:4px solid #7de2a8}"
         "code{word-break:break-all}</style></head><body><main>"
@@ -87,6 +103,8 @@ def _form(request, invoice_ref: str | None = None) -> str:
         "<small>If left blank, the verified on-chain sender is recorded after payment.</small>"
         "<label><input type='checkbox' name='terms' value='yes' required> "
         "I understand this is simulated trading: no customer capital or real broker account is involved. Every profit I earn after a successful pass is paid in full: 100% of my realized profit is transferred after verification under the published payout rules; no profit or pass result is guaranteed.</label>"
+        "<p><a href='/moj-prop/rules/'>Full simulation rules</a> · "
+        "<a href='/moj-prop/payment/'>Payment, reward and refund disclosures</a></p>"
         "<button type='submit'>Create 30 TRX invoice</button></form>"
     )
 
@@ -140,7 +158,9 @@ def starter30_checkout(request):
                 txid=request.POST.get("txid", ""),
             )
             _record_funnel_event(request, "payment_confirmed")
-            _record_funnel_event(request, "delivery_success")
+            # A paid and activated database row is NOT proof that the buyer
+            # authenticated or received their learning journal/scorecard.
+            # Do not manufacture delivery_success before actual delivery.
             return _page(
                 request,
                 "Starter30 activated",
@@ -148,7 +168,8 @@ def starter30_checkout(request):
                 f"<p>Account: <code>{escape(result['account_ref'])}</code></p>"
                 f"<p>Virtual balance: <strong>USD {escape(result['simulation_balance_usd'])}</strong></p>"
                 f"<p>Transaction: <code>{escape(result['txid'])}</code></p>"
-                "</div><p>This account is simulated only; no customer capital or real broker account was created. Every profit earned after a successful pass is paid in full: 100% of the trader's realized profit is transferred after verification under the published payout rules.</p>",
+                "</div><p>This account is simulated only; no customer capital or real broker account was created. Every profit earned after a successful pass is paid in full: 100% of the trader's realized profit is transferred after verification under the published payout rules.</p>"
+                + _buyer_portal_link(),
             )
         raise Starter30PaymentRejected("unsupported checkout action")
     except (Starter30PaymentRejected, Starter30ReleaseClosed, LookupError, ValueError) as error:
