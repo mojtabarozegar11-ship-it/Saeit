@@ -911,6 +911,15 @@ jobs:
           except (OSError, ValueError, sqlite3.Error):
               print("PRIVATE_QUEUE_SCHEMA_AUDIT=UNAVAILABLE")
           CPANEL_READONLY_PY
+      - name: Inspect current cPanel cron markers without exposing cron commands
+        if: steps.gate.outputs.operation == 'cpanel_readonly'
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 75s ssh -T -F "$RUNNER_TEMP/zomorod-command-channel/config" "$COMMAND_HOST" 'python3 -B -' < scripts/zomorod_cpanel_cron_evidence_readonly.py
       - name: Return private queue contract as sealed owner-only receipt
         if: steps.gate.outputs.operation == 'sealed_schema'
         shell: bash
