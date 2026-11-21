@@ -71,6 +71,7 @@ class MojtabaCanonicalReadOnlyTests(TestCase):
             agent=factory, action_type="product_research",
             capability_code="product_research", status="blocked"
         )
+        baseline_agent_count = Agent.objects.count()
         out = io.StringIO()
         call_command("mojtaba_runtime_inventory", stdout=out)
         report = json.loads(out.getvalue())
@@ -78,7 +79,8 @@ class MojtabaCanonicalReadOnlyTests(TestCase):
         self.assertEqual(report["canonical_agent_rows"], 0)
         self.assertEqual(report["canonical_active_rows"], 0)
         self.assertEqual(report["nonterminal_task_count"], 2)
-        self.assertEqual(report["registered_agent_rows"], 1)
+        self.assertEqual(report["registered_agent_rows"], baseline_agent_count)
+        self.assertEqual(Agent.objects.count(), baseline_agent_count)
         self.assertEqual(report["chat_session_count"], 0)
         self.assertEqual(report["chat_message_count"], 0)
         self.assertFalse(report["single_worker_attested"])
