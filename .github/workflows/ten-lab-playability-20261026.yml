@@ -1,0 +1,21 @@
+name: Ten Lab playability regression (isolated)
+on:
+  pull_request:
+    paths:
+      - 'site_releases/mojplaywin/ten-lab-20261023/**'
+      - 'scripts/verify_ten_lab_playability_20261026.cjs'
+      - '.github/workflows/ten-lab-playability-20261026.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  playability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Execute five-game runtime regression
+        run: node scripts/verify_ten_lab_playability_20261026.cjs

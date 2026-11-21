@@ -5,7 +5,7 @@ let active=false,paused=false,done=false,last=0,clock=0,score=0,level=1,scene=nu
 const rand=(a,b)=>Math.random()*(b-a)+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const colors=['#82eaf7','#ffc787','#a893f5','#96e7a2','#f48d9c'];
 const storageKey='mpw-tenlab-'+slug+'-best-v1';
-let best=0;try{best=Number(localStorage.getItem(storageKey))||0}catch{}
+let best=0;try{const stored=Number(localStorage.getItem(storageKey));best=Number.isSafeInteger(stored)&&stored>=0?Math.min(stored,1000000000):0}catch{}
 function text(t,x,y,size=20,color='#e7f8ff',align='left'){ctx.fillStyle=color;ctx.font='700 '+size+'px system-ui,sans-serif';ctx.textAlign=align;ctx.fillText(String(t),x,y)}
 function bg(a='#08182a',b='#12304a'){let g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,a);g.addColorStop(1,b);ctx.fillStyle=g;ctx.fillRect(0,0,W,H)}
 function circle(x,y,r,c){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=c;ctx.fill()}
@@ -18,7 +18,7 @@ function finish(won,msg){active=false;done=true;save();hud();$('overlay-title').
 function start(){active=true;paused=false;done=false;clock=0;frame=0;score=0;level=1;$('overlay').classList.add('hidden');$('pause').textContent='PAUSE';keys.clear();scene=builders[slug]();hud();note(scene.info)}
 function pause(force){if(!active)return;paused=force===undefined?!paused:force;$('pause').textContent=paused?'RESUME':'PAUSE';if(paused)keys.clear();note(paused?'Paused. Resume when ready.':scene.info)}
 function action(which){if(!active||paused)return;if(scene.press)scene.press(which)}
-function inputKey(k){if(k==='Escape'||k==='KeyP'){pause();return}if(!active||paused)return; if(['Space','Enter','ArrowUp'].includes(k))action('action');if(k==='Digit1')action('left');if(k==='Digit2')action('action');if(k==='Digit3')action('right');if(scene.key)scene.key(k)}
+function inputKey(k){if(k==='Escape'||k==='KeyP'){pause();return}if(!active||paused)return; if(['Space','Enter'].includes(k)||k==='ArrowUp'&&slug==='metro-vault')action('action');if(k==='Digit1')action('left');if(k==='Digit2')action('action');if(k==='Digit3')action('right');if(scene.key)scene.key(k)}
 $('start').addEventListener('click',start);$('pause').addEventListener('click',()=>pause());
 for(const id of ['left','right','up','down','action']){
  const el=$(id);el.addEventListener('pointerdown',e=>{keys.add(id);action(id);try{el.setPointerCapture(e.pointerId)}catch{}e.preventDefault()});
@@ -44,7 +44,7 @@ function windward(){
  boat.v=clamp(boat.v,0,143);
  boat.x+=Math.cos(boat.a)*boat.v*dt;boat.y+=Math.sin(boat.a)*boat.v*dt;
  boat.x=clamp(boat.x,25,900);boat.y=clamp(boat.y,28,490);
- const mark=buoys[ix];if(mark&&Math.hypot(mark.x-boat.x,mark.y-boat.y)<37){ix++;level=ix+1;score+=200+Math.round(t);if(ix===buoys.length)finish(true,'All five buoys rounded') }
+ const mark=buoys[ix];if(mark&&Math.hypot(mark.x-boat.x,mark.y-boat.y)<37){ix++;level=ix+1;score+=200+Math.round(t);if(ix===buoys.length){finish(true,'All five buoys rounded');return} }
  for(const reef of reefs)if(Math.hypot(boat.x-reef.x,boat.y-reef.y)<reef.r+10&&clock-reefHit>1.6){reefHit=clock;t-=8;boat.v*=.3;note('Reef collision: 8-second penalty')}
  if(t<=0)finish(false,'Race time expired');
  },draw(){
@@ -58,9 +58,9 @@ function windward(){
 }
 function lexicon(){
  const words=['ORBIT','FROST','SOLAR','RIVER','MANGO','PILOT','QUEST','BRAVE','WAVES','PIXEL','JELLY','NORTH','DELTA','SCALE','TIGER','STONE','CLOUD','SHIFT','ROUTE','BERRY'];
- let board=[],found=new Set(),chosen=null,startTime=90,list=[],hint=0;
+ let board=[],found=new Set(),chosen=null,startTime=90,list=[],hint=0,cursor=0;
  function make(){
-  board=Array.from({length:64},()=>String.fromCharCode(65+Math.floor(rand(0,26))));
+  cursor=0;board=Array.from({length:64},()=>String.fromCharCode(65+Math.floor(rand(0,26))));
   list=words.slice((level-1)*5,(level-1)*5+5);found.clear();
   const occupied=new Set();
   for(const w of list){let placed=false;
@@ -84,10 +84,11 @@ function lexicon(){
    if(list.includes(w)&&!found.has(w)){found.add(w);score+=150+Math.floor(startTime);hint=0;note('FOUND '+w+' — '+found.size+'/5. Select the first and last letter of each word.');if(found.size===5){level++;if(level>4)finish(true,'All four word grids solved');else {startTime+=38;make()}}}
    else{hint=.45;note('Not in target list: '+w+'. Try a straight word in any direction.')}
  }
- return{info:'Find five hidden words in each grid. Tap the first and last letter, or use a mouse. Four rounds.',press(which){if(which==='action'&&chosen!==null)chosen=null},
- click(p){const x=Math.floor((p.x-68)/57),y=Math.floor((p.y-35)/57);if(x>=0&&x<8&&y>=0&&y<8)select(y*8+x)},
+ return{info:'Find five hidden words in each grid. Tap the first and last letter, or use a mouse. Four rounds.',press(which){if(which==='action')select(cursor)},
+ key(k){if(k==='ArrowLeft')cursor=Math.max(0,cursor-1);else if(k==='ArrowRight')cursor=Math.min(63,cursor+1);else if(k==='ArrowUp')cursor=Math.max(0,cursor-8);else if(k==='ArrowDown')cursor=Math.min(63,cursor+8)},
+ click(p){const x=Math.floor((p.x-68)/57),y=Math.floor((p.y-35)/57);if(x>=0&&x<8&&y>=0&&y<8){cursor=y*8+x;select(cursor)}},
  update(dt){startTime-=dt;hint=Math.max(0,hint-dt);if(startTime<=0)finish(false,'Out of time')},
- draw(){bg('#112541','#162942');for(let y=0;y<8;y++)for(let x=0;x<8;x++){const k=y*8+x,X=68+x*57,Y=35+y*57;rect(X+2,Y+2,50,50,k===chosen?'#547e9d':'#204158',7);if(k===chosen)rect(X+2,Y+2,50,50,'#467785a8',7);text(board[k],X+27,Y+37,25,k===chosen?'#ffe3b3':'#e5f5ff','center')}
+ draw(){bg('#112541','#162942');for(let y=0;y<8;y++)for(let x=0;x<8;x++){const k=y*8+x,X=68+x*57,Y=35+y*57;rect(X+2,Y+2,50,50,k===chosen?'#547e9d':'#204158',7);if(k===chosen)rect(X+2,Y+2,50,50,'#467785a8',7);if(k===cursor){ctx.strokeStyle='#f5d995';ctx.lineWidth=3;ctx.strokeRect(X+4,Y+4,46,46)}text(board[k],X+27,Y+37,25,k===chosen?'#ffe3b3':'#e5f5ff','center')}
  text('TARGET WORDS',568,74,20,'#f2c988');list.forEach((w,i)=>{rect(555,94+i*65,290,50,found.has(w)?'#245949':'#18384c',9);text((found.has(w)?'✓ ':'○ ')+w,576,128+i*65,21,found.has(w)?'#9af2bd':'#f0f8f9')});
  text('TIME '+Math.ceil(startTime)+'s',574,466,23);text('ROUND '+level+' / 4',574,500,14,'#a9c9d1');if(hint>0)rect(60,488,420,6,'#ff9569')}}
 }
@@ -103,20 +104,20 @@ function dominion(){
  key(k){const dx=k==='ArrowLeft'?-1:k==='ArrowRight'?1:0,dy=k==='ArrowUp'?-1:k==='ArrowDown'?1:0;cursor=clamp(cursor%9+dx,0,8)+9*clamp(Math.floor(cursor/9)+dy,0,6)},
  press(which){if(which==='action')player(cursor)},
  click(p){const x=Math.floor((p.x-49)/90),y=Math.floor((p.y-56)/58);if(x>=0&&x<9&&y>=0&&y<7){cursor=y*9+x;player(cursor)}},
- update(){},draw(){bg('#0b2232','#102538');for(let i=0;i<cells.length;i++){const x=i%9,y=Math.floor(i/9),px=49+x*90,py=56+y*58;rect(px,py,81,51,cells[i]===1?'#247b99':cells[i]===2?'#ae664c':terrain[i]===2?'#30415c':'#1c4050',6);if(terrain[i]===2)text('◆',px+40,py+32,13,'#f1d59e','center');if(i===cursor){ctx.strokeStyle='#fcdf9f';ctx.lineWidth=3;ctx.strokeRect(px+2,py+2,77,47)}}
+ update(){},draw(){bg('#0b2232','#102538');for(let i=0;i<cells.length;i++){const x=i%9,y=Math.floor(i/9),px=49+x*90,py=56+y*58;rect(px,py,81,51,cells[i]===1?'#247b99':cells[i]===2?'#ae664c':terrain[i]===2?'#30415c':'#1c4050',6);if(cells[i]===0&&adj(i,1)&&terrain[i]<=energy){ctx.strokeStyle='#8ef1bd';ctx.lineWidth=1.5;ctx.strokeRect(px+5,py+5,71,41)}if(terrain[i]===2)text('◆',px+40,py+32,13,'#f1d59e','center');if(i===cursor){ctx.strokeStyle='#fcdf9f';ctx.lineWidth=3;ctx.strokeRect(px+2,py+2,77,47)}}
  text('YOUR ENERGY '+energy+'    AI ENERGY '+aiEnergy,43,32,18,'#f9d69f');text('BLUE '+cells.filter(x=>x===1).length+'  /  ORANGE '+cells.filter(x=>x===2).length,42,503,15)}};
 }
 function metro(){
- let y=387,vy=0,distance=0,hp=3,spawn=.8,obstacles=[],inv=0,dash=0,ground=418,space=0;
+ let y=387,vy=0,distance=0,bonus=0,hp=3,spawn=.8,obstacles=[],inv=0,dash=0,ground=418,space=0;
  function jump(){if(y>=ground-31){vy=-480}}
  return{info:'Arrow Up / Space / ACTION to jump. Right to dash. Clear rooftop vents, holes and drones. Grab gold tokens.',
  press(which){if(['action','up'].includes(which))jump();if(which==='right')dash=.75},
- update(dt){clock+=dt;distance+=dt*(205+(level-1)*16);score=Math.floor(distance/9);level=1+Math.floor(distance/750);spawn-=dt;
+ update(dt){clock+=dt;distance+=dt*(205+(level-1)*16);score=Math.floor(distance/9)+bonus;level=1+Math.floor(distance/750);spawn-=dt;
  if(down('right'))dash=.20;
  if(spawn<=0){const type=['vent','drone','pit','coin'][Math.floor(rand(0,4))];obstacles.push({type,x:970,y:type==='drone'?rand(310,370):418});spawn=rand(.8,1.45)*Math.max(.65,1-level*.025)}
  vy+=1060*dt;y+=vy*dt;if(y>ground-31){y=ground-31;vy=0}
  for(const o of obstacles){o.x-=dt*(205+(level-1)*16+(dash>0?100:0));
- if(o.x<125&&o.x>60){const bodyBottom=y+31;if(o.type==='coin'){if(Math.abs(o.y-25-y)<45){score+=80;o.x=-200}}else if(!inv&&(o.type==='pit'&&bodyBottom>=ground-2||o.type==='vent'&&bodyBottom>ground-65||o.type==='drone'&&Math.abs(o.y-y)<32)){hp--;inv=1.2;o.x=-150;note('Collision! '+hp+' shields remain. Jump earlier or dash through the gap.');if(hp<=0)finish(false,'The skyline claimed your last shield')}}
+ if(o.x<125&&o.x>60){const bodyBottom=y+31;if(o.type==='coin'){if(Math.abs(o.y-25-y)<45){bonus+=80;score+=80;o.x=-200}}else if(!inv&&(o.type==='pit'&&bodyBottom>=ground-2||o.type==='vent'&&bodyBottom>ground-65||o.type==='drone'&&Math.abs(o.y-y)<32)){hp--;inv=1.2;o.x=-150;note('Collision! '+hp+' shields remain. Jump earlier or dash through the gap.');if(hp<=0)finish(false,'The skyline claimed your last shield')}}
  }
  obstacles=obstacles.filter(o=>o.x>-220);
  if(distance>3500)finish(true,'Skyline cleared with '+hp+' shields left');
@@ -136,7 +137,7 @@ function cargo(){
  press(which){set(which==='left'?0:which==='right'?2:1)},
  update(dt){clock+=dt;spawn-=dt;if(spawn<=0){train.push({x:980,color:Math.floor(rand(0,3)),assigned:null,id:++seq});spawn=Math.max(.6,1.8-level*.09)*rand(.8,1.15)}
  const v=(160+level*22)*dt;for(const car of train){car.x-=v;if(car.x<465&&car.assigned===null){car.assigned=choice;note(car.assigned===car.color?'Nice routing! Next shipment inbound.':'Wrong dock — adjust the switch earlier next time.')}
- if(car.x<52&&!car.done){car.done=true;settled++;if(car.assigned===car.color){streak++;score+=100+Math.min(10,streak)*15}else{lives--;streak=0}level=1+Math.floor(settled/7);if(lives<=0)finish(false,'Shift ended: '+settled+' shipments sorted');if(settled>=35)finish(true,'All 35 shipments dispatched')}}train=train.filter(x=>!x.done);
+ if(car.x<52&&!car.done){car.done=true;settled++;if(car.assigned===car.color){streak++;score+=100+Math.min(10,streak)*15}else{lives--;streak=0}level=1+Math.floor(settled/7);if(lives<=0)finish(false,'Shift ended: '+settled+' shipments sorted');else if(settled>=35)finish(true,'All 35 shipments dispatched')}}train=train.filter(x=>!x.done);
  },draw(){bg('#0e1e2d','#163a45');text('ROUTE THE COLORED FREIGHT',24,42,24,'#f3d7ac');for(let j=0;j<3;j++){const y=185+j*111;line(42,y,875,y,'#527d83',11);line(42,y,875,y,'#193446',5);rect(35,y-36,117,70,'#234052',9);rect(40,y-33,110,65,bays[j]+'44',8);text(['BAY 1','BAY 2','BAY 3'][j],63,y+7,19,bays[j]);}
  line(460,67,460,450,'#f1d392aa',5);for(let j=0;j<3;j++)line(460,300,575,185+j*111,bays[j],4);circle(460,302,16,bays[choice]);for(const c of train){let y=c.assigned===null?300:185+c.assigned*111;rect(c.x,y-24,76,48,bays[c.color],9);rect(c.x+7,y-13,62,24,'#0c2a3b',4);text(String(c.id),c.x+38,y+5,16,bays[c.color],'center')}
  text('SWITCH: '+['BLUE','GOLD','VIOLET'][choice],700,66,21,bays[choice]);text('LIVES '+lives+'   COMBO '+streak,620,480,18);text('DISPATCHED '+settled+' / 35',24,480,18)}}
