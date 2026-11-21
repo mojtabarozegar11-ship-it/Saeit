@@ -21,25 +21,14 @@ def mojtaba_bot_portal(request):
     signed_in = bool(
         request.user.is_authenticated and request.user.is_active
     )
-    # Advertising an invoice route is allowed only when its real existing
-    # server release gates and local provider configuration are available.
-    # This preflight performs no on-chain RPC, charge or database write.
-    starter30_checkout_available = False
-    try:
-        from prop_firm.starter30_live import (
-            release_is_open, verify_pre_invoice_configuration,
-        )
-        if release_is_open():
-            verify_pre_invoice_configuration()
-            starter30_checkout_available = True
-    except Exception:
-        # Payment is fail-closed. The unpaid request remains available.
-        starter30_checkout_available = False
+    # The legacy paid release flag is insufficient to attest final rules,
+    # exclusive invoice recipient, reserved payouts or verified buyer email.
+    # Do not re-expose that unsafe route through the central assistant portal.
+    # Unpaid CRM requests remain available without a DB or provider preflight.
 
     nonce = token_urlsafe(24)
     context = {
         "signed_in": signed_in,
-        "starter30_checkout_available": starter30_checkout_available,
         "nonce": nonce,
         "csrf_for_chat": get_token(request) if signed_in else "",
     }
