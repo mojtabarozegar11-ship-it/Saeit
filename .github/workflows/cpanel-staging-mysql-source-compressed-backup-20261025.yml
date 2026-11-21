@@ -1,0 +1,56 @@
+name: cPanel one-shot SOURCE GZIP staging MySQL backup to VPS
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - .github/workflows/cpanel-staging-mysql-source-compressed-backup-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - name: Compress full logical snapshot on cPanel host, stream to VPS, verify gzip CRC
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo MYSQL_SOURCE_COMPRESSION=ON
+          timeout 3600s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY' | timeout 3600s ssh -T -F "$d/config" saeit-vps 'set -euo pipefail; umask 077; test "$(id -un)" = githubops; test -w /home/githubops; install -d -m 700 /home/githubops/private_mysql_snapshots; test ! -e /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz; test ! -e /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz.part; ulimit -f 14680064; dd bs=1M status=none of=/home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz.part'
+          from pathlib import Path
+          import os,sys,subprocess
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit("WRONG_ACCOUNT")
+          stage=h/'Saeit-staging'
+          if not stage.is_dir() or stage.is_symlink():raise SystemExit("STAGE_MISSING")
+          interpreter=h/'virtualenv/Saeit-staging/3.11/bin/python'
+          if not interpreter.is_file():raise SystemExit("VENVDIR_MISSING")
+          code = "import os,sys,subprocess,json\nos.environ.setdefault(\"DJANGO_SETTINGS_MODULE\",\"config.settings\")\nos.environ[\"PYTHONDONTWRITEBYTECODE\"]=\"1\"\nimport django\ndjango.setup()\nfrom django.conf import settings\nd=settings.DATABASES[\"default\"]\nif d[\"ENGINE\"]!=\"django.db.backends.mysql\":raise SystemExit(\"EXPECTED_MYSQL\")\nu=subprocess.run([\"uapi\",\"--output=json\",\"Mysql\",\"list_databases\"],capture_output=True,text=True,timeout=30)\nif u.returncode!=0:raise SystemExit(\"CPANEL_DB_LIST_FAILED\")\nrows=json.loads(u.stdout).get(\"result\",{}).get(\"data\",[])\nnames=[x[\"database\"] for x in rows if isinstance(x,dict) and x.get(\"database\")]\nif len(names)!=1 or names[0]!=d[\"NAME\"]:raise SystemExit(\"DB_SCOPE_MISMATCH\")\nenv=os.environ.copy()\nenv[\"MYSQL_PWD\"]=d[\"PASSWORD\"]\ncmd=[\"/usr/bin/mysqldump\",\"--single-transaction\",\"--quick\",\"--skip-lock-tables\",\"--hex-blob\",\"--no-tablespaces\",\"--default-character-set=utf8mb4\",\"--triggers\",\"-h\",str(d.get(\"HOST\") or \"localhost\"),\"-P\",str(d.get(\"PORT\") or 3306),\"-u\",str(d[\"USER\"]),\"--databases\",str(d[\"NAME\"])]\ndump=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env)\nzipper=subprocess.Popen([\"/usr/bin/gzip\",\"-1\"],stdin=dump.stdout,stdout=sys.stdout.buffer,stderr=subprocess.PIPE)\ndump.stdout.close()\nzerr=zipper.communicate()[1]\nderr=dump.communicate()[1]\nif dump.returncode:raise SystemExit(\"MYSQLDUMP_EXIT_\"+str(dump.returncode))\nif zipper.returncode:raise SystemExit(\"SOURCE_GZIP_EXIT_\"+str(zipper.returncode))"
+          env=os.environ.copy()
+          env["PYTHONDONTWRITEBYTECODE"]="1"
+          env["PYTHONPATH"]=str(stage)
+          subprocess.check_call([str(interpreter),"-B","-c",code],env=env,cwd=str(stage),stdout=sys.stdout.buffer)
+          PY
+          echo MYSQL_VERIFYING_PRIVATE_VPS_BACKUP
+          timeout 600s ssh -T -F "$d/config" saeit-vps 'set -euo pipefail; test -f /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz.part; test ! -e /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz; gzip -t /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz.part; test "$(stat -c%s /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz.part)" -gt 100000; mv /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz.part /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz; chmod 600 /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz; sha256sum /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz; stat -c '\''BACKUP_SIZE_BYTES=%s'\'' /home/githubops/private_mysql_snapshots/staging_full_20261025_sourcegzip.sql.gz; df -B1 /home/githubops | tail -n 1; echo MYSQL_SOURCE_GZIP_BACKUP_VERIFIED=YES'
+          echo MYSQL_SOURCE_COMPRESSED_BACKUP_SUCCESS=YES; MYSQL_SQL_WRITES=0
