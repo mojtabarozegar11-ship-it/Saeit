@@ -221,6 +221,7 @@ class CommerceFunnelEvent(T):
         ("view_store", "Store view"),
         ("view_item", "Product view"),
         ("begin_checkout", "Checkout opened"),
+        ("lead_submit", "Manual lead submitted"),
         ("invoice_created", "Invoice created"),
         ("payment_confirmed", "Payment confirmed"),
         ("delivery_success", "Delivery succeeded"),
