@@ -116,6 +116,54 @@ class MojPropUniqueReceiverPreflightTests(SimpleTestCase):
             archive.write_bytes(blob + b"tampered")
             self.assertFalse(audit._verify_local_backup_manifest(str(file))["verified"])
 
+    def test_digest_valid_cross_database_restore_is_never_accepted(self):
+        """A private dump with CREATE DATABASE / USE is not restore-safe."""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            hostile_fragments = (
+                b"CREATE DATABASE \x60old_live\x60;\nUSE \x60old_live\x60;\n",
+                b"USE old_live;\n",
+                b"/*!40101 USE old_live */;\n",
+                b"CREATE TABLE \x60old_live\x60.\x60b\x60 (x int);\n",
+                b"DROP TABLE IF EXISTS \x60b\x60;\n",
+                b"SOURCE /tmp/external.sql\n",
+                b"SELECT 1 INTO OUTFILE '/tmp/leak';\n",
+                b"CREATE USER 'other'@'localhost';\n",
+            )
+            for fragment in hostile_fragments:
+                with self.subTest(directive=fragment[:25]):
+                    sql = b"CREATE TABLE \x60a\x60 (x int);\n" + fragment
+                    self.assertTrue(audit._restore_scope_defects(sql))
+                    archive = root / "mojprop-full-logical.sql.gz"
+                    zipped = gzip.compress(sql)
+                    archive.write_bytes(zipped)
+                    manifest = {
+                        "gzip_sha256": hashlib.sha256(zipped).hexdigest(),
+                        "sql_sha256": hashlib.sha256(sql).hexdigest(),
+                        "compressed_bytes": len(zipped),
+                        "uncompressed_bytes": len(sql),
+                        "tables_in_live_schema": 1 + int(fragment.startswith(b"CREATE TABLE")),
+                        "create_table_statements": 1 + int(fragment.startswith(b"CREATE TABLE")),
+                        "isolated_restore_verified": True,
+                    }
+                    (root / "manifest.json").write_text(
+                        json.dumps(manifest), encoding="utf-8"
+                    )
+                    outcome = audit._verify_local_backup_manifest(
+                        str(root / "manifest.json")
+                    )
+                    self.assertFalse(outcome["verified"])
+                    self.assertFalse(outcome["restore_verified"])
+
+    def test_unscoped_single_db_dump_can_pass_digest_but_not_restore_proof(self):
+        sql = (
+            b"/*!40101 SET NAMES utf8mb4 */;\n"
+            b"CREATE TABLE \x60a\x60 (x int);\n"
+            b"INSERT INTO \x60a\x60 VALUES (1);\n"
+        )
+        self.assertEqual(audit._restore_scope_defects(sql), ())
+
+
     def test_no_backup_or_fake_restore_receipt_can_authorize_release(self):
         self.assertEqual(
             audit._verify_local_backup_manifest(None),

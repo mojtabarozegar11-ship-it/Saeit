@@ -75,6 +75,32 @@ def _exact_recipient_unique(constraints: dict) -> bool:
     )
 
 
+def _restore_scope_defects(sql: bytes) -> tuple[str, ...]:
+    """Reject SQL dump commands able to redirect an isolated restore.
+
+    A digest-valid no-DROP dump may still CREATE DATABASE and USE an old
+    production DB. Conservative read-only scanner: unfamiliar SQL should
+    be separately reviewed, never executed or silently sanitized here.
+    No SQL contents, user data or database names are printed.
+    """
+    if type(sql) is not bytes:
+        return ("sql_archive_is_not_bytes",)
+    patterns = (
+        ("database_definition", rb"(?im)^[ \t]*(?:CREATE|DROP|ALTER)[ \t]+(?:DATABASE|SCHEMA)\b"),
+        ("database_switch", rb"(?im)^[ \t]*USE[ \t]+"),
+        ("destructive_table", rb"(?im)^[ \t]*(?:DROP|TRUNCATE)[ \t]+TABLE\b"),
+        ("table_rename", rb"(?im)^[ \t]*RENAME[ \t]+TABLE\b"),
+        ("user_definition", rb"(?im)^[ \t]*(?:CREATE|DROP)[ \t]+USER\b"),
+        ("privilege_change", rb"(?im)^[ \t]*(?:GRANT|REVOKE)[ \t]+"),
+        ("importer_directive", rb"(?im)^[ \t]*(?:SOURCE[ \t]+|\\\.[ \t]+|DELIMITER\b)"),
+        ("global_setting", rb"(?im)^[ \t]*SET[ \t]+(?:@@GLOBAL\.|GLOBAL\b)"),
+        ("file_export", rb"(?im)\bINTO[ \t]+(?:OUTFILE|DUMPFILE)\b"),
+        ("cross_database_table", rb"(?im)^[ \t]*(?:(?:CREATE|ALTER|DROP|TRUNCATE)[ \t]+TABLE|(?:INSERT|REPLACE)[ \t]+INTO|UPDATE[ \t]+|DELETE[ \t]+FROM)[ \t]+(?:\x60[^\x60]+\x60|[A-Za-z_][\w$]*)[ \t]*\.[ \t]*"),
+        ("mysql_executable_database_comment", rb"(?is)/\*!\d{5,6}[ \t]*(?:(?:CREATE|DROP|ALTER)[ \t]+(?:DATABASE|SCHEMA)\b|USE[ \t]+|(?:DROP|TRUNCATE)[ \t]+TABLE\b)"),
+    )
+    return tuple(reason for reason, pattern in patterns if re.search(pattern, sql))
+
+
 def _verify_local_backup_manifest(raw: str | None) -> dict:
     """Digest/checksize verification only; never claims an import worked."""
     if not raw:
@@ -106,7 +132,7 @@ def _verify_local_backup_manifest(raw: str | None) -> dict:
         == data.get("tables_in_live_schema")
         == data.get("create_table_statements")
         and data.get("tables_in_live_schema", 0) > 0
-        and not re.search(rb"(?im)^\s*(DROP|TRUNCATE)\s+TABLE\s", plain)
+        and not _restore_scope_defects(plain)
     )
     # A readable archive is NOT a restored database. Never infer this from
     # a user-controlled flag or even an SQL checksum.
