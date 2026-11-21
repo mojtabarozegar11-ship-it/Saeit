@@ -25,6 +25,7 @@ class MojPropEnglishSitemapTests(SimpleTestCase):
             "https://mojplaywin.com/moj-prop/education/sixty-day-simulated-challenge/",
             "https://mojplaywin.com/moj-prop/education/best-day-consistency/",
             "https://mojplaywin.com/moj-prop/education/simulated-versus-live/",
+            "https://mojplaywin.com/moj-prop/selected-traders/",
         }
         for host in ("mojplaywin.com", "www.mojplaywin.com"):
             with self.subTest(host=host):
