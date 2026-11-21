@@ -34,13 +34,17 @@ class MojPropStarter30NativeAccessTests(TestCase):
         self.assertIn('<option value="blueprint" selected>', html)
         self.assertIn(PREFIX, html)
         self.assertIn("verified lawful invoice required; NOT paid", html)
-        self.assertIn("no payment, challenge or funded trading account", html)
+        self.assertIn("free request for written terms only", html)
+        self.assertIn("does not issue an invoice, collect a fee, enroll a ", html)
+        self.assertIn("challenge or activate a trading account", html)
         self.assertNotIn("name=\"product_id\"", html)
 
     def test_02_native_form_is_html_post_and_csrf_protected(self):
         html = self.fetch(STARTER_URL)
         self.assertIn('method="post"', html)
-        self.assertIn('action="' + FORM_URL + '"', html)
+        self.assertIn('action="/moj-prop-intake/?format=html&amp;service=blueprint'
+                      '&amp;package=starter-30-trx"', html)
+        self.assertNotIn('action="/mojprop-starter30-checkout/"', html)
         self.assertIn('name="csrfmiddlewaretoken"', html)
         self.assertIn('name="idempotency_key"', html)
         self.assertIn('name="consent"', html)
@@ -133,8 +137,10 @@ class MojPropStarter30NativeAccessTests(TestCase):
 
     def test_13_real_django_post_creates_one_unpaid_sku_scoped_lead(self):
         payload = self._submit_from_real_rendered_form()
+        # Match the actual product-specific HTML form action, not a synthetic
+        # generic POST URL. The GET context does not allocate an entitlement.
         response = self.browser.post(
-            FORM_URL, data=urlencode(payload),
+            STARTER_URL, data=urlencode(payload),
             content_type="application/x-www-form-urlencoded",
         )
         self.assertEqual(response.status_code, 201)
