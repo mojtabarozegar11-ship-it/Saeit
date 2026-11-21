@@ -1,0 +1,56 @@
+name: C28 signals 17 brands x 3 actual locale routes
+on:
+  push:
+    branches:
+      - fix/moj-signals-c28-51-localized-brands-20261115
+permissions:
+  contents: read
+concurrency:
+  group: signals-c28-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verified-landing-paths:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate paths and no unauthorized checkout
+        run: |
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          for p in ('core/financial_brand_pages.py','core/signal_commercial_catalog.py',
+                    'config/urls.py','tests/test_moj_c28_signal_51_localized_routes.py'):
+              ast.parse(Path(p).read_text(),filename=p)
+          s=Path('core/signal_commercial_catalog.py').read_text()
+          assert 'checkout_enabled=False' in s
+          assert 'agent_identity=CANONICAL_AGENT' in s
+          print('SIGNALS_C28_SOURCE_NO_FAKE_PAID_ACCESS=PASS')
+          PY
+      - name: Install Django requirements
+        run: python3 -m pip install -r requirements.txt
+      - name: Collect real manifest for live-route Django render tests
+        env:
+          SECRET_KEY: signal-c28-branch-only-key
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+        run: python3 manage.py collectstatic --noinput
+      - name: Verify 51 real market brand language routes and existing catalog
+        env:
+          SECRET_KEY: signal-c28-branch-only-key
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 manage.py test \
+            tests.test_moj_c28_signal_51_localized_routes \
+            tests.test_signal_commercial_catalog \
+            tests.test_signal_history_evidence \
+            tests.test_signal_source_evidence \
+            --verbosity 1
+          echo 'SIGNALS_C28_ALL_17_BRANDS_3_LOCALES=PASS'
