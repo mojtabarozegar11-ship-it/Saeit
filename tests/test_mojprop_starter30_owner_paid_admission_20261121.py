@@ -149,6 +149,69 @@ class Starter30OwnerPaidAdmissionTests(SimpleTestCase):
             normalized.assert_not_called()
             identities.using.assert_not_called()
 
+    def test_schema_requires_exact_unique_recipient_not_a_unique_txid(self):
+        self.assertFalse(admission._has_unique_recipient_index({
+            "txid_index": {"unique": True, "columns": ["txid"]},
+        }))
+        self.assertFalse(admission._has_unique_recipient_index({
+            "recipient_txid_pair": {"unique": True, "columns": ["recipient", "txid"]},
+        }))
+        self.assertFalse(admission._has_unique_recipient_index({
+            "recipient_nonunique": {"unique": False, "columns": ["recipient"]},
+        }))
+        self.assertTrue(admission._has_unique_recipient_index({
+            "recipient_exact": {"unique": True, "columns": ["recipient"]},
+        }))
+
+    def test_actual_schema_read_only_gate_rejects_missing_index(self):
+        from contextlib import nullcontext
+        from config.mojprop_db_router import MOJPROP_DB_ALIAS
+        fake = SimpleNamespace(
+            cursor=lambda: nullcontext(object()),
+            introspection=SimpleNamespace(
+                get_constraints=lambda cursor, table: {
+                    "txid_only": {"unique": True, "columns": ["txid"]},
+                },
+            ),
+        )
+        with patch("django.db.connections", {MOJPROP_DB_ALIAS: fake}):
+            with self.assertRaisesRegex(
+                admission.Starter30PaidAdmissionHold, "UNIQUE receiving address"
+            ):
+                admission.require_live_unique_invoice_recipient_schema()
+
+    def test_verified_unique_schema_is_only_a_read_only_prerequisite(self):
+        from contextlib import nullcontext
+        from config.mojprop_db_router import MOJPROP_DB_ALIAS
+        table_names = []
+        def inspect(cursor, table):
+            table_names.append(table)
+            return {"recipient": {"unique": True, "columns": ["recipient"]}}
+        fake = SimpleNamespace(
+            cursor=lambda: nullcontext(object()),
+            introspection=SimpleNamespace(get_constraints=inspect),
+        )
+        with patch("django.db.connections", {MOJPROP_DB_ALIAS: fake}):
+            self.assertIsNone(admission.require_live_unique_invoice_recipient_schema())
+        self.assertEqual(table_names, ["prop_firm_propsimulationpayment"])
+
+    def test_pre_invoice_chain_invokes_unique_schema_check_after_contract(self):
+        with (
+            patch.object(starter30_live, "require_release"),
+            patch.object(starter30_live, "_provider_pair", return_value=(object(), object())),
+            patch.object(starter30_live, "approved_recipient", return_value="offline"),
+            patch.object(starter30_live, "_hex_recipient", return_value="41" + "0" * 40),
+            patch.object(starter30_live, "attested_receivers", return_value=("offline",)),
+            patch("prop_firm.starter30_checkout_email.require_email_verification_release"),
+            patch.object(admission, "require_paid_admission_readiness") as commercial,
+            patch.object(admission, "require_live_unique_invoice_recipient_schema",
+                         side_effect=admission.Starter30PaidAdmissionHold("missing")) as index,
+        ):
+            with self.assertRaises(admission.Starter30PaidAdmissionHold):
+                starter30_live.verify_pre_invoice_configuration()
+        commercial.assert_called_once_with()
+        index.assert_called_once_with()
+
     def test_hold_message_never_contains_private_evidence_or_bank_details(self):
         with patch.dict(sys.modules, {"prop_firm.rules": None}):
             with self.assertRaises(admission.Starter30PaidAdmissionHold) as caught:
