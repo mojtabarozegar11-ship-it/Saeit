@@ -3,12 +3,15 @@ import os
 from openai import OpenAI
 
 from .models import ChatMessage
-from .master_agent_capability_pack import capability_pack_prompt
+from .master_agent_capability_pack import MASTER_AGENT_CAPABILITY_PACK, capability_pack_prompt
 from .chat_operation_security import is_authorized_chat_operator
+from .cyber_defense import make_security_event, seal_evidence, triage_security_events
+from .bot_identity import BOT_ID
 
 
 SYSTEM_PROMPT = """
-You are the Master Agent assistant for Saeit.
+You are Mojtaba.bot.ai, the single unified Master Agent assistant for Saeit.
+Other agents and workers are internal specialist components, not independent bots.
 You are a controlled management and research assistant.
 Explain plans, research tasks, risks, and required approvals clearly.
 Never claim that an action was executed when it was only discussed.
@@ -41,6 +44,24 @@ class MasterAgentChat:
         if operation is not None:
             direct_owner = is_authorized_chat_operator(session.user)
             if not direct_owner:
+                denied_event = make_security_event(
+                    "privileged_action_denied", "master_agent_chat",
+                    actor_id=str(session.user.pk),
+                )
+                denied_assessment = triage_security_events([denied_event])
+                AuditLog.objects.create(
+                    actor_type="authenticated_chat_user",
+                    actor_id=str(session.user.pk),
+                    action="privileged_chat_operation_denied",
+                    target_type="ChatOperation",
+                    target_id=operation.operation_id,
+                    after_state={
+                        "security_event": denied_event,
+                        "severity": denied_assessment["severity"],
+                        "evidence_hash": seal_evidence(denied_event)["record_hash"],
+                    },
+                    trace_id="chat-operation-denied-" + operation.operation_id,
+                )
                 reply = "اجرای دستور مدیریتی از این حساب مجاز نیست؛ فقط مدیر ارشد فعال می‌تواند دستور عملیاتی صادر کند."
                 ChatMessage.objects.create(
                     session=session,
@@ -48,7 +69,8 @@ class MasterAgentChat:
                     content=reply,
                     metadata={
                         "agent": "master_agent",
-                        "capability_pack": "1.0.0",
+                        "bot_id": BOT_ID,
+                        "capability_pack": MASTER_AGENT_CAPABILITY_PACK["version"],
                         "operation_id": operation.operation_id,
                         "execution": "forbidden",
                     },
@@ -102,7 +124,8 @@ class MasterAgentChat:
                 content=reply,
                 metadata={
                     "agent": "master_agent",
-                    "capability_pack": "1.0.0",
+                    "bot_id": BOT_ID,
+                    "capability_pack": MASTER_AGENT_CAPABILITY_PACK["version"],
                     "operation_id": operation.operation_id,
                     "approval_id": approval.pk,
                     "execution": execution,
@@ -137,6 +160,6 @@ class MasterAgentChat:
             session=session,
             role="assistant",
             content=reply,
-            metadata={"agent": "master_agent", "capability_pack": "1.0.0"},
+            metadata={"agent": "master_agent", "bot_id": BOT_ID, "capability_pack": MASTER_AGENT_CAPABILITY_PACK["version"]},
         )
         return reply

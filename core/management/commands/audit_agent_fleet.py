@@ -17,6 +17,7 @@ from core.management.commands.consolidate_legacy_agents import (
     LEGACY_AGENT_CODES, assess_agent,
 )
 from core.models import Agent, AgentTask
+from core.bot_identity import BOT_ID, summarize_internal_agent_registry
 
 
 EXECUTOR_SCOPES = {
@@ -87,6 +88,8 @@ class Command(BaseCommand):
 
             agents.append({
                 "code": agent.code,
+                "public_bot_id": BOT_ID,
+                "identity_scope": "internal_component_record_only",
                 "active": agent.active,
                 "capabilities": active_caps,
                 "known_registered_handlers": known_handlers,
@@ -126,6 +129,7 @@ class Command(BaseCommand):
 
         result = {
             "mode": "read_only",
+            "single_bot_contract": summarize_internal_agent_registry(agents),
             "days": days,
             "live_scheduler_attested": False,
             "external_delivery_attested": False,
