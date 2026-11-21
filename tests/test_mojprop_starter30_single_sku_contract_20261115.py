@@ -42,8 +42,9 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertEqual(self.catalog.count(marker), 1)
         starter = self.catalog.split(marker, 1)[1].split("</article>", 1)[0]
         self.assertIn("30 native TRX", starter)
-        self.assertIn("Check secure checkout availability", starter)
-        self.assertIn('href="/mojprop-starter30-checkout/"', starter)
+        self.assertIn("payment admission under independent verification", starter)
+        self.assertIn('href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"', starter)
+        self.assertNotIn('href="/mojprop-starter30-checkout/"', starter)
         self.assertIn("Pay only after the secure server issues an invoice", starter)
         self.assertNotIn("US$149", starter)
         self.assertIn("package=starter-30-trx#request", starter)
