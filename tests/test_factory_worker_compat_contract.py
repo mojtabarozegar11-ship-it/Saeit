@@ -122,5 +122,111 @@ class FactoryWorkerCompatibilityTests(unittest.TestCase):
         self.assertIsInstance(tree, ast.Module)
 
 
+    def test_entrypoint_failure_is_nonzero_without_task_or_on_worker_exception(self):
+        path = ROOT / "core/management/commands/factory_product_step.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        cls = next(node for node in tree.body if isinstance(node, ast.ClassDef)
+                   and node.name == "Command")
+        class CommandError(Exception):
+            pass
+        class BaseCommand:
+            def __init__(self):
+                self.messages = []
+                self.stdout = SimpleNamespace(write=self.messages.append)
+        class FailingWorker:
+            def __init__(self, *_args):
+                pass
+            def run(self, _task_id):
+                raise RuntimeError("native recipe binding not proven")
+        task = SimpleNamespace(pk=17, status="queued", product_id=3,
+                               refresh_from_db=lambda fields: None)
+        namespace = {
+            "BaseCommand": BaseCommand,
+            "CommandError": CommandError,
+            "AgentTask": SimpleNamespace(objects=SimpleNamespace(
+                filter=lambda **kwargs: SimpleNamespace(first=lambda: task))),
+            "_load_factory_components": lambda: (FailingWorker, lambda: None, lambda: None),
+            "os": SimpleNamespace(environ={}),
+        }
+        exec(compile(ast.Module(body=[cls], type_ignores=[]), str(path), "exec"), namespace)
+        command = namespace["Command"]()
+        with self.assertRaisesRegex(CommandError, "explicit_task_id_required"):
+            command.handle()
+        with self.assertRaises(CommandError) as caught:
+            command.handle(task_id=17, product_id=3)
+        self.assertEqual(str(caught.exception), "FACTORY_TASK_NOT_COMPLETED")
+        self.assertIsInstance(caught.exception.__cause__, RuntimeError)
+        self.assertEqual(task.status, "queued")
+        self.assertTrue(any(message.startswith("FACTORY_WAIT task=17")
+                            for message in command.messages))
+
+    def test_missing_factory_import_fails_before_database_access(self):
+        path = ROOT / "core/management/commands/factory_product_step.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        cls = next(node for node in tree.body if isinstance(node, ast.ClassDef)
+                   and node.name == "Command")
+        class CommandError(Exception):
+            pass
+        class BaseCommand:
+            def __init__(self):
+                self.stdout = SimpleNamespace(write=lambda _message: None)
+        def missing_runtime():
+            raise ModuleNotFoundError("No module named 'core.factory_agent_runtime'")
+        def forbidden_database_query(**_kwargs):
+            raise AssertionError("No database access is allowed before factory imports")
+        namespace = {
+            "BaseCommand": BaseCommand,
+            "CommandError": CommandError,
+            "AgentTask": SimpleNamespace(objects=SimpleNamespace(filter=forbidden_database_query)),
+            "_load_factory_components": missing_runtime,
+            "os": SimpleNamespace(environ={}),
+        }
+        exec(compile(ast.Module(body=[cls], type_ignores=[]), str(path), "exec"), namespace)
+        command = namespace["Command"]()
+        with self.assertRaisesRegex(CommandError, "runtime_dependencies_unavailable") as caught:
+            command.handle(task_id=17, product_id=3)
+        self.assertIsInstance(caught.exception.__cause__, ModuleNotFoundError)
+        with self.assertRaisesRegex(CommandError, "explicit_task_id_required"):
+            command.handle()
+
+    def test_paid_provider_blocked_before_runtime_import_or_database(self):
+        path = ROOT / "core/management/commands/factory_product_step.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        cls = next(node for node in tree.body if isinstance(node, ast.ClassDef)
+                   and node.name == "Command")
+        class CommandError(Exception):
+            pass
+        class BaseCommand:
+            pass
+        def forbidden(*_args, **_kwargs):
+            raise AssertionError("No import or query expected when paid mode enabled")
+        namespace = {
+            "BaseCommand": BaseCommand,
+            "CommandError": CommandError,
+            "AgentTask": SimpleNamespace(objects=SimpleNamespace(filter=forbidden)),
+            "_load_factory_components": forbidden,
+            "os": SimpleNamespace(environ={"MOJ_PAID_LLM_ENABLED": "1"}),
+        }
+        exec(compile(ast.Module(body=[cls], type_ignores=[]), str(path), "exec"), namespace)
+        with self.assertRaisesRegex(CommandError, "Paid LLM execution is not permitted"):
+            namespace["Command"]().handle(task_id=17)
+
+    def test_entrypoint_has_no_eager_legacy_runtime_imports(self):
+        path = ROOT / "core/management/commands/factory_product_step.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        imports = [node.module for node in tree.body if isinstance(node, ast.ImportFrom)]
+        for module in ("core.factory_agent_runtime", "core.factory_tool_pack",
+                       "core.factory_worker_compat"):
+            self.assertNotIn(module, imports)
+        loader = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                      and node.name == "_load_factory_components")
+        nested_imports = [node.module for node in ast.walk(loader)
+                          if isinstance(node, ast.ImportFrom)]
+        for module in ("core.factory_agent_runtime", "core.factory_tool_pack",
+                       "core.factory_worker_compat"):
+            self.assertIn(module, nested_imports)
+
+
+
 if __name__ == "__main__":
     unittest.main()
