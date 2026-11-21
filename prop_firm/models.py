@@ -127,6 +127,7 @@ class PropSimulationLoginChallenge(models.Model):
     class Purpose(models.TextChoices):
         LOGIN = "login", "Login"
         RECOVERY = "recovery", "Recovery"
+        CHECKOUT = "checkout", "Verified pre-invoice email"
 
     identity = models.ForeignKey(
         PropSimulationIdentity, on_delete=models.PROTECT, related_name="login_challenges"
