@@ -1,7 +1,13 @@
 """Contact-only PHP review gates; avoid changing other shared-shell routes."""
 from pathlib import Path
 import re
+import shutil
 import subprocess
+import unittest
+
+
+if shutil.which("php") is None:
+    raise unittest.SkipTest("PHP CLI is required for the contact-shell QA")
 
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=ROOT/"scripts/mpw_dynamic_main_shell_20261019.php"
