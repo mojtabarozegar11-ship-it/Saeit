@@ -164,6 +164,58 @@ class MojPropUniqueReceiverPreflightTests(SimpleTestCase):
         self.assertEqual(audit._restore_scope_defects(sql), ())
 
 
+    def test_derived_private_dump_is_byte_proven_but_not_restored(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            sql = (
+                b"CREATE TABLE \x60a\x60 (x int);\n"
+                b"INSERT INTO \x60a\x60 VALUES (1);\n"
+            )
+            original = (
+                b"CREATE DATABASE \x60original\x60;\n"
+                b"USE \x60original\x60;\n" + sql
+            )
+            old_zip = gzip.compress(original)
+            derived_zip = gzip.compress(sql)
+            (root / "mojprop-full-logical.sql.gz").write_bytes(old_zip)
+            (root / "mojprop-target-neutral.sql.gz").write_bytes(derived_zip)
+            data = {
+                "schema": "mojprop.target-neutral-backup-review.v1",
+                "source_archive_sha256": hashlib.sha256(old_zip).hexdigest(),
+                "source_sql_sha256": hashlib.sha256(original).hexdigest(),
+                "derived_archive_sha256": hashlib.sha256(derived_zip).hexdigest(),
+                "derived_sql_sha256": hashlib.sha256(sql).hexdigest(),
+                "derived_gzip_bytes": len(derived_zip),
+                "derived_sql_bytes": len(sql),
+                "database_definition_lines_removed": 1,
+                "database_selector_lines_removed": 1,
+                "scope_command_scan_clear": True,
+                "legacy_source_unchanged": True,
+                "standalone_restore_verified": False,
+                "tables_preserved": 1,
+                "insert_statements_preserved": 1,
+            }
+            path = root / "target-neutral-manifest.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            found = audit._verify_local_backup_manifest(str(path))
+            self.assertTrue(found["verified"])
+            self.assertFalse(found["restore_verified"])
+
+            # A self-signed but non-proven additional insert must be refused.
+            malicious_sql = sql + b"INSERT INTO \x60a\x60 VALUES (2);\n"
+            malicious_zip = gzip.compress(malicious_sql)
+            (root / "mojprop-target-neutral.sql.gz").write_bytes(malicious_zip)
+            data.update(
+                derived_archive_sha256=hashlib.sha256(malicious_zip).hexdigest(),
+                derived_sql_sha256=hashlib.sha256(malicious_sql).hexdigest(),
+                derived_gzip_bytes=len(malicious_zip),
+                derived_sql_bytes=len(malicious_sql),
+            )
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertFalse(
+                audit._verify_local_backup_manifest(str(path))["verified"]
+            )
+
     def test_no_backup_or_fake_restore_receipt_can_authorize_release(self):
         self.assertEqual(
             audit._verify_local_backup_manifest(None),
