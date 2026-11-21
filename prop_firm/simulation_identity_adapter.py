@@ -198,15 +198,22 @@ def consume_login_challenge(
             observed_at >= challenge.expires_at
             or not hmac.compare_digest(challenge.code_digest, expected)
         ):
+            # Commit the failed attempt before raising. Raising inside the
+            # atomic block would roll back the increment and silently disable
+            # the max-attempts lockout for this one-time challenge.
             challenge.attempt_count += 1
             challenge.save(
                 using=MOJPROP_DB_ALIAS,
                 update_fields=["attempt_count"],
             )
-            raise IdentityAdapterClosed("invalid or expired challenge")
-        challenge.consumed_at = observed_at
-        challenge.save(using=MOJPROP_DB_ALIAS, update_fields=["consumed_at"])
-        return int(challenge.identity_id)
+        else:
+            challenge.consumed_at = observed_at
+            challenge.save(using=MOJPROP_DB_ALIAS, update_fields=["consumed_at"])
+            return int(challenge.identity_id)
+
+    # The database lock and transaction have ended successfully. A wrong or
+    # expired code must be rejected without undoing its persisted attempt.
+    raise IdentityAdapterClosed("invalid or expired challenge")
 
 
 def settled_accounts(identity_id: int) -> list[dict]:
