@@ -4,6 +4,7 @@ Strictly offline: no paid invoice, email, customer, live host, TRON transfer,
 payment entitlement or private data is created by these tests.
 """
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -118,6 +119,74 @@ class MojPropPrivateEducationalPortalTests(SimpleTestCase):
         self.assertFalse(result["payment_recorded"])
         self.assertFalse(result["trades_executed"])
         self.assertFalse(result["funded_account_earned"])
+
+    def test_only_specific_paid_starter30_invoice_unlocks_educational_accounts(self):
+        with patch.object(portal.PropSimulationAccount, "objects") as manager:
+            manager.using.return_value.filter.return_value.order_by.return_value.values.return_value.__getitem__.return_value = []
+            accounts = portal._paid_learner_accounts(29)
+            self.assertEqual(accounts, [])
+            manager.using.assert_called_once_with(portal.MOJPROP_DB_ALIAS)
+            fields = manager.using.return_value.filter.call_args.kwargs
+            self.assertEqual(fields["identity_id"], 29)
+            self.assertEqual(fields["invoice_owner__identity_id"], 29)
+            self.assertIs(fields["invoice_owner__settlement_verified"], True)
+            self.assertEqual(fields["invoice_owner__payment__product"], portal.PRODUCT)
+            self.assertEqual(
+                fields["invoice_owner__payment__status"],
+                portal.PropSimulationPayment.Status.PAID,
+            )
+
+    def test_invalid_identity_number_cannot_query_paid_account(self):
+        for invalid in (0, -1, True, "29", None):
+            with self.subTest(identity=invalid):
+                with patch.object(portal.PropSimulationAccount, "objects") as manager:
+                    self.assertEqual(portal._paid_learner_accounts(invalid), [])
+                    manager.assert_not_called()
+
+    def test_tampered_stored_journal_is_not_displayed(self):
+        case = "MPS30-" + "B" * 20
+        request = RequestFactory().get("/mojprop-buyer-portal/", {"case": case})
+        request.session = {portal._SESSION_ID: 29}
+        event = SimpleNamespace(
+            payload={
+                "schema": "mojprop.starter30.buyer_education.v1",
+                "sessions": [{"session": 1, "closing_equity_usd": "1000.00",
+                              "risk_plan_recorded": True, "reflection_recorded": True}],
+                "verified_trade_evidence": False,
+                "payout_eligibility": False,
+            },
+            payload_digest="0" * 64,
+        )
+        with patch.object(portal.PropSimulationEvent, "objects") as manager:
+            manager.using.return_value.select_related.return_value.get.return_value = event
+            with self.assertRaises(Http404):
+                portal._report(request, case)
+            claimed = manager.using.return_value.select_related.return_value.get.call_args.kwargs
+            self.assertEqual(claimed["account__identity_id"], 29)
+            self.assertEqual(claimed["account__invoice_owner__identity_id"], 29)
+            self.assertEqual(claimed["account__invoice_owner__payment__product"], portal.PRODUCT)
+            self.assertEqual(
+                claimed["account__invoice_owner__payment__status"],
+                portal.PropSimulationPayment.Status.PAID,
+            )
+
+    def test_unknown_email_never_sends_code_or_creates_entitlement(self):
+        request = RequestFactory().post(
+            "/mojprop-buyer-portal/",
+            {"action": "request", "email": "unknown@example.invalid"},
+        )
+        request.session = {}
+        with patch.object(portal, "_identity_keys", return_value=("s" * 64, "e" * 64)):
+            with patch.object(portal.PropSimulationIdentity, "objects") as manager:
+                manager.using.return_value.filter.return_value.first.return_value = None
+                with patch.object(portal, "send_mail") as mail:
+                    with patch.object(portal.PropSimulationLoginChallenge, "objects") as challenges:
+                        result = portal._request_code(request)
+                        self.assertEqual(result.status_code, 200)
+                        self.assertIn(b"If a verified Starter30 account exists", result.content)
+                        self.assertNotIn(portal._SESSION_ID, request.session)
+                        mail.assert_not_called()
+                        challenges.assert_not_called()
 
     def test_route_and_settings_require_all_explicit_optins(self):
         settings = SETTINGS.read_text(encoding="utf8")
