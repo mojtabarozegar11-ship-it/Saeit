@@ -43,7 +43,9 @@ def _safe_service_prefill(request):
     Query strings are untrusted navigation hints, never prices, accepted
     contract terms, a customer identity, payment proof or persisted records.
     """
-    if request.method != "GET":
+    # During a failed HTML POST, the same fixed query hints are needed to
+    # render a safe retry form. They remain untrusted navigation only.
+    if request.method not in ("GET", "POST"):
         return None, ""
     services = request.GET.getlist("service")
     packages = request.GET.getlist("package")
