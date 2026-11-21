@@ -143,6 +143,11 @@ MPW_MOJPROP_INVOICE_ADDRESS_POOL_JSON = env(
 MPW_MOJPROP_INVOICE_ADDRESS_CONTROL_REF = env(
     "MPW_MOJPROP_INVOICE_ADDRESS_CONTROL_REF", default=""
 )
+# Checkout email verification and cross-account anti-abuse require separate,
+# owner-reviewed release controls. Neither switch sends email when false.
+MPW_MOJPROP_PREINVOICE_TRANSACTIONAL_EMAIL_APPROVED = env.bool(
+    "MPW_MOJPROP_PREINVOICE_TRANSACTIONAL_EMAIL_APPROVED", default=False
+)
 MPW_MOJPROP_RPC_A_SOURCE_ID = env("MPW_MOJPROP_RPC_A_SOURCE_ID", default="")
 MPW_MOJPROP_RPC_A_OPERATOR_ID = env("MPW_MOJPROP_RPC_A_OPERATOR_ID", default="")
 MPW_MOJPROP_RPC_A_ENDPOINT = env("MPW_MOJPROP_RPC_A_ENDPOINT", default="")
