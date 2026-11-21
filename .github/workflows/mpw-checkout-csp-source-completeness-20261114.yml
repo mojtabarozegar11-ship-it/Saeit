@@ -1,0 +1,59 @@
+name: MPW exact checkout CSP and versioned-source revenue blockers
+on:
+  push:
+    branches: [fix/mpw-live-checkout-csp-source-gaps-20261114]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'core/mpw_checkout_security_middleware.py'
+      - 'config/settings.py'
+      - 'scripts/mpw_checkout_source_coverage_20261114.py'
+      - 'tests/test_mpw_checkout_security_middleware_20261114.py'
+      - 'tests/test_mpw_checkout_source_coverage_20261114.py'
+      - '.github/workflows/mpw-checkout-csp-source-completeness-20261114.yml'
+permissions:
+  contents: read
+jobs:
+  exact-owner-source-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile all source gates and source-only middleware
+        run: |
+          python3 -m py_compile core/mpw_checkout_security_middleware.py
+          python3 -m py_compile scripts/mpw_checkout_source_coverage_20261114.py
+          python3 -m py_compile config/settings.py
+          python3 -m py_compile tests/test_mpw_checkout_security_middleware_20261114.py
+          python3 -m py_compile tests/test_mpw_checkout_source_coverage_20261114.py
+      - name: Execute 55 exact HTTP CSP/privacy/no-store negative regressions
+        run: python3 -m unittest discover -s tests -p 'test_mpw_checkout_security_middleware_20261114.py' -v
+      - name: Execute 50 module, migration and URL coverage negative regressions
+        run: python3 -m unittest discover -s tests -p 'test_mpw_checkout_source_coverage_20261114.py' -v
+      - name: Verify real checked-in source graph is honestly classified NO-GO
+        run: |
+          python3 scripts/mpw_checkout_source_coverage_20261114.py > /tmp/mpw-source-coverage.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('/tmp/mpw-source-coverage.json').read_text().split('=',1)[1])
+          assert report['schema']=='mojtaba.bot.ai.mpw-buyer-source-coverage.v1'
+          assert report['canonical_bot']=='mojtaba.bot.ai'
+          assert report['exact_checkout_csp_middleware_installed_in_settings_source']
+          assert not report['complete_versioned_buyer_checkout_source_candidate']
+          assert report['files']['mpw_commerce/buyer_orders.py']=='missing_or_unsafe'
+          assert report['files']['mpw_commerce/product_checkout_page.py']=='missing_or_unsafe'
+          assert report['files']['mpw_commerce/templates/mpw_commerce/product_checkout.html']=='missing_or_unsafe'
+          assert report['files']['core/migrations/0049_mpw_guest_email_recovery.py']=='missing_or_unsafe'
+          assert not report['explicit_source_routes']['commerce/book/<int:product_id>/']
+          assert not report['explicit_source_routes']['store/product/<int:product_id>/checkout/']
+          assert not report['release_permitted']
+          assert report['actual_collected_revenue'] is None
+          print('VERSIONED_REPO_BUYER_COMPONENTS=%s/%s' %(report['source_files_present'],report['source_files_required']))
+          print('VERSIONED_REPO_EXPLICIT_ROUTES=%s/%s' %(report['explicit_source_routes_count'],report['explicit_source_routes_required']))
+          print('SOURCE_CSP=INSTALLED_ONLY; LIVE_CSP=UNKNOWN; LIVE_STORE=UNKNOWN; RELEASE=NO-GO')
+          PY
+      - name: Confirm CI contains no side effect credentials or deployment
+        run: echo 'PR_ONLY=YES; SSH=NO; PAYMENT=NO; INVOICE=NO; EMAIL=NO; PROD_WRITE=NO'
