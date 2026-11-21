@@ -219,7 +219,25 @@ def _request_code(request) -> HttpResponse:
                         created_at__gte=since,
                     ).count()
                 )
-                if recent >= 3:
+                # The identity row lock is a shared DB-scoped throttle across
+                # Passenger workers. Browser-session throttling alone is not
+                # sufficient: a new session must not reissue an email code
+                # within 60 seconds to the same paid customer.
+                last_issued = (
+                    PropSimulationLoginChallenge.objects.using(MOJPROP_DB_ALIAS)
+                    .filter(
+                        identity_id=row.pk,
+                        purpose=PropSimulationLoginChallenge.Purpose.LOGIN,
+                        created_at__gte=since,
+                    )
+                    .order_by("-created_at")
+                    .values_list("created_at", flat=True)
+                    .first()
+                )
+                if recent >= 3 or (
+                    last_issued is not None
+                    and last_issued >= now - timedelta(seconds=60)
+                ):
                     return _login_page(request, note=message)
                 challenge = issue_login_challenge(row.pk)
             # Never disclose a login code in the HTTP response. Transactional
