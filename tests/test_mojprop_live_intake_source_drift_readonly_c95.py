@@ -146,9 +146,9 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         self.assertEqual(exact_git_blob(historical.read_bytes()), old_ref)
         # The archived C95 reference remains the true source used for the
         # original production comparison; the new PR is NOT a cPanel release.
-        # New branch preserves only the exact public Facebook organic UTM
-        # labels on free form POST; historical C95 production fixture is fixed.
-        self.assertEqual(exact_git_blob(current.read_bytes()), "643cc15291c136e48e26dfa3bca591f14ee8d985")
+        # The updated reviewed source additionally allows three bounded unpaid
+        # product enquiries; immutable historical C95 deployment pin stays fixed.
+        self.assertEqual(exact_git_blob(current.read_bytes()), "f042ac9be1fbe9ffba20b8bc74af17e2d57fd039")
         self.assertNotEqual(exact_git_blob(current.read_bytes()), old_ref)
 
     def test_current_url_source_exact_delta_without_changing_historical_auditor(self):
