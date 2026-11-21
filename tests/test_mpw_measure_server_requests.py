@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import tempfile
 import unittest
 from pathlib import Path
-from scripts.mpw_measure_server_requests import parse_line, stage, summarize
+from scripts.mpw_measure_server_requests import parse_line, stage, summarize, discover_logs
 
 
 class ServerRequestEvidenceTests(unittest.TestCase):
@@ -27,6 +27,13 @@ class ServerRequestEvidenceTests(unittest.TestCase):
             self.assertEqual(report["stages"]["store/start_submission"]["post_2xx_or_3xx_requests"], 1)
             self.assertIsNone(report["verified_customer_purchases"])
             self.assertIsNone(report["click_to_buy_conversion_rate"])
+
+    def test_future_month_archives_discovered_without_broad_glob(self):
+        paths = discover_logs(datetime(2027,1,2,tzinfo=timezone.utc), 7)
+        names = [p.name for p in paths]
+        self.assertIn("mojplaywin.com.zomorodmelal.ir-ssl_log-Dec-2026.gz", names)
+        self.assertIn("mojplaywin.com.zomorodmelal.ir-ssl_log-Jan-2027.gz", names)
+        self.assertNotIn("zomorodmelal.ir-ssl_log-Jan-2027.gz", names)
 
     def test_bot_categorized_separately(self):
         entry = '127.0.0.1 - - [21/Nov/2026:03:01:00 +0000] "GET /moj-prop/ HTTP/2.0" 200 50 "-" "Googlebot/2.1"\n'
