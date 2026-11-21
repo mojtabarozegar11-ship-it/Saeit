@@ -34,3 +34,20 @@ Rollback: after confirming exact current SHA values, restore the separately back
 The scheduled social posts are **scheduled** and were still `PENDING` when last examined. Preserving UTM can improve later campaign attribution but does **not** prove a human click, created invoice, completed 30 TRX payment, sold challenge, trader hire, or earned revenue. An actual paid sale and permissioned rewards remain separately verifiable.
 
 Safeguard: the old source had no separate script and the only current product landing checkout link is preserved. This does not touch or grant live real-money brokerage trading to challenge customers.
+
+## Existing source release publisher: pinned four-asset v2 with historical rollback support
+
+The initial full CI attempt correctly blocked the source change because an older one-time static-only publisher in `scripts/mojprop_starter30_static_release.py` pinned the **previous Git blob** for `index.html` and exactly three files. That fail-closed safeguard was not disabled. The publisher now explicitly reviews these **four** immutable Git source blobs:
+
+| Static asset | Git blob SHA-1 (identity, not a signature) |
+|---|---|
+| `index.html` | `0453939e3b40304d542a7e8e75f4bef6a9f99280` |
+| `journal-template.csv` | `2d732321f1c1f431685e514789cf26bf2a977d84` |
+| `journal-guide.txt` | `1e02213de4bed3fc9211e388b3f8b135ef2c0f0a` |
+| `checkout-attribution.js` | `dbf6035a9cfeb65dd92995d1302081123ebfbe5c` |
+
+New future manual static releases use `mojprop.starter30.static.v2` and include all four verified files. The old `mojprop.starter30.static.v1` manifest with exactly the historical three files is **still accepted exclusively for rollback** of previously recorded releases. A v2 manifest missing the new script is refused; a tampered/missing script file is refused before any write. All original no-symlink, no-hardlink, owner/permission, create-only atomic deployment, approval flag, private manifest and customer-asset protection logic remains.
+
+Targeted tests at pinned PR commit `e7145305932ccbf2a8eba3d7fc67477cc3616115`: **32 static release tests, 12 reviewed-source tests, and 3 attribution tests, all passing**. Includes direct old-v1 rollback and new-v2 bad-manifest rejection checks; no live installation occurs during tests.
+
+A second historical multi-page catalog publisher `scripts/update_mojplaywin_moj_prop_catalog.py` is a separate, non-authorized broad deployment and must **not** be used to overwrite any current live content. The scoped static page and its own reviewed four-asset publisher are the safe release lane for this fix. This PR merges source only and never triggers a deployment or payment transaction.
