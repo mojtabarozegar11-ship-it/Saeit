@@ -1,0 +1,40 @@
+name: ZM private document attachments QA (source only)
+
+on:
+  pull_request:
+    paths:
+      - "content/zomorod-business/attachments.php"
+      - "scripts/test_zomorod_business_attachments.py"
+      - ".github/workflows/zomorod-business-attachments-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-php-http:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: sqlite3, fileinfo, zip
+          coverage: none
+      - name: Lint standalone endpoint
+        run: php -l content/zomorod-business/attachments.php
+      - name: Exercise isolated PHP HTTP / SQLite fixture
+        run: python3 scripts/test_zomorod_business_attachments.py
+      - name: Enforce source-only no-deploy scope
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("content/zomorod-business/attachments.php").read_text()
+          assert "SQLITE3_OPEN_READONLY" in source
+          assert "move_uploaded_file" in source
+          assert "hash_equals($csrf" in source
+          assert "Content-Disposition: attachment" in source
+          assert "management.sqlite3" in source
+          print("Verified read-only auth, private upload and download source guards")
+          PY
