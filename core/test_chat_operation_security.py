@@ -45,7 +45,7 @@ class ChatOperationSecurityTests(TestCase):
         for user in (self.customer, self.staff):
             with self.subTest(username=user.username):
                 session = ChatSession.objects.create(user=user, title="access check")
-                answer = MasterAgentChat().respond(session, "deploy release")
+                answer = MasterAgentChat().respond(session, "deploy release now")
                 self.assertIn("مجاز نیست", answer)
         self.assertFalse(ApprovalRequest.objects.filter(target_type="ChatOperation").exists())
 

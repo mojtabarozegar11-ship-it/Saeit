@@ -55,12 +55,13 @@ def test_signed_success_webhook_settles_once(django_user_model):
     order.refresh_from_db()
     assert intent.status == "succeeded"
     assert order.status == "paid"
-    assert LedgerEntry.objects.filter(reference="payment:demo:evt-1").count() == 1
+    receipt_reference = "payment_receipt:" + hashlib.sha256(b"demo\x00demo-ref-1").hexdigest()
+    assert LedgerEntry.objects.filter(reference=receipt_reference).count() == 1
 
     second = signed_post(client, payload)
     assert second.status_code == 200
     assert PaymentWebhookEvent.objects.filter(provider="demo", event_id="evt-1").count() == 1
-    assert LedgerEntry.objects.filter(reference="payment:demo:evt-1").count() == 1
+    assert LedgerEntry.objects.filter(reference=receipt_reference).count() == 1
 
 
 @pytest.mark.django_db

@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated, IsAuthenticatedOrReadOnly
@@ -9,7 +11,7 @@ from .task_runtime import TaskExecutionError, TaskRuntime
 
 
 from .orchestrator import MasterAgent
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.conf import settings
 from django.utils import timezone
 import hashlib
@@ -267,13 +269,18 @@ class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
             return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
         if quantity < 1:
             return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            product = Product.objects.select_for_update().get(pk=product_id, active=True, knowledge_article__published=True)
-        except (Product.DoesNotExist, TypeError, ValueError):
-            return Response({"detail": "Active, published-knowledge-backed product not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        from django.db import transaction
+        # MariaDB requires SELECT ... FOR UPDATE to run inside the transaction.
+        # Keep the product price snapshot and order-item creation in one unit.
         with transaction.atomic():
+            try:
+                product = Product.objects.select_for_update().get(
+                    pk=product_id, active=True, knowledge_article__published=True
+                )
+            except (Product.DoesNotExist, TypeError, ValueError):
+                return Response(
+                    {"detail": "Active, published-knowledge-backed product not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
             order = Order.objects.create(
                 customer=request.user,
                 status="pending",
@@ -311,44 +318,82 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="create")
     def create_intent(self, request):
-        order_id = request.data.get("order_id")
+        # A payment request may create an external financial obligation later.
+        # Staff can manage internal records, but cannot self-authorize payments.
+        if not is_authorized_chat_operator(request.user):
+            return Response(
+                {"detail": "Only an active superuser can initiate payment approval."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        raw_order_id = request.data.get("order_id")
         key = str(request.data.get("idempotency_key", "")).strip()
-        if not order_id or not key:
+        if not raw_order_id or not key:
             return Response(
                 {"detail": "order_id and idempotency_key are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        order = Order.objects.filter(pk=order_id, customer=request.user).first()
-        if order is None:
-            return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
-        if order.status != "pending":
-            return Response({"detail": "Only pending orders can start payment."}, status=status.HTTP_409_CONFLICT)
+        try:
+            order_id = int(raw_order_id)
+        except (TypeError, ValueError):
+            return Response({"detail": "order_id must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
+        if order_id < 1 or len(key) > 128:
+            return Response({"detail": "Invalid order_id or idempotency_key."}, status=status.HTTP_400_BAD_REQUEST)
 
-        existing = PaymentIntent.objects.filter(idempotency_key=key).first()
-        if existing:
-            if existing.order_id != order.pk:
-                return Response({"detail": "Idempotency key is already bound to another order."}, status=status.HTTP_409_CONFLICT)
+        try:
+            with transaction.atomic():
+                order = Order.objects.select_for_update().filter(
+                    pk=order_id, customer=request.user
+                ).first()
+                if order is None:
+                    return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+                if order.status != "pending":
+                    return Response(
+                        {"detail": "Only pending orders can start payment."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+
+                # An order can only have one payment intent. Repeated identical
+                # keys return its original receipt; a changed key is a conflict.
+                existing = PaymentIntent.objects.filter(order=order).first()
+                if existing:
+                    if existing.idempotency_key != key:
+                        return Response(
+                            {"detail": "Order already has a different payment intent."},
+                            status=status.HTTP_409_CONFLICT,
+                        )
+                    return Response(
+                        {"status": "existing", "payment_intent": self.get_serializer(existing).data},
+                        status=status.HTTP_200_OK,
+                    )
+                if PaymentIntent.objects.filter(idempotency_key=key).exists():
+                    return Response(
+                        {"detail": "Idempotency key is already bound to another order."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+
+                intent = PaymentIntent.objects.create(
+                    order=order,
+                    amount=order.total,
+                    currency=order.currency,
+                    idempotency_key=key,
+                    status="awaiting_approval",
+                    provider="not_configured",
+                )
+                approval = ApprovalRequest.objects.create(
+                    action_type="payment",
+                    target_type="PaymentIntent",
+                    target_id=str(intent.pk),
+                    reason="Owner approval required before initiating an external payment.",
+                    risk="critical",
+                    requested_by=request.user,
+                )
+        except IntegrityError:
+            # Global unique keys also protect two different orders racing to
+            # create the same intent. Never expose an unhandled server error.
             return Response(
-                {"status": "existing", "payment_intent": self.get_serializer(existing).data},
-                status=status.HTTP_200_OK,
+                {"detail": "Payment intent already exists; refresh the order."},
+                status=status.HTTP_409_CONFLICT,
             )
-
-        intent = PaymentIntent.objects.create(
-            order=order,
-            amount=order.total,
-            currency=order.currency,
-            idempotency_key=key,
-            status="awaiting_approval",
-            provider="not_configured",
-        )
-        approval = ApprovalRequest.objects.create(
-            action_type="payment",
-            target_type="PaymentIntent",
-            target_id=str(intent.pk),
-            reason="Owner approval required before initiating an external payment.",
-            risk="critical",
-            requested_by=request.user,
-        )
         return Response(
             {
                 "status": "approval_required",
@@ -357,7 +402,6 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
             },
             status=status.HTTP_202_ACCEPTED,
         )
-
 
 class PaymentWebhookViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
@@ -379,6 +423,8 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             return Response({"detail": "Webhook payload must be valid JSON."}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(payload, dict):
+            return Response({"detail": "Webhook payload must be an object."}, status=status.HTTP_400_BAD_REQUEST)
 
         event_type = str(payload.get("event_type", "")).strip()
         intent_id = payload.get("payment_intent_id")
@@ -392,6 +438,13 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                 provider=provider, event_id=event_id
             ).first()
             if existing:
+                # An event ID is immutable. Do not silently acknowledge a
+                # provider retry whose signed payload differs from the original.
+                if existing.payload_hash != payload_hash:
+                    return Response(
+                        {"detail": "Provider event ID was reused with a different payload."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
                 return Response(
                     {"status": existing.status, "event_id": event_id},
                     status=status.HTTP_200_OK,
@@ -403,19 +456,52 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
             if intent is None:
                 return Response({"detail": "Payment intent not found for provider."}, status=status.HTTP_404_NOT_FOUND)
 
-            event = PaymentWebhookEvent.objects.create(
-                provider=provider,
-                event_id=event_id,
-                event_type=event_type,
-                payment_intent=intent,
-                payload_hash=payload_hash,
-                status="received",
-            )
+            try:
+                # Concurrent signed deliveries of the same event can both
+                # observe no row. The database unique (provider, event_id)
+                # constraint is final authority, with a savepoint to keep the
+                # outer transaction usable after a collision.
+                with transaction.atomic():
+                    event = PaymentWebhookEvent.objects.create(
+                        provider=provider,
+                        event_id=event_id,
+                        event_type=event_type,
+                        payment_intent=intent,
+                        payload_hash=payload_hash,
+                        status="received",
+                    )
+            except IntegrityError:
+                recorded = PaymentWebhookEvent.objects.filter(
+                    provider=provider, event_id=event_id
+                ).first()
+                if recorded is not None:
+                    if recorded.payload_hash != payload_hash:
+                        return Response(
+                            {"detail": "Provider event ID was reused with a different payload."},
+                            status=status.HTTP_409_CONFLICT,
+                        )
+                    return Response(
+                        {"status": recorded.status, "event_id": event_id},
+                        status=status.HTTP_200_OK,
+                    )
+                return Response(
+                    {"detail": "Concurrent event collision; retry reconciliation."},
+                    status=status.HTTP_409_CONFLICT,
+                )
 
             if event_type == "payment.succeeded":
-                amount = str(payload.get("amount", ""))
+                # Compare numeric amounts, not display formatting (15 == 15.00).
+                # Reject non-finite or malformed values before crediting an order.
+                try:
+                    amount = Decimal(str(payload.get("amount", "")))
+                except (InvalidOperation, TypeError, ValueError):
+                    amount = None
                 currency = str(payload.get("currency", "")).strip()
-                if amount != str(intent.amount) or currency != intent.currency:
+                if (
+                    amount is None or not amount.is_finite()
+                    or amount != intent.amount or currency != intent.currency
+                    or not provider_reference
+                ):
                     event.status = "rejected"
                     event.error = "Amount or currency mismatch."
                     event.processed_at = timezone.now()
@@ -429,36 +515,72 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                     event.save(update_fields=["status", "error", "processed_at", "updated_at"])
                     return Response({"detail": event.error}, status=status.HTTP_409_CONFLICT)
 
+                # One provider receipt must never settle two orders, even when
+                # the provider retries it with a new event_id. Check legacy
+                # settled intents, then atomically claim the unique ledger key
+                # before switching the intent/order to paid.
+                if PaymentIntent.objects.filter(
+                    provider=provider,
+                    provider_reference=provider_reference,
+                    status="succeeded",
+                ).exclude(pk=intent.pk).exists():
+                    event.status = "rejected"
+                    event.error = "Provider receipt was already used for another payment."
+                    event.processed_at = timezone.now()
+                    event.save(update_fields=["status", "error", "processed_at", "updated_at"])
+                    return Response({"detail": event.error}, status=status.HTTP_409_CONFLICT)
+
+                receipt_key = hashlib.sha256(
+                    (provider + "\x00" + provider_reference).encode("utf-8")
+                ).hexdigest()
+                order = intent.order
+                try:
+                    # LedgerEntry.reference is UNIQUE at the database level.
+                    # The nested savepoint lets a receipt collision be rejected
+                    # without leaving the outer transaction in an error state.
+                    with transaction.atomic():
+                        LedgerEntry.objects.create(
+                            reference=f"payment_receipt:{receipt_key}",
+                            order=order,
+                            payment_intent=intent,
+                            entry_type="payment",
+                            amount=intent.amount,
+                            currency=intent.currency,
+                            metadata={
+                                "provider": provider,
+                                "event_id": event_id,
+                                "provider_reference": provider_reference,
+                            },
+                        )
+                except IntegrityError:
+                    event.status = "rejected"
+                    event.error = "Provider receipt already has a ledger entry."
+                    event.processed_at = timezone.now()
+                    event.save(update_fields=["status", "error", "processed_at", "updated_at"])
+                    return Response({"detail": event.error}, status=status.HTTP_409_CONFLICT)
+
                 intent.status = "succeeded"
                 intent.provider_reference = provider_reference
                 intent.save(update_fields=["status", "provider_reference", "updated_at"])
-
-                order = intent.order
                 order.status = "paid"
                 order.save(update_fields=["status", "updated_at"])
-
-                LedgerEntry.objects.get_or_create(
-                    reference=f"payment:{provider}:{event_id}",
-                    defaults={
-                        "order": order,
-                        "payment_intent": intent,
-                        "entry_type": "payment",
-                        "amount": intent.amount,
-                        "currency": intent.currency,
-                        "metadata": {"provider": provider, "event_id": event_id},
-                    },
-                )
                 event.status = "processed"
             elif event_type == "payment.failed":
-                intent.status = "failed"
-                intent.provider_reference = provider_reference
-                intent.save(update_fields=["status", "provider_reference", "updated_at"])
-                event.status = "processed"
+                # Out-of-order provider webhooks must never reverse a settled
+                # payment or contradict the immutable financial ledger.
+                if intent.status not in {"ready_for_gateway", "gateway_pending"}:
+                    event.status = "ignored"
+                    event.error = "Payment is not in a fail-able state."
+                else:
+                    intent.status = "failed"
+                    intent.provider_reference = provider_reference
+                    intent.save(update_fields=["status", "provider_reference", "updated_at"])
+                    event.status = "processed"
             else:
                 event.status = "ignored"
 
             event.processed_at = timezone.now()
-            event.save(update_fields=["status", "processed_at", "updated_at"])
+            event.save(update_fields=["status", "error", "processed_at", "updated_at"])
             AuditLog.objects.create(
                 actor_type="payment_provider",
                 actor_id=provider,
@@ -554,9 +676,9 @@ class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"], url_path="decide")
     def decide(self, request, pk=None):
         approval = self.get_object()
-        if approval.target_type == "ChatOperation" and not is_authorized_chat_operator(request.user):
+        if approval.target_type in {"ChatOperation", "PaymentIntent"} and not is_authorized_chat_operator(request.user):
             return Response(
-                {"detail": "Only an active superuser can approve chat operations."},
+                {"detail": "Only an active superuser can approve critical operations."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if approval.requested_by_id != request.user.pk:

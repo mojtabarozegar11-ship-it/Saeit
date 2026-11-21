@@ -7,7 +7,7 @@ from core.models import ApprovalRequest, KnowledgeArticle, Order, PaymentIntent,
 @pytest.mark.django_db
 def test_payment_intent_is_idempotent_and_requires_approval(django_user_model):
     owner = django_user_model.objects.create_user(
-        username="payment-owner", password="x", is_staff=True
+        username="payment-owner", password="x", is_staff=True, is_superuser=True
     )
     order = Order.objects.create(
         customer=owner, status="pending", total="250.00", currency="IRR"
@@ -42,7 +42,7 @@ def test_payment_intent_is_idempotent_and_requires_approval(django_user_model):
 @pytest.mark.django_db
 def test_payment_approval_moves_intent_to_gateway_ready(django_user_model):
     owner = django_user_model.objects.create_user(
-        username="payment-approver", password="x", is_staff=True
+        username="payment-approver", password="x", is_staff=True, is_superuser=True
     )
     order = Order.objects.create(
         customer=owner, status="pending", total="500.00", currency="IRR"
@@ -76,7 +76,7 @@ def test_payment_approval_moves_intent_to_gateway_ready(django_user_model):
 @pytest.mark.django_db
 def test_rejected_payment_does_not_become_gateway_ready(django_user_model):
     owner = django_user_model.objects.create_user(
-        username="payment-reject", password="x", is_staff=True
+        username="payment-reject", password="x", is_staff=True, is_superuser=True
     )
     order = Order.objects.create(
         customer=owner, status="pending", total="100.00", currency="IRR"
