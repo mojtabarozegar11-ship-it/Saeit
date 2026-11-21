@@ -48,9 +48,9 @@ class ServerRequestEvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             file = Path(temp) / "access.log"
             lines = [
-                '203.0.113.66 - - [21/Nov/2026:03:01:00 +0000] "GET /store/product/225/checkout/?email=private@example.test HTTP/2.0" 404 42 "-" "Mozilla/5.0"\\n',
-                '203.0.113.66 - - [21/Nov/2026:03:02:00 +0000] "GET /store/product/225/checkout/?token=private HTTP/2.0" 302 42 "-" "Mozilla/5.0"\\n',
-                '203.0.113.66 - - [21/Nov/2026:03:03:00 +0000] "GET /store/product/999999998/checkout/ HTTP/2.0" 404 42 "-" "Mozilla/5.0"\\n',
+                '203.0.113.66 - - [21/Nov/2026:03:01:00 +0000] "GET /store/product/225/checkout/?email=private@example.test HTTP/2.0" 404 42 "-" "Mozilla/5.0"\n',
+                '203.0.113.66 - - [21/Nov/2026:03:02:00 +0000] "GET /store/product/225/checkout/?token=private HTTP/2.0" 302 42 "-" "Mozilla/5.0"\n',
+                '203.0.113.66 - - [21/Nov/2026:03:03:00 +0000] "GET /store/product/999999998/checkout/ HTTP/2.0" 404 42 "-" "Mozilla/5.0"\n',
             ]
             file.write_text("".join(lines))
             report = summarize((file,), 7, datetime(2026, 11, 21, 4, 0, tzinfo=timezone.utc))
