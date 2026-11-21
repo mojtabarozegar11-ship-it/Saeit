@@ -131,7 +131,7 @@ def verify_pre_invoice_configuration() -> None:
     # in the browser error response.
     if policy_drift_defects():
         raise Starter30PaymentRejected(
-            "Starter30 simulation policy verification is unavailable"
+            "Starter30 simulation policy verification is unavailable; no invoice may be issued"
         )
     try:
         _provider_pair()
