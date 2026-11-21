@@ -1,0 +1,16 @@
+{
+  "currency": "IRR",
+  "synthetic_example": true,
+  "enterprises": [
+    {
+      "name": "نمونه فرضی محصول زراعی",
+      "units_sold": "1000",
+      "unit_price": "350000",
+      "variable_cost_per_unit": "220000",
+      "allocated_fixed_cost": "60000000",
+      "selling_fee_percent": "2",
+      "land_area_hectares": "2",
+      "irrigation_water_m3": "800"
+    }
+  ]
+}

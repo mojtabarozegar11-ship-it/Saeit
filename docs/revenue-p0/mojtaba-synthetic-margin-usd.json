@@ -1,0 +1,10 @@
+{
+  "canonical_bot": "mojtaba.bot.ai",
+  "offer_id": "website_diagnosis",
+  "currency": "USD",
+  "direct_cost": "20.00",
+  "overhead_cost": "5.00",
+  "processor_fee_fraction": "0.0200",
+  "target_margin_fraction": "0.3000",
+  "synthetic_example": true
+}

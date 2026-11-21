@@ -1,0 +1,13 @@
+{
+  "canonical_bot": "mojtaba.bot.ai",
+  "period": "annual",
+  "area_ha": "10",
+  "yield_kg_per_ha": "1000",
+  "sale_price_irr_per_kg": "200000",
+  "variable_cost_irr_per_kg": "100000",
+  "fixed_cost_irr": "500000000",
+  "price_sensitivity_fraction": "0.10",
+  "yield_sensitivity_fraction": "0.10",
+  "cost_sensitivity_fraction": "0.10",
+  "synthetic_example": true
+}
