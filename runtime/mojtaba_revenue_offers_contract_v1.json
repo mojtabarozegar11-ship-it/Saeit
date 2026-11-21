@@ -1,0 +1,143 @@
+{
+  "schema": "mojtaba.bot.ai.revenue-offers.v1",
+  "canonical_bot_id": "mojtaba.bot.ai",
+  "scope": "repository_source_only_no_live_sales_attestation",
+  "single_bot_policy": "one_orchestrator_with_internal_A_to_E_missions_no_child_bot_deployment",
+  "auto_spend_authorized": false,
+  "auto_publication_authorized": false,
+  "auto_email_authorized": false,
+  "automatic_live_trading_authorized": false,
+  "offers": [
+    {
+      "id": "website-doctor",
+      "channel": "mojplaywin.com",
+      "language": "en",
+      "type": "manual_quote_service",
+      "public_inquiry_route": "/earn/inquiry.php?service=website-doctor",
+      "source_reference": "mpw_revenue_20261020/earn/website-doctor/index.html",
+      "customer_inputs": [
+        "affected_url",
+        "specific_problem",
+        "scope_consent",
+        "target_outcome"
+      ],
+      "deliverables": [
+        "evidence_observation_table",
+        "ranked_repair_actions",
+        "before_after_evidence_for_authorized_repairs",
+        "limitations_and_source_links"
+      ],
+      "quote_mode": "manual_review_only",
+      "payment_verified": false,
+      "delivery_verified": false,
+      "received_revenue_verified": false,
+      "claims_not_allowed": [
+        "guaranteed_conversion_increase",
+        "automatic_site_repair_without_access"
+      ]
+    },
+    {
+      "id": "farm-profitability-break-even",
+      "channel": "zomorodmelal.ir",
+      "language": "fa",
+      "type": "manual_quote_service",
+      "public_inquiry_route": null,
+      "source_reference": "product_recipes/farm_enterprise_economics/README.md",
+      "customer_inputs": [
+        "unit_price",
+        "units_sold",
+        "variable_cost_per_unit",
+        "allocated_fixed_cost",
+        "currency_and_period",
+        "data_consent"
+      ],
+      "deliverables": [
+        "assumptions_table",
+        "contribution_margin",
+        "break_even_units",
+        "sensitivity_cases",
+        "cashflow_notes_and_limits"
+      ],
+      "quote_mode": "manual_review_only",
+      "payment_verified": false,
+      "delivery_verified": false,
+      "received_revenue_verified": false,
+      "claims_not_allowed": [
+        "guaranteed_profit",
+        "certified_financial_advice"
+      ]
+    }
+  ],
+  "digital_products": [
+    {
+      "sku": 72,
+      "channel": "mojplaywin.com",
+      "offer_type": "existing_digital_book",
+      "public_checkout_source_link": "/store/product/72/checkout/",
+      "rights_verified_live": false,
+      "private_file_hash_verified_live": false,
+      "order_email_verified_live": false,
+      "server_chain_finality_verified_live": false,
+      "delivery_verified_live": false,
+      "received_revenue_verified_live": false
+    },
+    {
+      "sku": 225,
+      "channel": "mojplaywin.com",
+      "offer_type": "existing_digital_book",
+      "public_checkout_source_link": "/store/product/225/checkout/",
+      "rights_verified_live": false,
+      "private_file_hash_verified_live": false,
+      "order_email_verified_live": false,
+      "server_chain_finality_verified_live": false,
+      "delivery_verified_live": false,
+      "received_revenue_verified_live": false
+    },
+    {
+      "sku": 879,
+      "channel": "mojplaywin.com",
+      "offer_type": "website_kit_under_review",
+      "public_checkout_source_link": null,
+      "public_details_source_link": "/store/product/879/",
+      "rights_verified_live": false,
+      "private_file_hash_verified_live": false,
+      "order_email_verified_live": false,
+      "server_chain_finality_verified_live": false,
+      "delivery_verified_live": false,
+      "received_revenue_verified_live": false
+    }
+  ],
+  "lead_evidence_required": [
+    "explicit_client_consent",
+    "inquiry_receipt_id",
+    "agreed_scope",
+    "accepted_quote",
+    "compliant_paid_receipt",
+    "deliverable_sha256",
+    "private_delivery_receipt",
+    "client_acceptance_or_resolution"
+  ],
+  "explicit_non_evidence": [
+    "html_200_only",
+    "github_ci_success_only",
+    "draft_invoice",
+    "internal_test_order",
+    "source_listed_price",
+    "unsent_quote",
+    "gmail_message_count",
+    "agent_registry_count"
+  ],
+  "operational_stop_conditions": [
+    "noncanonical_new_bot",
+    "unauthorized_spend",
+    "unverified_customer_rights",
+    "unverified_payment_finality",
+    "unsafe_destination",
+    "missing_owner_release_approval"
+  ],
+  "next_release_gate": "live_read_only_cpanel_route_hash_and_customer_order_payment_delivery_validation",
+  "confirmed_paid_order_count": null,
+  "confirmed_revenue_amount": null,
+  "revenue_currency": null,
+  "last_live_inventory_verified_at": null
+}
