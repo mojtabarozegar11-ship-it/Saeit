@@ -1,0 +1,103 @@
+name: Zomorod trust live source read-only preflight 20261022
+on:
+  push:
+    branches: [zomorod/trust-validation-20261022]
+    paths: [".github/workflows/zomorod-trust-preflight-20261022.yml"]
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Read-only public trust inventory (no financial data)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'REMOTE_PY'
+          from pathlib import Path
+          import re,hashlib
+          web=Path.home()/'public_html'
+          paths=['index.html','contact/index.html','company/index.html','about/index.html','store/index.php','legal/index.html','privacy/index.html','terms/index.html','financial-transparency/index.html','robots.txt','.htaccess']
+          print('TRUST_AUDIT_VERSION=20261022_v1')
+          for rel in paths:
+              p=web/rel
+              ok=p.is_file() and not p.is_symlink()
+              print('PUBLIC_FILE',rel,'exists',int(ok))
+              if not ok:continue
+              raw=p.read_bytes()
+              print('FILE_METADATA',rel,'bytes',len(raw),'sha256_12',hashlib.sha256(raw).hexdigest()[:12])
+              if rel.endswith(('.html','.php')):
+                  s=raw.decode('utf8','replace')
+                  print('TRUST_MARKERS',rel,
+                      'national_id',int('14008746024' in s),
+                      'registration',int('3110' in s),
+                      'contact_form',int(bool(re.search(r'<form\\b',s,re.I))),
+                      'privacy_link',int(bool(re.search(r'href=[\\x22\\x27][^\\x22\\x27]*privacy',s,re.I))),
+                      'terms_link',int(bool(re.search(r'href=[\\x22\\x27][^\\x22\\x27]*terms',s,re.I))))
+              if rel=='.htaccess':
+                  s=raw.decode('utf8','replace')
+                  print('HTACCESS_MARKERS',
+                      'rewriteengine',int('RewriteEngine' in s),
+                      'https',int('HTTPS' in s),
+                      'canonical_www',int('HTTP_HOST' in s),
+                      'hsts',int('Strict-Transport-Security' in s))
+          REMOTE_PY
+          for route in / /contact/ /company/ /about/ /store/ /privacy/ /terms/ /legal/ /financial-transparency/ /ar/ /admin/login/; do
+            code="$(curl -sS -L --max-time 12 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            printf 'PUBLIC_TRUST_ROUTE %s %s\n' "$route" "$code"
+          done
+      - name: Clean temporary runner keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+
+# Post-release independent integrity recheck, no writes.

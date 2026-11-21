@@ -1,0 +1,23 @@
+name: Zomorod trust pages safe selftest 20261022
+on:
+  push:
+    branches: [zomorod/trust-validation-20261022]
+    paths:
+      - scripts/zomorod_trust_contact_safe_20261022.py
+      - .github/workflows/zomorod-trust-pages-selftest-20261022.yml
+  pull_request:
+    paths:
+      - scripts/zomorod_trust_pages_safe_20261022.py
+permissions:
+  contents: read
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and reversible public trust page fixture
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_trust_contact_safe_20261022.py
+          python3 scripts/zomorod_trust_contact_safe_20261022.py selftest
