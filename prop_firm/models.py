@@ -199,7 +199,7 @@ class PropSimulationPayment(models.Model):
     payment_ref = models.CharField(max_length=96, unique=True)
     product = models.CharField(max_length=48, default="MOJPROP-STARTER30")
     network = models.CharField(max_length=32, default="tron-mainnet")
-    recipient = models.CharField(max_length=64)
+    recipient = models.CharField(max_length=64, unique=True)
     amount_sun = models.PositiveBigIntegerField(default=30_000_000)
     payer_hex41 = models.CharField(max_length=42, null=True, blank=True)
     issued_at = models.DateTimeField()
