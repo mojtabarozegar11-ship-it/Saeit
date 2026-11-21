@@ -1,5 +1,6 @@
-"""Production-exact Starter30 static template is protected from source regressions.
+"""Reviewed Starter30 static template source is protected from regressions.
 
+These SHA/Git pins are offline, not a claim of current server deployment.
 No deployment, live network, invoice, Django DB or TRON transfer.
 """
 import hashlib
@@ -55,7 +56,7 @@ class OfficialStarter30LiveSourceTests(unittest.TestCase):
         self.assertEqual(page.h1_count, 1)
         self.assertEqual(page.canonical, ["https://mojplaywin.com/moj-prop/starter-30-trx/"])
         self.assertEqual(page.ctas.count("/mojprop-starter30-checkout/"), 0)
-        self.assertEqual(page.ctas.count("/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx"), 3)
+        self.assertEqual(page.ctas.count("/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx&utm_source=moj_prop&utm_medium=onsite&utm_campaign=starter30_lead&utm_content=free_terms"), 3)
         status = [x for x in page.forms if x.get("method") == "get"
                   and x.get("action") == "/mojprop-starter30-status/"]
         self.assertEqual(len(status), 1)
