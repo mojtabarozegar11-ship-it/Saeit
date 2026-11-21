@@ -40,6 +40,37 @@ def test_symlinked_scalar_is_unknown_not_followed(tmp_path):
     assert census.read_scalar(link) is None
 
 
+
+def test_versioned_python_executable_symlink_is_counted_without_escaping(tmp_path):
+    bin_dir = tmp_path / "usr" / "bin"
+    bin_dir.mkdir(parents=True)
+    versioned = bin_dir / "python3.11"
+    versioned.write_bytes(b"readonly dummy executable")
+    versioned.chmod(0o755)
+    link = bin_dir / "python3"
+    link.symlink_to("python3.11")
+    with patch.object(census, "BINS", {"python3": link}):
+        assert census.trusted_system_binary_present("python3", link) is True
+        # Read-only census must not follow caller-chosen paths or chains.
+        link.unlink()
+        link.symlink_to("../private/python3.11")
+        assert census.trusted_system_binary_present("python3", link) is False
+        link.unlink()
+        link.symlink_to("python3.11")
+        versioned.unlink()
+        versioned.symlink_to(tmp_path / "outside")
+        assert census.trusted_system_binary_present("python3", link) is False
+
+
+def test_nonpython_executable_symlink_is_not_treated_as_trusted(tmp_path):
+    exe = tmp_path / "bwrap.real"
+    exe.write_bytes(b"demo")
+    exe.chmod(0o755)
+    symlink = tmp_path / "bwrap"
+    symlink.symlink_to(exe.name)
+    assert census.trusted_system_binary_present("bwrap", symlink) is False
+
+
 def test_missing_scalar_returns_unknown(tmp_path):
     assert census.read_scalar(tmp_path / "absent") is None
 
