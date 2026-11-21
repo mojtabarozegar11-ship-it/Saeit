@@ -1,0 +1,61 @@
+name: Moj messaging - WhatsApp outbound connectivity audit
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths: ['.github/workflows/moj-messaging-whatsapp-outbound-audit-20261028.yml']
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Test DNS, TLS and HTTP connectivity without reading any accounts
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/mmsg-wa-outbound.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          timeout 45s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'python3 -' <<'PY'
+          import socket,ssl,datetime,http.client
+          hosts=['web.whatsapp.com','mmg.whatsapp.net']
+          print('MMSG_VPS_UTC_CLOCK_YEAR='+str(datetime.datetime.now(datetime.timezone.utc).year))
+          for host in hosts:
+              name=host.upper().replace('.','_')
+              try:
+                  addrs=socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)
+                  print('MMSG_'+name+'_DNS='+('OK' if addrs else 'EMPTY'))
+              except Exception:
+                  print('MMSG_'+name+'_DNS=FAILED')
+          host='web.whatsapp.com'
+          try:
+              ctx=ssl.create_default_context()
+              with socket.create_connection((host,443),timeout=8) as raw:
+                  with ctx.wrap_socket(raw,server_hostname=host) as stream:
+                      assert stream.version() in {'TLSv1.2','TLSv1.3'}
+              print('MMSG_WA_TLS_443=PASS')
+          except Exception as exc:
+              print('MMSG_WA_TLS_443=FAILED_'+type(exc).__name__)
+          try:
+              conn=http.client.HTTPSConnection(host,timeout=8,context=ssl.create_default_context())
+              conn.request('HEAD','/')
+              response=conn.getresponse()
+              # Never print page contents or redirects/cookies.
+              code=response.status
+              print('MMSG_WA_HTTPS_HEAD='+('REACHABLE' if 200<=code<500 else 'SERVER_ERROR'))
+              conn.close()
+          except Exception as exc:
+              print('MMSG_WA_HTTPS_HEAD=FAILED_'+type(exc).__name__)
+          print('MMSG_WA_AUDIT_NO_ACCOUNT_DATA=PASS')
+          PY

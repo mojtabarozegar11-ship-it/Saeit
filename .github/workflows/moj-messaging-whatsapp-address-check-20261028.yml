@@ -1,0 +1,55 @@
+name: Moj messaging - WhatsApp resolved IPv4 route audit
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths: ['.github/workflows/moj-messaging-whatsapp-address-check-20261028.yml']
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check global IPv4 DNS and connections on named WhatsApp destinations only
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/wa-address-route.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          timeout 55s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'python3 -' <<'PY'
+          import ipaddress,socket
+          names={'WA_WEB':'web.whatsapp.com','WA_MEDIA':'mmg.whatsapp.net','WA_ROOT':'www.whatsapp.com','GITHUB':'github.com'}
+          for label,host in names.items():
+              try:
+                  records=socket.getaddrinfo(host,443,socket.AF_INET,socket.SOCK_STREAM)
+                  ips=list(dict.fromkeys(item[4][0] for item in records))
+              except OSError:
+                  print('MMSG_'+label+'_DNS=FAILED');continue
+              print('MMSG_'+label+'_IPV4_GLOBAL='+('YES' if ips and all(ipaddress.ip_address(ip).is_global for ip in ips) else 'NO'))
+              print('MMSG_'+label+'_IPV4_ADDRESS_COUNT='+str(len(ips)))
+              good=0
+              failed=[]
+              for ip in ips[:5]:
+                  s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+                  s.settimeout(2.5)
+                  try:
+                      s.connect((ip,443));good+=1
+                  except OSError as error:
+                      failed.append(type(error).__name__)
+                  finally:s.close()
+              print('MMSG_'+label+'_TCP_OK='+str(good))
+              print('MMSG_'+label+'_TCP_FAIL='+str(len(failed)))
+              if failed: print('MMSG_'+label+'_ERROR_TYPES='+','.join(sorted(set(failed))))
+          print('MMSG_NO_CHAT_OR_SECRET_ACCESS=PASS')
+          PY

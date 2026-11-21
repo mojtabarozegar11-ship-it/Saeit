@@ -1,0 +1,67 @@
+name: Moj phone SSH key inventory (read only)
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths: ['.github/workflows/moj-phone-ssh-key-inventory-20261028.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Inspect only SSH key access capabilities; never print key material
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/phone-key-audit.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 0600 "$d/known"
+          timeout 45s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'python3 -' <<'PY'
+          from pathlib import Path
+          import os
+          assert os.getenv("USER")=="githubops" or os.getuid()==1000
+          p=Path.home()/'.ssh'/'authorized_keys'
+          if not p.is_file() or p.is_symlink():
+              print('PHONE_KEY_AUTHORIZED_FILE=ABSENT')
+              raise SystemExit(0)
+          lines=[x.strip() for x in p.read_text().splitlines() if x.strip() and not x.lstrip().startswith('#')]
+          print('PHONE_SSH_TOTAL_AUTHORIZED_LINES='+str(len(lines)))
+          phone=0
+          limited=0
+          forced=0
+          unrestricted=0
+          comfy=0
+          for line in lines:
+              segments=line.split()
+              key_index=next((n for n,x in enumerate(segments) if x in ('ssh-ed25519','ssh-rsa','ecdsa-sha2-nistp256','ecdsa-sha2-nistp384','ecdsa-sha2-nistp521')),None)
+              if key_index is None: continue
+              options=' '.join(segments[:key_index]).lower()
+              label=' '.join(segments[key_index+2:]).lower()
+              isphone=any(k in label for k in ('phone','termux','android','mobile','karegar'))
+              if isphone:
+                  phone+=1
+                  if 'comfyui-phone-ui-20261015' in label: comfy+=1
+                  if 'command=' in options:
+                      forced+=1
+                  if any(k in options for k in ('restrict','no-pty','command=','permitopen','permitlisten')):
+                      limited+=1
+                  else:
+                      unrestricted+=1
+          print('PHONE_SSH_PHONE_LABELED_KEYS='+str(phone))
+          print('PHONE_SSH_COMFYUI_RESTRICTED_KEY='+('PRESENT' if comfy else 'ABSENT'))
+          print('PHONE_SSH_PHONE_FORCED_COMMAND_KEYS='+str(forced))
+          print('PHONE_SSH_PHONE_RESTRICTED_KEYS='+str(limited))
+          print('PHONE_SSH_PHONE_POSSIBLE_SHELL_KEYS='+str(unrestricted))
+          print('PHONE_SSH_NO_KEYS_MODIFIED=PASS')
+          PY

@@ -1,0 +1,92 @@
+name: Moj messaging - read-only WhatsApp TLS root cause
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths: ['.github/workflows/moj-messaging-tls-root-cause-20261028.yml']
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Classify TLS failure on isolated VPS without changing files
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/mmsg-wa-tls.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          mapfile -t WA_IPS < <(python3 - <<'PY'
+          import socket,ipaddress
+          infos=socket.getaddrinfo('web.whatsapp.com',443,socket.AF_INET,socket.SOCK_STREAM)
+          ips=list(dict.fromkeys(r[4][0] for r in infos if ipaddress.ip_address(r[4][0]).is_global))
+          for ip in ips[:3]: print(ip)
+          PY
+          )
+          test "${#WA_IPS[@]}" -gt 0
+          python3 - "${WA_IPS[@]}" <<'PY'
+          import sys,socket,ssl
+          good=0
+          for ip in sys.argv[1:]:
+              try:
+                  with socket.create_connection((ip,443),timeout=7) as raw:
+                      with ssl.create_default_context().wrap_socket(raw,server_hostname='web.whatsapp.com') as tls:
+                          good+=1
+              except Exception as exc:
+                  print('MMSG_RUNNER_WA_TLS_ERROR='+type(exc).__name__,flush=True)
+          print('MMSG_RUNNER_WA_TLS='+('PASS' if good else 'FAIL'),flush=True)
+          PY
+          timeout 100s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 python3 - "${WA_IPS[@]}" <<'PY'
+          import socket,ssl,sys,ipaddress
+          def cls(exc):
+              if isinstance(exc,ssl.SSLCertVerificationError):
+                  return 'CERT_VERIFY_'+str(getattr(exc,'verify_code','UNKNOWN'))
+              if isinstance(exc,TimeoutError): return 'TIMEOUT'
+              if isinstance(exc,ConnectionResetError): return 'CONNECTION_RESET'
+              if isinstance(exc,ssl.SSLEOFError): return 'TLS_EOF'
+              if isinstance(exc,ssl.SSLError): return 'TLS_'+type(exc).__name__
+              return type(exc).__name__+'_ERRNO_'+str(getattr(exc,'errno','UNKNOWN'))
+          def connect(host, ip, label):
+              try:
+                  with socket.create_connection((ip,443),timeout=7) as raw:
+                      raw.settimeout(7)
+                      print('MMSG_'+label+'_TCP=PASS',flush=True)
+                      with ssl.create_default_context().wrap_socket(raw,server_hostname=host) as tls:
+                          print('MMSG_'+label+'_TLS=PASS_'+str(tls.version()),flush=True)
+                          return True
+              except Exception as exc:
+                  print('MMSG_'+label+'_TLS=FAIL_'+cls(exc),flush=True)
+                  return False
+          def resolve(host,label):
+              try:
+                  infos=socket.getaddrinfo(host,443,socket.AF_INET,socket.SOCK_STREAM)
+                  ips=list(dict.fromkeys(v[4][0] for v in infos if ipaddress.ip_address(v[4][0]).is_global))
+                  print('MMSG_'+label+'_DNS='+('PASS' if ips else 'NO_PUBLIC_IP'),flush=True)
+                  return ips[:2]
+              except Exception as exc:
+                  print('MMSG_'+label+'_DNS=FAIL_'+cls(exc),flush=True)
+                  return []
+          wa=resolve('web.whatsapp.com','WA')
+          gh=resolve('github.com','GITHUB')
+          direct=[connect('web.whatsapp.com',ip,'WA_VPS_DNS_'+str(i+1)) for i,ip in enumerate(wa)]
+          supplied=sys.argv[1:4]
+          if any(not ipaddress.ip_address(v).is_global for v in supplied):
+              raise SystemExit('Unsafe non-public input rejected')
+          external=[connect('web.whatsapp.com',ip,'WA_RUNNER_DNS_'+str(i+1)) for i,ip in enumerate(supplied)]
+          control=[connect('github.com',ip,'GITHUB_'+str(i+1)) for i,ip in enumerate(gh)]
+          print('MMSG_WA_TLS_DIAG='+('PASS' if any(direct+external) else 'FAIL'),flush=True)
+          print('MMSG_GITHUB_TLS_CONTROL='+('PASS' if any(control) else 'FAIL'),flush=True)
+          print('MMSG_NO_ACCOUNT_ACCESS_OR_VPS_CHANGES=PASS',flush=True)
+          sys.exit(0 if any(direct+external) else 1)
+          PY

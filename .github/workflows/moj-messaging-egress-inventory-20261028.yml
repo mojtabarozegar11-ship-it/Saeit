@@ -1,0 +1,45 @@
+name: Moj messaging - existing egress inventory (read only)
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths: ['.github/workflows/moj-messaging-egress-inventory-20261028.yml']
+permissions:
+  contents: read
+jobs:
+  inventory:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Inspect availability of already deployed egress clients without reading keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/mmsg-egress-inventory.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          timeout 50s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'python3 -' <<'PY'
+          import shutil,subprocess,json,os
+          for name in ('tailscale','wg','wg-quick','cloudflared','warp-cli','openvpn','ssh'):
+              print('MMSG_EGRESS_CLIENT_'+name.upper().replace('-','_')+'='+('INSTALLED' if shutil.which(name) else 'ABSENT'))
+          if shutil.which('tailscale'):
+              try:
+                  raw=subprocess.run(['tailscale','status','--json'],capture_output=True,text=True,timeout=7)
+                  if raw.returncode==0:
+                      data=json.loads(raw.stdout)
+                      print('MMSG_TAILSCALE_BACKEND='+str(data.get('BackendState','UNKNOWN')))
+                      print('MMSG_TAILSCALE_EXIT_ACTIVE='+('YES' if data.get('ExitNodeStatus') else 'NO'))
+                  else: print('MMSG_TAILSCALE_STATUS=UNAVAILABLE')
+              except Exception: print('MMSG_TAILSCALE_STATUS=UNKNOWN')
+          print('MMSG_PROXY_ENV_CONFIGURED='+('YES' if any(os.environ.get(k) for k in ('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','http_proxy','https_proxy','all_proxy')) else 'NO'))
+          print('MMSG_ONLY_READ_ONLY_CLIENT_INVENTORY=PASS')
+          PY
