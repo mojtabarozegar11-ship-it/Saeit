@@ -1,6 +1,7 @@
-"""Preserve approved live official English MOJ PROP source parity.
+"""Protect exact reviewed official English MOJ PROP source bytes.
 
-Offline only: no network, page deployment, database, payment or customer data.
+This offline source hash is not an attestation of live server deployment.
+No network, page deployment, database, payment or customer data.
 """
 import hashlib
 from html.parser import HTMLParser
