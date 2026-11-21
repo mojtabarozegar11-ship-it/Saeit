@@ -30,6 +30,7 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         self.payment.expires_at = self.now - timedelta(seconds=1)
         self.payment.issued_at = self.now - timedelta(days=1)
         self.payment.txid = ""
+        self.payment.recipient = self.receiver
         self.transfer = SimpleNamespace(
             tx_hash=self.txid,
             network=m.NETWORK,
@@ -63,8 +64,18 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
         self.mock_rpc = self.enterContext(
             patch("prop_firm.starter30_live.query_solidified_transfer", return_value=self.transfer)
         )
-        self.mock_recipient = self.enterContext(
-            patch("prop_firm.starter30_live.approved_recipient", return_value=self.receiver)
+        # Expiry tests use isolated fake receivers. Mock only the separate
+        # receiver-pool *attestation boundary*, not the transaction's equality
+        # constraint; a mismatched recipient must still fail closed.
+        def _exclusive_receiver_check(*, recorded_recipient, onchain_recipient):
+            if recorded_recipient != onchain_recipient:
+                raise m.InvoiceAttributionUnavailable("incorrect invoice receiver")
+            self.events.append("receiver_verified")
+        self.mock_receiver_binding = self.enterContext(
+            patch(
+                "prop_firm.starter30_live.require_payment_binding",
+                side_effect=_exclusive_receiver_check,
+            )
         )
         self.mock_accounts = self.enterContext(
             patch("prop_firm.starter30_live.PropSimulationAccount")
@@ -104,7 +115,7 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
             using=MOJPROP_DB_ALIAS, update_fields=["status", "updated_at"]
         )
         self.assertEqual(
-            self.events, ["atomic_enter", "row_locked", "clock_checked", "saved", "commit"]
+            self.events, ["atomic_enter", "row_locked", "receiver_verified", "clock_checked", "saved", "commit"]
         )
         self.mock_accounts.assert_not_called()
         self.mock_rpc.assert_called()
@@ -113,7 +124,8 @@ class Starter30ExpiryCommitTests(SimpleTestCase):
     def test_expiry_clock_is_read_after_locked_row(self):
         with self.assertRaises(m.Starter30PaymentRejected):
             self._settle()
-        self.assertLess(self.events.index("row_locked"), self.events.index("clock_checked"))
+        self.assertLess(self.events.index("row_locked"), self.events.index("receiver_verified"))
+        self.assertLess(self.events.index("receiver_verified"), self.events.index("clock_checked"))
 
     def test_repeated_expired_attempt_does_not_write_again(self):
         with self.assertRaisesRegex(m.Starter30PaymentRejected, "invoice has expired"):
