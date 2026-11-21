@@ -10,11 +10,12 @@ import importlib.util
 from pathlib import Path
 import tempfile
 
+from django.db import transaction
 from django.utils import timezone
 from .factory_native_review_gateway import inspect_family
 from .factory_f41_gateway import build_verified_order
 
-from .models import AgentTask, Product
+from .models import AgentTask, CompanyInquiry, Product
 from .production_gate import ProductionGate
 from .tool_gateway import ToolGateway, ToolSpec
 
@@ -41,6 +42,47 @@ def market_research(payload):
         "verified_effect": True,
         "evidence": _evidence("database_measurement", {"active_products": active_products, "queued_tasks": queued}),
         "next_action": "income_opportunity_score",
+    }
+
+
+@transaction.atomic
+def inbound_lead_review(payload):
+    """Route a real inbound company inquiry to private review; never contact it."""
+    lead_id = (payload or {}).get("inquiry_id")
+    if type(lead_id) is not int or lead_id <= 0:
+        raise ValueError("A valid inbound inquiry ID is required")
+    lead = CompanyInquiry.objects.select_for_update().filter(pk=lead_id).first()
+    if lead is None or lead.kind not in {"commercial", "project", "technology"}:
+        raise ValueError("A supported company inquiry was not found")
+
+    marker = f"[economic-master:inbound-review:{lead.pk}]"
+    fields = []
+    if marker not in lead.internal_note:
+        note = (
+            f"{marker} Recorded for internal commercial review only. "
+            "No customer identity, willingness to pay, contract, approval, "
+            "or payment has been independently verified. No response sent."
+        )
+        lead.internal_note = "\n".join(filter(None, (lead.internal_note.strip(), note)))
+        fields.append("internal_note")
+    if lead.status == "new":
+        lead.status = "reviewing"
+        fields.append("status")
+    if fields:
+        lead.save(update_fields=fields + ["updated_at"])
+
+    return {
+        "action_performed": "Registered a real inbound company inquiry for internal review without contacting the sender.",
+        "verified_effect": True,
+        "source_inquiry_id": lead.pk,
+        "inquiry_kind": lead.kind,
+        "review_status": lead.status,
+        "customer_identity_verified": False,
+        "customer_demand_independently_verified": False,
+        "external_contact_performed": False,
+        "revenue_not_assessed": True,
+        "requires_owner_approval_for_reply": True,
+        "evidence": _evidence("inbound_inquiry_record", lead.pk),
     }
 
 
@@ -410,6 +452,7 @@ def build_economic_gateway():
         ToolSpec(code="factory_native_review",handler=factory_native_review,risk="low"),
         ToolSpec(code="factory_f41_private_build",handler=build_verified_order,risk="low"),
         ToolSpec(code="income_market_research", handler=market_research, risk="medium"),
+        ToolSpec(code="income_inbound_lead_review", handler=inbound_lead_review, risk="low"),
         ToolSpec(code="income_opportunity_score", handler=opportunity_score, risk="medium"),
         ToolSpec(code="income_offer_design", handler=offer_design, risk="medium"),
         ToolSpec(code="income_mvp_build", handler=mvp_build, risk="medium"),
@@ -417,4 +460,21 @@ def build_economic_gateway():
         ToolSpec(code="income_revenue_verify", handler=revenue_verify, risk="medium"),
         ToolSpec(code="income_profit_optimize", handler=profit_optimize, risk="medium"),
         ToolSpec(code="master_self_improvement", handler=master_self_improvement, risk="medium"),
+    ])
+
+
+def build_economic_master_gateway():
+    """Never route the economic master through the factory's shared gateway."""
+    from .economic_execution import EconomicGateway
+
+    return EconomicGateway([
+        ("income_market_research", "low", market_research),
+        ("income_inbound_lead_review", "low", inbound_lead_review),
+        ("income_opportunity_score", "low", opportunity_score),
+        ("income_offer_design", "medium", offer_design),
+        ("income_mvp_build", "medium", mvp_build),
+        ("income_growth_experiment", "medium", growth_experiment),
+        ("income_revenue_verify", "medium", revenue_verify),
+        ("income_profit_optimize", "medium", profit_optimize),
+        ("master_self_improvement", "medium", master_self_improvement),
     ])
