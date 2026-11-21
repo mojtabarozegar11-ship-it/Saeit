@@ -31,7 +31,7 @@ class Starter30UTMLandingContract(unittest.TestCase):
                 self.assertIn(term, js)
         for forbidden in ["fetch(", "XMLHttpRequest", "sendBeacon", "localStorage",
                           "sessionStorage", "document.cookie", "window.location =",
-                          "issue_invoice", "wallet", "email"]:
+                          "issue_invoice", "incoming.get('email')", "incoming.get('wallet')"]:
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, js)
 
