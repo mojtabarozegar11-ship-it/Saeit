@@ -72,6 +72,17 @@
     </section>
     {% endif %}
     <section class="panel">
+      <h2>Simulated Starter30 · 30 TRX</h2>
+      <p>Starter30 is a simulated trading challenge with a virtual balance, not a real-money investment or guaranteed income opportunity. Review the challenge rules before choosing to enter.</p>
+      <p><a href="/moj-prop/starter-30-trx/">Read the official Starter30 rules and conditions</a></p>
+      {% if starter30_checkout_available %}
+      <p>Online 30 TRX invoice creation is currently enabled by the Moj Prop server. A payment must never be sent until a unique invoice and receiver address have been issued by the checkout itself. Passing the challenge or earning profit is not guaranteed.</p>
+      <p><a class="button" href="/mojprop-starter30-checkout/">Open the 30 TRX invoice checkout</a></p>
+      {% else %}
+      <p class="small">Online invoice creation is not currently offered from this page. You can still request the written conditions without paying.</p>
+      {% endif %}
+    </section>
+    <section class="panel">
       <h2>Customer inquiries</h2>
       <p>Visitors may request the written terms of the simulated Moj Prop Starter30 challenge without sending payment. This request is not an activated challenge, trading account or promise of returns.</p>
       <a href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx">Request written Starter30 terms</a>

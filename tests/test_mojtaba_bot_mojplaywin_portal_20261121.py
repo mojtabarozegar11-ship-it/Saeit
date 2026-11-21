@@ -4,6 +4,7 @@ All tests are read-only: no model/API calls, payment, task scheduling or bot sta
 """
 import re
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory, SimpleTestCase
@@ -23,6 +24,38 @@ class MojtabaSiteEntryTests(SimpleTestCase):
             if authenticated else AnonymousUser()
         )
         return mojtaba_bot_portal(request)
+
+    def test_checkout_link_only_when_real_release_preflight_passes(self):
+        with patch("prop_firm.starter30_live.release_is_open", return_value=True), \
+             patch("prop_firm.starter30_live.verify_pre_invoice_configuration") as preflight:
+            response = self._get(authenticated=False)
+        body = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('href="/mojprop-starter30-checkout/"', body)
+        self.assertIn('href="/moj-prop/starter-30-trx/"', body)
+        self.assertIn("not a real-money investment", body)
+        self.assertIn("Passing the challenge or earning profit is not guaranteed", body)
+        preflight.assert_called_once_with()
+        self.assertNotIn('id="chat-form"', body)
+
+    def test_closed_payment_release_never_advertises_checkout(self):
+        with patch("prop_firm.starter30_live.release_is_open", return_value=False), \
+             patch("prop_firm.starter30_live.verify_pre_invoice_configuration") as preflight:
+            body = self._get(authenticated=False).content.decode()
+        preflight.assert_not_called()
+        self.assertNotIn('href="/mojprop-starter30-checkout/"', body)
+        self.assertIn("/moj-prop-intake/?format=html&amp;service=blueprint", body)
+
+    def test_payment_preflight_exception_fails_closed_without_side_effect(self):
+        with patch("prop_firm.starter30_live.release_is_open", return_value=True), \
+             patch("prop_firm.starter30_live.verify_pre_invoice_configuration",
+                   side_effect=RuntimeError("provider not ready")):
+            response = self._get(authenticated=False)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('href="/mojprop-starter30-checkout/"',
+                         response.content.decode())
+        self.assertIn('href="/moj-prop/starter-30-trx/"',
+                      response.content.decode())
 
     def test_canonical_path_resolves_without_separate_dns(self):
         self.assertEqual(reverse("mojtaba_bot_portal"), "/mojtaba.bot.ai/")
