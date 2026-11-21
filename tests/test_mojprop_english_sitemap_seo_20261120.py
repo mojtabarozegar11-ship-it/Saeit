@@ -3,7 +3,7 @@ from xml.etree import ElementTree
 
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
-from core.seo_views import sitemap_xml
+from core.seo_views import robots_txt, sitemap_xml
 
 
 @override_settings(ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com"])
@@ -36,3 +36,17 @@ class MojPropEnglishSitemapTests(SimpleTestCase):
                 self.assertEqual(set(urls), expected)
                 self.assertEqual(len(urls), len(expected))
                 self.assertFalse(any("checkout" in u or "status" in u or "?" in u for u in urls))
+
+    def test_education_sitemap_discovery_in_robots(self):
+        for host in ("mojplaywin.com", "www.mojplaywin.com"):
+            with self.subTest(host=host):
+                response = robots_txt(RequestFactory().get("/robots.txt", HTTP_HOST=host))
+                self.assertEqual(response.status_code, 200)
+                body = response.content.decode("utf-8")
+                self.assertIn("Sitemap: https://mojplaywin.com/sitemap.xml", body)
+                self.assertIn(
+                    "Sitemap: https://mojplaywin.com/moj-prop/education/sitemap.xml",
+                    body,
+                )
+                self.assertIn("Disallow: /mojprop-starter30-checkout/", body)
+                self.assertIn("Disallow: /mojprop-starter30-status/", body)
