@@ -35,6 +35,35 @@ class ServerRequestEvidenceTests(unittest.TestCase):
         self.assertIn("mojplaywin.com.zomorodmelal.ir-ssl_log-Jan-2027.gz", names)
         self.assertNotIn("zomorodmelal.ir-ssl_log-Jan-2027.gz", names)
 
+
+    def test_only_published_legacy_checkout_skus_are_counted(self):
+        for sku in (72, 225, 879):
+            self.assertEqual(
+                stage(f"/store/product/{sku}/checkout/"), ("store", "legacy_checkout")
+            )
+        for sku in (0, 1, 779, 999999998):
+            self.assertIsNone(stage(f"/store/product/{sku}/checkout/"))
+
+    def test_legacy_404_and_redirect_report_both_visible_without_customer_data(self):
+        with tempfile.TemporaryDirectory() as temp:
+            file = Path(temp) / "access.log"
+            lines = [
+                '203.0.113.66 - - [21/Nov/2026:03:01:00 +0000] "GET /store/product/225/checkout/?email=private@example.test HTTP/2.0" 404 42 "-" "Mozilla/5.0"\\n',
+                '203.0.113.66 - - [21/Nov/2026:03:02:00 +0000] "GET /store/product/225/checkout/?token=private HTTP/2.0" 302 42 "-" "Mozilla/5.0"\\n',
+                '203.0.113.66 - - [21/Nov/2026:03:03:00 +0000] "GET /store/product/999999998/checkout/ HTTP/2.0" 404 42 "-" "Mozilla/5.0"\\n',
+            ]
+            file.write_text("".join(lines))
+            report = summarize((file,), 7, datetime(2026, 11, 21, 4, 0, tzinfo=timezone.utc))
+            old = report["stages"]["store/legacy_checkout"]
+            self.assertEqual(old["get_404_requests"], 1)
+            self.assertEqual(old["get_30x_redirects"], 1)
+            self.assertEqual(old["post_2xx_or_3xx_requests"], 0)
+            self.assertNotIn("203.0.113.66", str(report))
+            self.assertNotIn("private@example.test", str(report))
+            self.assertNotIn("token=private", str(report))
+            self.assertNotIn("999999998", str(report))
+            self.assertIsNone(report["verified_customer_purchases"])
+
     def test_bot_categorized_separately(self):
         entry = '127.0.0.1 - - [21/Nov/2026:03:01:00 +0000] "GET /moj-prop/ HTTP/2.0" 200 50 "-" "Googlebot/2.1"\n'
         self.assertEqual(parse_line(entry)[-1], "likely_automated")
