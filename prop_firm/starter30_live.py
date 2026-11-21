@@ -13,6 +13,7 @@ import secrets
 import string
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
@@ -128,23 +129,37 @@ def verify_pre_invoice_configuration() -> None:
         _provider_pair()
         _hex_recipient(approved_recipient())
         attested_receivers()
+        # A non-verified anonymous mailbox must never consume a permanent
+        # receiving address, even when all TRON RPC connections work.
+        from prop_firm.starter30_checkout_email import require_email_verification_release
+        require_email_verification_release()
     except (PaymentHold, ValueError, TypeError) as exc:
         raise Starter30PaymentRejected(
             "TRON verification configuration is unavailable; no invoice may be issued"
         ) from exc
 
 
-def issue_invoice(*, email: str, payer_address: str | None = None, terms_accepted: bool) -> IssuedStarter30Invoice:
-    """Atomically reserve one *never reused* owner-attested on-chain receiver.
+def issue_invoice(
+    *, email: str, payer_address: str | None = None,
+    terms_accepted: bool, email_proof: str = "",
+) -> IssuedStarter30Invoice:
+    """Allocate an exclusive receiving address only to a verified guest email.
 
-    Database uniqueness on payment.recipient is the concurrency arbiter. If
-    another request wins the same free address, restart the whole transaction;
-    never expose an uncommitted invoice or a shared receiving address.
+    The email identity row is locked to make repeat issuance idempotent across
+    sessions. The DB UNIQUE recipient constraint handles concurrent *different*
+    emails competing for the same address; no exposed address is ever recycled.
     """
     require_release()
     if terms_accepted is not True:
         raise Starter30PaymentRejected("simulation disclosure must be accepted")
     verify_pre_invoice_configuration()
+    from prop_firm.starter30_checkout_email import (
+        CheckoutEmailUnavailable, verify_checkout_email_proof,
+    )
+    try:
+        verified_identity_id = verify_checkout_email_proof(email, email_proof)
+    except CheckoutEmailUnavailable as exc:
+        raise Starter30PaymentRejected(str(exc)) from exc
     receivers = attested_receivers()
     normalized = normalize_email(email)
     payer_hex41 = _payer_hex(payer_address) if payer_address and payer_address.strip() else None
@@ -152,25 +167,56 @@ def issue_invoice(*, email: str, payer_address: str | None = None, terms_accepte
     for _ in range(min(len(receivers) + 1, 8)):
         try:
             with transaction.atomic(using=MOJPROP_DB_ALIAS):
+                # No get_or_create: issuing an invoice never implicitly creates
+                # a buyer identity bypassing the email OTP verification.
+                identity = (
+                    PropSimulationIdentity.objects.using(MOJPROP_DB_ALIAS)
+                    .select_for_update()
+                    .get(pk=verified_identity_id, provider="email", subject_key=subject_key)
+                )
+                if (
+                    identity.email_digest != email_digest
+                    or identity.status == PropSimulationIdentity.Status.BLOCKED
+                ):
+                    raise Starter30PaymentRejected("email identity is unavailable")
+                now = timezone.now()
+                # A retried checkout for the same verified email reuses exactly
+                # one non-expired pending invoice; no new address is burned.
+                previous = (
+                    PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS)
+                    .filter(
+                        invoice_owner__identity_id=identity.pk,
+                        status=PropSimulationPayment.Status.AWAITING,
+                        expires_at__gt=now,
+                    )
+                    .select_related("invoice_owner")
+                    .order_by("-issued_at")
+                    .first()
+                )
+                if previous is not None:
+                    if previous.recipient not in receivers:
+                        raise Starter30PaymentRejected("previous invoice requires support")
+                    if (previous.payer_hex41 or None) != payer_hex41:
+                        raise Starter30PaymentRejected(
+                            "existing invoice sending-wallet option differs; contact support"
+                        )
+                    return IssuedStarter30Invoice(
+                        previous.payment_ref,
+                        previous.invoice_owner.invoice_ref,
+                        previous.recipient,
+                        previous.amount_sun,
+                        previous.expires_at,
+                    )
                 used = set(
                     PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS)
                     .filter(recipient__in=receivers)
                     .values_list("recipient", flat=True)
                 )
                 recipient = select_unused_receiver(receivers, used)
-                identity, _ = PropSimulationIdentity.objects.using(MOJPROP_DB_ALIAS).get_or_create(
-                    provider="email",
-                    subject_key=subject_key,
-                    defaults={
-                        "email_digest": email_digest,
-                        "status": PropSimulationIdentity.Status.PENDING,
-                    },
-                )
-                if identity.email_digest != email_digest or identity.status == PropSimulationIdentity.Status.BLOCKED:
-                    raise Starter30PaymentRejected("email identity is unavailable")
+                if payer_hex41 and payer_hex41 == _hex_recipient(recipient):
+                    raise Starter30PaymentRejected("payer wallet cannot be invoice receiving wallet")
                 invoice_ref = _token("MOJPROP30-")
                 payment_ref = _token("PAY-")
-                now = timezone.now()
                 expires_at = now + timedelta(hours=24)
                 owner = PropSimulationInvoiceOwner.objects.using(MOJPROP_DB_ALIAS).create(
                     identity=identity,
@@ -192,11 +238,23 @@ def issue_invoice(*, email: str, payer_address: str | None = None, terms_accepte
                     terms_acceptance_ref=TERMS_REF,
                     status=PropSimulationPayment.Status.AWAITING,
                 )
-                return IssuedStarter30Invoice(payment_ref, invoice_ref, recipient, NATIVE_AMOUNT_SUN, expires_at)
+                return IssuedStarter30Invoice(
+                    payment_ref, invoice_ref, recipient, NATIVE_AMOUNT_SUN, expires_at
+                )
         except IntegrityError:
-            # Concurrent reservation / identity conflict: the atomic block
-            # rolled back. Re-read free receivers; never double-assign one.
+            # Roll back a concurrent unique-recipient conflict, then re-read
+            # the remaining pool. Never silently double-credit one address.
             continue
+        except ValidationError as exc:
+            errors = getattr(exc, "error_dict", {})
+            if set(errors) == {"recipient"} and all(
+                getattr(error, "code", None) == "unique"
+                for error in errors.get("recipient", ())
+            ):
+                # Model.full_clean checks the uniqueness constraint before the
+                # DB insert. A losing allocator must retry, not return HTTP 500.
+                continue
+            raise Starter30PaymentRejected("invoice validation failed") from exc
         except InvoiceAttributionUnavailable as exc:
             raise Starter30PaymentRejected(str(exc)) from exc
     raise Starter30PaymentRejected(
