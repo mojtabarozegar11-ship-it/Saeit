@@ -1,0 +1,28 @@
+name: TRON Pay isolated quality (NO DEPLOY)
+on:
+  pull_request:
+    paths:
+      - 'mpw_tron_pro/**'
+      - 'tests/test_mpw_tron*.py'
+      - '.github/workflows/mpw-tron-pro-isolated-quality.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-tests:
+    name: Secure TRON invoice and UI contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate Python source
+        run: python -m compileall -q mpw_tron_pro
+      - name: Test 93+ isolated payment, automatic delivery and security contracts
+        run: python -m unittest discover -s tests -p 'test_mpw_tron*.py' -v
+      - name: End source-only quality gate
+        run: echo 'Validated isolated TRON checkout source; no production deployment is configured in this workflow.'
