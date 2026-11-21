@@ -1,0 +1,26 @@
+name: AGRI-001 private checkpoint integrity agent regression
+on:
+  pull_request:
+    paths:
+      - scripts/factory_agri150k_private_checkpoint_integrity_agent_v1.py
+      - scripts/factory_agri150k_english_private_gate_v1.py
+      - tests/test_factory_agri150k_private_checkpoint_integrity_agent_v1.py
+      - .github/workflows/agri-private-checkpoint-integrity-agent-ci.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: agri-private-integrity-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  read-only-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile integrity agent and gate
+        run: |
+          python3 -m py_compile scripts/factory_agri150k_private_checkpoint_integrity_agent_v1.py
+      - name: Run isolated fail-closed regression
+        run: |
+          python3 -m unittest tests.test_factory_agri150k_private_checkpoint_integrity_agent_v1 -v
