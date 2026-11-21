@@ -1,0 +1,28 @@
+name: Zomorod deploy-backup no-overwrite regression
+on:
+  push:
+    branches: [fix/zm-preserve-unique-deploy-backups-20261101]
+    paths:
+      - ".github/workflows/zomorod-app-pages-deploy.yml"
+      - ".github/workflows/zm-backup-no-overwrite-regression-20261101.yml"
+      - "tests/test_zm_backup_no_overwrite.py"
+  pull_request:
+    paths:
+      - ".github/workflows/zomorod-app-pages-deploy.yml"
+      - ".github/workflows/zm-backup-no-overwrite-regression-20261101.yml"
+      - "tests/test_zm_backup_no_overwrite.py"
+permissions:
+  contents: read
+concurrency:
+  group: zm-backup-unique-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify backup exclusivity and non-destructive retry
+        run: python3 -m unittest discover -s tests -p 'test_zm_backup_no_overwrite.py' -v
