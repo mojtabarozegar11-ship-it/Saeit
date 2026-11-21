@@ -1,0 +1,149 @@
+name: Owner-authorized irreversible purge of 14 verified historical factory backups
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - .github/workflows/factory-owner-purge-old-backups-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Purge only 14 old factory snapshots with zero buyer and financial records
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import collections,json,os,re,sqlite3,stat,subprocess
+          home=Path('/home/githubops')
+          runtime=home/'factory-runtime'
+          ops=runtime/'operations'
+          backups=ops/'backups'
+          live=runtime/'django-app'
+          for p in (home,runtime,ops,backups,live,live/'core'):
+              if p.is_symlink() or not p.is_dir():raise SystemExit('UNSAFE_FACTORY_BACKUP_ROOT')
+          if os.geteuid()==0 or os.environ.get('USER')!='githubops':
+              raise SystemExit('NONROOT_FACTORY_USER_REQUIRED')
+          target_names=[
+          'master-before-20261024T000721Z.sqlite3',
+          'master-before-20261023T181806Z.sqlite3',
+          'master-before-20261023T171614Z.sqlite3',
+          'native-master-20261022T100951Z-2216076',
+          'f41-master-20261022T101121Z-2216944',
+          'native-master-20261022T084810Z-2200744',
+          'f41-master-20261022T084957Z-2202127',
+          'native-master-20261022T083144Z-2192205',
+          'f41-master-20261022T084126Z-2197341',
+          'f41-master-20261022T082425Z-2190841',
+          'factory-before-owner-20261014T065724Z.sqlite3',
+          'factory-20261010T105749Z.sqlite3',
+          'factory-before-owner-20261014T064939Z.sqlite3',
+          'native-master-20261022T035843Z-2127891',
+          'master-before-20261016T141706Z.sqlite3']
+          check_tables=('core_order','core_orderitem','core_paymentintent','core_paymentwebhookevent','core_walletconnection','core_ledgerentry','core_cryptopaymentintent','core_companyinquiry','core_chatmessage','core_chatsession','core_educationenrollment','core_educationattempt','core_educationprogress','core_educationbookmark','core_educationcertificate','core_newslettersubmission','core_tradeemailoutbox','core_tradeemailaudit','core_trademailbox','django_session')
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=12)
+          if cron.returncode:raise SystemExit('CRON_UNREADABLE')
+          classified=[]
+          for name in target_names:
+              p=backups/name
+              if p.is_symlink() or not p.exists():raise SystemExit('BACKUP_TARGET_ABSENT_OR_SYMLINK')
+              isdir=p.is_dir()
+              if not isdir and not (p.is_file() and p.suffix=='.sqlite3'):
+                  raise SystemExit('UNEXPECTED_BACKUP_TARGET_TYPE')
+              files=[]
+              if isdir:
+                  for base,dirs,names in os.walk(p,followlinks=False):
+                      for n in dirs+names:
+                          x=Path(base)/n
+                          if x.is_symlink():raise SystemExit('SYMLINK_INSIDE_FACTORY_BACKUP')
+                          if not x.is_dir() and not x.is_file():raise SystemExit('BACKUP_SPECIAL_NODE')
+                          if x.is_file():
+                              if x.stat().st_nlink!=1:raise SystemExit('HARDLINK_IN_BACKUP')
+                              files.append(x)
+                  db=p/'sqlite-before.sqlite3'
+              else:
+                  if p.stat().st_nlink!=1:raise SystemExit('HARDLINKED_BACKUP')
+                  files=[p]
+                  db=p
+              size=sum(x.stat().st_size for x in files)
+              if db.is_symlink() or not db.is_file():
+                  classified.append({'name':name,'bytes':size,'safe_candidate':False,'reason':'FACTORY_SQLITE_SNAPSHOT_MISSING'})
+                  continue
+              if not 70*2**20<size<950*2**20:
+                  classified.append({'name':name,'bytes':size,'safe_candidate':False,'reason':'BACKUP_SIZE_OUTSIDE_EXPECTED_RANGE'})
+                  continue
+              con=sqlite3.connect('file:'+str(db)+'?mode=ro&immutable=1',uri=True,timeout=12)
+              tables=set(x[0] for x in con.execute("select name from sqlite_master where type='table'"))
+              if not {'core_factoryrun','core_factoryevidence','core_product','core_order','core_paymentintent'}.issubset(tables):
+                  raise SystemExit('NOT_FACTORY_DATABASE_SNAPSHOT')
+              counts={k:int(con.execute('select count(*) from "'+k+'"').fetchone()[0]) for k in check_tables if k in tables}
+              owner_user=int(con.execute('select count(*) from auth_user').fetchone()[0]) if 'auth_user' in tables else None
+              products=int(con.execute('select count(*) from core_product').fetchone()[0])
+              con.close()
+              sensitive=sum(counts.values())
+              referenced=name in cron.stdout
+              children=sorted(x.name for x in p.iterdir()) if isdir else []
+              classified.append({'name':name,'bytes':size,'directory':isdir,'files_inside':len(files),
+                                 'top_child_names':children[:8],'protected_business_rows':sensitive,
+                                 'protected_table_counts':{k:v for k,v in counts.items() if v>0},
+                                 'auth_user_rows':owner_user,'product_rows_in_historical_backup':products,
+                                 'direct_cron_name_reference':referenced,
+                                 'safe_candidate':sensitive==0 and not referenced and owner_user is not None and owner_user<=3})
+          eligible=[x for x in classified if x['safe_candidate']]
+          if len(classified)!=15 or len(eligible)!=14:
+              raise SystemExit('HISTORICAL_BACKUP_SAFETY_CENSUS_CHANGED')
+          if sum(x['bytes'] for x in eligible)!=8363196904:
+              raise SystemExit('HISTORICAL_BACKUP_SIZE_CHANGED')
+          excluded=[x for x in classified if not x['safe_candidate']]
+          if len(excluded)!=1 or excluded[0]['name']!='native-master-20261022T035843Z-2127891':
+              raise SystemExit('UNEXPECTED_PROTECTED_BACKUP_SET')
+          import time,shutil
+          for x in eligible:
+              p=backups/x['name']
+              if p.is_symlink() or not p.exists() or p.stat().st_mtime>time.time()-3600:
+                  raise SystemExit('CANDIDATE_RECENT_OR_CHANGED')
+          if not (runtime/'django-app/core').is_dir() or (runtime/'django-app/core').is_symlink():
+              raise SystemExit('LIVE_ENGINE_SOURCE_MISSING')
+          if any(x['name'] in cron.stdout for x in eligible):
+              raise SystemExit('ACTIVE_CRON_DEPENDS_ON_BACKUP')
+          marker=backups/'.owner-factory-historical-backups-deleted-20261025.done'
+          if marker.exists() or marker.is_symlink():raise SystemExit('ONE_TIME_BACKUP_PURGE_DONE')
+          disk_before=shutil.disk_usage(backups).free
+          for x in eligible:
+              p=backups/x['name']
+              if x['directory']:
+                  shutil.rmtree(p)
+              else:
+                  p.unlink()
+          if any((backups/x['name']).exists() for x in eligible):
+              raise SystemExit('POST_PURGE_BACKUP_TARGET_REMAINS')
+          if not (backups/excluded[0]['name']).exists():
+              raise SystemExit('PROTECTED_NONSTANDARD_BACKUP_MISSING')
+          result={'removed_factory_backup_snapshots':len(eligible),
+                  'removed_backup_file_bytes':sum(x['bytes'] for x in eligible),
+                  'protected_unclassified_backup_entries_untouched':True,
+                  'free_bytes_before':disk_before,'free_bytes_after':shutil.disk_usage(backups).free,
+                  'customer_payment_records_in_deleted_snapshots':0,
+                  'live_factory_sites_three_products_games_image_project_modified':False}
+          fd=os.open(marker,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+          with os.fdopen(fd,'w') as out:
+              json.dump(result,out,sort_keys=True)
+              out.write('\n')
+          print('OWNER_FACTORY_BACKUP_PURGE_RESULT='+json.dumps(result,sort_keys=True),flush=True)
+
+          PY
+          echo OWNER_FACTORY_BACKUP_CENSUS_READONLY=PASS
