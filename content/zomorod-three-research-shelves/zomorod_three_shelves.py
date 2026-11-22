@@ -130,6 +130,8 @@ def graphic(group, slug):
     return 'data:image/svg+xml;base64,' + base64.b64encode(svg.encode()).decode()
 
 def page_html(group, group_title, title, slug, subject):
+    # These pages are embedded in the site's V7 shell at runtime.  Generate
+    # content navigation in main, not a second semantic header/footer.
     path = f"/research/directory/{group}/{slug}/"
     t, s, g = escape(title), escape(subject), escape(group_title)
     canonical = "https://zomorodmelal.ir" + path
@@ -144,18 +146,18 @@ def page_html(group, group_title, title, slug, subject):
 :root{{--green:#102f23;--gold:#eac77a;--text:#f8edcf}}
 *{{box-sizing:border-box}}body{{margin:0;background:radial-gradient(circle at 70% 0%,#244b38,var(--green) 45%);
 color:var(--text);font-family:Tahoma,Arial,sans-serif;line-height:2}}
-a{{color:var(--gold)}}header,main,footer{{width:min(1030px,calc(100% - 38px));margin:auto}}
-header{{padding:30px 0;border-bottom:1px solid #a98e5280}}header a{{margin-left:20px;text-decoration:none}}
-main{{padding:38px 0 60px}}.eyebrow{{font-size:13px;color:var(--gold);letter-spacing:.04em}}
+a{{color:var(--gold)}}main{{width:min(1030px,calc(100% - 38px));margin:auto;padding:38px 0 60px}}
+.directory-crumbs{{margin-bottom:24px}}.directory-crumbs a{{margin-left:20px}}
+.eyebrow{{font-size:13px;color:var(--gold);letter-spacing:.04em}}
 h1{{font-size:clamp(28px,4vw,49px);color:var(--gold);line-height:1.5}}h2{{color:var(--gold)}}
 p{{max-width:83ch}}.panel{{border:1px solid #b7a36b77;border-radius:21px;padding:26px;
 margin:22px 0;background:#0b291eb8;box-shadow:0 12px 35px #0002}}
 .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px}}
-footer{{border-top:1px solid #a98e5280;padding:22px 0 40px;color:#e2d1ac}}
 </style></head><body>
-<header><a href="/">زمرد ملل</a><a href="/research/">مرکز تحقیقات</a>
-<a href="/company/">معرفی شرکت</a></header>
-<main><div class="eyebrow">مرکز تحقیقات علمی · {g}</div>
+<main><nav class="directory-crumbs" aria-label="مسیر دسترسی">
+<a href="/">زمرد ملل</a><a href="/research/">مرکز تحقیقات</a>
+<a href="/company/">معرفی شرکت</a></nav>
+<div class="eyebrow">مرکز تحقیقات علمی · {g}</div>
 <h1>{t}</h1>
 <p>{s}.</p>
 <section class="panel"><h2>موضوع پژوهش و دامنه علمی</h2>
@@ -174,7 +176,7 @@ footer{{border-top:1px solid #a98e5280;padding:22px 0 40px;color:#e2d1ac}}
 تجهیزات مشخص، ارائه خدمت عمومی، مجوز تخصصی یا اعتباربخشی آزمایشگاهی نیست.
 اطلاعات مربوط به امکانات و طرح‌های عملیاتی صرفاً پس از مستندسازی جداگانه اعلام می‌شود.</p>
 <p><a href="/research/">بازگشت به مرکز تحقیقات ←</a></p></section>
-</main><footer>شرکت کشت و صنعت زمرد ملل · پژوهش علمی، ژنتیک و توسعه فناوری</footer>
+</main>
 <!-- {MARKER}:page -->
 </body></html>'''
 
