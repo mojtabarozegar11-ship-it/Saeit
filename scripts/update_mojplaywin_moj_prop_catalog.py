@@ -131,7 +131,7 @@ def source_root(run_id: str) -> Path:
     if (not all(mark in starter for mark in (
             "MOJPROP-STARTER30", "payment admission under independent verification",
             "Request 30 TRX plan details", "/moj-prop-intake/?format=html",
-            "14 stages", "$100,000",
+            "14 virtual balances", "$100,000",
             "./journal-template.csv", "./journal-guide.txt",
             "30 TRX", "No real funded account",
             "server-issued 30 TRX invoice",
