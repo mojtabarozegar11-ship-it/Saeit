@@ -3,8 +3,6 @@ on:
   push:
     branches: [main]
     paths: [.github/workflows/mpw-all-agents-private-activation.yml]
-  schedule:
-    - cron: "37 2,14 * * *"
   workflow_dispatch:
 permissions:
   contents: read
