@@ -43,36 +43,36 @@ class Starter30PublicOwnerPolicyParityTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, t)
 
-    def test_03_source_page_has_full_reward_and_request_conditions(self):
-        t = self.page.lower()
-        for fragment in ("id=\"profit-reward-schedule\"", "2026-11-21/simulation-v2",
-                         "100% trader share", "14 days", "14-day intervals",
-                         "usd $10", "network transfer fees",
-                         "first successfully completed eligible profit withdrawal"):
+    def test_03_static_checkout_asset_stays_exactly_release_pinned(self):
+        import hashlib
+        raw = STATIC_PAGE.read_bytes()
+        blob = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\\0" + raw).hexdigest()
+        self.assertEqual(blob, "24c927a46c86fc2a4691028fde79edcbb57696db")
+        self.assertNotIn('id="profit-reward-schedule"', self.page)
+        self.assertIn("payment and invoice issuance are currently unavailable", self.page.lower())
+
+    def test_04_guide_discloses_policy_not_actual_paid_reward(self):
+        t = self.guide.lower()
+        for fragment in ("do not send trx", "not proof of an operating payout service",
+                         "not currently", "100%", "does not guarantee profitable performance"):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, t)
-
-    def test_04_financial_guarantee_is_not_fabricated(self):
-        for t in (self.guide.lower(), self.page.lower()):
-            self.assertIn("do not send trx", t)
-            self.assertIn("100%", t)
-            self.assertIn("not", t)
-        self.assertNotIn("passing the rules guarantees payment", self.page.lower())
-        self.assertNotIn("a successful pass guarantees payment", self.page.lower())
+        self.assertNotIn("a verified reward payment has been completed", t)
 
     def test_05_no_direct_wallet_or_paid_fee_collection_created(self):
         self.assertIn('action="/mojprop-starter30-status/"', self.page)
         self.assertIn("payment and invoice issuance are currently unavailable", self.page.lower())
         self.assertIn("unique server-issued invoice", self.guide.lower())
-        self.assertIn("no customer funds", self.page.lower())
+        self.assertIn("no customer capital is accepted", self.page.lower())
         self.assertNotIn('action="/mojprop-starter30-checkout/" method="post"', self.page)
 
-    def test_06_no_fictional_claim_about_earned_profit(self):
-        for t in (self.guide.lower(), self.page.lower()):
-            self.assertIn("qualifying", t)
-            self.assertIn("verification", t)
-        self.assertIn("not proof of an operating payout service", self.guide.lower())
-        self.assertIn("not currently an activated payout rail", self.page.lower())
+    def test_06_current_guide_explains_eligibility_and_unverified_payout(self):
+        t = self.guide.lower()
+        self.assertIn("qualifying", t)
+        self.assertIn("verification", t)
+        self.assertIn("not proof of an operating payout service", t)
+        self.assertIn("before anyone is charged", t)
+        self.assertIn("the 100% figure describes the intended", t)
 
     def test_07_public_education_links_are_exact_first_party_urls(self):
         self.assertIn("https://mojplaywin.com/moj-prop/payment/?utm_source=github", self.guide)
