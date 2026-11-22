@@ -1,7 +1,7 @@
 """Every financial-brand signal subsite must feed the canonical Mojtaba.bot.ai intake."""
 from html import escape as html_escape
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from django.test import SimpleTestCase, override_settings
 
@@ -24,6 +24,19 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
         self.assertNotIn("checkout", SIGNAL_INTAKE_PATH)
         self.assertNotIn("#", SIGNAL_INTAKE_PATH)
         self.assertNotIn("mojtaba.bot.ai/", SIGNAL_INTAKE_PATH)
+
+    def test_canonical_signal_inquiry_has_only_approved_consent_form_parameters(self):
+        url = urlsplit(SIGNAL_INTAKE_PATH)
+        self.assertEqual(url.scheme, "https")
+        self.assertEqual(url.hostname, "mojplaywin.com")
+        self.assertEqual(url.path, "/moj-prop-intake/")
+        self.assertEqual(parse_qs(url.query, strict_parsing=True), {
+            "format": ["html"],
+            "service": ["signals"],
+        })
+        self.assertEqual(url.fragment, "")
+        self.assertIsNone(url.username)
+        self.assertIsNone(url.password)
 
     @override_settings(ALLOWED_HOSTS=("testserver", "zomorodmelal.ir", "mojplaywin.com"))
     def test_cross_domain_brand_ctas_point_at_mojplaywin_not_local_subsite(self):
