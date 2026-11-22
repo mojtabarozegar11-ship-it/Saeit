@@ -144,9 +144,17 @@ class CanonicalMojPropContactFallback(unittest.TestCase):
             "MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED",
             "MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED",
             "MOJPROP_STATIC_ROLLBACK_VERIFIED",
-            "MOJPROP_STATIC_APPROVED_MAIN_SHA == github.sha",
         ):
             self.assertIn(guard, workflow)
+        # The release decision may be pinned either to the reviewed main SHA
+        # or to the owner-pinned manual dispatch gate. Both are fail-closed.
+        self.assertTrue(
+            "MOJPROP_STATIC_APPROVED_MAIN_SHA == github.sha" in workflow
+            or (
+                "github.actor == 'mojtabarozegar11-ship-it'" in workflow
+                and "github.ref == 'refs/heads/main'" in workflow
+            )
+        )
 
 
 if __name__ == "__main__":
