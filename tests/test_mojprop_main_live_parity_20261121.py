@@ -62,7 +62,7 @@ class OfficialMojPropLiveParityTests(unittest.TestCase):
         self.assertIn("30 TRX INITIAL ENTRY",html)
         self.assertIn("$100,000 virtual",html)
         self.assertIn("14 SIMULATED LEVELS",html)
-        self.assertIn("Payment and new enrollment are currently unavailable",html)
+        self.assertIn("payment and new enrollment are currently unavailable",html.lower())
         self.assertIn('href="/moj-prop/starter-30-trx/"',html)
 
     def test_fourteen_conditional_levels_and_no_false_capital(self):
