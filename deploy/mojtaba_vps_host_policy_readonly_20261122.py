@@ -119,7 +119,11 @@ def cgroup_receipt() -> dict:
 
 
 def release_info() -> dict[str, str | None]:
-    data = bounded_read(Path("/etc/os-release"), limit=4096) or ""
+    # On many Linux distributions /etc/os-release is a legitimate symlink;
+    # read only the fixed, package-owned fallback, never follow arbitrary links.
+    data = (bounded_read(Path("/etc/os-release"), limit=4096)
+            or bounded_read(Path("/usr/lib/os-release"), limit=4096)
+            or "")
     result: dict[str, str | None] = {"id": None, "version_id": None}
     for line in data.splitlines():
         key, sep, value = line.partition("=")
