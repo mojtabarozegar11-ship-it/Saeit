@@ -152,9 +152,11 @@ def verify_pre_invoice_configuration() -> None:
     from prop_firm.starter30_paid_admission import (
         require_paid_admission_readiness,
         require_live_unique_invoice_recipient_schema,
+        require_live_isolated_migration_lineage,
     )
     require_paid_admission_readiness()
     require_live_unique_invoice_recipient_schema()
+    require_live_isolated_migration_lineage()
 
 
 def issue_invoice(
