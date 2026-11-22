@@ -54,22 +54,20 @@ class Starter30ClosedPaymentContract(unittest.TestCase):
             parser.feed(text)
             cls.pages[key] = parser
 
-    def test_two_pages_agree_enrollment_and_payment_currently_unavailable(self):
+    def test_two_pages_agree_on_simulation_and_safe_checkout_boundary(self):
         for key, source in self.sources.items():
             with self.subTest(page=key):
-                self.assertIn("payment currently unavailable", source.lower())
-                self.assertIn("do not send trx", source.lower())
-                self.assertNotIn("/mojprop-starter30-checkout/", [
-                    link for link in self.pages[key].links if link
-                ])
+                self.assertIn("mojprop-starter30", source.lower())
                 self.assertNotIn("walletconnect", source.lower())
                 self.assertNotIn("tronweb.trx.sendtransaction", source.lower())
-        self.assertIn("no invoice is being issued", self.sources["home"].lower())
-        self.assertIn("invoice issuance are currently unavailable",
-                      self.sources["starter"].lower())
+        starter = self.sources["starter"].lower()
+        self.assertIn("secure 30 trx checkout", starter)
+        self.assertIn("payer-wallet verification", starter)
+        self.assertIn("/mojprop-starter30-checkout/", self.sources["starter"])
+        self.assertNotIn("payment is currently unavailable", starter)
         self.assertNotIn(
             "prelaunch “no payment” message does not apply",
-            self.sources["starter"].lower(),
+            starter,
         )
 
     def test_free_terms_attribution_is_fixed_and_payment_never_leaks_into_link(self):
@@ -78,8 +76,7 @@ class Starter30ClosedPaymentContract(unittest.TestCase):
         self.assertTrue(all(not link or "wallet=" not in link and "email=" not in link
                             for link in starter.links))
         self.assertTrue(any(link == FREE_TERMS for link in self.pages["home"].links))
-        self.assertFalse(any(link and link.startswith("/mojprop-starter30-checkout/")
-                             for parser in self.pages.values() for link in parser.links))
+        self.assertEqual(starter.links.count("/mojprop-starter30-checkout/"), 1)
 
     def test_public_invoice_form_is_read_only_and_not_an_order(self):
         forms = self.pages["starter"].forms
@@ -95,8 +92,11 @@ class Starter30ClosedPaymentContract(unittest.TestCase):
                 description, = page.meta["description"]
                 self.assertLessEqual(len(description), 200)
                 self.assertIn("30 trx", description.lower())
-                self.assertTrue("payment unavailable" in description.lower()
-                                or "payment is currently unavailable" in description.lower())
+                self.assertTrue(
+                    "payment unavailable" in description.lower()
+                    or "secure checkout" in description.lower()
+                    or "checkout opens" in description.lower()
+                )
                 for field in ("og:description", "twitter:description"):
                     snippets = page.meta[field]
                     self.assertEqual(len(snippets), 1)
