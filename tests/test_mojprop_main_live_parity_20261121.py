@@ -9,8 +9,19 @@ from pathlib import Path
 import unittest
 
 PAGE=Path(__file__).resolve().parents[1]/"templates"/"moj-prop-v4"/"index.html"
-SHA256="029d2493c80480afd0b8d01683254c63a236a4d930c6cc43410def81906848e5"
-BLOB="fea39dbc409ba8c4c30a807313a20b8d4db19283"
+# Immutable live baseline from independently reviewed source.
+LIVE_SHA256="029d2493c80480afd0b8d01683254c63a236a4d930c6cc43410def81906848e5"
+LIVE_BLOB="fea39dbc409ba8c4c30a807313a20b8d4db19283"
+# Reviewed new candidate (never assert this is live solely from GitHub).
+CANDIDATE_SHA256="4b00b000ecc971073345aa2ca7baaf6753bf83d9bb5243e4ad1276b7012c13e7"
+CANDIDATE_BLOB="463ebd2dfb5d803cd20ac17f2c53422d36d65ad9"
+COPY_CHANGES=(
+    ("Starter 30 — 30 TRX</a>", "Starter30 — Free written terms</a>"),
+    (
+        "MOJ-PROP-01 (the proposed two-stage live-account route) remains prelaunch",
+        "MOJ-PROP-01 (the proposed two-stage simulated evaluation route) remains prelaunch",
+    ),
+)
 
 class Scan(HTMLParser):
     def __init__(self):
@@ -35,10 +46,24 @@ class Scan(HTMLParser):
             self.h1+=1
 
 class OfficialMojPropLiveParityTests(unittest.TestCase):
-    def test_exact_source_matches_verified_public_release(self):
+    def test_exact_reviewed_copy_and_preserved_original_live_source(self):
+        # Exact new source candidate (not proof of live deployment).
         b=PAGE.read_bytes()
-        self.assertEqual(hashlib.sha256(b).hexdigest(),SHA256)
-        self.assertEqual(hashlib.sha1(b"blob "+str(len(b)).encode()+b"\0"+b).hexdigest(),BLOB)
+        self.assertEqual(hashlib.sha256(b).hexdigest(),CANDIDATE_SHA256)
+        self.assertEqual(hashlib.sha1(b"blob "+str(len(b)).encode()+b"\0"+b).hexdigest(),CANDIDATE_BLOB)
+
+        baseline=b
+        for before,after in COPY_CHANGES:
+            before_bytes=before.encode("utf-8")
+            after_bytes=after.encode("utf-8")
+            self.assertEqual(baseline.count(after_bytes),1,after)
+            self.assertNotIn(before_bytes,baseline)
+            baseline=baseline.replace(after_bytes,before_bytes,1)
+        # Exact reverse must reproduce the independently pinned historical live
+        # source; this catches any change beyond the two reviewed copy edits.
+        self.assertEqual(hashlib.sha256(baseline).hexdigest(),LIVE_SHA256)
+        self.assertEqual(hashlib.sha1(b"blob "+str(len(baseline)).encode()+b"\0"+baseline).hexdigest(),LIVE_BLOB)
+
     def test_official_info_and_order_policy_not_misrepresented(self):
         s=PAGE.read_text(encoding="utf8")
         self.assertTrue(s.startswith("<!-- MOJ_PROP_CATALOG_RELEASE_V4 -->"))
