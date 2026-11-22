@@ -36,13 +36,15 @@ def test_starter30_static_publication_is_owner_dispatch_only():
     )
     assert "github.event_name == 'workflow_dispatch'" in source
     assert "    runs-on: [self-hosted, factory-vps]" in source
+    assert "approved_release_sha:" in source
+    assert "github.actor == 'mojtabarozegar11-ship-it'" in source
     assert "MOJ_PROP_API_PREFLIGHT=PASS" in source
     for required in (
         "inputs.owner_approved_static_release == true",
         "MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED",
         "MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED",
         "MOJPROP_STATIC_ROLLBACK_VERIFIED",
-        "MOJPROP_STATIC_APPROVED_MAIN_SHA == github.sha",
+        "inputs.approved_release_sha == github.sha",
     ):
         assert required in source
     assert "MOJ_PROP_STATUS_API_PREFLIGHT=PASS" in source
