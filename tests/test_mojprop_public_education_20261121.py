@@ -15,10 +15,15 @@ GUIDES=(
 # Reviewed, independent free Signal Desk teaching material; six historical guides
 # retain their immutable editorial and no-draft acceptance checks.
 FREE_SIGNAL_SAMPLE="signal-desk-free-scenario-sample.md"
+REAL_GOLD_MARKET_BRIEF="gold-macro-scenarios-q4-2026-20261122.md"
 # Exactly two explicit authority references, never a general off-site allow rule.
 TRUSTED_EDUCATIONAL_REFERENCES=frozenset((
     "https://www.law.cornell.edu/cfr/text/17/4.41",
     "https://www.investor.gov/introduction-investing/general-resources/news-alerts/alerts-bulletins/investor-bulletins/social-media-stock-scams",
+    "https://fred.stlouisfed.org/series/DFII10",
+    "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_real_yield_curve",
+    "https://www.gold.org/goldhub/research/gold-demand-trends/gold-demand-trends-q3-2026/outlook",
+    "https://www.elibrary.imf.org/view/journals/068/2026/007/article-A001-en.xml",
 ))
 
 class MojPropEducationPublicationTests(unittest.TestCase):
@@ -30,11 +35,12 @@ class MojPropEducationPublicationTests(unittest.TestCase):
         self.assertIn("30 TRX simulated challenge",repo_readme)
 
     def test_public_guide_catalog_is_complete(self):
-        self.assertEqual({p.name for p in ROOT.glob("*.md")},set(GUIDES)|{"README.md",FREE_SIGNAL_SAMPLE})
+        self.assertEqual({p.name for p in ROOT.glob("*.md")},set(GUIDES)|{"README.md",FREE_SIGNAL_SAMPLE,REAL_GOLD_MARKET_BRIEF})
         index=(ROOT/"README.md").read_text(encoding="utf-8")
         for name in GUIDES:
             with self.subTest(guide=name):self.assertIn(f"./{name}",index)
         self.assertIn(f"./{FREE_SIGNAL_SAMPLE}",index)
+        self.assertIn(f"./{REAL_GOLD_MARKET_BRIEF}",index)
 
     def test_guides_are_educational_and_no_editorial_drafts(self):
         for name in GUIDES:
