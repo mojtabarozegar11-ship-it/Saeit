@@ -2,7 +2,7 @@
 """Read-only Moj Prop source parity gate for the manually routed owner cPanel app.
 
 This is deliberately NOT a deployer and is NOT a financial admission gate.
-It reads seven selected source files to expose a *known* class of mixed-version
+It reads twelve selected source files and direct source dependencies to expose a *known* class of mixed-version
 release that could make the live rules and the buyer's promised terms diverge.
 A source match does NOT prove active LSWSGI processes reloaded, legal eligibility,
 an invoice, company reward reserves, settled blockchain transfers or delivery.
@@ -30,8 +30,13 @@ REQUIRED = {
     "prop_firm/policy_integrity.py": "68dfaf2a31e6f63f2c25f8eea93843f27f73d7d8",
     "prop_firm/starter30_live.py": "3c006d15dd6b35d5128ec3af7d03def28841b8e4",
     "prop_firm/customer_portal_views.py": "f918d8b6645dd168014e6a2dd718bd851afc7884",
+    "prop_firm/models.py": "e6e0a50ca29002fdf58133cf7eda5c22dee3c8ac",
+    "prop_firm/simulation_identity_adapter.py": "0b4e6bf2050634816314b0ced5b8e424f5a5d2ad",
+    "prop_firm/starter30_checkout_email.py": "dc6cdf6daae0b3649a1db4811f4aa3834e37df38",
+    "prop_firm/starter30_receiver_pool.py": "2e34e773846fc8903915a784bf3d07de5a411014",
+    "config/mojprop_db_router.py": "d3f255e6a71615ac9f86fcee632eb9b49da0eca8",
 }
-EXPECTED_COUNT = 7
+EXPECTED_COUNT = 12
 
 
 def git_blob(raw: bytes) -> str:
@@ -65,7 +70,7 @@ def check_bundle(root: Path) -> dict:
         })
     match_count = sum(row["status"] == "MATCH" for row in rows)
     summary = {
-        "scope": "exactly_seven_production_source_files_only",
+        "scope": "exactly_twelve_production_source_files_only",
         "source_root": str(root),
         "checked": len(rows),
         "matched": match_count,
