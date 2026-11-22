@@ -198,9 +198,21 @@ def _keyed_request_id(raw: str) -> str:
 
 
 def _matches_keyed_retry(row, *, name, email, route, horizon, notes, product_id):
-    """Keep a stolen/reused key from granting another buyer's private receipt."""
+    """Keep other-channel/staff rows inaccessible via public idempotency keys.
+
+    New allowlisted public Signal Desk source labels remain part of the *same*
+    consented intake channel. Unknown, manually imported, or staff-created
+    sources are still not eligible for public receipt recovery.
+    """
+    public_source = row.source == "moj-prop-public"
+    if not public_source and row.route == "signals":
+        public_source = any(
+            row.source == "moj-prop-public:" + dict(approved)["utm_campaign"]
+            for service, package, approved in _PUBLIC_CAMPAIGNS
+            if service == "signals" and package == ""
+        )
     return (
-        row.source == "moj-prop-public" and row.consent is True
+        public_source and row.consent is True
         and row.name == name and row.email == email
         and row.route == route and row.horizon == horizon
         and row.notes == notes and row.product_id == product_id
