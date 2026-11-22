@@ -99,7 +99,13 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             root = Path(tmp)
             self.fill(root)
             buf = io.StringIO()
-            with patch.object(MOD, "PUBLIC_EFFECTIVE_ROOT", root):
+            wsgi = root / "owner-public-wsgi-shim.txt"
+            wsgi.write_text(
+                "APP='" + str(root) + "'\n"
+                "if APP not in sys.path: sys.path.insert(0, APP)\n"
+                "os.chdir(APP)\n", encoding="utf-8"
+            )
+            with patch.object(MOD, "PUBLIC_EFFECTIVE_ROOT", root), patch.object(MOD, "PUBLIC_WSGI", wsgi):
                 with contextlib.redirect_stdout(buf):
                     status = MOD.main(["--check"])
             self.assertEqual(status, 0)
@@ -135,6 +141,31 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             self.assertEqual(report["matched"], 11)
             self.assertEqual(report["missing"], 1)
             self.assertFalse(report["source_bundle_matches"])
+
+
+    def test_11_wrong_public_wsgi_target_fails_even_when_all_sources_match(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.fill(root)
+            wsgi = root / "mismatched-wsgi-shim.txt"
+            wsgi.write_text(
+                "APP='/home/zomorod2/old-unreviewed-tree'\n"
+                "if APP not in sys.path: sys.path.insert(0, APP)\n"
+                "os.chdir(APP)\n", encoding="utf-8"
+            )
+            buf = io.StringIO()
+            with patch.object(MOD, "PUBLIC_EFFECTIVE_ROOT", root), patch.object(MOD, "PUBLIC_WSGI", wsgi):
+                with contextlib.redirect_stdout(buf):
+                    status = MOD.main(["--check"])
+            self.assertEqual(status, 2)
+            self.assertIn("effective_public_wsgi_root_unverified", buf.getvalue())
+            self.assertEqual(len(list(root.rglob("*.py"))), 12)
+
+    def test_12_effective_reviewed_root_is_the_cpanel_passenger_target(self):
+        self.assertEqual(MOD.PUBLIC_EFFECTIVE_ROOT,
+            Path("/home/zomorod2/Saeit-mojprop-candidate-20261122"))
+        self.assertEqual(MOD.PUBLIC_WSGI,
+            Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py"))
 
 
 if __name__ == "__main__":
