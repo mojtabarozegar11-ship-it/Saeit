@@ -56,6 +56,19 @@ class MojPropEducationPublicationTests(unittest.TestCase):
                 self.assertNotIn("**Editorial draft — not public.**",text)
                 self.assertNotIn("mojtabarozegar11-ship-it/MojPlayWin-Gateway-Private",text)
 
+    def test_dated_gold_research_has_attributed_owner_domain_return_links(self):
+        # The linked source-based article is discovered from main on PR merge
+        # checks. Keep actual owner-site referrals attributable without
+        # weakening the strict external-source allowlist below.
+        article=(ROOT/"gold-macro-scenarios-q4-2026-20261122.md").read_text(encoding="utf-8")
+        for url in (
+            "https://mojplaywin.com/mojtaba.bot.ai/?utm_source=github",
+            "https://mojplaywin.com/moj-prop-intake/?format=html&service=signals&utm_source=github",
+        ):
+            with self.subTest(owner_link=url):
+                self.assertIn(url,article)
+        self.assertIn("No buy/sell/entry/stop-loss/target levels are asserted",article)
+
     def test_relative_document_links_resolve_within_public_directory(self):
         for p in ROOT.glob("*.md"):
             for link in re.findall(r"\]\((\./[^)]+)\)",p.read_text(encoding="utf-8")):
