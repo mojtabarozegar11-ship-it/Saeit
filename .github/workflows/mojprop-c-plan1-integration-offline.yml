@@ -1,0 +1,58 @@
+# Cycle C: offline regression only. No keys, wallet, transaction or deployment.
+name: MOJ PROP C real Plan1 trusted handoff and global replay safety
+on:
+  push:
+    branches:
+      - mojprop-c-plan1-invoice-boundary-20261117
+    paths:
+      - 'services/mojprop_plan1_trusted_handoff.py'
+      - 'services/mojprop_plan1_atomic_candidate_ledger.py'
+      - 'services/mojprop_real_plan1_invoice_boundary.py'
+      - 'tests/test_mojprop_plan1_trusted_handoff.py'
+      - 'tests/test_mojprop_plan1_atomic_candidate_ledger.py'
+      - 'tests/test_mojprop_real_plan1_invoice_boundary.py'
+      - '.github/workflows/mojprop-c-plan1-integration-offline.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  c-offline-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: '.'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Exact HEAD source compile
+        run: |
+          python3 -B -m py_compile \
+            services/mojprop_real_plan1_tron_candidate.py \
+            services/mojprop_real_plan1_invoice_boundary.py \
+            services/mojprop_plan1_atomic_candidate_ledger.py \
+            services/mojprop_plan1_trusted_handoff.py \
+            tests/test_mojprop_real_plan1_tron_candidate.py \
+            tests/test_mojprop_real_plan1_invoice_boundary.py \
+            tests/test_mojprop_plan1_atomic_candidate_ledger.py \
+            tests/test_mojprop_plan1_trusted_handoff.py
+      - name: Trusted B to C prepayment handoff proofs and denials
+        run: python3 -B -m unittest discover -s tests -p 'test_mojprop_plan1_trusted_handoff.py' -v
+      - name: Twenty fact boundary and private order safety
+        run: python3 -B -m unittest discover -s tests -p 'test_mojprop_real_plan1_invoice_boundary.py' -v
+      - name: Cross-order transaction candidate uniqueness reference
+        run: python3 -B -m unittest discover -s tests -p 'test_mojprop_plan1_atomic_candidate_ledger.py' -v
+      - name: Merged canonical real Plan1 native TRX verifier regression
+        run: python3 -B -m unittest discover -s tests -p 'test_mojprop_real_plan1_tron_candidate.py' -v
+      - name: Never enable real checkout in this source-only CI
+        run: |
+          python3 -B - <<'PY'
+          from services.mojprop_plan1_trusted_handoff import ReviewSnapshot
+          from services.mojprop_real_plan1_invoice_boundary import PRODUCT, AMOUNT_SUN, NETWORK
+          assert PRODUCT == "MOJ-PROP-01"
+          assert AMOUNT_SUN == 30_000_000
+          assert NETWORK == "tron-mainnet"
+          assert not hasattr(ReviewSnapshot, "payment_url")
+          print("NO_CHECKOUT_NO_RPC_NO_WALLET_SEND_NO_DEPLOY")
+          PY
