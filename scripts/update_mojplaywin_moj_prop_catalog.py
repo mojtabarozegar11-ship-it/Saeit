@@ -64,6 +64,13 @@ OWNER_LIVE_CATALOG_MARKERS = (
     b"Starter 30",
     b"Do not send funds before a written offer",
 )
+# This is the reviewed legacy Payment disclosure currently live. It may be
+# replaced only by the approved payment-status page in this release.
+OWNER_LIVE_PAYMENT_MARKERS = (
+    b"BUYER PAYMENT AND REWARD POLICY",
+    b"Current operational disclosure: the Starter30 checkout is currently unavailable.",
+    b"Do not use a copied wallet or send USDT instead.",
+)
 
 
 def digest(data: bytes) -> str:
@@ -258,7 +265,10 @@ def plan(root: Path) -> list[dict]:
                 b"Payment follows trust.",
                 b"no invoice is being issued",
             )
-            if not all(marker in before for marker in legacy_markers):
+            if not (
+                all(marker in before for marker in legacy_markers)
+                or all(marker in before for marker in OWNER_LIVE_PAYMENT_MARKERS)
+            ):
                 raise RuntimeError("Live payment page differs from the reviewed legacy disclosure; refusing replacement")
         elif exists and before != after:
             raise RuntimeError("A public Moj Prop asset exists with unexpected content; refusing replacement")
