@@ -43,3 +43,24 @@ class PrivateAuctionAdmin(admin.ModelAdmin):
     list_display = ("title", "status", "minimum_price", "starts_at", "ends_at", "created_by")
     list_filter = ("status",)
     search_fields = ("title", "description")
+
+
+from .models import PublicProcurementNumber
+
+
+@admin.register(PublicProcurementNumber)
+class PublicProcurementNumberAdmin(admin.ModelAdmin):
+    """Read-only, permanent numbering ledger; do not edit from Django admin."""
+    list_display = ("serial_number", "notice_key", "reserved_at")
+    ordering = ("serial_number",)
+    search_fields = ("notice_key", "=serial_number")
+    readonly_fields = ("notice_key", "serial_number", "baseline_evidence", "reserved_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

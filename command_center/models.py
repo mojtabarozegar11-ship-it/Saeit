@@ -215,3 +215,21 @@ class CommandRequest(models.Model):
 
     class Meta:
         ordering = ("status", "-created_at")
+
+
+class PublicProcurementNumber(models.Model):
+    """Permanently reserved public ad numbers; notice codes are separate stable keys.
+
+    The number is allocated only after the existing advertisement high-watermark
+    has been verified; never derive it from a product category index or a date.
+    """
+    notice_key = models.CharField(max_length=40, unique=True)
+    serial_number = models.PositiveBigIntegerField(unique=True, db_index=True)
+    baseline_evidence = models.TextField()
+    reserved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("serial_number",)
+
+    def __str__(self):
+        return f"{self.serial_number} · {self.notice_key}"
