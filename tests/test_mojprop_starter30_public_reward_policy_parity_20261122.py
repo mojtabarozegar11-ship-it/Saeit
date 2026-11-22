@@ -46,7 +46,7 @@ class Starter30PublicOwnerPolicyParityTests(unittest.TestCase):
     def test_03_static_checkout_asset_stays_exactly_release_pinned(self):
         import hashlib
         raw = STATIC_PAGE.read_bytes()
-        blob = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\\0" + raw).hexdigest()
+        blob = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
         self.assertEqual(blob, "24c927a46c86fc2a4691028fde79edcbb57696db")
         self.assertNotIn('id="profit-reward-schedule"', self.page)
         self.assertIn("payment and invoice issuance are currently unavailable", self.page.lower())
@@ -54,7 +54,7 @@ class Starter30PublicOwnerPolicyParityTests(unittest.TestCase):
     def test_04_guide_discloses_policy_not_actual_paid_reward(self):
         t = self.guide.lower()
         for fragment in ("do not send trx", "not proof of an operating payout service",
-                         "not currently", "100%", "does not guarantee profitable performance"):
+                         "not accepting", "100%", "does **not** guarantee profitable performance"):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, t)
         self.assertNotIn("a verified reward payment has been completed", t)
