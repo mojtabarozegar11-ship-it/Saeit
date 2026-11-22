@@ -158,9 +158,9 @@ def _form(request, invoice_ref: str | None = None) -> str:
         + _funnel_hidden_fields(request)
         + "<label for='email'>Email for the isolated simulation identity</label>"
         "<input id='email' name='email' type='email' required autocomplete='email'>"
-        "<label for='payer_address'>Your sending TRON wallet address (optional)</label>"
-        "<input id='payer_address' name='payer_address' autocomplete='off'>"
-        "<small>If left blank, the verified on-chain sender is recorded after payment.</small>"
+        "<label for='payer_address'>Your sending TRON wallet address (required)</label>"
+        "<input id='payer_address' name='payer_address' required autocomplete='off'>"
+        "<small>This is required because every customer payment is received by one owner-approved wallet.</small>"
         "<label><input type='checkbox' name='terms' value='yes' required> "
         "I understand this is simulated trading: no customer capital or real broker account is involved. Every profit I earn after a successful pass is paid in full: 100% of my realized profit is transferred after verification under the published payout rules; no profit or pass result is guaranteed.</label>"
         "<p><a href='/moj-prop/rules/'>Full simulation rules</a> · "

@@ -173,6 +173,10 @@ def issue_invoice(
     if terms_accepted is not True:
         raise Starter30PaymentRejected("simulation disclosure must be accepted")
     verify_pre_invoice_configuration()
+    if type(payer_address) is not str or not payer_address.strip():
+        raise Starter30PaymentRejected(
+            "sending TRON wallet is required when one receive-only wallet is used"
+        )
     from prop_firm.starter30_checkout_email import (
         CheckoutEmailUnavailable, verify_checkout_email_proof,
     )

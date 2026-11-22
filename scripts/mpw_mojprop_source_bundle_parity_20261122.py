@@ -26,14 +26,14 @@ REQUIRED = {
     "prop_firm/simulation_policy.py": "15c5771e340315ebd649f92224ddd9bce138a256",
     "prop_firm/rules.py": "550269ebf2de3e2f1b50ade0939680597845e224",
     "prop_firm/simulation_payout.py": "fcb94c6bed91554aa58ad8943bebc71061748924",
-    "prop_firm/starter30_paid_admission.py": "7d2d31b606375db431df948328d79048c36c75b7",
+    "prop_firm/starter30_paid_admission.py": "3668de1fd9741d96e15fd6a999432b8a8107540b",
     "prop_firm/policy_integrity.py": "68dfaf2a31e6f63f2c25f8eea93843f27f73d7d8",
-    "prop_firm/starter30_live.py": "cee61912514216e2e1b561c2f73b9ff7a3e25d97",
+    "prop_firm/starter30_live.py": "91e06d6cb463c7c8ed34949f2e0a6d5975e9cc2a",
     "prop_firm/customer_portal_views.py": "7d4d087a0ac03d6b445b495cf6702db5a00579d5",
-    "prop_firm/models.py": "cc668e879ad7f730d08732f0284f1c8979d7987e",
+    "prop_firm/models.py": "5576f0d29347e4ee41af6d63cb385583815bd03e",
     "prop_firm/simulation_identity_adapter.py": "0b4e6bf2050634816314b0ced5b8e424f5a5d2ad",
     "prop_firm/starter30_checkout_email.py": "dc6cdf6daae0b3649a1db4811f4aa3834e37df38",
-    "prop_firm/starter30_receiver_pool.py": "2e34e773846fc8903915a784bf3d07de5a411014",
+    "prop_firm/starter30_receiver_pool.py": "60d413881e61cad3b31902acb73b7188a52f0394",
     "config/mojprop_db_router.py": "9c0763798778b9de8037ade341fd96b6d6de49d7",
 }
 EXPECTED_COUNT = 12

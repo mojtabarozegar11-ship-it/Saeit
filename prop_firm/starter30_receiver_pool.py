@@ -29,6 +29,16 @@ _MAX_POOL_SIZE = 256
 
 def attested_receivers() -> tuple[str, ...]:
     """Return only owner-attested public addresses, never wallet secrets."""
+    # Owner explicitly selected one shared receive-only wallet. In this mode
+    # payer-wallet binding is mandatory and the wallet is never used as reserve.
+    if getattr(settings, "MPW_MOJPROP_SINGLE_RECEIVER_MODE", False) is True:
+        ref = getattr(settings, "MPW_MOJPROP_SINGLE_RECEIVER_CONTROL_REF", "")
+        if type(ref) is not str or _ATTESTATION.fullmatch(ref) is None:
+            raise InvoiceAttributionUnavailable("single receiver control evidence is missing")
+        try:
+            return (approved_recipient(),)
+        except Exception as exc:
+            raise InvoiceAttributionUnavailable("merchant wallet configuration is unavailable") from exc
     if getattr(settings, "MPW_MOJPROP_INVOICE_ADDRESS_POOL_VERIFIED", False) is not True:
         raise InvoiceAttributionUnavailable("invoice-specific receiving addresses are not approved")
     ref = getattr(settings, "MPW_MOJPROP_INVOICE_ADDRESS_CONTROL_REF", "")
@@ -67,6 +77,10 @@ def select_unused_receiver(pool: tuple[str, ...], used: set[str]) -> str:
     """Deterministic public-address selection, with DB uniqueness as final gate."""
     if type(pool) is not tuple or type(used) is not set:
         raise InvoiceAttributionUnavailable("untrusted receiver allocation data")
+    # In single-receiver mode the same owner wallet is deliberately reused;
+    # mandatory payer binding and the unique txid provide attribution.
+    if len(pool) == 1:
+        return pool[0]
     for address in pool:
         if address not in used:
             return address

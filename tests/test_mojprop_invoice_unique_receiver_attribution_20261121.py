@@ -125,9 +125,23 @@ class InvoiceReceiverAttributionTests(SimpleTestCase):
                     recorded_recipient=self.SHARED, onchain_recipient=self.SHARED
                 )
 
-    def test_database_schema_enforces_one_receiver_for_all_time(self):
-        self.assertIs(PropSimulationPayment._meta.get_field("recipient").unique, True)
+    def test_database_schema_uses_single_owner_receiver_and_unique_txid(self):
+        # Single-receiver mode deliberately reuses the one owner wallet; payer
+        # binding plus exact dual-RPC proof identifies each invoice.
+        self.assertIs(PropSimulationPayment._meta.get_field("recipient").unique, False)
         self.assertIs(PropSimulationPayment._meta.get_field("txid").unique, True)
+
+    def test_single_receiver_mode_exposes_only_owner_wallet(self):
+        with self.config(
+            MPW_MOJPROP_SINGLE_RECEIVER_MODE=True,
+            MPW_MOJPROP_SINGLE_RECEIVER_CONTROL_REF="single-receiver-offline-proof-20261122",
+        ):
+            self.assertEqual(pool.attested_receivers(), (self.SHARED,))
+            self.assertEqual(pool.select_unused_receiver((self.SHARED,), {self.SHARED}), self.SHARED)
+            self.assertIsNone(pool.require_payment_binding(
+                recorded_recipient=self.SHARED,
+                onchain_recipient=self.SHARED,
+            ))
 
     def test_live_issue_path_uses_unique_receiver_atomically(self):
         source = inspect.getsource(starter30_live.issue_invoice)

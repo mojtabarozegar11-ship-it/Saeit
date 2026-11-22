@@ -136,9 +136,20 @@ def require_live_unique_invoice_recipient_schema() -> None:
 
         conn = connections[MOJPROP_DB_ALIAS]
         with conn.cursor() as cursor:
-            constraints = conn.introspection.get_constraints(
-                cursor, PropSimulationPayment._meta.db_table,
-            )
+            table_name = PropSimulationPayment._meta.db_table
+            constraints = conn.introspection.get_constraints(cursor, table_name)
+            if getattr(settings, "MPW_MOJPROP_SINGLE_RECEIVER_MODE", False) is True:
+                columns = {
+                    column.name
+                    for column in conn.introspection.get_table_description(cursor, table_name)
+                }
+                if "payer_hex41" not in columns:
+                    raise Starter30PaidAdmissionHold(
+                        "single-receiver mode requires payer-wallet binding column"
+                    )
+                # One receive-only wallet is intentional; payer binding,
+                # exact amount, dual-RPC finality and unique txid provide attribution.
+                return
     except Exception as exc:
         raise Starter30PaidAdmissionHold(
             "Starter30 payment database uniqueness cannot be verified"

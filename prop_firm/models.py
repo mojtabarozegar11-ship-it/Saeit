@@ -279,7 +279,9 @@ class PropSimulationPayment(models.Model):
     payment_ref = models.CharField(max_length=96, unique=True)
     product = models.CharField(max_length=48, default="MOJPROP-STARTER30")
     network = models.CharField(max_length=32, default="tron-mainnet")
-    recipient = models.CharField(max_length=64, unique=True)
+    # One owner-approved receiving wallet is shared by all invoices. Invoice attribution
+    # is enforced by mandatory payer-wallet binding and unique transaction IDs.
+    recipient = models.CharField(max_length=64, unique=False)
     amount_sun = models.PositiveBigIntegerField(default=30_000_000)
     payer_hex41 = models.CharField(max_length=42, null=True, blank=True)
     issued_at = models.DateTimeField()

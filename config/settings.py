@@ -133,6 +133,44 @@ MPW_MOJPROP_TRX_RPC_ATTESTED = env.bool(
     "MPW_MOJPROP_TRX_RPC_ATTESTED", default=False
 )
 
+# Owner-selected single receive-only wallet mode. Payer wallet binding is
+# mandatory in this mode; the reserve wallet is never used for customer intake.
+MPW_MOJPROP_SINGLE_RECEIVER_MODE = env.bool(
+    "MPW_MOJPROP_SINGLE_RECEIVER_MODE", default=False
+)
+MPW_MOJPROP_SINGLE_RECEIVER_CONTROL_REF = env(
+    "MPW_MOJPROP_SINGLE_RECEIVER_CONTROL_REF", default=""
+)
+MPW_MOJPROP_REWARD_RESERVE_WALLET = env(
+    "MPW_MOJPROP_REWARD_RESERVE_WALLET", default=""
+)
+MPW_MOJPROP_REWARD_RESERVE_ASSET = env(
+    "MPW_MOJPROP_REWARD_RESERVE_ASSET", default=""
+)
+
+# Owner-attested commercial admission evidence. Values are never rendered.
+MPW_MOJPROP_PAID_RULES_FINALLY_APPROVED = env.bool(
+    "MPW_MOJPROP_PAID_RULES_FINALLY_APPROVED", default=False
+)
+MPW_MOJPROP_WRITTEN_PAID_TERMS_VERIFIED = env.bool(
+    "MPW_MOJPROP_WRITTEN_PAID_TERMS_VERIFIED", default=False
+)
+MPW_MOJPROP_QUALIFIED_PAYOUT_RESERVE_VERIFIED = env.bool(
+    "MPW_MOJPROP_QUALIFIED_PAYOUT_RESERVE_VERIFIED", default=False
+)
+MPW_MOJPROP_REAL_REWARD_SETTLEMENT_VERIFIED = env.bool(
+    "MPW_MOJPROP_REAL_REWARD_SETTLEMENT_VERIFIED", default=False
+)
+MPW_MOJPROP_PAID_TERMS_EVIDENCE_REF = env(
+    "MPW_MOJPROP_PAID_TERMS_EVIDENCE_REF", default=""
+)
+MPW_MOJPROP_REWARD_RESERVE_EVIDENCE_REF = env(
+    "MPW_MOJPROP_REWARD_RESERVE_EVIDENCE_REF", default=""
+)
+MPW_MOJPROP_REWARD_SETTLEMENT_EVIDENCE_REF = env(
+    "MPW_MOJPROP_REWARD_SETTLEMENT_EVIDENCE_REF", default=""
+)
+
 # Commercial release evidence gates. These are intentionally independent of
 # generic release booleans: a configured flag cannot substitute for proof of
 # seller eligibility, custody, funded reward reserve, settlement rail or
