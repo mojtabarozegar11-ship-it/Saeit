@@ -2,7 +2,7 @@
 """Read-only Moj Prop source parity gate for the manually routed owner cPanel app.
 
 This is deliberately NOT a deployer and is NOT a financial admission gate.
-It reads five selected source files to expose a *known* class of mixed-version
+It reads seven selected source files to expose a *known* class of mixed-version
 release that could make the live rules and the buyer's promised terms diverge.
 A source match does NOT prove active LSWSGI processes reloaded, legal eligibility,
 an invoice, company reward reserves, settled blockchain transfers or delivery.
@@ -24,12 +24,14 @@ PUBLIC_EFFECTIVE_ROOT = Path("/home/zomorod2/Saeit-mojplaywin-integrated-2026111
 # mainline parity from a runtime environment variable or a Django release flag.
 REQUIRED = {
     "prop_firm/simulation_policy.py": "15c5771e340315ebd649f92224ddd9bce138a256",
+    "prop_firm/rules.py": "550269ebf2de3e2f1b50ade0939680597845e224",
+    "prop_firm/simulation_payout.py": "e79a9677a14f5c2813d4f4e3b4d3622bb62474eb",
     "prop_firm/starter30_paid_admission.py": "663bbde80fbe867a644589bc687bbed2840125af",
     "prop_firm/policy_integrity.py": "68dfaf2a31e6f63f2c25f8eea93843f27f73d7d8",
     "prop_firm/starter30_live.py": "3c006d15dd6b35d5128ec3af7d03def28841b8e4",
     "prop_firm/customer_portal_views.py": "f918d8b6645dd168014e6a2dd718bd851afc7884",
 }
-EXPECTED_COUNT = 5
+EXPECTED_COUNT = 7
 
 
 def git_blob(raw: bytes) -> str:
@@ -63,7 +65,7 @@ def check_bundle(root: Path) -> dict:
         })
     match_count = sum(row["status"] == "MATCH" for row in rows)
     summary = {
-        "scope": "exactly_five_production_source_files_only",
+        "scope": "exactly_seven_production_source_files_only",
         "source_root": str(root),
         "checked": len(rows),
         "matched": match_count,
