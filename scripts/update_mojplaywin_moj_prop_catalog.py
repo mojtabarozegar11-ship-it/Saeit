@@ -68,7 +68,8 @@ OWNER_LIVE_CATALOG_MARKERS = (
 # replaced only by the approved payment-status page in this release.
 OWNER_LIVE_PAYMENT_MARKERS = (
     b"BUYER PAYMENT AND REWARD POLICY",
-    b"Current operational disclosure: the Starter30 checkout is currently unavailable.",
+    b"Current operational disclosure:",
+    b"Starter30 checkout is currently unavailable.",
     b"Do not use a copied wallet or send USDT instead.",
 )
 
