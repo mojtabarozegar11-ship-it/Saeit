@@ -37,13 +37,16 @@ class Starter30NavigationAndPaymentCopyTests(unittest.TestCase):
                 self.assertIn(marker, source)
         self.assertEqual(source.count('id="starter30-featured"'), 1)
 
-    def test_moj_prop_separates_plan1_prelaunch_from_starter30_payment(self):
+    def test_moj_prop_removes_free_plan_and_explains_paid_virtual_progression(self):
         source = MOJ_PROP.read_text(encoding="utf-8")
         self.assertIn('href="/moj-prop/starter-30-trx/">Open the canonical Starter30 page', source)
         self.assertIn('href="/moj-prop/rules/">Read the published Starter30 rules', source)
-        self.assertIn("MOJ-PROP-01 (the proposed two-stage simulated evaluation route) remains prelaunch", source)
-        self.assertIn("Starter30 — Free written terms", source)
-        self.assertNotIn("Starter 30 — 30 TRX</a>", source)
+        self.assertNotIn("Plan 1", source)
+        self.assertNotIn("MOJ-PROP-01", source)
+        self.assertIn("30 TRX INITIAL ENTRY", source)
+        self.assertIn("$100,000 virtual", source)
+        self.assertIn("Starter30 · 30 TRX plan", source)
+        self.assertIn("14 SIMULATED LEVELS", source)
         self.assertIn("Starter30 payment:", source)
         self.assertNotIn("paid challenges, live accounts, KYC, automatic payment and profit guarantees are not active", source)
 
