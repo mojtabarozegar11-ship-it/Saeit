@@ -51,6 +51,17 @@ class FactoryWorkerCompatibility:
         self.factory_executor = factory_executor
         self.runtime = TaskRuntime()
 
+    @staticmethod
+    def _require_runtime_schema():
+        # Validate before select_related(), which otherwise raises a raw
+        # FieldError if the source AgentTask lacks VPS-only factory relations.
+        fields = {field.name for field in AgentTask._meta.get_fields()}
+        if not {"factory_run", "product", "environment"}.issubset(fields):
+            raise FactoryWorkerCompatibilityError(
+                "Factory AgentTask model lacks run/product/environment relations; "
+                "reconcile source and runtime before execution"
+            )
+
     @classmethod
     def _verify_native_product_binding(cls, task):
         # The Django FactoryRun table has hundreds of historical "active" rows.
@@ -104,7 +115,20 @@ class FactoryWorkerCompatibility:
             raise FactoryWorkerCompatibilityError("Factory task is not queued")
         if task.attempt_count >= task.max_attempts:
             raise FactoryWorkerCompatibilityError("Factory task retry budget is exhausted")
-        if task.next_retry_at and task.next_retry_at > timezone.now():
+        # The checked-in AgentTask model and some VPS-local factory schemas
+        # differ. Never let a missing relation crash after a task is claimed,
+        # or treat source-only fields as evidence of a verified factory run.
+        required_binding_fields = (
+            "factory_run_id", "product_id", "factory_run", "product", "environment"
+        )
+        if any(not hasattr(task, field) for field in required_binding_fields):
+            raise FactoryWorkerCompatibilityError(
+                "Factory task schema lacks required run/product binding; reconcile runtime first"
+            )
+        # A retry timestamp is optional in the legacy AgentTask schema. When
+        # present, retain its backoff gate; retries remain attempt-bounded.
+        retry_at = getattr(task, "next_retry_at", None)
+        if retry_at is not None and retry_at > timezone.now():
             raise FactoryWorkerCompatibilityError("Factory task retry backoff is not due")
         if not task.factory_run_id or not task.product_id:
             raise FactoryWorkerCompatibilityError("Factory task has no existing Product and Run")
@@ -158,6 +182,7 @@ class FactoryWorkerCompatibility:
     def run(self, task_id):
         # Preflight is outside claim and never consumes an attempt for an
         # orphaned task. The same checks are repeated while holding locks.
+        self._require_runtime_schema()
         task = AgentTask.objects.select_related("factory_run", "product").get(pk=task_id)
         self._preflight(task)
         with transaction.atomic():
