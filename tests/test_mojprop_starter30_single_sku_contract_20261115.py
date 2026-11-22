@@ -86,7 +86,7 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertEqual(self.detail.count('<script type="application/ld+json">'), 1)
         self.assertIn('<script defer src="/mpw-measure/tracker.js"></script>', self.detail)
         self.assertIn('<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>', self.detail)
-        self.assertIn("Pay only through the server-issued 30 TRX invoice", self.detail)
+        self.assertIn("Payment must use only the secure checkout", self.detail)
         self.assertEqual(lower.count("<form"), 1)
         self.assertIn('<form action="/mojprop-starter30-status/" method="get"', self.detail)
         self.assertNotIn('method="post"', lower)
