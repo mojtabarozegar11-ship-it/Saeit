@@ -3,6 +3,7 @@
 No external traffic, payment, email, live market prices, or trading is generated.
 """
 import json
+from html import escape as html_escape
 from pathlib import Path
 
 from django.conf import settings
@@ -58,14 +59,14 @@ class FreeSignalPageContracts(SimpleTestCase):
 
     @override_settings(ALLOWED_HOSTS=("testserver", "mojplaywin.com", "zomorodmelal.ir"))
     def test_17_brands_and_arabic_routes_preserve_paid_and_free_destinations(self):
-        self.assertEqual(SIGNAL_FREE_PREVIEW_PATH, "https://mojplaywin.com/moj-prop/signals/#free-preview")
+        self.assertEqual(SIGNAL_FREE_PREVIEW_PATH, "https://mojplaywin.com/moj-prop/signals/")
         for slug, *_ in BRANDS:
             for path in (f"/{slug}/market-signals/", f"/ar/{slug}/market-signals/"):
                 with self.subTest(path=path):
                     response = self.client.get(path)
                     self.assertEqual(response.status_code, 200)
                     html = response.content.decode("utf-8")
-                    self.assertEqual(html.count('href="'+SIGNAL_INTAKE_PATH+'"'), 2)
+                    self.assertEqual(html.count('href="'+html_escape(SIGNAL_INTAKE_PATH, quote=True)+'"'), 2)
                     self.assertEqual(html.count('href="'+SIGNAL_FREE_PREVIEW_PATH+'"'), 1)
                     self.assertIn("mojtaba.bot.ai", html.casefold())
 
