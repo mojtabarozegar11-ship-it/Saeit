@@ -24,9 +24,9 @@ BEFORE = BUNDLE / "signals-index.before.html"
 MANIFEST = BUNDLE / "manifest.json"
 
 BASE_SHA256 = "7ebd4931efb3594f334ee5867ab5974db4275742c11b277ae918b94dd32df4c6"
-NEXT_SHA256 = "7ee5d3fb4f57edb3147c304e96c9d15302f480b24f4d3e06fdedfd5e424e3492"
+NEXT_SHA256 = "f60ea4b001e496d4e5c7536aa3b4036f9c0a106b032663039fbf621692fc74bf"
 BASE_BYTES = 5544
-NEXT_BYTES = 6223
+NEXT_BYTES = 6228
 H1_OLD = b"<h1>Signals without illusion.</h1>"
 H1_NEW = b"<h1>Educational trading signal examples and market analysis</h1>"
 EDGE_OLD = b'</div></section><section class="grid">'
@@ -38,7 +38,7 @@ EDGE_NEW = (
     b'Example message: &quot;Please send the educational Signal Desk scope, sample and pricing.&quot;'
     b'</p><p><a href="/moj-prop-intake/?format=html&amp;service=signals'
     b'&amp;utm_source=moj_prop&amp;utm_medium=onsite'
-    b'&amp;utm_campaign=signal_desk_primary_cta_20261122&amp;utm_content=hero">'
+    b'&amp;utm_campaign=signals_education_lead_20261121&amp;utm_content=signal_nav">'
     b'Request written Signal Desk proposal - no payment</a></p></section>'
     b'<section class="grid">'
 )
