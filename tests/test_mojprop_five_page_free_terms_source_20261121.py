@@ -35,7 +35,7 @@ class EnglishFreeTermsSourceParityTests(unittest.TestCase):
         self.assertIn('id="scaling-path"', content)
         self.assertIn("virtual, not withdrawable principal", content)
         self.assertIn("Promotion is never automatic.", content)
-        actual = re.findall(r"<li>Level ([0-9]+) — \\$([0-9,]+) virtual</li>", content)
+        actual = re.findall(r"<li>Level ([0-9]+) — \$([0-9,]+) virtual</li>", content)
         expected = [(str(i + 1), n) for i, n in enumerate((
             "1,000", "1,500", "2,000", "3,000", "5,000", "7,500",
             "10,000", "15,000", "20,000", "35,000", "50,000",
