@@ -25,7 +25,7 @@ PUBLIC_EFFECTIVE_ROOT = Path("/home/zomorod2/Saeit-mojplaywin-integrated-2026111
 REQUIRED = {
     "prop_firm/simulation_policy.py": "15c5771e340315ebd649f92224ddd9bce138a256",
     "prop_firm/rules.py": "550269ebf2de3e2f1b50ade0939680597845e224",
-    "prop_firm/simulation_payout.py": "e79a9677a14f5c2813d4f4e3b4d3622bb62474eb",
+    "prop_firm/simulation_payout.py": "fcb94c6bed91554aa58ad8943bebc71061748924",
     "prop_firm/starter30_paid_admission.py": "663bbde80fbe867a644589bc687bbed2840125af",
     "prop_firm/policy_integrity.py": "68dfaf2a31e6f63f2c25f8eea93843f27f73d7d8",
     "prop_firm/starter30_live.py": "3c006d15dd6b35d5128ec3af7d03def28841b8e4",
