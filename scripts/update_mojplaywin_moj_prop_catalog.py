@@ -22,7 +22,7 @@ from pathlib import Path
 HOME = Path("/home/zomorod2")
 DOCROOT = HOME / "mojplaywin.com"
 ROUTE = DOCROOT / "moj-prop"
-BACKUPS = HOME / ".mojplaywin-backups"
+BACKUPS = HOME / ".mojplaywin-moj-prop-backups"
 HTML_FILES = (
     Path("index.html"),
     Path("samples/prop-blueprint/index.html"),
