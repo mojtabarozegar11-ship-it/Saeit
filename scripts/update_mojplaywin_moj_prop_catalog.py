@@ -43,7 +43,13 @@ STARTER30_FILES = (
 # A real owner-edited Signal Desk was observed on cPanel (unknown hash).
 # Starter30 release is strictly *not* authorized to rewrite that separate page.
 PRESERVED_LIVE_FILES = (Path("signals/index.html"),)
-FILES = tuple(x for x in HTML_FILES if x not in PRESERVED_LIVE_FILES) + STARTER30_FILES
+# The live home is an owner-maintained commercial shell. It already exposes
+# the reviewed Moj Prop routes, but it differs from this catalog payload; never
+# replace it as part of a static-only catalog release.
+FILES = tuple(
+    x for x in HTML_FILES
+    if x not in PRESERVED_LIVE_FILES and x != Path("index.html")
+) + STARTER30_FILES
 MANIFEST_SCHEMA = "mojprop.static.starter30.v3-preserve-signals"
 BASELINE_CATALOG = Path("baselines/catalog-index-v4.html")
 BASELINE_HOME = Path("baselines/index-v4.html")
