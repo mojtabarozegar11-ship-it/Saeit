@@ -29,8 +29,8 @@ GOLD_RESEARCH_APPROVED_LINKS=frozenset((
     "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_real_yield_curve",
     "https://www.gold.org/goldhub/research/gold-demand-trends/gold-demand-trends-q3-2026/outlook",
     "https://www.elibrary.imf.org/view/journals/068/2026/007/article-A001-en.xml",
-    "https://mojplaywin.com/mojtaba.bot.ai/",
-    "https://mojplaywin.com/moj-prop-intake/?format=html&service=signals",
+    "https://mojplaywin.com/mojtaba.bot.ai/?utm_source=github&utm_medium=organic_referral&utm_campaign=gold_macro_q4_20261122",
+    "https://mojplaywin.com/moj-prop-intake/?format=html&service=signals&utm_source=github&utm_medium=organic_referral&utm_campaign=gold_macro_q4_20261122",
 ))
 
 class MojPropEducationPublicationTests(unittest.TestCase):
