@@ -68,8 +68,66 @@ jobs:
           d="$RUNNER_TEMP/sqlite-restore-proof"
           src="/home/githubops/factory-runtime/operations/backups/master-before-20261105T210434Z.sqlite3"
           dst="/home/zomorod2/restore-staging/factory/master-before-20261105T210434Z.sqlite3"
+          # Never overwrite a previous interrupted transfer. A host-level df
+          # is not the same as the cPanel account quota; require BOTH gates.
           ssh -F "$d/config" saeit-vps "test -f '$src'; stat -c 'SOURCE_BYTES=%s SOURCE_MTIME=%Y' '$src'"
-          ssh -F "$d/config" saeit-cpanel "install -d -m 700 /home/zomorod2/restore-staging/factory; rm -f -- '$dst'"
+          source_bytes="$(ssh -F "$d/config" saeit-vps "stat -c %s '$src'")"
+          [[ "$source_bytes" =~ ^[0-9]+$ ]]
+          ssh -T -F "$d/config" saeit-cpanel "python3 - '$source_bytes'" <<'PY'
+          import json, os, shutil, stat, subprocess, sys
+          from pathlib import Path
+          source_bytes = int(sys.argv[1])
+          home = Path("/home/zomorod2")
+          destination = home/"restore-staging/factory/master-before-20261105T210434Z.sqlite3"
+          if source_bytes <= 0 or home.is_symlink() or not home.is_dir():
+              raise SystemExit("RESTORE_PREFLIGHT_INVALID_SOURCE_OR_HOME")
+          for ancestor in (destination.parent, destination.parent.parent):
+              if ancestor.is_symlink():
+                  raise SystemExit("RESTORE_PREFLIGHT_SYMLINK_PARENT")
+          if os.path.lexists(destination):
+              info = destination.lstat()
+              print("CPANEL_RESTORE_DESTINATION_ALREADY_PRESENT=1", flush=True)
+              print("CPANEL_RESTORE_DESTINATION_BYTES="+str(info.st_size), flush=True)
+              raise SystemExit("RESTORE_PREFLIGHT_EXISTING_PARTIAL_REVIEW_REQUIRED")
+          fs = os.statvfs(home)
+          filesystem_free = fs.f_bavail * fs.f_frsize
+          required_fs_free = source_bytes + 2 * 1024**3
+          print("CPANEL_FILESYSTEM_FREE_BYTES="+str(filesystem_free), flush=True)
+          if filesystem_free < required_fs_free:
+              raise SystemExit("RESTORE_PREFLIGHT_FILESYSTEM_SPACE_INSUFFICIENT")
+          # cPanel account quotas are not reliably reflected in statvfs/df.
+          cpapi2 = shutil.which("cpapi2")
+          if cpapi2 is None and Path("/usr/local/cpanel/bin/cpapi2").is_file():
+              cpapi2 = "/usr/local/cpanel/bin/cpapi2"
+          if not cpapi2:
+              raise SystemExit("RESTORE_PREFLIGHT_ACCOUNT_QUOTA_UNAVAILABLE")
+          result = subprocess.run(
+              [cpapi2, "--user=zomorod2", "DiskUsage", "fetchdiskusagewithextras"],
+              capture_output=True, text=True, timeout=40, check=False,
+          )
+          if result.returncode != 0:
+              raise SystemExit("RESTORE_PREFLIGHT_ACCOUNT_QUOTA_QUERY_FAILED")
+          try:
+              payload = json.loads(result.stdout)
+              info = payload["cpanelresult"]["data"][0]
+              quota_used = int(info["quotaused"])
+              quota_limit = info["quotalimit"]
+          except (ValueError, TypeError, KeyError, IndexError) as exc:
+              raise SystemExit("RESTORE_PREFLIGHT_ACCOUNT_QUOTA_UNPARSEABLE") from exc
+          if quota_limit in (None, "", "unlimited"):
+              print("CPANEL_ACCOUNT_QUOTA_UNLIMITED=1", flush=True)
+          else:
+              try:
+                  limit = int(quota_limit)
+              except (ValueError, TypeError) as exc:
+                  raise SystemExit("RESTORE_PREFLIGHT_ACCOUNT_QUOTA_INVALID") from exc
+              account_free = limit - quota_used
+              print("CPANEL_ACCOUNT_FREE_BYTES="+str(account_free), flush=True)
+              if limit <= 0 or quota_used < 0 or account_free < source_bytes + 1024**3:
+                  raise SystemExit("RESTORE_PREFLIGHT_ACCOUNT_QUOTA_INSUFFICIENT")
+          print("CPANEL_RESTORE_PREFLIGHT_PASSED=1", flush=True)
+          PY
+          ssh -F "$d/config" saeit-cpanel "install -d -m 700 /home/zomorod2/restore-staging/factory; test ! -e '$dst'; test ! -L '$dst'"
           timeout 780s bash -o pipefail -c "ssh -F '$d/config' saeit-vps 'cat -- "$src"' | ssh -F '$d/config' saeit-cpanel 'umask 077; cat > "$dst"'"
           ssh -F "$d/config" saeit-vps "sha256sum '$src'"
           ssh -F "$d/config" saeit-cpanel "sha256sum '$dst'; stat -c 'RESTORED_BYTES=%s' '$dst'"
