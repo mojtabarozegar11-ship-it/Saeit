@@ -214,9 +214,16 @@ def verify_private_backup_root(*, create: bool) -> None:
     if BACKUPS.exists():
         info = BACKUPS.lstat()
         if (not stat.S_ISDIR(info.st_mode)
-                or info.st_uid != os.geteuid()
-                or info.st_mode & 0o077):
-            raise RuntimeError("Untrusted Moj Prop backup root owner or mode")
+                or info.st_uid != os.geteuid()):
+            raise RuntimeError("Untrusted Moj Prop backup root owner or type")
+        if info.st_mode & 0o077:
+            # This is an isolated Moj Prop directory, not the legacy shared
+            # backup root. Tighten only this owner-correct directory; never
+            # chmod an unrelated existing host directory.
+            os.chmod(BACKUPS, 0o700)
+            info = BACKUPS.lstat()
+            if info.st_mode & 0o077:
+                raise RuntimeError("Untrusted Moj Prop backup root mode")
     elif create:
         BACKUPS.mkdir(mode=0o700)
         verify_private_backup_root(create=False)
