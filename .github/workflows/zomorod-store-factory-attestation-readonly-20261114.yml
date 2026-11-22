@@ -1,0 +1,53 @@
+name: Zomorod factory cPanel source attestation - reviewed manual only
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/zomorod-store-factory-attestation-readonly-20261114.yml'
+      - 'scripts/zomorod_cpanel_store_factory_attest_readonly_20261114.sh'
+      - 'tests/test_zomorod_store_factory_attest_readonly_20261114.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-factory-store-attestation-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  source-contract-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline safety tests; no secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/zomorod_cpanel_store_factory_attest_readonly_20261114.sh
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_store_factory_attest_readonly_20261114.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_cpanel_store_provenance_readonly_20261114.py' -v
+  manual-main-factory-attestation:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Read exact cPanel PHP through existing pinned direct factory route
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash scripts/zomorod_cpanel_store_factory_attest_readonly_20261114.sh
+      - name: Save sanitized evidence without private module hash
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zm-factory-cpanel-store-source-attestation
+          path: ${{ runner.temp }}/zm-factory-store-source.jsonl
+          retention-days: 7
+          if-no-files-found: warn
