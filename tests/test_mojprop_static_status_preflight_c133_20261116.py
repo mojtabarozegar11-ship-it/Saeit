@@ -97,7 +97,14 @@ class StatusPreflightReleaseTests(unittest.TestCase):
         self.assertIn("github.event_name == 'workflow_dispatch'", src)
         self.assertIn("MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED", src)
         self.assertIn("MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED", src)
-        self.assertIn("MOJPROP_STATIC_APPROVED_MAIN_SHA == github.sha", src)
+        for marker in (
+            "github.actor == 'mojtabarozegar11-ship-it'",
+            "github.ref == 'refs/heads/main'",
+            "vars.MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED == 'true'",
+            "vars.MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED == 'true'",
+            "vars.MOJPROP_STATIC_ROLLBACK_VERIFIED == 'true'",
+        ):
+            self.assertIn(marker, src)
         self.assertIn("inputs.owner_approved_static_release == true", src)
 
 
