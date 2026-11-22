@@ -133,6 +133,40 @@ class MojPropTwoBranchArchiveProofTests(TestCase):
         self.assertNotIn("subprocess.run(", source)
 
 
+    def test_11_archive_lineage_reads_multiline_values_without_leaking_rows(self):
+        names = list(MOD.LEGACY) + list(MOD.ISOLATED)[:5]
+        header = b"CREATE TABLE " + bytes([96]) + b"django_migrations" + bytes([96]) + b" (id int);\n"
+        payload = (b"INSERT INTO " + bytes([96]) + b"django_migrations" + bytes([96])
+                   + b" VALUES\n" + b",\n".join(
+                       ("('prop_firm','" + name + "')").encode() for name in names
+                   ) + b";\n")
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "historical.sql.gz"
+            with gzip.open(path, "wb") as f:
+                f.write(header + payload)
+            os.chmod(path, 0o600)
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            result = MOD.inspect_archive(path, digest, {"django_migrations"})
+            self.assertTrue(result["archived_migration_names_15_of_15"])
+            self.assertFalse(result["archived_unique_receiver_marked_applied"])
+            self.assertFalse(result["rehearsed_independent_restore"])
+
+    def test_12_backup_migration_records_must_not_claim_unique_was_applied(self):
+        marker = b"INSERT INTO " + bytes([96]) + b"django_migrations" + bytes([96])
+        sql = (b"CREATE TABLE " + bytes([96]) + b"django_migrations" + bytes([96])
+               + b" (id int);\n" + marker +
+               b" VALUES\n('prop_firm','0006_unique_invoice_receivers');\n")
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "unique-not-applied.sql.gz"
+            with gzip.open(path, "wb") as f:
+                f.write(sql)
+            os.chmod(path, 0o600)
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            result = MOD.inspect_archive(path, digest, {"django_migrations"})
+            self.assertFalse(result["archived_migration_names_15_of_15"])
+            self.assertTrue(result["archived_unique_receiver_marked_applied"])
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()
