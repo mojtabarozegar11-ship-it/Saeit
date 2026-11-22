@@ -99,11 +99,13 @@ class ProtectedSubsiteDeployLockTests(unittest.TestCase):
                         filename == "mojplaywin-moj-prop-deploy.yml"
                     ),
                 ))
-                unsafe = source.replace(
-                    "if: github.event_name == 'workflow_dispatch'",
-                    "if: github.event_name == 'push'",
-                    1,
-                )
+                # Tamper with the real guarded condition, whether the
+                # workflow uses raw YAML or the wrapped GitHub expression.
+                # Refuse no-op mutations in this negative security case.
+                dispatch = "github.event_name == 'workflow_dispatch'"
+                self.assertIn(dispatch, source)
+                unsafe = source.replace(dispatch, "github.event_name == 'push'", 1)
+                self.assertNotEqual(unsafe, source)
                 self.assertFalse(manual_release_job_guarded(
                     unsafe, header, job,
                     require_static_owner_approval=(
