@@ -2,7 +2,7 @@
 
 > **Moj Prop educational resource** · Simulated trading and purchase safety. This is not investment advice, a profit guarantee, or proof of a completed payout.
 
-**Educational product information — check the current official terms before ordering.** Starter 30 is a *simulated* evaluation, not a real brokerage account, investment deposit, or custody of customer trading capital. This guide reflects publicly visible product information checked on 21 November 2026; it does not certify payment settlement, challenge outcomes, or reward transfers.
+**Educational product information — check the current official terms before ordering.** Starter 30 is a *simulated* evaluation, not a real brokerage account, investment deposit, or custody of customer trading capital. This guide distinguishes live publicly visible information from the owner-approved source-policy conditions checked on 22 November 2026; neither certifies payment settlement, challenge outcomes, a financed reward reserve or actual transfers.
 
 ## At a glance
 
@@ -20,6 +20,26 @@
 | What about rewards? | The product describes payment of **100% of qualifying trader-earned profit after a successful pass and verification** under the published payout rules. Publication of terms is not independent proof that a payout has already been made. |
 
 [Read the official Starter 30 product page](https://mojplaywin.com/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=starter30_buyer_guide) · [Review the risk rulebook](https://mojplaywin.com/moj-prop/rules/?utm_source=github&utm_medium=organic_referral&utm_campaign=starter30_buyer_guide)
+
+## Reward-request conditions recorded in the current program policy
+
+The owner-approved **`2026-11-21/simulation-v2` program policy** in `prop_firm/simulation_policy.py` defines these conditions for a **future eligible, admitted and independently verified** simulated challenge. They are **not proof of an operating payout service, an enforceable individual purchase agreement, a reserve, or an already completed transfer**. Before any payment opens, the merchant must publish matching accepted terms, verify each buyer's eligibility and demonstrate an actual funded reward-settlement process.
+
+| Program-policy item | Exact intended condition |
+| --- | --- |
+| Trader's share | **100% of independently verified eligible trader-earned profit**, after passing the simulated evaluation; the company's share of that eligible profit is **0%** |
+| First profit-reward request | Not before **14 days of qualifying activity** in the applicable post-pass simulated stage |
+| Subsequent requests | No more frequently than **once every 14 days**, subject to account verification and the accepted terms |
+| Minimum eligible request | **USD $10** of accepted, eligible trader-earned profit |
+| Payment-transfer network fee | **Paid by the company**, not deducted from the verified trader-entitled reward |
+| Original challenge-entry fee | The **verified, actually paid entry fee** is scheduled for a full refund **with the first successful profit withdrawal**; it is not a promise of a refund for an unsuccessful challenge or a payment before there is a qualifying successful withdrawal |
+| Principal or deposits | The **USD $1,000 is virtual**, cannot be withdrawn, and customer trading deposits are not accepted |
+
+**Eligibility and timing:** These are *request eligibility* windows, **not promises that a transfer will be processed instantly** on the 14th day. A trader must satisfy all contract-version-specific challenge conditions, post-pass verification and reward checks. Actual payment method, identity/jurisdiction checks, dispute process and applicable taxes require written terms before paid enrolment. The native-TRX entry refund must be matched to the actual original paid invoice, so the company cannot credit an invented, unpaid or duplicated fee.
+
+**Important operational status — 22 November 2026:** The official Starter30 checkout is **not accepting enrolments or issuing new invoices**. No verified public reward disbursement or company reward reserve is presented in this guide. **Do not send TRX.** The 100% figure describes the intended company obligation on *eligible realized simulated profit*; it does **not** guarantee profitable performance, an evaluation pass, any entitlement to virtual principal or present availability of transfers. The rate and timing must be incorporated into a verified, buyer-accepted offer before anyone is charged.
+
+[Read the official live payment-status notice](https://mojplaywin.com/moj-prop/payment/?utm_source=github&utm_medium=organic_referral&utm_campaign=starter30_buyer_guide) · [Request complete terms free](https://mojplaywin.com/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx&utm_source=github&utm_medium=organic_referral&utm_campaign=starter30_buyer_guide)
 
 ## Frequently asked questions
 
