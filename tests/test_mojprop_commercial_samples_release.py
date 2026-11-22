@@ -224,34 +224,32 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
             self.assertFalse((self.route / path).exists(), str(path))
 
     def test_corrupted_last_backup_refuses_any_partial_live_restore(self):
-        # Reverse-order rollback would restore catalog BEFORE discovering that
-        # its final saved home/index.html is corrupt. Verify zero live writes.
+        # The live home is preserved and is not part of this release backup.
+        # Corrupt a deployed Starter30 asset and verify zero live writes.
         release.deploy("123", "a" * 40)
         backup = self.backups / "moj-prop-catalog-123"
-        live_home = (self.route / "index.html").read_bytes()
         live_catalog = (self.route / "catalog/index.html").read_bytes()
         live_starter = (self.route / "starter-30-trx/index.html").read_bytes()
-        saved_home = backup / "files/index.html"
-        original = saved_home.read_bytes()
-        saved_home.write_bytes(b"tampered old home")
+        saved_catalog = backup / "files/catalog/index.html"
+        original = saved_catalog.read_bytes()
+        saved_catalog.write_bytes(b"tampered old catalog")
         with self.assertRaisesRegex(RuntimeError, "Backup checksum mismatch before any live change"):
             release.restore(backup)
-        self.assertEqual((self.route / "index.html").read_bytes(), live_home)
         self.assertEqual((self.route / "catalog/index.html").read_bytes(), live_catalog)
         self.assertEqual((self.route / "starter-30-trx/index.html").read_bytes(), live_starter)
-        saved_home.write_bytes(original)
+        saved_catalog.write_bytes(original)
         release.restore(backup)
-        self.assertNotEqual((self.route / "index.html").read_bytes(), live_home)
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
 
     def test_symlinked_saved_home_is_denied_before_rollback_modifies_site(self):
         release.deploy("123", "a" * 40)
         backup = self.backups / "moj-prop-catalog-123"
         live_catalog = (self.route / "catalog/index.html").read_bytes()
-        saved_home = backup / "files/index.html"
-        saved_home.unlink()
+        saved_file = backup / "files/catalog/index.html"
+        saved_file.unlink()
         foreign = self.home / "external-owner-content"
         foreign.write_bytes(b"unrelated tenant content")
-        saved_home.symlink_to(foreign)
+        saved_file.symlink_to(foreign)
         with self.assertRaisesRegex(RuntimeError, "Expected a regular file"):
             release.restore(backup)
         self.assertEqual((self.route / "catalog/index.html").read_bytes(), live_catalog)
@@ -260,12 +258,12 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
     def test_insecure_saved_backup_mode_is_denied_before_rollback(self):
         release.deploy("123", "a" * 40)
         backup = self.backups / "moj-prop-catalog-123"
-        saved = backup / "files/index.html"
+        saved = backup / "files/catalog/index.html"
         saved.chmod(0o644)
-        original_live = (self.route / "index.html").read_bytes()
+        original_live = (self.route / "catalog/index.html").read_bytes()
         with self.assertRaisesRegex(RuntimeError, "Unsafe saved backup owner or permissions"):
             release.restore(backup)
-        self.assertEqual((self.route / "index.html").read_bytes(), original_live)
+        self.assertEqual((self.route / "catalog/index.html").read_bytes(), original_live)
 
     def test_deploy_denies_unverified_saved_bytes_before_publication(self):
         # Even if the backup was corrupted immediately after copying it, the
@@ -282,7 +280,7 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
 
     def test_mismatched_live_starter30_digest_prevents_incorrect_rollback(self):
         release.deploy("123", "a" * 40)
-        buyer_access = self.route / "starter-30-trx/journal-guide.txt"
+        buyer_access = self.route / "catalog/index.html"
         buyer_access.write_bytes(buyer_access.read_bytes() + b"\noperator revision\n")
         with self.assertRaisesRegex(RuntimeError, "subsequently modified"):
             release.restore(self.backups / "moj-prop-catalog-123")
@@ -458,11 +456,13 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         self.assertFalse((self.route / "samples/prop-blueprint/index.html").exists())
         self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
 
-    def test_unauthorized_home_modification_blocks_all_writes(self):
-        (self.route / "index.html").write_text("<title>Changed without approval</title>", "utf-8")
-        with self.assertRaisesRegex(RuntimeError, "Live home differs from approved baseline"):
-            release.deploy("123", "a" * 40)
-        self.assertFalse((self.route / "samples/prop-blueprint/index.html").exists())
+    def test_owner_home_is_preserved_while_catalog_release_proceeds(self):
+        home = (self.route / "index.html")
+        home.write_text("<title>Owner-maintained home</title>", encoding="utf-8")
+        release.deploy("123", "a" * 40)
+        self.assertEqual(home.read_text("utf-8"), "<title>Owner-maintained home</title>")
+        self.assertTrue((self.route / "catalog/index.html").is_file())
+        self.assertTrue((self.route / "starter-30-trx/index.html").is_file())
 
     def test_mutated_live_content_fails_closed_during_rollback(self):
         release.deploy("123", "a" * 40)
