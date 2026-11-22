@@ -25,16 +25,16 @@ PUBLIC_EFFECTIVE_ROOT = Path("/home/zomorod2/Saeit-mojplaywin-integrated-2026111
 REQUIRED = {
     "prop_firm/simulation_policy.py": "15c5771e340315ebd649f92224ddd9bce138a256",
     "prop_firm/rules.py": "550269ebf2de3e2f1b50ade0939680597845e224",
-    "prop_firm/simulation_payout.py": "e79a9677a14f5c2813d4f4e3b4d3622bb62474eb",
+    "prop_firm/simulation_payout.py": "fcb94c6bed91554aa58ad8943bebc71061748924",
     "prop_firm/starter30_paid_admission.py": "7d2d31b606375db431df948328d79048c36c75b7",
     "prop_firm/policy_integrity.py": "68dfaf2a31e6f63f2c25f8eea93843f27f73d7d8",
     "prop_firm/starter30_live.py": "cee61912514216e2e1b561c2f73b9ff7a3e25d97",
-    "prop_firm/customer_portal_views.py": "f918d8b6645dd168014e6a2dd718bd851afc7884",
-    "prop_firm/models.py": "e6e0a50ca29002fdf58133cf7eda5c22dee3c8ac",
+    "prop_firm/customer_portal_views.py": "7d4d087a0ac03d6b445b495cf6702db5a00579d5",
+    "prop_firm/models.py": "cc668e879ad7f730d08732f0284f1c8979d7987e",
     "prop_firm/simulation_identity_adapter.py": "0b4e6bf2050634816314b0ced5b8e424f5a5d2ad",
     "prop_firm/starter30_checkout_email.py": "dc6cdf6daae0b3649a1db4811f4aa3834e37df38",
     "prop_firm/starter30_receiver_pool.py": "2e34e773846fc8903915a784bf3d07de5a411014",
-    "config/mojprop_db_router.py": "d3f255e6a71615ac9f86fcee632eb9b49da0eca8",
+    "config/mojprop_db_router.py": "9c0763798778b9de8037ade341fd96b6d6de49d7",
 }
 EXPECTED_COUNT = 12
 

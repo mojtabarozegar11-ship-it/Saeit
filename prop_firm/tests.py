@@ -1,4 +1,4 @@
-"""Database isolation contract for all seven explicit MOJ PROP models."""
+"""Database isolation contract for all eight explicit MOJ PROP models."""
 from django.contrib.auth import get_user_model
 
 from config.mojprop_db_router import (
@@ -14,6 +14,7 @@ from .models import (
     PropSimulationLoginChallenge,
     PropSimulationPayment,
     PropSimulationPayoutCommitment,
+    PropSimulationStageTransition,
 )
 
 
@@ -25,12 +26,13 @@ ISOLATED_MODELS = (
     PropSimulationEvent,
     PropSimulationPayment,
     PropSimulationPayoutCommitment,
+    PropSimulationStageTransition,
 )
 
 
-def test_exactly_seven_models_are_isolated():
+def test_exactly_eight_models_are_isolated():
     labels = {model._meta.label_lower for model in ISOLATED_MODELS}
-    assert len(labels) == 7
+    assert len(labels) == 8
     assert labels == set(ISOLATED_MODEL_LABELS)
 
 

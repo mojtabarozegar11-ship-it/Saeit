@@ -69,6 +69,10 @@ def commit_full_profit_payout(
             .select_for_update()
             .get(account_ref=account_ref.strip())
         )
+        if account.kind != PropSimulationAccount.Kind.FUNDED_SIMULATION:
+            raise PayoutCommitmentRejected(
+                "only an isolated funded-simulation account can create a payout commitment"
+            )
         if account.status != PropSimulationAccount.Status.PASSED:
             raise PayoutCommitmentRejected(
                 "only a trusted PASSED simulation account can create a payout commitment"

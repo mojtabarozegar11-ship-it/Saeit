@@ -34,6 +34,7 @@ from prop_firm.models import (
     PropSimulationIdentity,
     PropSimulationLoginChallenge,
     PropSimulationPayment,
+    PropSimulationStageTransition,
 )
 from prop_firm.simulation_identity_adapter import (
     IdentityAdapterClosed,
@@ -92,8 +93,26 @@ def _paid_learner_accounts(identity_id: int) -> list[dict]:
         .order_by("-created_at")
         .values(
             "id", "account_ref", "kind", "status",
-            "starting_capital_usd", "policy_version",
+            "starting_capital_usd", "policy_version", "tier_index",
         )[:25]
+    )
+
+
+def _stage_history(account_id: uuid.UUID) -> list[dict]:
+    """Read verified simulated stage receipts without creating any side effect."""
+    if not isinstance(account_id, uuid.UUID):
+        return []
+    return list(
+        PropSimulationStageTransition.objects.using(MOJPROP_DB_ALIAS)
+        .filter(account_id=account_id)
+        .order_by("-created_at")
+        .values(
+            "from_tier",
+            "to_tier",
+            "to_capital_usd",
+            "policy_version",
+            "created_at",
+        )[:14]
     )
 
 
@@ -313,10 +332,28 @@ def _dashboard(request, *, note: str = "") -> HttpResponse:
         ref = escape(str(account["account_ref"]))
         status = escape(str(account["status"]))
         starting = escape(str(account["starting_capital_usd"]))
+        tier = escape(str(int(account["tier_index"]) + 1))
         row_html = (
             f"<li>Simulation account <strong>{ref}</strong>: {status}, virtual "
-            f"starting reference USD {starting}."
+            f"starting reference USD {starting}; simulated level {tier}/14."
         )
+        stage_items = []
+        for transition in _stage_history(account["id"]):
+            when = escape(transition["created_at"].isoformat())
+            to_tier = escape(str(int(transition["to_tier"]) + 1))
+            capital = escape(str(transition["to_capital_usd"]))
+            policy = escape(str(transition["policy_version"]))
+            stage_items.append(
+                f"<li>Verified simulated upgrade to level {to_tier}/14 "
+                f"(virtual reference USD {capital}) — {when}; policy {policy}.</li>"
+            )
+        if stage_items:
+            row_html += (
+                "<p class='note'>Verified simulated stage receipts (not broker funding "
+                "and not a payout entitlement):</p><ul>"
+                + "".join(stage_items)
+                + "</ul>"
+            )
         if (account["status"] == PropSimulationAccount.Status.ACTIVE
                 and account["kind"] == PropSimulationAccount.Kind.CHALLENGE):
             row_html += (
