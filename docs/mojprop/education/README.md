@@ -29,9 +29,9 @@ Both links were checked against the public site. They are free educational files
 ## Explore the official Moj Prop pages
 
 - [Overview and rules](https://mojplaywin.com/moj-prop/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
-- [Published risk rules](https://mojplaywin.com/moj-prop/rules/?utm_source=github&utm_medium=organic_referral&utm_campaign=signal_sample_20261122?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+- [Published risk rules](https://mojplaywin.com/moj-prop/rules/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
 - [Starter 30 simulated challenge and practice journal](https://mojplaywin.com/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
-- [Payment information](https://mojplaywin.com/moj-prop/payment/?utm_source=github&utm_medium=organic_referral&utm_campaign=signal_sample_20261122?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+- [Payment information](https://mojplaywin.com/moj-prop/payment/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
 
 A simulated balance is virtual and is not cash belonging to a participant. Any advertised evaluation fee, current eligibility, order process or conditional reward must be checked on the official product and checkout pages before payment. A visible checkout form does not establish that a real invoice or a customer payment has been completed.
 
