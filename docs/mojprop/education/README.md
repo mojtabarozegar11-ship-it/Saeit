@@ -13,6 +13,12 @@
 4. [A structured 60-day practice plan](./sixty-day-practice-plan.md) — maintain a journal and review decisions without trying to force a pass.
 5. [TRX invoice safety checklist](./secure-trx-invoice-checklist.md) — review invoice details, recipient verification, confirmation and duplicate-payment risks.
 
+## Free Signal Desk sample — no live trades
+
+- [**See an auditable, fictional market-scenario brief**](./signal-desk-free-scenario-sample.md) — a fully specified bullish/bearish/no-trade teaching case, with costs, loss budget, invalidation and explicit disclosure that it is not a live signal or achieved return.
+- [**Download the machine-readable example record (CSV)**](./signal-desk-free-scenario-record.csv) — one fabricated, unexecuted example with inspectable calculations; no customer, market feed or trading history.
+- [**Request free written Signal Desk terms on the official site**](https://mojplaywin.com/moj-prop-intake/?format=html&service=signals). No payment, invoice or subscription is created by this request.
+
 ## Free practice journal downloads
 
 - [Download the simulated trading journal CSV](https://mojplaywin.com/moj-prop/starter-30-trx/journal-template.csv?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
