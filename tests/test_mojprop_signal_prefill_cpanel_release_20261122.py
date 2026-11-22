@@ -22,7 +22,10 @@ class ExactMojPropFreeSignalSourceTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.after = (ROOT / "core/mojprop_accessible_intake.py").read_bytes()
+        # Preserve the exact historic input/output of this old release
+        # utility as a fixture; current main has a newer form UX contract.
+        cls.after = (ROOT / "tests/fixtures/mojprop_signal_prefill_reviewed_source_c8e6de.py.txt").read_bytes()
+        cls.current = (ROOT / "core/mojprop_accessible_intake.py").read_bytes()
         cls.before = cls.after.replace(mod.ADDITION + mod.ANCHOR, mod.ANCHOR, 1)
 
     def test_01_exact_reviewed_source_candidate_and_back_reversal(self):
@@ -32,6 +35,17 @@ class ExactMojPropFreeSignalSourceTests(TestCase):
         self.assertEqual(mod.git_blob(self.after), mod.NEXT_BLOB)
         self.assertEqual(mod.sha256(self.after), mod.NEXT_SHA256)
         self.assertEqual(mod.candidate(self.before), self.after)
+
+    def test_current_starter30_form_cannot_be_accepted_by_older_signal_release(self):
+        # Exact current reviewed form is a different source version: the
+        # historical one-off signal script remains fail-closed in production.
+        self.assertEqual(mod.git_blob(self.current),
+                         "2e3a5ad1efb90bb3e629463a740cee03a8227ee5")
+        self.assertNotEqual(self.current, self.after)
+        self.assertIn(b"Starter30", self.current)
+        self.assertIn(b"no payment", self.current)
+        with self.assertRaisesRegex(RuntimeError, "PINNED_MAINLINE_SOURCE_DRIFT"):
+            mod.candidate(self.current)
 
     def test_02_signals_only_no_fee_invoice_or_other_service_changed(self):
         addition = mod.ADDITION

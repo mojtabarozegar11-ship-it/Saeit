@@ -235,6 +235,18 @@ def request_form(request, *, error=None, status=200):
     # Retain the fixed product hint on the form POST, including validation
     # failures, without reflecting untrusted campaign data or buyer PII.
     is_starter30 = prefill_notes.startswith("Requested canonical product: MOJPROP-STARTER30 ")
+    # Display a product-specific free inquiry label without changing the
+    # blueprint service code validated, classified and stored by the CRM.
+    service_options = _options(
+        tuple(choice for choice in MojPropRequest.ROUTE_CHOICES
+              if choice[0] != "digital"),
+        selected=selected,
+    )
+    if is_starter30:
+        service_options = service_options.replace(
+            '<option value="blueprint" selected>Prop-program design</option>',
+            '<option value="blueprint" selected>Starter30 — free written terms</option>',
+        )
     action = (ACTION + "&amp;service=blueprint&amp;package=starter-30-trx"
               + _verified_public_campaign_suffix(request)
               if is_starter30 else ACTION)
@@ -262,8 +274,11 @@ def request_form(request, *, error=None, status=200):
             'remains a separate route.</p>'
         )
     form = (
-        '<p>Request a written, manually reviewed service proposal. '
-        'No payment, live account or return is promised.</p>'
+        ('<p>Request the free Starter30 written eligibility, risk and payout '
+         'conditions before considering any purchase. This does not enroll '
+         'you or create a payment obligation.</p>' if is_starter30 else
+         '<p>Request a written, manually reviewed service proposal. '
+         'No payment, live account or return is promised.</p>')
         + message +
         '<form method="post" action="' + action + '" '
         'enctype="application/x-www-form-urlencoded">'
@@ -279,8 +294,7 @@ def request_form(request, *, error=None, status=200):
          '<input type="hidden" name="service" value="digital"></p>'
          if digital_product else
          '<p><label>Service <select name="service" required>' +
-         _options(tuple(choice for choice in MojPropRequest.ROUTE_CHOICES
-                        if choice[0] != "digital"), selected=selected) +
+         service_options +
          '</select></label></p>') +
         '<p>For downloadable products, use the verified store checkout; this '
         'form creates only an unpaid manual-review request.</p>'
@@ -302,7 +316,9 @@ def request_form(request, *, error=None, status=200):
          '<p><a href="/moj-prop/">Return to Moj Prop</a></p>')
     )
     return _private_html(
-        "MojPlayWin digital product inquiry" if digital_product else "Moj Prop request",
+        ("MojPlayWin digital product inquiry" if digital_product else
+         "Starter30 — request free written conditions" if is_starter30
+         else "Moj Prop request"),
         form, status=status,
     )
 
