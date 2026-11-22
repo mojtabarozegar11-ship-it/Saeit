@@ -1,9 +1,25 @@
 """Explicit platform capability matrix. 'manual' NEVER means API publishable."""
 from __future__ import annotations
 from dataclasses import asdict, dataclass
+from unicodedata import normalize
+from urllib.parse import unquote
 
 BRANDS = ("personal", "zomorod", "mojplaywin")
 RESTRICTED_HANDLES = ("dr.mojtaba.rozegar",)
+
+
+def restricted_profile_in(*identifiers):
+    """Detect banned accounts in handles/URLs, including encoded legacy rows.
+
+    This is a denial rule, not a way to verify an unrelated account's identity.
+    """
+    for value in identifiers:
+        if not isinstance(value, str):
+            continue
+        normalized = normalize("NFKC", unquote(unquote(value))).casefold()
+        if any(handle in normalized for handle in RESTRICTED_HANDLES):
+            return True
+    return False
 MEDIA_HOSTS = frozenset({"mojplaywin.com", "www.mojplaywin.com",
                          "zomorodmelal.ir", "www.zomorodmelal.ir"})
 

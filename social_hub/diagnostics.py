@@ -14,7 +14,7 @@ import re
 from urllib.parse import quote, urlsplit
 
 from .adapters import Blocked, Uncertain, _server
-from .catalog import BRANDS, RESTRICTED_HANDLES
+from .catalog import BRANDS, RESTRICTED_HANDLES, restricted_profile_in
 from .transport import http_transport
 from .credential_vault import credential_for
 
@@ -194,6 +194,9 @@ def inspect(account: dict, token: str, *, transport=None, allowed_instances=()):
            "https://graph.facebook.com/v24.0/"+destination+"?fields=id,username",headers)
         ident=_valid_identity(result.get("id"))
         _match(ident,destination)
+        username=_valid_identity(result.get("username"))
+        if restricted_profile_in(username):
+            raise Blocked("Restricted Instagram identity refused")
         return Diagnostic("identity_verified",ident,"read_verified",
                           "professional_account_read_checked_publish_scope_unknown")
 
