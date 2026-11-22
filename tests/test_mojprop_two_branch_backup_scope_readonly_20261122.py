@@ -192,6 +192,44 @@ class MojPropTwoBranchArchiveProofTests(TestCase):
         ))
 
 
+    def test_15_drop_free_candidate_preserves_all_other_bytes(self):
+        names = {"t" + str(i) for i in range(30)}
+        sql = b"-- scoped archive\n"
+        for name in sorted(names):
+            table = bytes([96]) + name.encode() + bytes([96])
+            sql += b"DROP TABLE IF EXISTS " + table + b";\n"
+            sql += b"CREATE TABLE " + table + b" (id int);\n"
+        sql += b"INSERT INTO " + bytes([96]) + b"t0" + bytes([96]) + b" VALUES (42);\n"
+        candidate = MOD.derive_drop_free_candidate(sql, names)
+        self.assertNotIn(b"DROP TABLE", candidate)
+        self.assertEqual(candidate.count(b"CREATE TABLE"), 30)
+        self.assertIn(b"VALUES (42)", candidate)
+        expected = b"".join(line for line in sql.splitlines(keepends=True)
+                            if not line.startswith(b"DROP TABLE"))
+        self.assertEqual(candidate, expected)
+
+    def test_16_drop_free_candidate_rejects_mismatched_removed_table_count(self):
+        names = {"t" + str(i) for i in range(30)}
+        sql = b"".join(
+            b"CREATE TABLE " + bytes([96]) + name.encode() + bytes([96]) +
+            b" (id int);\n" for name in sorted(names)
+        )
+        with self.assertRaises(ValueError):
+            MOD.derive_drop_free_candidate(sql, names)
+
+    def test_17_drop_free_candidate_rejects_database_selection_and_scope_escape(self):
+        names = {"t" + str(i) for i in range(30)}
+        sql = b"".join(
+            b"DROP TABLE IF EXISTS " + bytes([96]) + name.encode() + bytes([96]) +
+            b";\nCREATE TABLE " + bytes([96]) + name.encode() + bytes([96]) +
+            b" (id int);\n" for name in sorted(names)
+        )
+        with self.assertRaises(ValueError):
+            MOD.derive_drop_free_candidate(b"USE old_database;\n" + sql, names)
+        with self.assertRaises(ValueError):
+            MOD.derive_drop_free_candidate(sql + b"SOURCE /other.sql;\n", names)
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()
