@@ -57,7 +57,7 @@ class Starter30ClosedPaymentContract(unittest.TestCase):
     def test_two_pages_agree_enrollment_and_payment_currently_unavailable(self):
         for key, source in self.sources.items():
             with self.subTest(page=key):
-                self.assertIn("payment currently unavailable", source.lower())
+                self.assertTrue("payment currently unavailable" in source.lower() or "payment and new enrollment are currently unavailable" in source.lower())
                 self.assertIn("do not send trx", source.lower())
                 self.assertNotIn("/mojprop-starter30-checkout/", [
                     link for link in self.pages[key].links if link

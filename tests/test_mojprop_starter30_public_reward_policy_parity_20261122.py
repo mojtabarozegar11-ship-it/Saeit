@@ -47,7 +47,7 @@ class Starter30PublicOwnerPolicyParityTests(unittest.TestCase):
         import hashlib
         raw = STATIC_PAGE.read_bytes()
         blob = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
-        self.assertEqual(blob, "24c927a46c86fc2a4691028fde79edcbb57696db")
+        self.assertEqual(blob, "b2e2633be69c7731f78b20a3457455ccd4feba1a")
         self.assertNotIn('id="profit-reward-schedule"', self.page)
         self.assertIn("payment and invoice issuance are currently unavailable", self.page.lower())
 

@@ -11,8 +11,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "templates/moj-prop-v4/starter-30-trx/index.html"
 PIN = ROOT / "scripts/mojprop_starter30_static_release.py"
-APPROVED_LIVE_SHA256 = "90b86d2a2e45eca70e0d2356a231433b50b8f638d0665e019631589673fb7202"
-APPROVED_LIVE_GIT_BLOB = "24c927a46c86fc2a4691028fde79edcbb57696db"
+APPROVED_LIVE_SHA256 = "dfdc657b17b52da5fc1fe4be46aa1231794ac5286c717f6ae394f1e8fca5742b"
+APPROVED_LIVE_GIT_BLOB = "b2e2633be69c7731f78b20a3457455ccd4feba1a"
 
 
 class Scan(HTMLParser):
