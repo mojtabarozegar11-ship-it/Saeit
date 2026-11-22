@@ -63,11 +63,12 @@ class MojPropCatalogSamplesContractTests(unittest.TestCase):
         starter = (SITE_SOURCE / expected[0]).read_text("utf-8")
         self.assertIn("./journal-template.csv", starter)
         self.assertIn("./journal-guide.txt", starter)
-        self.assertIn("payment admission under independent verification", starter)
-        self.assertIn("Request free written Starter30 terms", starter)
+        self.assertIn("secure 30 TRX checkout", starter)
+        self.assertIn("Open secure 30 TRX checkout", starter)
+        self.assertIn('href="/mojprop-starter30-checkout/"', starter)
+        self.assertIn("payer-wallet verification", starter)
         self.assertIn("No real funded account", starter)
-        self.assertNotIn("Checkout available · 30 TRX", starter)
-        self.assertNotIn('href="/mojprop-starter30-checkout/"', starter)
+        self.assertNotIn("payment admission under independent verification", starter)
 
     def test_market_brief_uses_named_sources_and_no_unverified_quote(self):
         page = (SITE_SOURCE / "samples/gold-market-brief/index.html").read_text("utf-8")
