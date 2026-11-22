@@ -117,8 +117,11 @@ namespace MojTrade.OmegaX
             if (previousFast >= previousSlow && fast < slow && rsi > 25)
                 sellVotes++;
 
-            var rangeHigh = Bars.HighPrices.Skip(Math.Max(0, index - 20)).Take(20).Max();
-            var rangeLow = Bars.LowPrices.Skip(Math.Max(0, index - 20)).Take(20).Min();
+            // Exclude the just-closed candle from the breakout range.
+            // Including it makes close > rangeHigh / close < rangeLow impossible.
+            var lookbackStart = Math.Max(0, index - 20);
+            var rangeHigh = Bars.HighPrices.Skip(lookbackStart).Take(index - lookbackStart).Max();
+            var rangeLow = Bars.LowPrices.Skip(lookbackStart).Take(index - lookbackStart).Min();
             var close = Bars.ClosePrices[index];
             if (close > rangeHigh && fast > slow)
                 buyVotes++;
