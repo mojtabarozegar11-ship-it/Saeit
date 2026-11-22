@@ -150,7 +150,11 @@ class Starter30PublicOfferTests(unittest.TestCase):
             "MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED",
             "MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED",
             "MOJPROP_STATIC_ROLLBACK_VERIFIED",
-            "MOJPROP_STATIC_APPROVED_MAIN_SHA == github.sha",
+            "github.actor == 'mojtabarozegar11-ship-it'",
+            "github.ref == 'refs/heads/main'",
+            "vars.MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED == 'true'",
+            "vars.MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED == 'true'",
+            "vars.MOJPROP_STATIC_ROLLBACK_VERIFIED == 'true'",
         ):
             self.assertIn(required, workflow)
         self.assertIn("MOJ_PROP_STATUS_API_PREFLIGHT=PASS", workflow)
