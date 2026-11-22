@@ -145,15 +145,26 @@ class PublicReleaseSafety(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"BUYER_VALUE_EVIDENCE_MISSING"):
                 mod.require_quality_clearance(root,"test_product",digest,manifest,package)
 
-    def test_paid_product_needs_documented_real_buyer_signal(self):
+    def test_first_paid_product_can_launch_without_prior_buyer_but_demand_is_unvalidated(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t); digest="a"*64
             path,_=buyer_value_fixture(root,"test_product",digest,paid=True)
-            with self.assertRaisesRegex(ValueError,"BUYER_VALUE_PAID_DEMAND_NOT_VALIDATED"):
-                mod.require_buyer_value_evidence(root,"test_product",digest)
+            prelaunch=mod.require_buyer_value_evidence(root,"test_product",digest)
+            self.assertFalse(prelaunch["real_buyer_demand_documented"])
+            self.assertEqual(prelaunch["demand_validation_status"],"unvalidated_prelaunch_demand")
             path,_=buyer_value_fixture(root,"test_product",digest,paid=True,real_buyer=True)
-            self.assertTrue(mod.require_buyer_value_evidence(root,"test_product",digest)
-                            ["real_buyer_demand_documented"])
+            verified=mod.require_buyer_value_evidence(root,"test_product",digest)
+            self.assertTrue(verified["real_buyer_demand_documented"])
+            self.assertEqual(verified["demand_validation_status"],"documented_real_buyer_signal")
+
+    def test_prelaunch_product_still_needs_real_comparison_and_workflow_proofs(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t); digest="a"*64
+            path,document=buyer_value_fixture(root,"test_product",digest,paid=True)
+            document["customer_workflows"][0]["proof_sha256"]="0"*64
+            path.write_text(json.dumps(document),encoding="utf8")
+            with self.assertRaisesRegex(ValueError,"BUYER_VALUE_PROOF_NOT_VERIFIED"):
+                mod.require_buyer_value_evidence(root,"test_product",digest)
 
     def test_tampered_buyer_proof_is_rejected(self):
         with tempfile.TemporaryDirectory() as t:
