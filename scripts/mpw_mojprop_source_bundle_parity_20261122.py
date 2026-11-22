@@ -18,7 +18,8 @@ import stat
 import sys
 from pathlib import Path
 
-PUBLIC_EFFECTIVE_ROOT = Path("/home/zomorod2/Saeit-mojplaywin-integrated-20261119")
+PUBLIC_EFFECTIVE_ROOT = Path("/home/zomorod2/Saeit-mojprop-candidate-20261122")
+PUBLIC_WSGI = Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py")
 
 # Pinned reviewed GitHub main blobs as of 22 Nov 2026. Never guess current
 # mainline parity from a runtime environment variable or a Django release flag.
@@ -86,10 +87,32 @@ def check_bundle(root: Path) -> dict:
     return summary
 
 
+def wsgi_root_matches(wsgi: Path, expected: Path) -> bool:
+    """Fail closed if the actual public Passenger shim points elsewhere."""
+    try:
+        if wsgi.is_symlink() or not wsgi.is_file() or expected.is_symlink():
+            return False
+        lines = wsgi.read_text(encoding="utf-8").splitlines()
+        return (
+            lines.count("APP='" + str(expected) + "'") == 1
+            and "os.chdir(APP)" in lines
+            and any("sys.path.insert(0, APP)" in item for item in lines)
+        )
+    except (OSError, UnicodeError):
+        return False
+
+
 def main(args: list[str]) -> int:
     if args != ["--check"]:
         print("Only read-only --check is supported.", file=sys.stderr)
         return 64
+    if not wsgi_root_matches(PUBLIC_WSGI, PUBLIC_EFFECTIVE_ROOT):
+        print(json.dumps({
+            "source_bundle_matches": False,
+            "reason": "effective_public_wsgi_root_unverified",
+            "written_live_changes": 0,
+        }, sort_keys=True))
+        return 2
     report = check_bundle(PUBLIC_EFFECTIVE_ROOT)
     print(json.dumps(report, sort_keys=True, ensure_ascii=True))
     return 0 if report["source_bundle_matches"] else 2
