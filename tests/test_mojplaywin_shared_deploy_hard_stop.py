@@ -76,8 +76,8 @@ class ProtectedSubsiteDeployLockTests(unittest.TestCase):
         header = source.split("\njobs:", 1)[0]
         self.assertTrue(manual_main_deployment_guarded(source, header))
         pushed = source.replace(
-            "if: github.event_name == 'workflow_dispatch'",
-            "if: github.event_name == 'push'",
+            "github.event_name == 'workflow_dispatch'",
+            "github.event_name == 'push'",
             1,
         )
         self.assertFalse(manual_main_deployment_guarded(pushed, header))
@@ -100,8 +100,8 @@ class ProtectedSubsiteDeployLockTests(unittest.TestCase):
                     ),
                 ))
                 unsafe = source.replace(
-                    "if: github.event_name == 'workflow_dispatch'",
-                    "if: github.event_name == 'push'",
+                    "github.event_name == 'workflow_dispatch'",
+                    "github.event_name == 'push'",
                     1,
                 )
                 self.assertFalse(manual_release_job_guarded(
