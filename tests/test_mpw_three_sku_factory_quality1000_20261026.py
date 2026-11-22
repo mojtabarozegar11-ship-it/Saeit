@@ -78,6 +78,19 @@ class Qc1000Tests(unittest.TestCase):
                 self.assertEqual(len(ticket["quality_criteria"]),100)
                 self.assertIsNone(ticket["professional_quality_score"])
                 self.assertFalse(ticket["quality_1000_verified"])
+                self.assertEqual(ticket["quality_goal"], "strict_evidence_based_quality")
+                self.assertFalse(ticket["numeric_quality_threshold_required"])
+                self.assertEqual(ticket["quality_policy"], "saeit.factory.strict-evidence-quality.v1")
+                self.assertEqual(ticket["state"], "REWORK_REAL_QUALITY_EVIDENCE_REQUIRED")
+                self.assertTrue(ticket["legacy_100_criteria_scorecard_nonblocking"])
+                acceptance = ticket["release_acceptance_criteria"]
+                self.assertEqual(len(acceptance), len({item["id"] for item in acceptance}))
+                self.assertEqual({item["id"] for item in acceptance}, {
+                    "artifact_integrity", "version_bound_rights", "content_accuracy_and_originality",
+                    "format_accessibility_and_usability", "security_and_third_party_assets",
+                    "commercial_offer_and_customer_value", "authenticated_payment_and_private_delivery"})
+                self.assertEqual([item["state"] for item in acceptance],
+                                 ["measured"] + ["pending"] * (len(acceptance) - 1))
                 self.assertFalse(ticket["can_replace_live_store_file"])
                 self.assertTrue(ticket["current_product_stays_published"])
                 self.assertEqual(ticket["legal_dossier_status"], "owner_confirmed_complete")
@@ -126,6 +139,8 @@ class Qc1000Tests(unittest.TestCase):
             self.assertTrue(web["zip_crc_passed"])
             self.assertFalse(pdf["quality1000_verified"])
             self.assertFalse(web["quality1000_verified"])
+            self.assertFalse(pdf["quality1000_numeric_gate_required"])
+            self.assertFalse(web["quality1000_numeric_gate_required"])
 
 if __name__=="__main__":
     unittest.main()
