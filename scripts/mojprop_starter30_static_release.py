@@ -171,7 +171,7 @@ def _stage_bytes(run_id: str) -> dict[str, bytes]:
     page = out["index.html"].decode("utf-8")
     if (not all(mark in page for mark in (
             "MOJPROP-STARTER30", "secure 30 TRX checkout",
-            "Open secure 30 TRX checkout", "payer-wallet verification",
+            "Review 30 TRX checkout requirements", "payer-wallet verification",
             "100% of every profit earned", "No real funded account",
             '<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>'))
             or 'index,follow' not in page
