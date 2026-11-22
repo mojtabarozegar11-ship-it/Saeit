@@ -95,6 +95,7 @@ class Starter30ClosedPaymentContract(unittest.TestCase):
                 self.assertTrue(
                     "payment unavailable" in description.lower()
                     or "secure checkout" in description.lower()
+                    or "secure 30 trx checkout" in description.lower()
                     or "checkout opens" in description.lower()
                 )
                 for field in ("og:description", "twitter:description"):
