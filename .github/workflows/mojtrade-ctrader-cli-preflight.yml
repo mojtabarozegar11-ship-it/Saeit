@@ -1,0 +1,40 @@
+name: MojTrade cTrader CLI read-only preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "trading/MojTradeOmegaXDemoBot.cs"
+      - "trading/MojTrade_OMEGA_X_Deploy_Guide.md"
+      - ".github/workflows/mojtrade-ctrader-cli-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtrade-ctrader-cli-preflight
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Read-only tool availability
+        shell: bash
+        run: |
+          set -u
+          echo "runner=$(hostname)"
+          for tool in ctrader-cli dotnet docker; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              echo "$tool=present"
+              "$tool" --version 2>&1 | head -n 2 || true
+            else
+              echo "$tool=absent"
+            fi
+          done
+          for tool in brew apt-get sudo curl; do
+            if command -v "$tool" >/dev/null 2>&1; then echo "$tool=present"; else echo "$tool=absent"; fi
+          done
+          echo "No credentials, account login, installation, network call, cBot run, backtest, deployment or order is performed."

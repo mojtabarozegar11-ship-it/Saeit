@@ -1,10 +1,12 @@
-# راهنمای استقرار MojTrade OMEGA X در cTrader
+# راهنمای استقرار هسته ترید canonical `mojtaba.bot.ai` در cTrader
 
 ## وضعیت امنیتی
 
 - حساب واقعی ممنوع است.
 - برداشت وجه در این پروژه وجود ندارد.
 - `EnableDemoTrading` به‌صورت پیش‌فرض خاموش است.
+- تنها cBot مجاز: `MojtabaBotTradingCoreDemo` در مسیر `MojTradeOmegaXDemoBot.cs`.
+- `MojTradeDemoBot.cs` ریشه legacy است و نباید مستقل فعال شود.
 - تا قبل از تأیید کامپایل و اجرای دمو، هیچ Cloud Instance شروع نمی‌شود.
 
 ## فایل اصلی
@@ -17,11 +19,26 @@ trading/MojTradeOmegaXDemoBot.cs
 
 1. ورود دستی به cTrader با حساب کاربر.
 2. بازکردن cTrader Algo.
-3. ساخت cBot یا بازکردن cBot مربوط به `MojTradeOmegaXDemoBot`.
+3. ساخت cBot یا بازکردن cBot مربوط به `MojtabaBotTradingCoreDemo`.
 4. جایگزین‌کردن کد با فایل GitHub.
 5. انتخاب Build/Compile.
 6. رفع همه خطاهای کامپایل؛ هشدار غیرحساس باید ثبت شود.
 7. اجرای Backtest بدون اتصال به حساب واقعی.
+
+## مسیر رسمی Compile و Backtest با cTrader CLI
+
+پس از ساخت و خروجی‌گرفتن فایل `.algo` از cTrader Algo، مسیر CLI رسمی روی Linux/VPS قابل استفاده است. پیش‌نیاز آن .NET 8 و حساب cTrader است؛ نصب CLI، ساخت فایل credentials، ورود حساب، اجرای cBot و Backtest هنوز نیازمند تأیید موردی مالک است.
+
+مراحل مجازِ بعدی، بدون حساب واقعی:
+
+1. ساخت `.algo` از هسته canonical و ثبت خروجی Compile.
+2. اجرای `ctrader-cli metadata` برای تأیید نام و نوع پارامترها.
+3. اجرای `ctrader-cli backtest` با بازه تاریخی، نماد، تایم‌فریم و `--data-mode` مشخص.
+4. ثبت Log و Report و بررسی حدضرر، حدسود، حجم، اسپرد و تعداد پوزیشن.
+5. فقط پس از عبور از گیت‌ها، اجرای Demo با `EnableDemoTrading=true`.
+6. اجرای Live همچنان ممنوع و قفل دائمی است.
+
+تا زمان دریافت فایل `.algo` و نتیجه واقعی CLI، Compile و Backtest تأییدشده محسوب نمی‌شوند.
 
 ## تنظیمات ایمن اولیه دمو
 
@@ -31,7 +48,7 @@ trading/MojTradeOmegaXDemoBot.cs
 | Risk % | 0.25 |
 | Max Positions | 3 |
 | Daily Loss Stop % | 2 |
-| Consecutive Loss Stop | 5 |
+| Consecutive Loss Stop | 3 |
 | Fast EMA | 8 |
 | Slow EMA | 34 |
 | ATR Period | 14 |
@@ -43,7 +60,7 @@ trading/MojTradeOmegaXDemoBot.cs
 1. بررسی نمایش Demo در حساب.
 2. کامپایل موفق.
 3. Backtest و بررسی حدضرر/حدسود.
-4. فعال‌کردن `EnableDemoTrading=true` فقط روی دمو.
+4. فعال‌کردن `EnableDemoTrading=true` فقط روی دمو و فقط پس از تأیید دستی compile، backtest و گیت ریسک.
 5. اجرای یک Instance برای XAUUSD.
 6. اجرای جداگانه برای BTCUSD.
 7. اجرای جداگانه برای ETHUSD.

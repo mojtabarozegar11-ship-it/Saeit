@@ -1,0 +1,41 @@
+name: MojTrade official cTrader CLI install
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "trading/MojTradeOmegaXDemoBot.cs"
+      - ".github/workflows/mojtrade-ctrader-cli-install.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtrade-ctrader-cli-install
+  cancel-in-progress: true
+
+jobs:
+  install-cli:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 20
+    steps:
+      - name: Install official user-scoped Homebrew and Spotware cTrader CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew_prefix="${HOME}/.linuxbrew"
+          if [ ! -x "$brew_prefix/bin/brew" ]; then
+            mkdir -p "$brew_prefix"
+            git clone --depth 1 https://github.com/Homebrew/brew "$brew_prefix/Homebrew"
+            mkdir -p "$brew_prefix/bin"
+            ln -sfn "$brew_prefix/Homebrew/bin/brew" "$brew_prefix/bin/brew"
+          fi
+          eval "$("$brew_prefix/bin/brew" shellenv)"
+          brew --version
+          brew tap spotware/tap https://github.com/spotware/homebrew-tap
+          brew install spotware/tap/ctrader-cli
+          ctrader-cli --version
+          ctrader-cli --help >/dev/null
+          echo "cli_install=verified"
+          echo "No cTrader credentials, account login, cBot run, backtest, deployment or order is performed."
