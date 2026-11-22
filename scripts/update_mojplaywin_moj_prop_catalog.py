@@ -156,7 +156,7 @@ def source_root(run_id: str) -> Path:
     starter = html["starter-30-trx/index.html"]
     if (not all(mark in starter for mark in (
             "MOJPROP-STARTER30", "secure 30 TRX checkout",
-            "Open secure 30 TRX checkout", 'href="/mojprop-starter30-checkout/"',
+            "Review 30 TRX checkout requirements", 'href="/mojprop-starter30-checkout/"',
             "./journal-template.csv", "./journal-guide.txt",
             "30 TRX", "No real funded account",
             "server-issued invoice",
