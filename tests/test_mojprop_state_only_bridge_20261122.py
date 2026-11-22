@@ -28,7 +28,7 @@ NEW_MODELS = {
 def git_blob(path):
     payload = path.read_bytes()
     return hashlib.sha1(
-        b"blob " + str(len(payload)).encode() + b"\\0" + payload).hexdigest()
+        b"blob " + str(len(payload)).encode() + b"\0" + payload).hexdigest()
 
 
 class StateOnlyBridgeTests(TestCase):
