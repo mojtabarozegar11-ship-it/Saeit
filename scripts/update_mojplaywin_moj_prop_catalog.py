@@ -32,6 +32,7 @@ HTML_FILES = (
     Path("catalog/index.html"),
     Path("signals/index.html"),
     Path("starter-30-trx/index.html"),
+    Path("payment/index.html"),
 )
 # These two FREE educational files are part of the same reversible static
 # release. A sales link must never be published without its actual content.
@@ -228,6 +229,17 @@ def plan(root: Path) -> list[dict]:
         elif relative == Path("catalog/index.html") and exists:
             if before != after and before != old_catalog:
                 raise RuntimeError("Live catalog differs from both approved baseline and release; refusing replacement")
+        elif relative == Path("payment/index.html") and exists:
+            # This page is a controlled Moj Prop payment-status asset. Permit
+            # replacement only when the live page is the known pre-checkout
+            # disclosure; refuse unrelated owner edits or another tenant.
+            legacy_markers = (
+                b"PAYMENT GATE / HONEST STATUS",
+                b"Payment follows trust.",
+                b"no invoice is being issued",
+            )
+            if not all(marker in before for marker in legacy_markers):
+                raise RuntimeError("Live payment page differs from the reviewed legacy disclosure; refusing replacement")
         elif exists and before != after:
             raise RuntimeError("A public Moj Prop asset exists with unexpected content; refusing replacement")
         intended.append({
