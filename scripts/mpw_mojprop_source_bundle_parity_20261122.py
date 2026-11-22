@@ -29,7 +29,7 @@ REQUIRED = {
     "prop_firm/starter30_paid_admission.py": "663bbde80fbe867a644589bc687bbed2840125af",
     "prop_firm/policy_integrity.py": "68dfaf2a31e6f63f2c25f8eea93843f27f73d7d8",
     "prop_firm/starter30_live.py": "3c006d15dd6b35d5128ec3af7d03def28841b8e4",
-    "prop_firm/customer_portal_views.py": "f918d8b6645dd168014e6a2dd718bd851afc7884",
+    "prop_firm/customer_portal_views.py": "7d4d087a0ac03d6b445b495cf6702db5a00579d5",
     # Candidate model blob includes the isolated simulation tier and transition receipt.
     "prop_firm/models.py": "cc668e879ad7f730d08732f0284f1c8979d7987e",
     "prop_firm/simulation_identity_adapter.py": "0b4e6bf2050634816314b0ced5b8e424f5a5d2ad",
