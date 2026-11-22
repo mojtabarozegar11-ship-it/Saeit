@@ -42,7 +42,11 @@ def test_starter30_static_publication_is_owner_dispatch_only():
         "MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED",
         "MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED",
         "MOJPROP_STATIC_ROLLBACK_VERIFIED",
-        "MOJPROP_STATIC_APPROVED_MAIN_SHA == github.sha",
+        "github.actor == 'mojtabarozegar11-ship-it'",
+        "github.ref == 'refs/heads/main'",
+        "vars.MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED == 'true'",
+        "vars.MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED == 'true'",
+        "vars.MOJPROP_STATIC_ROLLBACK_VERIFIED == 'true'",
     ):
         assert required in source
     assert "MOJ_PROP_STATUS_API_PREFLIGHT=PASS" in source
