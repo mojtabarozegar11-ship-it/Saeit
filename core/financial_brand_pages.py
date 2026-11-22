@@ -24,8 +24,8 @@ BRANDS = [
     ("206", "۲۰۶", "206", "٢٠٦"),
     ("108", "۱۰۸", "108", "١٠٨"),
 ]
-SIGNAL_INTAKE_PATH = "https://mojplaywin.com/moj-prop/?service=signals#request"
-SIGNAL_FREE_PREVIEW_PATH = "https://mojplaywin.com/moj-prop/signals/#free-preview"
+SIGNAL_INTAKE_PATH = "https://mojplaywin.com/moj-prop-intake/?format=html&service=signals"
+SIGNAL_FREE_PREVIEW_PATH = "https://mojplaywin.com/moj-prop/signals/"
 
 PALETTES = [
     ("emerald", "#0b322b", "#c9a65a"), ("amethyst", "#2b173c", "#dfbd7a"),
