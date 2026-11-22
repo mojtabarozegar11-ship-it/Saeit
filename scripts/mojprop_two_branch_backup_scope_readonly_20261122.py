@@ -188,6 +188,11 @@ def inspect_archive(path: Path, expected_sha: str, live_tables: set[str]) -> dic
     return result
 
 
+def legacy_markers_contradict_schema(applied: set[str], physical_tables: set[str]) -> bool:
+    """Old branch cannot be assumed physically applied if its root tables are absent."""
+    return bool(applied & set(LEGACY)) and not LEGACY_ROOT_TABLES <= physical_tables
+
+
 def inspect_live() -> dict:
     if pwd.getpwuid(os.geteuid()).pw_name != OWNER or not APP.is_dir():
         raise PermissionError("live inspection only under authorized tenant")
@@ -235,9 +240,8 @@ def inspect_live() -> dict:
         "legacy_applied_count": len(applied & set(LEGACY)),
         "legacy_root_tables_present_in_isolated_alias": len(LEGACY_ROOT_TABLES & tables),
         "legacy_root_tables_expected": len(LEGACY_ROOT_TABLES),
-        "legacy_markers_without_legacy_schema": (
-            bool(applied & set(LEGACY))
-            and len(LEGACY_ROOT_TABLES & tables) < len(LEGACY_ROOT_TABLES)
+        "legacy_markers_without_legacy_schema": legacy_markers_contradict_schema(
+            applied, tables
         ),
         "new_applied_count": len(applied & set(ISOLATED)),
         "historical_names_all_known": applied <= set(LEGACY) | set(ISOLATED),
