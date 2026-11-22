@@ -14,13 +14,17 @@ from django.conf import settings
 from django.db import transaction, IntegrityError
 from django.utils import timezone
 from core.models import Order
+from services.mojtaba_tron_owner_receiver import approved_recipient
 
 from .models import CommerceInvoice
 from .policy import CommercePolicyError, order_snapshot
 
-RECEIVERS={
-    "ETH": ("ethereum-mainnet","0x89149b01f59115B86553561F12438D2ADF517E75",18),
-    "TRX": ("tron-mainnet","THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73",6),
+# The owner-verified Trust Wallet QR is the only TRX receive source.
+# Keep every invoice path on the same validated recipient; do not duplicate
+# or accept a receiver from request data or a second hard-coded constant.
+RECEIVERS = {
+    "ETH": ("ethereum-mainnet", "0x89149b01f59115B86553561F12438D2ADF517E75", 18),
+    "TRX": ("tron-mainnet", approved_recipient(), 6),
 }
 
 
