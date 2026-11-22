@@ -25,6 +25,8 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
         self.assertEqual(len(MOD.REQUIRED), MOD.EXPECTED_COUNT)
         self.assertEqual(set(MOD.REQUIRED), {
             "prop_firm/simulation_policy.py",
+            "prop_firm/rules.py",
+            "prop_firm/simulation_payout.py",
             "prop_firm/starter30_paid_admission.py",
             "prop_firm/policy_integrity.py",
             "prop_firm/starter30_live.py",
@@ -38,7 +40,7 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
         with TemporaryDirectory() as tmp:
             report = MOD.check_bundle(Path(tmp))
             self.assertFalse(report["source_bundle_matches"])
-            self.assertEqual(report["missing"], 5)
+            self.assertEqual(report["missing"], 7)
             self.assertEqual(report["matched"], 0)
             self.assertEqual(report["written_live_changes"], 0)
 
@@ -49,7 +51,7 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             before = {rel: (root / rel).stat().st_mtime_ns for rel in MOD.REQUIRED}
             report = MOD.check_bundle(root)
             self.assertTrue(report["source_bundle_matches"])
-            self.assertEqual(report["matched"], 5)
+            self.assertEqual(report["matched"], 7)
             self.assertFalse(report["worker_reload_proven"])
             self.assertFalse(report["financial_release_proven"])
             after = {rel: (root / rel).stat().st_mtime_ns for rel in MOD.REQUIRED}
@@ -63,7 +65,7 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             policy.write_bytes(policy.read_bytes() + b"# drift\n")
             report = MOD.check_bundle(root)
             self.assertEqual(report["drift"], 1)
-            self.assertEqual(report["matched"], 4)
+            self.assertEqual(report["matched"], 6)
             self.assertFalse(report["source_bundle_matches"])
 
     def test_05_absent_buyer_admission_fails_even_when_other_files_match(self):
@@ -73,7 +75,7 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             (root / "prop_firm/starter30_paid_admission.py").unlink()
             report = MOD.check_bundle(root)
             self.assertEqual(report["missing"], 1)
-            self.assertEqual(report["matched"], 4)
+            self.assertEqual(report["matched"], 6)
             self.assertFalse(report["source_bundle_matches"])
 
     def test_06_symlink_replacement_is_not_silently_accepted(self):
@@ -97,7 +99,7 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
                     status = MOD.main(["--check"])
             self.assertEqual(status, 0)
             self.assertIn('"source_bundle_matches": true', buf.getvalue())
-            self.assertEqual(len(list(root.rglob("*.py"))), 5)
+            self.assertEqual(len(list(root.rglob("*.py"))), 7)
 
     def test_08_no_mutation_mode_is_available(self):
         with TemporaryDirectory() as tmp:
