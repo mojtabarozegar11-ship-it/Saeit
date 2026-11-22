@@ -24,11 +24,11 @@ def synthetic_page() -> tuple[bytes, bytes]:
 class SignalDeskHeroConversionTests(TestCase):
     def test_01_real_source_and_candidate_sha_pinned(self):
         self.assertEqual(change.BASE_BYTES, 5544)
-        self.assertEqual(change.NEXT_BYTES, 6223)
+        self.assertEqual(change.NEXT_BYTES, 6228)
         self.assertEqual(change.BASE_SHA256,
                          "7ebd4931efb3594f334ee5867ab5974db4275742c11b277ae918b94dd32df4c6")
         self.assertEqual(change.NEXT_SHA256,
-                         "7ee5d3fb4f57edb3147c304e96c9d15302f480b24f4d3e06fdedfd5e424e3492")
+                         "f60ea4b001e496d4e5c7536aa3b4036f9c0a106b032663039fbf621692fc74bf")
 
     def test_02_single_hero_change_is_fully_reversible(self):
         before, after = synthetic_page()
@@ -123,9 +123,11 @@ class SignalDeskHeroConversionTests(TestCase):
 
     def test_10_hero_links_to_existing_nonfinancial_intake_and_attribution(self):
         self.assertIn(b"/moj-prop-intake/?format=html&amp;service=signals", change.EDGE_NEW)
-        self.assertIn(b"utm_campaign=signal_desk_primary_cta_20261122", change.EDGE_NEW)
+        self.assertIn(b"utm_campaign=signals_education_lead_20261121", change.EDGE_NEW)
         self.assertNotIn(b"/trx-easy/", change.EDGE_NEW)
         self.assertNotIn(b"/mojprop-starter30-checkout", change.EDGE_NEW)
+        self.assertIn(b"utm_content=signal_nav", change.EDGE_NEW)
+        self.assertNotIn(b"utm_campaign=signal_desk_primary_cta_20261122", change.EDGE_NEW)
 
     def test_11_new_text_does_not_add_unapproved_free_challenge_plan(self):
         self.assertNotIn(b"free plan", change.EDGE_NEW.lower())
