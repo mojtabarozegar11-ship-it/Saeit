@@ -1,6 +1,6 @@
 """Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
-from core.models import AgentTask, Product, Order, LedgerEntry
+from core.models import AgentTask, CompanyInquiry, Product, Order, LedgerEntry
 
 @dataclass(frozen=True)
 class Candidate:
@@ -18,6 +18,18 @@ class AutonomousBrain:
     def observe(self):
         products = Product.objects.all()
         economic_tasks = AgentTask.objects.filter(agent__code="economic-master-agent")
+        # Already planned or attempted inquiries must not be re-introduced as
+        # new customer demand. An inquiry is an intake record, not a sale.
+        previously_seen_inquiries = economic_tasks.filter(
+            action_type="income_inbound_lead_review",
+            input_data__inquiry_id__isnull=False,
+        ).values_list("input_data__inquiry_id", flat=True)
+        next_inquiry_id = CompanyInquiry.objects.filter(
+            kind__in=("commercial", "project", "technology"),
+            status__in=("new", "reviewing"),
+        ).exclude(pk__in=previously_seen_inquiries).order_by(
+            "created_at", "pk"
+        ).values_list("pk", flat=True).first()
         latest_offer = economic_tasks.filter(
             capability_code="income_offer_design"
         ).order_by("-created_at", "-pk").first()
@@ -77,6 +89,7 @@ class AutonomousBrain:
             for seen_at in (latest_paid_order_at, latest_payment_entry_at)
         )
         return {
+            "new_inbound_inquiry_id": next_inquiry_id,
             "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
             "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
             "market_research_complete": market_research_complete,
@@ -102,6 +115,12 @@ class AutonomousBrain:
         # prerequisite. Check evidence first; never infer settled revenue.
         if s.get("financial_event_needs_reconcile", False):
             return [Candidate("income_revenue_verify", "New financial evidence needs independent reconciliation.", 10, 10, 9, 1)]
+        if s.get("new_inbound_inquiry_id"):
+            return [Candidate(
+                "income_inbound_lead_review",
+                "Route a persisted customer inquiry into private commercial review without external outreach.",
+                10, 10, 10, 1,
+            )]
         if s.get("self_improvement_unverified", False) and not s.get("self_improvement_complete", False):
             return [Candidate(
                 "await_external_self_improvement_review",
