@@ -56,6 +56,14 @@ BASELINE_HOME = Path("baselines/index-v4.html")
 BASELINE_SIGNAL = Path("baselines/signals-index-before-free.html")
 # Exact #2407 one-off public research preview (before double opt-in #2428).
 BASELINE_SIGNAL_FREE_PREVIEW = Path("baselines/signals-index-after-free-preview.html")
+# This is the owner-maintained English catalog currently live on cPanel. It is
+# recognized only by its complete commercial-shell signature and is preserved
+# byte-for-byte when it differs from the newer source payload.
+OWNER_LIVE_CATALOG_MARKERS = (
+    b"COMMERCIAL CATALOG / ENGLISH-FIRST",
+    b"Starter 30",
+    b"Do not send funds before a written offer",
+)
 
 
 def digest(data: bytes) -> str:
@@ -231,12 +239,16 @@ def plan(root: Path) -> list[dict]:
             assert_file(target)
         before = target.read_bytes() if exists else None
         after = (root / relative).read_bytes()
+        preserve_owner_catalog = False
         if relative == Path("index.html"):
             if not exists or before not in (after, old_home, old_home_without_marker):
                 raise RuntimeError("Live home differs from approved baseline; refusing replacement")
         elif relative == Path("catalog/index.html") and exists:
             if before != after and before != old_catalog:
-                raise RuntimeError("Live catalog differs from both approved baseline and release; refusing replacement")
+                if all(marker in before for marker in OWNER_LIVE_CATALOG_MARKERS):
+                    preserve_owner_catalog = True
+                else:
+                    raise RuntimeError("Live catalog differs from both approved baseline and release; refusing replacement")
         elif relative == Path("payment/index.html") and exists and before != after:
             # This page is a controlled Moj Prop payment-status asset. Permit
             # replacement only when the live page is the known pre-checkout
@@ -250,10 +262,11 @@ def plan(root: Path) -> list[dict]:
                 raise RuntimeError("Live payment page differs from the reviewed legacy disclosure; refusing replacement")
         elif exists and before != after:
             raise RuntimeError("A public Moj Prop asset exists with unexpected content; refusing replacement")
+        effective_after = before if preserve_owner_catalog else after
         intended.append({
             "path": str(relative), "existed": exists,
             "before_sha": digest(before) if exists else None,
-            "after_sha": digest(after), "changed": before != after,
+            "after_sha": digest(effective_after), "changed": before != effective_after,
             "mode": (target.stat().st_mode & 0o777) if exists else 0o644,
         })
     return intended
