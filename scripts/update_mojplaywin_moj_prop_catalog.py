@@ -229,7 +229,7 @@ def plan(root: Path) -> list[dict]:
         elif relative == Path("catalog/index.html") and exists:
             if before != after and before != old_catalog:
                 raise RuntimeError("Live catalog differs from both approved baseline and release; refusing replacement")
-        elif relative == Path("payment/index.html") and exists:
+        elif relative == Path("payment/index.html") and exists and before != after:
             # This page is a controlled Moj Prop payment-status asset. Permit
             # replacement only when the live page is the known pre-checkout
             # disclosure; refuse unrelated owner edits or another tenant.
