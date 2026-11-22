@@ -7,7 +7,7 @@
 The `prop_firm` app has two legitimate historical branches:
 
 - 10 original migrations named `0001_initial` through `0010_reward_reserve_ledger`, preserved byte-for-byte from `source-sync/20261120/prop_firm/migrations/`. The legacy database tables remain in the **default** database and must never be dropped in this cutover.
-- 6 separate simulation migrations, ending at `0006_unique_invoice_receivers`. The seven simulation models belong exclusively to the **mojprop** database.
+- 7 separate simulation migrations, ending at `0007_alter_propsimulationaccount_policy_version`. The seven simulation models belong exclusively to the **mojprop** database.
 
 The proposed `0011_state_only_bridge` joins these histories and removes 15 obsolete legacy model declarations from *future Django migration state only*, with `database_operations=[]`. Existing historical physical tables remain in `default`; no legacy rows are copied or erased.
 
@@ -26,9 +26,9 @@ This PR adds two controls: explicit `hints={"model_name":"propsimulationpayment"
 - 15 historical tables exist in `default`, zero in `mojprop`.
 - Seven simulation tables exist in `mojprop`, zero in `default`.
 - Historical migration records coexist with the new simulation records on `mojprop`; `default` holds historical records only.
-- Django's in-memory full migration graph with 17 nodes has one leaf, `0011_state_only_bridge`.
+- Django's in-memory full migration graph with 18 nodes has one leaf, `0011_state_only_bridge`.
 - Both aliases passed `MigrationLoader.check_consistent_history` in memory using production history.
-- With the guarded 0003, the hypothetical default plan routes out all 19 possible model/data operations; `mojprop` has only two `AlterField` operations from 0006.
+- With the guarded 0003, the hypothetical default plan routes out all 20 possible model/data operations; `mojprop` has only three `AlterField` operations from 0006 and 0007.
 - Django's in-memory `MigrationAutodetector` produced no extra migrations against the intended, unique-recipient model state.
 - Fake editors + the actual Django router verified the new 0003 forward and reverse protections; no real SQL.
 - A neutralized logical backup archive passed digest/source checks, **not** an independent restore.
