@@ -155,6 +155,32 @@ class CampaignSourceCRMWriteIntegrationTests(TestCase):
         self.assertIn(b"original request was recovered", response2.content.lower())
 
 
+    def test_13_staff_or_nonpublic_source_cannot_be_recovered_by_public_key(self):
+        import uuid
+        from core.mojprop_views import _keyed_request_id
+        key = str(uuid.uuid4())
+        MojPropRequest.objects.create(
+            request_id=_keyed_request_id(key),
+            name="Fictional Test Prospect",
+            email="fictional-prospect-05@samplebusiness.com",
+            route="signals",
+            horizon="review",
+            notes="Please share educational market brief service scope.",
+            consent=True,
+            source="staff-private-record",
+        )
+        response = self._post(extra={
+            **CAMPAIGN, "idempotency_key": key,
+        }, suffix="05")
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+        self.assertEqual(
+            MojPropRequest.objects.get(request_id=_keyed_request_id(key)).source,
+            "staff-private-record",
+        )
+        self.assertNotIn(b"private-receipt", response.content)
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()
