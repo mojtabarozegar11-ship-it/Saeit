@@ -26,6 +26,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 OWNER = "zomorod2"
 APP = Path("/home/zomorod2/Saeit-mojplaywin-integrated-20261119")
 PAYMENT_TABLE = "prop_firm_propsimulationpayment"
+# All five original 0001_initial CreateModel tables exist in the legacy default
+# alias but are absent from the isolated alias despite its ten applied markers.
+LEGACY_ROOT_TABLES = frozenset((
+    "prop_firm_proptrader",
+    "prop_firm_propaccount",
+    "prop_firm_propexecution",
+    "prop_firm_propequityobservation",
+    "prop_firm_propdecisionlog",
+))
 MAX_SQL_BYTES = 8 * 1024 * 1024
 
 LEGACY = {
@@ -224,6 +233,12 @@ def inspect_live() -> dict:
         "scope": "owner_mojprop_alias_read_only_snapshot_30_table_schema",
         "live_table_count": len(tables),
         "legacy_applied_count": len(applied & set(LEGACY)),
+        "legacy_root_tables_present_in_isolated_alias": len(LEGACY_ROOT_TABLES & tables),
+        "legacy_root_tables_expected": len(LEGACY_ROOT_TABLES),
+        "legacy_markers_without_legacy_schema": (
+            bool(applied & set(LEGACY))
+            and len(LEGACY_ROOT_TABLES & tables) < len(LEGACY_ROOT_TABLES)
+        ),
         "new_applied_count": len(applied & set(ISOLATED)),
         "historical_names_all_known": applied <= set(LEGACY) | set(ISOLATED),
         "recipient_unique_enforced_in_db": unique_receiver,
