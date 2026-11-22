@@ -133,7 +133,7 @@ def source_root(run_id: str) -> Path:
             "Open secure 30 TRX checkout", 'href="/mojprop-starter30-checkout/"',
             "./journal-template.csv", "./journal-guide.txt",
             "30 TRX", "No real funded account",
-            "server-issued 30 TRX invoice",
+            "server-issued invoice",
             "100% of every profit earned",
             "payer-wallet verification"))
             or "Payment is currently unavailable" in starter):
