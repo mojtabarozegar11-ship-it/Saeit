@@ -35,7 +35,17 @@ class ManualOnlyHostReleaseTests(unittest.TestCase):
                 self.assertIn(clause, job)
         self.assertNotIn("github.event_name == 'push'", job)
         static = (WORKFLOWS / "mojplaywin-moj-prop-deploy.yml").read_text()
-        self.assertIn("if: github.event_name == 'workflow_dispatch' && inputs.owner_approved_static_release == true", static)
+        # Keep the full protected release predicate even under wrapped YAML.
+        for required in (
+            "if: ${{ github.event_name == 'workflow_dispatch'",
+            "inputs.owner_approved_static_release == true",
+            "github.actor == 'mojtabarozegar11-ship-it'",
+            "github.ref == 'refs/heads/main'",
+            "vars.MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED == 'true'",
+            "vars.MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED == 'true'",
+            "vars.MOJPROP_STATIC_ROLLBACK_VERIFIED == 'true'",
+        ):
+            self.assertIn(required, static)
         self.assertNotIn("inputs.owner_approval == 'OWNER_APPROVED'", static)
 
     def test_mojprop_catalog_release_requires_manual_dispatch_and_owner_record(self):
