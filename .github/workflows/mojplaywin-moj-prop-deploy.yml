@@ -163,8 +163,11 @@ jobs:
           WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
           timeout 50s ssh -F "$WORK/config" saeit-host \
             "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/update_mojplaywin_moj_prop_catalog.py preflight $GITHUB_RUN_ID"
-          digest="$(timeout 25s ssh -F "$WORK/config" saeit-host \
-            'test -f /home/zomorod2/mojplaywin.com/moj-prop/signals/index.html && test ! -L /home/zomorod2/mojplaywin.com/moj-prop/signals/index.html && sha256sum /home/zomorod2/mojplaywin.com/moj-prop/signals/index.html' | awk '{print $1}')"
+          signal_url="https://mojplaywin.com/moj-prop/signals/?v=$GITHUB_SHA"
+          signal_status="$(curl --silent --show-error --max-redirs 0 --max-time 20 \
+            -o "$RUNNER_TEMP/mojprop-signal-desk-before.html" -w '%{http_code}' "$signal_url" || true)"
+          [[ "$signal_status" == '200' ]] || { echo "SIGNAL_DESK_PUBLIC_UNAVAILABLE=$signal_status"; exit 1; }
+          digest="$(sha256sum "$RUNNER_TEMP/mojprop-signal-desk-before.html" | awk '{print $1}')"
           [[ "$digest" =~ ^[a-f0-9]{64}$ ]] || { echo 'SIGNAL_DESK_PRESERVE_BEFORE_HASH_UNAVAILABLE'; exit 1; }
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "MOJ_PROP_LIVE_STATIC_COMPATIBILITY=CHECKED_READ_ONLY"
@@ -251,8 +254,7 @@ jobs:
           [[ "$signal_status" == '200' ]]
           # This release must NOT overwrite Signal Desk, regardless of its
           # independent email-signup state or owner-customized live content.
-          digest_after="$(timeout 25s ssh -F "$WORK/config" saeit-host \
-            'test -f /home/zomorod2/mojplaywin.com/moj-prop/signals/index.html && test ! -L /home/zomorod2/mojplaywin.com/moj-prop/signals/index.html && sha256sum /home/zomorod2/mojplaywin.com/moj-prop/signals/index.html' | awk '{print $1}')"
+          digest_after="$(sha256sum "$RUNNER_TEMP/mojprop-signal-desk.html" | awk '{print $1}')"
           [[ "$digest_after" =~ ^[a-f0-9]{64}$ ]] || exit 1
           [[ "$digest_after" == "${{ steps.signal_before.outputs.digest }}" ]] || {
             echo 'SIGNAL_DESK_CHANGED_DURING_SEPARATE_STARTER30_RELEASE'; exit 1;
