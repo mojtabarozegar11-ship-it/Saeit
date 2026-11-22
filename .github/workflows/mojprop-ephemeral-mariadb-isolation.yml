@@ -1,0 +1,50 @@
+name: MOJ PROP Ephemeral MariaDB Isolation
+
+on:
+  pull_request:
+    paths:
+      - 'prop_firm/migrations/**'
+      - 'scripts/mojprop_ephemeral_mariadb_ci.py'
+      - '.github/workflows/mojprop-ephemeral-mariadb-isolation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-ephemeral-mariadb-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-native-mariadb:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: ci-temporary-mojprop-only
+          MARIADB_ROOT_HOST: '%'
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated MariaDB test prerequisites only
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends pkg-config libmariadb-dev libmariadb-dev-compat
+          python -m pip install 'Django>=5.2,<6.0' 'mysqlclient>=2.2.1,<3'
+      - name: Assert 15 historical and 7 simulated tables in two disposable databases
+        env:
+          CI_MOJPROP_EPHEMERAL_DB_ONLY: 'yes'
+          CI_DB_HOST: '127.0.0.1'
+          CI_DB_ROOT_PASSWORD: ci-temporary-mojprop-only
+        run: python -B scripts/mojprop_ephemeral_mariadb_ci.py
