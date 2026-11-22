@@ -121,15 +121,16 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
 
     def test_current_intake_view_is_separately_reviewed_without_moving_c95_pin(self):
         # The immutable C95 cPanel evidence still points to its original bytes.
-        # A newer source file containing bounded UTM fields and first-party
-        # conversion tracking is inspected separately, not called deployed.
+        # A newer source file containing bounded UTM fields, first-party
+        # conversion tracking and bounded CRM source labels is inspected
+        # separately, not called deployed.
         root = Path(__file__).resolve().parents[1]
         old_pin = EXPECTED["core/mojprop_views.py"]
         archive = root / "docs/mojprop/historical-static-evidence" / (old_pin + ".py.txt")
         current = root / "core/mojprop_views.py"
         self.assertEqual(exact_git_blob(archive.read_bytes()), old_pin)
         self.assertEqual(exact_git_blob(current.read_bytes()),
-                         "c3b582dd5a0e5a97d10e91444173014238aad21a")
+                         "d69ec8fbf2fb167e716d55ced8abf7952ddcd6aa")
         self.assertNotEqual(exact_git_blob(current.read_bytes()), old_pin)
         src = current.read_text(encoding="utf-8")
         self.assertIn("utm_source", src)

@@ -25,12 +25,47 @@ from django.views.decorators.csrf import csrf_protect
 from .models import MojPropRequest
 from .mojprop_catalog_contract import public_service_catalog
 from .mojprop_receipts import make_receipt_token, verify_receipt_token, public_status_text
-from .mojprop_accessible_intake import request_form, created_receipt, status_form, status_result
+from .mojprop_accessible_intake import request_form, created_receipt, status_form, status_result, _PUBLIC_CAMPAIGNS
 
 ROUTES = {choice[0] for choice in MojPropRequest.ROUTE_CHOICES}
 HORIZONS = {choice[0] for choice in MojPropRequest.HORIZON_CHOICES}
 MAX_REQUESTS_PER_WINDOW = 5
 RATE_WINDOW = timedelta(minutes=10)
+
+
+def _allowlisted_self_declared_lead_source(payload, route: str) -> str:
+    """Persist only a reviewed campaign code; never treat UTM as buyer proof.
+
+    An HTTP client can forge UTM even if its tuple matches the site's own
+    links. Consequently this *descriptive marketing label* is not identity,
+    a trusted referrer, a valid purchase, or conversion/revenue evidence.
+    Reuse the single-source public form allowlist to avoid introducing
+    separate campaign values or a schema migration.
+    """
+    default = "moj-prop-public"
+    if route != "signals" or payload is None or not hasattr(payload, "get"):
+        return default
+    # Only the currently published Signal Desk navigation+hero tuple may
+    # classify a new Signal Desk lead. Other services retain old semantics.
+    campaigns = [
+        approved for service, package, approved in _PUBLIC_CAMPAIGNS
+        if service == "signals" and package == ""
+    ]
+    utm_keys = {key for key in payload if type(key) is str and key.startswith("utm_")}
+    for approved in campaigns:
+        expected = dict(approved)
+        if utm_keys != set(expected):
+            continue
+        if any(
+            type(payload.get(key)) is not str or payload.get(key) != value
+            or (hasattr(payload, "getlist") and payload.getlist(key) != [value])
+            for key, value in approved
+        ):
+            continue
+        code = expected["utm_campaign"]
+        label = default + ":" + code
+        return label if len(label) <= 80 else default
+    return default
 
 
 def _text(payload, key: str, limit: int) -> str:
@@ -163,9 +198,21 @@ def _keyed_request_id(raw: str) -> str:
 
 
 def _matches_keyed_retry(row, *, name, email, route, horizon, notes, product_id):
-    """Keep a stolen/reused key from granting another buyer's private receipt."""
+    """Keep other-channel/staff rows inaccessible via public idempotency keys.
+
+    New allowlisted public Signal Desk source labels remain part of the *same*
+    consented intake channel. Unknown, manually imported, or staff-created
+    sources are still not eligible for public receipt recovery.
+    """
+    public_source = row.source == "moj-prop-public"
+    if not public_source and row.route == "signals":
+        public_source = any(
+            row.source == "moj-prop-public:" + dict(approved)["utm_campaign"]
+            for service, package, approved in _PUBLIC_CAMPAIGNS
+            if service == "signals" and package == ""
+        )
     return (
-        row.source == "moj-prop-public" and row.consent is True
+        public_source and row.consent is True
         and row.name == name and row.email == email
         and row.route == route and row.horizon == horizon
         and row.notes == notes and row.product_id == product_id
@@ -406,7 +453,7 @@ def _mojprop_intake_api(request):
                     notes=notes,
                     product_id=product_scope,
                     consent=True,
-                    source="moj-prop-public",
+                    source=_allowlisted_self_declared_lead_source(payload, route),
                     ip_hash=ip_hash,
                     user_agent=str(request.META.get("HTTP_USER_AGENT", ""))[:300],
                 )
