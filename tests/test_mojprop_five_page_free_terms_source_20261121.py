@@ -5,6 +5,7 @@ The English home free-terms change was deployed and backed up separately.
 """
 from pathlib import Path
 import unittest
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 FREE = "/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"
@@ -21,13 +22,28 @@ class EnglishFreeTermsSourceParityTests(unittest.TestCase):
         content = PRODUCT.read_text(encoding="utf-8")
         self.assertIn("Request free written Starter30 terms", content)
         self.assertIn("Get written Starter30 conditions — free", content)
-        self.assertIn("secure 30 TRX checkout", content)
-        self.assertIn("payer-wallet verification", content)
+        self.assertIn("The secure checkout first verifies your email", content)
+        self.assertIn("requires your sending TRON wallet address", content)
         self.assertIn("single owner-approved receive-only wallet", content)
         self.assertIn(FREE, content)
-        self.assertIn(">Open secure 30 TRX checkout</a>", content)
+        self.assertIn(">Review 30 TRX checkout requirements</a>", content)
         self.assertIn('href="/mojprop-starter30-checkout/"', content)
         self.assertNotIn("payment admission under independent verification", content)
+
+    def test_starter30_canonical_product_has_exact_fourteen_virtual_levels(self):
+        content = PRODUCT.read_text(encoding="utf-8")
+        self.assertIn('id="scaling-path"', content)
+        self.assertIn("virtual, not withdrawable principal", content)
+        self.assertIn("Promotion is never automatic.", content)
+        actual = re.findall(r"<li>Level ([0-9]+) — \$([0-9,]+) virtual</li>", content)
+        expected = [(str(i + 1), n) for i, n in enumerate((
+            "1,000", "1,500", "2,000", "3,000", "5,000", "7,500",
+            "10,000", "15,000", "20,000", "35,000", "50,000",
+            "70,000", "85,000", "100,000",
+        ))]
+        self.assertEqual(actual, expected)
+        self.assertIn("30 native TRX", content)
+
 
     def test_education_articles_route_reader_to_free_precise_offer(self):
         for slug in EDUCATIONAL:
