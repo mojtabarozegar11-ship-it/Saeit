@@ -1,5 +1,11 @@
 """Hermetic GitHub Actions MariaDB proof. No production data, credentials or endpoints."""
 import os
+import sys
+from pathlib import Path
+
+# Calling Python on a script path adds scripts/, not the repository root, to sys.path.
+# Resolve the checked-out repository explicitly; never use external PYTHONPATH.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 def main():
     assert os.environ.get("GITHUB_ACTIONS") == "true", "GitHub Actions only"
