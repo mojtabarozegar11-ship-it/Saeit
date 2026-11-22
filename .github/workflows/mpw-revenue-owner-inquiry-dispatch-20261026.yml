@@ -5,14 +5,19 @@ on:
     paths:
       - ".github/workflows/mpw-revenue-owner-inquiry-dispatch-20261026.yml"
       - "scripts/mpw_revenue_owner_inquiry_dispatch_20261026.php"
+      - "mpw_revenue_20261020/earn/inquiry.php"
   push:
     branches: [main]
     paths:
       - ".github/workflows/mpw-revenue-owner-inquiry-dispatch-20261026.yml"
       - "scripts/mpw_revenue_owner_inquiry_dispatch_20261026.php"
   workflow_dispatch:
-  schedule:
-    - cron: "17 * * * *"
+    inputs:
+      owner_email_approved:
+        description: "Owner explicitly approved sending private inquiry notifications for this run"
+        required: true
+        type: boolean
+        default: false
 permissions: {contents: read}
 concurrency:
   group: mpw-revenue-owner-inquiry-dispatch
@@ -36,9 +41,21 @@ jobs:
           assert 'customer_orders' not in s and 'payment_webhooks' not in s
           print('MPW_PRIVACY_SAFE_OWNER_DISPATCH_SOURCE=PASS')
           PY
+          # No automatic inquiry mail or scheduled owner dispatch.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          inquiry=Path('mpw_revenue_20261020/earn/inquiry.php').read_text()
+          workflow=Path('.github/workflows/mpw-revenue-owner-inquiry-dispatch-20261026.yml').read_text()
+          assert '@mail(' not in inquiry and 'mail(' not in inquiry
+          assert re.search(r'(?m)^  schedule:\s*$',workflow) is None
+          assert "github.event_name == 'workflow_dispatch'" in workflow
+          assert 'inputs.owner_email_approved == true' in workflow
+          print('MPW_OWNER_APPROVED_EMAIL_ONLY=PASS')
+          PY
   notify-owner:
     needs: [source-quality]
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.owner_email_approved == true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
