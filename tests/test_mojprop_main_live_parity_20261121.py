@@ -7,8 +7,8 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1]
 PAGE=ROOT/"templates"/"moj-prop-v4"/"index.html"
 PRODUCT=ROOT/"templates"/"moj-prop-v4"/"starter-30-trx"/"index.html"
-MAIN_SHA256="d45923374c148f7a0e4df5406bea77f38963e8ee18dc5fb49f3a88b2256fcfac"
-MAIN_GIT_BLOB="b31de0e17e626f712f586d269674edd133652a21"
+MAIN_SHA256="37c09989e6ac048cc8167b95f69be3d13e113fda78c240f016c36932b88865fe"
+MAIN_GIT_BLOB="d47e95f3b5eaa4f43e061e4aedd39847145d9dfd"
 PRODUCT_SHA256="dfdc657b17b52da5fc1fe4be46aa1231794ac5286c717f6ae394f1e8fca5742b"
 PRODUCT_GIT_BLOB="b2e2633be69c7731f78b20a3457455ccd4feba1a"
 LEVELS=("$1,000","$1,500","$2,000","$3,000","$5,000","$7,500",
