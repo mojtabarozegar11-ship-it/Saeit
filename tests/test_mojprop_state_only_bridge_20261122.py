@@ -54,7 +54,7 @@ class StateOnlyBridgeTests(TestCase):
         migration = module.Migration("0011_state_only_bridge", "prop_firm")
         self.assertEqual(set(migration.dependencies), {
             ("prop_firm", "0010_reward_reserve_ledger"),
-            ("prop_firm", "0006_unique_invoice_receivers"),
+            ("prop_firm", "0007_alter_propsimulationaccount_policy_version"),
         })
         self.assertEqual(len(migration.operations), 1)
         op = migration.operations[0]
