@@ -2,8 +2,6 @@ name: MojTrade read-only relay snapshot
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "7 * * * *"
   push:
     paths:
       - scripts/mojtrade_observe_market.py
