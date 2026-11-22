@@ -65,6 +65,17 @@ class VPSReadOnlyHostPolicyTests(TestCase):
             self.assertEqual(audit.release_info(),
                              {"id": "ubuntu", "version_id": "24.04"})
 
+    def test_os_release_fixed_vendor_fallback_no_arbitrary_symlink(self):
+        def controlled_read(path, *, limit=2048):
+            if str(path) == "/etc/os-release":
+                return None
+            if str(path) == "/usr/lib/os-release":
+                return "ID=ubuntu\nVERSION_ID=24.04"
+            raise AssertionError("unexpected path read")
+        with patch.object(audit, "bounded_read", side_effect=controlled_read):
+            self.assertEqual(audit.release_info(),
+                             {"id": "ubuntu", "version_id": "24.04"})
+
     def test_os_release_refuses_unbounded_name(self):
         with patch.object(audit, "bounded_read",
                           return_value='ID="../../bad"\nVERSION_ID="a b"'):
