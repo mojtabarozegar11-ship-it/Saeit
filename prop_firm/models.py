@@ -89,6 +89,7 @@ class PropSimulationAccount(models.Model):
     account_ref = models.CharField(max_length=96, unique=True)
     kind = models.CharField(max_length=24, choices=Kind.choices)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    tier_index = models.PositiveSmallIntegerField(default=0)
     starting_capital_usd = models.DecimalField(
         max_digits=18, decimal_places=2, default=Decimal("1000.00")
     )
@@ -103,6 +104,10 @@ class PropSimulationAccount(models.Model):
             models.CheckConstraint(
                 condition=Q(starting_capital_usd__gt=0),
                 name="mp_sim_account_capital_positive",
+            ),
+            models.CheckConstraint(
+                condition=Q(tier_index__gte=0) & Q(tier_index__lte=13),
+                name="mp_sim_account_tier_range",
             )
         ]
         indexes = [
@@ -117,6 +122,80 @@ class PropSimulationAccount(models.Model):
                 raise ValidationError("Simulation account identity does not match invoice owner")
         if self.invoice_owner_id and not self.invoice_owner.settlement_verified:
             raise ValidationError("Settled invoice owner required before simulation account")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+class PropSimulationStageTransition(models.Model):
+    """Immutable, one-level-at-a-time simulated promotion receipt."""
+
+    account = models.ForeignKey(
+        PropSimulationAccount,
+        on_delete=models.PROTECT,
+        related_name="stage_transitions",
+    )
+    transition_key = models.CharField(max_length=96)
+    from_tier = models.PositiveSmallIntegerField()
+    to_tier = models.PositiveSmallIntegerField()
+    from_capital_usd = models.DecimalField(max_digits=18, decimal_places=2)
+    to_capital_usd = models.DecimalField(max_digits=18, decimal_places=2)
+    policy_version = models.CharField(max_length=32)
+    performance_evidence_digest = models.CharField(max_length=64)
+    capacity_evidence_digest = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account", "transition_key"],
+                name="mp_sim_stage_account_key",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(from_tier__gte=0)
+                    & Q(from_tier__lte=12)
+                    & Q(to_tier__gte=1)
+                    & Q(to_tier__lte=13)
+                ),
+                name="mp_sim_stage_tier_range",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(from_capital_usd__gt=0)
+                    & Q(to_capital_usd__gt=0)
+                ),
+                name="mp_sim_stage_capital_positive",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["account", "-created_at"],
+                name="mp_sim_stage_account_time",
+            ),
+            models.Index(
+                fields=["policy_version", "-created_at"],
+                name="mp_sim_stage_policy_time",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.to_tier != self.from_tier + 1:
+            raise ValidationError("Simulation promotion must advance exactly one tier")
+        if self.from_capital_usd <= 0 or self.to_capital_usd <= 0:
+            raise ValidationError("Simulation tier capital must be positive")
+        for value in (
+            self.performance_evidence_digest,
+            self.capacity_evidence_digest,
+        ):
+            if (
+                type(value) is not str
+                or len(value) != 64
+                or any(char not in "0123456789abcdefABCDEF" for char in value)
+            ):
+                raise ValidationError("Evidence digest must be SHA-256")
 
     def save(self, *args, **kwargs):
         self.full_clean()
