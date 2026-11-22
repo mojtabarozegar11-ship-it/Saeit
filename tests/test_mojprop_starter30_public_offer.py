@@ -67,7 +67,7 @@ class Starter30PublicOfferTests(unittest.TestCase):
 
     def test_current_exact_price_and_invoice_boundary(self):
         page = PUBLIC.read_text("utf-8")
-        for required in ("30 TRX", "one-time simulated access",
+        for required in ("30 TRX", "listed initial challenge entry",
                          'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx&amp;utm_source=moj_prop&amp;utm_medium=onsite&amp;utm_campaign=starter30_lead&amp;utm_content=free_terms"',
                          "server-issued 30 TRX invoice",
                          "A public checkout page alone is not evidence"):
