@@ -1,4 +1,5 @@
 """Every financial-brand signal subsite must feed the canonical Mojtaba.bot.ai intake."""
+from html import escape as html_escape
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -18,9 +19,10 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
         # domains. A relative /moj-prop/ link would resolve to the wrong host.
         self.assertEqual(
             SIGNAL_INTAKE_PATH,
-            "https://mojplaywin.com/moj-prop/?service=signals#request",
+            "https://mojplaywin.com/moj-prop-intake/?format=html&service=signals",
         )
         self.assertNotIn("checkout", SIGNAL_INTAKE_PATH)
+        self.assertNotIn("#", SIGNAL_INTAKE_PATH)
         self.assertNotIn("mojtaba.bot.ai/", SIGNAL_INTAKE_PATH)
 
     @override_settings(ALLOWED_HOSTS=("testserver", "zomorodmelal.ir", "mojplaywin.com"))
@@ -32,7 +34,7 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
             with self.subTest(hostname=hostname):
                 self.assertEqual(response.status_code, 200)
                 html = response.content.decode("utf-8")
-                self.assertEqual(html.count('href="' + SIGNAL_INTAKE_PATH + '"'), 2)
+                self.assertEqual(html.count('href="' + html_escape(SIGNAL_INTAKE_PATH, quote=True) + '"'), 2)
                 self.assertNotIn('href="/moj-prop/?service=signals#request"', html)
                 self.assertNotIn('href="/commerce/"', html)
 
@@ -47,10 +49,9 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
         signal_page = SIGNAL_DESK.read_text(encoding="utf-8")
         self.assertEqual(signal_page.count(LOCAL_SIGNAL_INTAKE), 2)
         target = urlsplit(SIGNAL_INTAKE_PATH)
-        self.assertEqual(
-            target.path + "?" + target.query + "#" + target.fragment,
-            LOCAL_SIGNAL_INTAKE,
-        )
+        self.assertEqual(target.path + "?" + target.query,
+                         "/moj-prop-intake/?format=html&service=signals")
+        self.assertEqual(target.fragment, "")
 
     def test_all_host_signal_subsites_use_the_canonical_signal_intake(self):
         for slug, *_ in BRANDS:
@@ -58,7 +59,7 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
                 response = self.client.get(f"/{slug}/market-signals/")
                 self.assertEqual(response.status_code, 200)
                 html = response.content.decode("utf-8")
-                self.assertEqual(html.count(SIGNAL_INTAKE_PATH), 2)
+                self.assertEqual(html.count(html_escape(SIGNAL_INTAKE_PATH, quote=True)), 2)
                 self.assertIn("mojtaba.bot.ai", html.casefold())
                 self.assertNotIn('href="/store/"', html)
                 self.assertNotIn('href="/commerce/"', html)
@@ -69,7 +70,7 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
                 response = self.client.get(f"/ar/{slug}/market-signals/")
                 self.assertEqual(response.status_code, 200)
                 html = response.content.decode("utf-8")
-                self.assertEqual(html.count(SIGNAL_INTAKE_PATH), 2)
+                self.assertEqual(html.count(html_escape(SIGNAL_INTAKE_PATH, quote=True)), 2)
                 self.assertIn("mojtaba.bot.ai", html.casefold())
 
     def test_store_subsite_keeps_its_store_destination(self):
