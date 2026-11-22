@@ -21,7 +21,7 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes((ROOT / relative).read_bytes())
 
-    def test_01_exact_five_mainline_blobs_are_pinned(self):
+    def test_01_twelve_mainline_blobs_are_pinned(self):
         self.assertEqual(len(MOD.REQUIRED), MOD.EXPECTED_COUNT)
         self.assertEqual(set(MOD.REQUIRED), {
             "prop_firm/simulation_policy.py",
@@ -31,6 +31,11 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             "prop_firm/policy_integrity.py",
             "prop_firm/starter30_live.py",
             "prop_firm/customer_portal_views.py",
+            "prop_firm/models.py",
+            "prop_firm/simulation_identity_adapter.py",
+            "prop_firm/starter30_checkout_email.py",
+            "prop_firm/starter30_receiver_pool.py",
+            "config/mojprop_db_router.py",
         })
         for relative, digest in MOD.REQUIRED.items():
             with self.subTest(relative=relative):
@@ -40,18 +45,18 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
         with TemporaryDirectory() as tmp:
             report = MOD.check_bundle(Path(tmp))
             self.assertFalse(report["source_bundle_matches"])
-            self.assertEqual(report["missing"], 7)
+            self.assertEqual(report["missing"], 12)
             self.assertEqual(report["matched"], 0)
             self.assertEqual(report["written_live_changes"], 0)
 
-    def test_03_all_five_exact_files_match_with_no_side_effect(self):
+    def test_03_all_twelve_exact_files_match_with_no_side_effect(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             self.fill(root)
             before = {rel: (root / rel).stat().st_mtime_ns for rel in MOD.REQUIRED}
             report = MOD.check_bundle(root)
             self.assertTrue(report["source_bundle_matches"])
-            self.assertEqual(report["matched"], 7)
+            self.assertEqual(report["matched"], 12)
             self.assertFalse(report["worker_reload_proven"])
             self.assertFalse(report["financial_release_proven"])
             after = {rel: (root / rel).stat().st_mtime_ns for rel in MOD.REQUIRED}
@@ -65,7 +70,7 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             policy.write_bytes(policy.read_bytes() + b"# drift\n")
             report = MOD.check_bundle(root)
             self.assertEqual(report["drift"], 1)
-            self.assertEqual(report["matched"], 6)
+            self.assertEqual(report["matched"], 11)
             self.assertFalse(report["source_bundle_matches"])
 
     def test_05_absent_buyer_admission_fails_even_when_other_files_match(self):
@@ -75,7 +80,7 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             (root / "prop_firm/starter30_paid_admission.py").unlink()
             report = MOD.check_bundle(root)
             self.assertEqual(report["missing"], 1)
-            self.assertEqual(report["matched"], 6)
+            self.assertEqual(report["matched"], 11)
             self.assertFalse(report["source_bundle_matches"])
 
     def test_06_symlink_replacement_is_not_silently_accepted(self):
@@ -99,7 +104,7 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
                     status = MOD.main(["--check"])
             self.assertEqual(status, 0)
             self.assertIn('"source_bundle_matches": true', buf.getvalue())
-            self.assertEqual(len(list(root.rglob("*.py"))), 7)
+            self.assertEqual(len(list(root.rglob("*.py"))), 12)
 
     def test_08_no_mutation_mode_is_available(self):
         with TemporaryDirectory() as tmp:
@@ -108,6 +113,28 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
                 with contextlib.redirect_stderr(io.StringIO()):
                     self.assertEqual(MOD.main(["--apply"]), 64)
             self.assertEqual(list(root.iterdir()), [])
+
+
+    def test_09_changed_model_blocks_even_if_policy_matches(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.fill(root)
+            model = root / "prop_firm/models.py"
+            model.write_bytes(model.read_bytes() + b"# mismatched schema\\n")
+            report = MOD.check_bundle(root)
+            self.assertEqual(report["matched"], 11)
+            self.assertEqual(report["drift"], 1)
+            self.assertFalse(report["source_bundle_matches"])
+
+    def test_10_missing_identity_adapter_blocks_customer_portal_release(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.fill(root)
+            (root / "prop_firm/simulation_identity_adapter.py").unlink()
+            report = MOD.check_bundle(root)
+            self.assertEqual(report["matched"], 11)
+            self.assertEqual(report["missing"], 1)
+            self.assertFalse(report["source_bundle_matches"])
 
 
 if __name__ == "__main__":
