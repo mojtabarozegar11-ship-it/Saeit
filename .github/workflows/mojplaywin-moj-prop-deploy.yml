@@ -164,10 +164,15 @@ jobs:
           timeout 50s ssh -F "$WORK/config" saeit-host \
             "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/update_mojplaywin_moj_prop_catalog.py preflight $GITHUB_RUN_ID"
           signal_url="https://mojplaywin.com/moj-prop/signals/?v=$GITHUB_SHA"
-          signal_status="$(curl --silent --show-error --max-redirs 0 --max-time 20 \
-            -o "$RUNNER_TEMP/mojprop-signal-desk-before.html" -w '%{http_code}' "$signal_url" || true)"
-          [[ "$signal_status" == '200' ]] || { echo "SIGNAL_DESK_PUBLIC_UNAVAILABLE=$signal_status"; exit 1; }
-          digest="$(sha256sum "$RUNNER_TEMP/mojprop-signal-desk-before.html" | awk '{print $1}')"
+          signal_file="$RUNNER_TEMP/mojprop-signal-desk-before.html"
+          signal_status="$(curl -L --fail --silent --show-error --max-redirs 3 --connect-timeout 10 --max-time 25 \
+            -H 'Cache-Control: no-cache' -o "$signal_file" -w '%{http_code}' "$signal_url" || true)"
+          [[ "$signal_status" == '200' && -s "$signal_file" ]] || {
+            echo "SIGNAL_DESK_PUBLIC_UNAVAILABLE=$signal_status"
+            [[ -f "$signal_file" ]] && head -c 300 "$signal_file" | tr '\n' ' ' || true
+            exit 1
+          }
+          digest="$(sha256sum "$signal_file" | awk '{print $1}')"
           [[ "$digest" =~ ^[a-f0-9]{64}$ ]] || { echo 'SIGNAL_DESK_PRESERVE_BEFORE_HASH_UNAVAILABLE'; exit 1; }
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "MOJ_PROP_LIVE_STATIC_COMPATIBILITY=CHECKED_READ_ONLY"
