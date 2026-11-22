@@ -61,7 +61,7 @@ class Starter30PublicOwnerPolicyParityTests(unittest.TestCase):
 
     def test_05_no_direct_wallet_or_paid_fee_collection_created(self):
         self.assertIn('action="/mojprop-starter30-status/"', self.page)
-        self.assertIn("payment and invoice issuance are currently unavailable", self.page.lower())
+        self.assertIn("secure 30 trx checkout", self.page.lower())
         self.assertIn("unique server-issued invoice", self.guide.lower())
         self.assertIn("no customer capital is accepted", self.page.lower())
         self.assertNotIn('action="/mojprop-starter30-checkout/" method="post"', self.page)
