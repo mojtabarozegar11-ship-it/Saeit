@@ -41,10 +41,10 @@ jobs:
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
           chmod 600 "$d/key"
           ssh-keygen -y -P '' -f "$d/key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          ssh-keyscan -T 10 -p 22 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test -s "$d/known"
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          timeout 90s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          timeout 90s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 -o ForwardAgent=no -p 22 githubops@178.239.147.150 'bash -se' <<'REMOTE'
           set -euo pipefail
           test "$(id -un)" = githubops
           echo "HEALTH_UTC=$(date -u +%FT%TZ)"
@@ -62,9 +62,46 @@ jobs:
             state="$(systemctl is-active "$unit" 2>/dev/null || true)"
             echo "HEALTH_SERVICE_${unit}=${state:-unknown}"
           done
-          cron="$(crontab -l 2>/dev/null || true)"
-          count="$(printf '%s\n' "$cron" | awk '!/^ *#/ && /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/{n++} END{print n+0}')"
+          # Distinguish a normal empty user crontab from a permission or
+          # interpreter failure. Never publish Cron source, errors or usernames.
+          # The remote SSH session has already verified user=githubops.
+          cron_observed=0
+          if cron="$(LC_ALL=C crontab -l 2>&1)"; then
+            cron_observed=1
+            echo "HEALTH_FACTORY_CRON_READ=observed"
+          else
+            cron_exit=$?
+            if (( cron_exit == 1 )) && [[ "$cron" == "no crontab for githubops" ]]; then
+              cron_observed=1
+              cron=""
+              echo "HEALTH_FACTORY_CRON_READ=none_installed"
+            else
+              cron=""
+              echo "HEALTH_FACTORY_CRON_READ=unavailable_fail_closed"
+            fi
+          fi
+          count="$(printf '%s\n' "$cron" | awk '!/^[[:space:]]*(#|$)/ && /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/{n++} END{print n+0}')"
+          # Presence of an active tagged Cron row is not itself evidence of a
+          # paused scheduler. Retain the existing fail-closed count and label
+          # for backward compatibility; report safe categories for review.
+          echo "HEALTH_FACTORY_TAGGED_CRON_ENTRIES=$count"
           echo "HEALTH_FACTORY_HOLD_CRON_ENTRIES=$count"
+          echo "HEALTH_FACTORY_CRON_POLICY=tagged_schedulers_require_review"
+          # Safe numeric-only Cron tag categories (no commands or paths).
+          printf '%s\n' "$cron" | awk '
+            /^[[:space:]]*(#|$)/ {next}
+            /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/ {
+              if (/SAEIT_MASTER_AGENT_V1/) master++
+              if (/SAEIT_FACTORY_EVERY_MINUTE_V1/) minute++
+              if (/SAEIT_FACTORY_LIFECYCLE_12_V1/) lifecycle++
+              if (/SAEIT_AUTONOMOUS_PRODUCTS_V2/) products++
+              if (/SAEIT_PRODUCTION_WAREHOUSE_V1/) warehouse++
+              if (!/SAEIT_(MASTER_AGENT_V1|FACTORY_EVERY_MINUTE_V1|FACTORY_LIFECYCLE_12_V1|AUTONOMOUS_PRODUCTS_V2|PRODUCTION_WAREHOUSE_V1)/) other++
+            }
+            END {
+              printf "HEALTH_FACTORY_TAG_COUNTS=master:%d,minute:%d,lifecycle:%d,products:%d,warehouse:%d,other:%d\n", master+0, minute+0, lifecycle+0, products+0, warehouse+0, other+0
+            }
+          '
           if test -r /etc/os-release; then
             . /etc/os-release
             echo "HEALTH_OS_ID=${ID:-unknown}"
@@ -153,6 +190,7 @@ jobs:
           if (( root_free_kib < 2097152 )); then echo "HEALTH_CRITICAL=root_disk_free_below_2GiB"; gate_fail=1; fi
           if (( root_inode_used_pct >= 95 )); then echo "HEALTH_CRITICAL=root_inodes_95pct_or_more"; gate_fail=1; fi
           if (( ram_available_mb < 512 )); then echo "HEALTH_CRITICAL=ram_available_below_512MiB"; gate_fail=1; fi
+          if (( cron_observed != 1 )); then echo "HEALTH_CRITICAL=factory_crontab_unavailable"; gate_fail=1; fi
           if (( count > 0 )); then echo "HEALTH_CRITICAL=factory_hold_cron_violation"; gate_fail=1; fi
           ssh_active="$(systemctl is-active ssh 2>/dev/null || true)"
           sshd_active="$(systemctl is-active sshd 2>/dev/null || true)"
