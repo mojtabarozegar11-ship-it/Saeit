@@ -47,6 +47,21 @@ class PlatformAdapterTests(unittest.TestCase):
         with self.assertRaises(Blocked):
             send(account("researchgate","x"),{"text":"Hello"},"abcdefg",mock)
 
+    def test_legacy_restricted_instagram_identity_never_reaches_transport(self):
+        for profile in (
+            "https://www.instagram.com/Dr.Mojtaba.Rozegar/",
+            "https://instagram.com/dr%2Emojtaba%2Erozegar/",
+            "https://instagram.com/dr%252Emojtaba%252Erozegar/",
+        ):
+            with self.subTest(profile=profile):
+                mock, calls = respond(ok({"id": "should-not-be-used"}))
+                with self.assertRaises(Blocked):
+                    send(account("instagram", "123456789", public_url=profile),
+                         {"text": "Normal content",
+                          "image_url": "https://mojplaywin.com/media/photo.jpg"},
+                         "token123", mock)
+                self.assertEqual(calls, [])
+
     def test_telegram_returns_real_remote_id(self):
         mock,calls=respond(ok({"ok":True,"result":{"message_id":42}}))
         result=send(account(),{"text":"Research update"},"123456789:"+"A"*30,mock)
@@ -101,11 +116,27 @@ class PlatformAdapterTests(unittest.TestCase):
                  "image_url":"https://attacker.example/image.jpg"},"token123",m)
 
     def test_instagram_two_stage_verified_media_only(self):
-        m,c=respond(ok({"id":"container789"}),ok({"id":"post123"}))
+        m,c=respond(ok({"id":"123456","username":"approved_ig_business"}),
+                    ok({"id":"container789"}),ok({"id":"post123"}))
         out=send(account("instagram","123456"),{"text":"My professional study",
             "image_url":"https://mojplaywin.com/media/photo.jpg"},"token123",m)
         self.assertEqual(out.remote_id,"post123")
-        self.assertEqual(len(c),2)
+        self.assertEqual(len(c),3)
+        self.assertEqual(c[0][0],"GET")
+        self.assertTrue(c[1][1].endswith("/media"))
+
+    def test_instagram_live_provider_identity_blocks_prohibited_username(self):
+        for remote in ({"id":"123456","username":"Dr.Mojtaba.Rozegar"},
+                       {"id":"123456","username":""},
+                       {"id":"999999","username":"approved_ig_business"}):
+            with self.subTest(remote=remote):
+                m,c=respond(ok(remote))
+                with self.assertRaises(Blocked):
+                    send(account("instagram","123456"),{
+                         "text":"Ordinary permitted content",
+                         "image_url":"https://mojplaywin.com/media/photo.jpg"},
+                         "token123",m)
+                self.assertEqual([row[0] for row in c],["GET"])
 
     def test_tiktok_explicit_consent_and_submitted_state(self):
         info=ok({"data":{"privacy_level_options":["SELF_ONLY"]},"error":{"code":"ok"}})
@@ -204,6 +235,19 @@ class DurableQueueTests(unittest.TestCase):
         with self.assertRaises(Blocked):
             run_one(self.db,pid,env=env,transport=mock,execute=True)
         self.assertEqual(len(calls),1)
+
+    def test_legacy_restricted_profile_cannot_claim_preapproved_post(self):
+        self.db.verify_account(self.aid, proof="api-proof-authorized-12345", actor="owner")
+        pid = self.db.draft(account_id=self.aid, content={"text": "Regular message"}, actor="staff")
+        self.db.approve(pid, "owner")
+        # Simulate a legacy DB row imported after verification, not the safe API.
+        self.db.db.execute("UPDATE accounts SET public_url=? WHERE id=?",
+                           ("https://instagram.com/dr%2Emojtaba%2Erozegar/", self.aid))
+        with self.assertRaises(Blocked):
+            self.db.claim(pid)
+        self.assertEqual(self.db.post(pid)["state"], "approved")
+        with self.assertRaises(Blocked):
+            self.db.draft(account_id=self.aid, content={"text": "Other"}, actor="staff")
 
     def test_ambiguous_failure_requires_manual_review(self):
         self.db.verify_account(self.aid,proof="api-proof-authorized-12345",actor="owner")
