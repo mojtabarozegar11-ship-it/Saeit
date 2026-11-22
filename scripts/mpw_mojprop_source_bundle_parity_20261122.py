@@ -34,7 +34,7 @@ REQUIRED = {
     "prop_firm/simulation_identity_adapter.py": "0b4e6bf2050634816314b0ced5b8e424f5a5d2ad",
     "prop_firm/starter30_checkout_email.py": "dc6cdf6daae0b3649a1db4811f4aa3834e37df38",
     "prop_firm/starter30_receiver_pool.py": "2e34e773846fc8903915a784bf3d07de5a411014",
-    "config/mojprop_db_router.py": "d3f255e6a71615ac9f86fcee632eb9b49da0eca8",
+    "config/mojprop_db_router.py": "9c0763798778b9de8037ade341fd96b6d6de49d7",
 }
 EXPECTED_COUNT = 12
 
