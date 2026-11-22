@@ -29,7 +29,12 @@ class Starter30TermsFormContextTests(SimpleTestCase):
         self.assertIn(self.expected_action, html)
         self.assertIn("Requested canonical product: MOJPROP-STARTER30", html)
         self.assertIn("free request for written terms only", html)
+        self.assertIn("<h1>Starter30 — request free written conditions</h1>", html)
+        self.assertIn('<option value="blueprint" selected>Starter30 — free written terms</option>', html)
+        self.assertIn('name="service" required', html)
         self.assertIn('name="csrfmiddlewaretoken"', html)
+        self.assertIn('name="email"', html)
+        self.assertIn('name="consent"', html)
         self.assertNotIn("campaign_external_untrusted", html)
         self.assertNotIn("guaranteed trading profit", html)
 
@@ -50,6 +55,8 @@ class Starter30TermsFormContextTests(SimpleTestCase):
         self.assertIn('action="/moj-prop-intake/?format=html"', html)
         self.assertNotIn(self.expected_action, html)
         self.assertNotIn("Requested canonical product: MOJPROP-STARTER30", html)
+        self.assertNotIn("Starter30 — request free written conditions", html)
+        self.assertIn("<h1>Moj Prop request</h1>", html)
 
     def test_unrecognized_package_does_not_inject_starter30_action(self):
         html, _ = self.render(self.factory.get(
