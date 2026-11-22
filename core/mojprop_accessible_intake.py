@@ -14,6 +14,35 @@ from .models import MojPropRequest
 
 ACTION = "/moj-prop-intake/?format=html"
 
+# Three existing public storefront cards; these values are not payment evidence.
+_DIGITAL_PRODUCTS = {
+    "72": "The Science and Practice of Chess Improvement",
+    "225": "Taniya and the Little Baker Worms",
+    "879": "Atelier Interior — Client-Ready Website Kit",
+}
+
+
+def _safe_digital_product(request):
+    """Accept a single canonical free-inquiry SKU, never a price or wallet.
+
+    POST error rendering requires that the bounded GET product hint matches
+    the original form's POST service/product. No arbitrary user text is echoed.
+    """
+    if request.method not in ("GET", "POST"):
+        return None
+    if request.GET.getlist("service") != ["digital"]:
+        return None
+    ids = request.GET.getlist("product_id")
+    if len(ids) != 1 or ids[0] not in _DIGITAL_PRODUCTS:
+        return None
+    if request.GET.getlist("package"):
+        return None
+    if request.method == "POST":
+        if (request.POST.getlist("service") != ["digital"] or
+                request.POST.getlist("product_id") != ids):
+            return None
+    return ids[0]
+
 
 def _private_html(title, body, *, status=200):
     document = (
@@ -183,6 +212,14 @@ def request_form(request, *, error=None, status=200):
         request,
         allow_starter30_post_retry=(request.method == "POST" and error is not None),
     )
+    digital_product = _safe_digital_product(request)
+    if digital_product:
+        selected = "digital"
+        prefill_notes = (
+            "Unpaid product inquiry: " + _DIGITAL_PRODUCTS[digital_product] +
+            ". Please send written product, delivery and payment details. " +
+            "I understand this request is not an order or invoice."
+        )
     message = ('<p role="alert">' + escape(error) + '</p>') if error else ''
     # Retain the fixed product hint on the form POST, including validation
     # failures, without reflecting untrusted campaign data or buyer PII.
@@ -190,6 +227,8 @@ def request_form(request, *, error=None, status=200):
     action = (ACTION + "&amp;service=blueprint&amp;package=starter-30-trx"
               + _verified_public_campaign_suffix(request)
               if is_starter30 else ACTION)
+    if digital_product:
+        action = ACTION + "&amp;service=digital&amp;product_id=" + digital_product
     if prefill_notes.startswith("Prelaunch interest only: MOJ-PROP-01"):
         message += (
             '<p><strong>MOJ-PROP-01 simulated trading challenge — PRELAUNCH.</strong> '
@@ -204,6 +243,13 @@ def request_form(request, *, error=None, status=200):
         message += ('<p>Starter30 is a <strong>free request for written terms only</strong>; '
                     'this form does not issue an invoice, collect a fee, enroll a '
                     'challenge or activate a trading account.</p>')
+    elif digital_product:
+        message += (
+            '<p><strong>Digital product question — no payment.</strong> '
+            'This free request is not an order, purchase, invoice, payment '
+            'confirmation or download entitlement. Secure store checkout '
+            'remains a separate route.</p>'
+        )
     form = (
         '<p>Request a written, manually reviewed service proposal. '
         'No payment, live account or return is promised.</p>'
@@ -212,13 +258,19 @@ def request_form(request, *, error=None, status=200):
         'enctype="application/x-www-form-urlencoded">'
         '<input type="hidden" name="csrfmiddlewaretoken" value="' + csrf + '">'
         + _attribution_hidden_fields(request) +
+        ('<input type="hidden" name="product_id" value="' + digital_product + '">'
+         if digital_product else '') +
         '<p><label>Your name <input name="name" autocomplete="name" '
         'required minlength="2" maxlength="200"></label></p>'
         '<p><label>Contact email <input type="email" name="email" '
         'autocomplete="email" required maxlength="254"></label></p>'
-        '<p><label>Service <select name="service" required>'
-        + _options(tuple(choice for choice in MojPropRequest.ROUTE_CHOICES
-                         if choice[0] != "digital"), selected=selected) + '</select></label></p>'
+        + ('<p><label>Service: Digital product inquiry</label>'
+         '<input type="hidden" name="service" value="digital"></p>'
+         if digital_product else
+         '<p><label>Service <select name="service" required>' +
+         _options(tuple(choice for choice in MojPropRequest.ROUTE_CHOICES
+                        if choice[0] != "digital"), selected=selected) +
+         '</select></label></p>') +
         '<p>For downloadable products, use the verified store checkout; this '
         'form creates only an unpaid manual-review request.</p>'
         '<p><label>Time horizon <select name="horizon" required>'
@@ -233,9 +285,15 @@ def request_form(request, *, error=None, status=200):
         '<p><label><input type="checkbox" name="consent" value="on" required> '
         'I consent to storing this request for a written manual review.</label></p>'
         '<p><button type="submit">Submit request for manual review</button></p>'
-        '</form><p><a href="/moj-prop/">Return to Moj Prop</a></p>'
+        '</form>' +
+        ('<p><a href="/store/">Return to MojPlayWin store</a></p>'
+         if digital_product else
+         '<p><a href="/moj-prop/">Return to Moj Prop</a></p>')
     )
-    return _private_html("Moj Prop request", form, status=status)
+    return _private_html(
+        "MojPlayWin digital product inquiry" if digital_product else "Moj Prop request",
+        form, status=status,
+    )
 
 
 def status_form(request, *, error=None, status=200):
