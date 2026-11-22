@@ -1,10 +1,10 @@
 """Focused isolated tests for the 14-level simulation transition ledger."""
 
 from decimal import Decimal as D
+from unittest.mock import patch
 
 from django.test import TestCase
 
-from config.mojprop_db_router import MOJPROP_DB_ALIAS
 from prop_firm.models import (
     PropSimulationAccount,
     PropSimulationIdentity,
@@ -18,7 +18,7 @@ from prop_firm.simulation_stage_ledger import (
 from prop_firm.rules import LEVELS
 
 
-DB = MOJPROP_DB_ALIAS
+DB = "default"
 PERFORMANCE = "a" * 64
 CAPACITY = "b" * 64
 
@@ -27,6 +27,12 @@ class SimulationStageLedgerTests(TestCase):
     databases = {DB}
 
     def setUp(self):
+        self.alias_patch = patch(
+            "prop_firm.simulation_stage_ledger.MOJPROP_DB_ALIAS",
+            DB,
+        )
+        self.alias_patch.start()
+        self.addCleanup(self.alias_patch.stop)
         identity = PropSimulationIdentity.objects.using(DB).create(
             subject_key="stage-ledger-test",
             email_digest="c" * 64,
