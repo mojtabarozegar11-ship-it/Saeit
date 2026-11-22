@@ -54,10 +54,6 @@ class Starter30PublicOwnerPolicyParityTests(unittest.TestCase):
 
     def test_04_financial_guarantee_is_not_fabricated(self):
         for t in (self.guide.lower(), self.page.lower()):
-            for phrase in ("no new starter30 invoice", "do not send trx",
-                           "not currently", "not", "no real"):
-                # Only terms substantively present in each asset are checked below.
-                pass
             self.assertIn("do not send trx", t)
             self.assertIn("100%", t)
             self.assertIn("not", t)
