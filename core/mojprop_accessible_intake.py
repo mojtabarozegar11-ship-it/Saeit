@@ -122,6 +122,17 @@ def _safe_service_prefill(request, *, allow_starter30_post_retry=False):
             "uses a virtual $1,000 reference balance, not a funded account, "
             "live trade, payment or profit guarantee."
         )
+    if service == "signals" and not packages:
+        # This is user-editable suggested copy for a FREE enquiry only.
+        # The submitted CRM request still requires explicit consent,
+        # real contact details, CSRF, validation and server-side acceptance.
+        return service, (
+            "Please send the free written terms for the educational Signal Desk: "
+            "covered markets, market-scenario examples, risk disclosures, "
+            "delivery frequency, proposed pricing and cancellation conditions. "
+            "I understand this is only a request for information, not a paid "
+            "subscription, executed trade or guaranteed trading result."
+        )
     return service, ""
 
 
