@@ -28,7 +28,14 @@ class ManualDeployGuardTests(unittest.TestCase):
             return None
         condition = " ".join(line.strip() for line in match.group(1).splitlines())
         condition = condition.replace(">-", " ").replace(">", " ").strip()
-        return " ".join(condition.split())
+        condition = " ".join(condition.split())
+        if condition.startswith("${{ ") and condition.endswith(" }}"):
+            condition = condition[4:-3].strip()
+        elif "${{" in condition or "}}" in condition:
+            return None
+        if "||" in condition:
+            return None
+        return condition
 
     def test_all_sensitive_jobs_are_dispatch_only(self):
         for filename, job in WORKFLOWS.items():

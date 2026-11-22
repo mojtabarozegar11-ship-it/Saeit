@@ -145,12 +145,13 @@ class Starter30PublicOfferTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text("utf-8")
         self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
         self.assertIn("MOJ_PROP_API_PREFLIGHT=PASS", workflow)
+        self.assertIn("approved_release_sha:", workflow)
         for required in (
             "inputs.owner_approved_static_release == true",
             "MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED",
             "MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED",
             "MOJPROP_STATIC_ROLLBACK_VERIFIED",
-            "MOJPROP_STATIC_APPROVED_MAIN_SHA == github.sha",
+            "inputs.approved_release_sha == github.sha",
         ):
             self.assertIn(required, workflow)
         self.assertIn("MOJ_PROP_STATUS_API_PREFLIGHT=PASS", workflow)

@@ -13,6 +13,10 @@
 4. [A structured 60-day practice plan](./sixty-day-practice-plan.md) — maintain a journal and review decisions without trying to force a pass.
 5. [TRX invoice safety checklist](./secure-trx-invoice-checklist.md) — review invoice details, recipient verification, confirmation and duplicate-payment risks.
 
+## Free dated gold macro research — no live calls
+
+- [**Q4 2026 gold macro-scenario brief (published 22 November)**](./gold-macro-scenarios-q4-2026-20261122.md) — original economic research on real yields, demand channels and conflicting scenarios, with named FRED, Treasury, World Gold Council and IMF source links; no live price feed, trade, return claim or execution. [Read the indexable article on the official website](https://mojplaywin.com/moj-prop/signals/gold-q4-2026/?utm_source=github&utm_medium=organic_referral&utm_campaign=gold_macro_q4_20261122). No paid subscription or invoice is created.
+
 ## Free Signal Desk sample — no live trades
 
 - [**See an auditable, fictional market-scenario brief**](./signal-desk-free-scenario-sample.md) — a fully specified bullish/bearish/no-trade teaching case, with costs, loss budget, invalidation and explicit disclosure that it is not a live signal or achieved return.
