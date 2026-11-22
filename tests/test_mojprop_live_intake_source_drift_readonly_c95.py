@@ -148,7 +148,19 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         # original production comparison; the new PR is NOT a cPanel release.
         # The updated reviewed source additionally allows three bounded unpaid
         # product enquiries; immutable historical C95 deployment pin stays fixed.
-        self.assertEqual(exact_git_blob(current.read_bytes()), "ee4374977fa82cf80df1244f4617dc1a689c061b")
+        candidate = current.read_bytes()
+        # Pin the exact reviewed source candidate; keep the immutable C95
+        # historical snapshot and deployment reference untouched.
+        self.assertEqual(exact_git_blob(candidate),
+                         "c8e6de24ce4d9573395a64222d198be48d989f1b")
+        # Reverse precisely the one approved, user-editable no-payment
+        # Signal Desk prefilling change. Any unrelated source modification
+        # fails this check rather than being blessed with a fresh digest.
+        approved_addition = ("    if service == \"signals\" and not packages:\n        # This is user-editable suggested copy for a FREE enquiry only.\n        # The submitted CRM request still requires explicit consent,\n        # real contact details, CSRF, validation and server-side acceptance.\n        return service, (\n            \"Please send the free written terms for the educational Signal Desk: \"\n            \"covered markets, market-scenario examples, risk disclosures, \"\n            \"delivery frequency, proposed pricing and cancellation conditions. \"\n            \"I understand this is only a request for information, not a paid \"\n            \"subscription, executed trade or guaranteed trading result.\"\n        )\n").encode("utf-8")
+        self.assertEqual(candidate.count(approved_addition), 1)
+        previous = candidate.replace(approved_addition, b"", 1)
+        self.assertEqual(exact_git_blob(previous),
+                         "ee4374977fa82cf80df1244f4617dc1a689c061b")
         self.assertNotEqual(exact_git_blob(current.read_bytes()), old_ref)
 
     def test_current_url_source_exact_delta_without_changing_historical_auditor(self):
