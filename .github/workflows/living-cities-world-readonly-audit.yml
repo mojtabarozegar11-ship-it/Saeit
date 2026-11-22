@@ -1,0 +1,37 @@
+# Manual-only: no push trigger, no deploy, no merge, no restart, no paid API.
+name: Living Cities original world read-only audit
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: living-cities-world-readonly-audit
+  cancel-in-progress: false
+jobs:
+  inspect-original-world:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify non-mutating source inspector
+        run: python3 -m unittest discover -s tests -p 'test_living_cities_scene_source_audit.py'
+      - name: Establish existing fingerprint-pinned relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Inspect only the original cPanel browser files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 60s ssh -T -F "$d/config" host 'python3 -' < scripts/living_cities_scene_source_audit.py
+      - name: Remove ephemeral runner relay material
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          if [ -d "$d" ]; then rm -rf -- "$d"; fi
