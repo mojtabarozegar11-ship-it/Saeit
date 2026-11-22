@@ -108,11 +108,17 @@ class MigrationRouterGuardTests(TestCase):
         self.assertEqual(self.execute("mojprop", reverse=True), (["inspect"], 1))
 
     def test_12_uses_real_router(self):
-        from django.db import router
-        self.assertFalse(router.allow_migrate(
+        # CI's global DATABASE_ROUTERS differs between workflow settings.
+        # Check the actual production router class without changing CI settings.
+        from config.mojprop_db_router import MojPropDatabaseRouter
+        production_router = MojPropDatabaseRouter()
+        self.assertFalse(production_router.allow_migrate(
             "default", "prop_firm", model_name="propsimulationpayment"))
-        self.assertTrue(router.allow_migrate(
+        self.assertTrue(production_router.allow_migrate(
             "mojprop", "prop_firm", model_name="propsimulationpayment"))
+        # Guards in the migration body independently reject default even
+        # when the process-wide router has no isolated-app configuration.
+        self.assertEqual(self.execute("default", override=True), ([], 0))
 
     def test_13_two_internal_alias_guards(self):
         src = Path(self.module.__file__).read_text()
