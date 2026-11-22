@@ -1,15 +1,18 @@
 name: Staff panel staging release
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/staff-staging-release.yml'
+  # Never start a workflow that writes to cPanel from a branch push.
   workflow_dispatch:
     inputs:
       revision:
-        description: Reviewed Git revision to stage
+        description: Full reviewed Git commit SHA to stage
         required: true
         type: string
+      release_mode:
+        description: Stage files only, or explicitly authorize a live staff-panel activation
+        required: true
+        type: choice
+        options: [staging_only, activate_live]
+        default: staging_only
 permissions:
   contents: read
 concurrency:
@@ -110,7 +113,19 @@ jobs:
           if grep -q 'command_center' "$APP/config/settings.py"; then echo "LIVE_APP_REGISTERED=yes"; else echo "LIVE_APP_REGISTERED=no"; fi
           if grep -q 'staff/' "$APP/config/urls.py"; then echo "LIVE_STAFF_ROUTE=yes"; else echo "LIVE_STAFF_ROUTE=no"; fi
           REMOTE
-          echo "Activating staff panel with layout-independent Django integration and rollback:"
+          echo "STAGING_READY=$release; LIVE_ACTIVATION=separate_explicit_step"
+      - name: Activate staff panel only after explicit live approval
+        if: ${{ inputs.release_mode == 'activate_live' }}
+        shell: bash
+        env:
+          REVIEWED_REVISION: ${{ inputs.revision }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_REVISION" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          release="staff-${REVIEWED_REVISION:0:12}"
+          # Credentials and pinned host keys were created by the staging step.
+          test -f "$RUNNER_TEMP/ssh/config"
+          echo "LIVE_ACTIVATION_AUTHORIZED=explicit_workflow_dispatch"
           timeout 150s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "python3 /home/zomorod2/Saeit-staging/releases/$release/scripts/activate_staff_panel.py /home/zomorod2/Saeit-staging/releases/$release /home/zomorod2/Saeit"
           echo "Staff activation script completed."
       - name: Remove temporary SSH credentials
