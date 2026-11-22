@@ -20,6 +20,7 @@ case "$target" in
   *) echo "UNAPPROVED_AGENT_WORKFLOW" >&2; exit 3 ;;
 esac
 [[ "${GITHUB_REPOSITORY:-}" == "mojtabarozegar11-ship-it/Saeit" ]] || { echo "WRONG_REPOSITORY" >&2; exit 4; }
+[[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${GITHUB_REF:-}" == "refs/heads/main" && "${GITHUB_ACTOR:-}" == "mojtabarozegar11-ship-it" ]] || { echo "OWNER_MANUAL_DISPATCH_REQUIRED" >&2; exit 11; }
 [[ -n "${GH_TOKEN:-}" ]] || { echo "GITHUB_ACTIONS_TOKEN_MISSING" >&2; exit 5; }
 command -v gh >/dev/null
 command -v jq >/dev/null

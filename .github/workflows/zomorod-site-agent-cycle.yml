@@ -1,11 +1,8 @@
 name: Run Zomorod site agent cycle
+# Until authenticated relay and independent cPanel execution are proven,
+# allow only an explicitly authorized, bounded manual invocation.
+# Never use GitHub Actions as the continuous site-agent scheduler.
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/zomorod-site-agent-cycle.yml"
-  schedule:
-    - cron: "45 4 * * *"
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,8 +30,22 @@ jobs:
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          # Retry only transient host-key discovery, never a fingerprint mismatch.
+          vps_scan=""
+          for attempt in 1 2 3; do
+            vps_scan="$(ssh-keyscan -T 8 -t rsa 178.239.147.150 2>/dev/null || true)"
+            test -n "$vps_scan" && break
+            if test "$attempt" -lt 3; then sleep 2; fi
+          done
+          if test -z "$vps_scan"; then
+            echo "SITE_AGENT_RELAY=VPS_HOST_KEY_UNREACHABLE" >&2
+            exit 1
+          fi
+          printf '%s\n' "$vps_scan" > "$d/vps.known"
+          if test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "SITE_AGENT_RELAY=VPS_HOST_KEY_MISMATCH" >&2
+            exit 1
+          fi
           cat > "$d/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
@@ -59,10 +70,23 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$d/config"
-          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
-          test -n "$scan"
+          # Keep the verified VPS jump host and independently pinned cPanel key.
+          # Suppress SSH details: public Actions logs receive status only.
+          scan=""
+          for attempt in 1 2 3; do
+            scan="$(timeout 28s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null || true)"
+            test -n "$scan" && break
+            if test "$attempt" -lt 3; then sleep 2; fi
+          done
+          if test -z "$scan"; then
+            echo "SITE_AGENT_RELAY=VPS_TO_CPANEL_UNREACHABLE_OR_UNAUTHENTICATED" >&2
+            exit 1
+          fi
           printf '%s\n' "$scan" > "$d/host.candidate"
-          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          if test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "SITE_AGENT_RELAY=CPANEL_HOST_KEY_MISMATCH" >&2
+            exit 1
+          fi
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_CPANEL_RELAY=verified"
       - name: Verify the exact Zomorod app and runtime

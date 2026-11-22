@@ -32,7 +32,8 @@ jobs:
           bash scripts/owner_three_agent_collections_execute_20261024.sh --selftest
   execute:
     needs: validate
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # A push to this workflow must validate source only, never dispatch live agents.
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == 'mojtabarozegar11-ship-it'
     runs-on: ubuntu-24.04
     timeout-minutes: 23
     strategy:
