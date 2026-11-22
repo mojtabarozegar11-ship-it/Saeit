@@ -51,7 +51,7 @@ Each delivered report should record (1) issue time UTC and research window; (2) 
 
 ## Request written service terms — no payment
 
-The central operator is [mojtaba.bot.ai within MojPlayWin](https://mojplaywin.com/mojtaba.bot.ai/). For a genuine manual enquiry about a date-stamped gold research report, supported markets, proposed schedule, licensing, delivery, price, cancellation and jurisdictional conditions, use the **[consented written-terms enquiry form](https://mojplaywin.com/moj-prop-intake/?format=html&service=signals)**. This action does not make an order, generate an invoice, sign up to a mailing list, permit live trade execution or request TRX.
+The central operator is [mojtaba.bot.ai within MojPlayWin](https://mojplaywin.com/mojtaba.bot.ai/?utm_source=github&utm_medium=organic_referral&utm_campaign=gold_macro_q4_20261122). For a genuine manual enquiry about a date-stamped gold research report, supported markets, proposed schedule, licensing, delivery, price, cancellation and jurisdictional conditions, use the **[consented written-terms enquiry form](https://mojplaywin.com/moj-prop-intake/?format=html&service=signals&utm_source=github&utm_medium=organic_referral&utm_campaign=gold_macro_q4_20261122)**. This action does not make an order, generate an invoice, sign up to a mailing list, permit live trade execution or request TRX.
 
 ### Editorial / legal and source notes
 
