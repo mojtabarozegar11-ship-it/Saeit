@@ -3,7 +3,7 @@
 The route is English-only and uses only the dedicated mojprop database.
 It accepts exactly 30 TRX, verifies a submitted transaction through two
 independent SolidityNode providers, and grants a simulated account only inside
-one database transaction after both proofs agree. A payer wallet may be supplied to bind an invoice, but it is optional; when omitted, the settled sender is recorded from the verified on-chain transfer.
+one database transaction after both proofs agree. For the current single-receiver invoice flow, the payer wallet is required and bound to the invoice before issuance. Settlement verifies the on-chain sender against that binding. Do not describe the wallet as optional unless a separately attested exclusive-receiver attribution flow is implemented and approved.
 """
 from __future__ import annotations
 
