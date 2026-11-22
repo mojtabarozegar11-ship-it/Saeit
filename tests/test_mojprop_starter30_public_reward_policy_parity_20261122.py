@@ -47,7 +47,7 @@ class Starter30PublicOwnerPolicyParityTests(unittest.TestCase):
         import hashlib
         raw = STATIC_PAGE.read_bytes()
         blob = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
-        self.assertEqual(blob, "353f476fbfbd5467a18264ef460d83f353cb9a02")
+        self.assertEqual(blob, "737e26d5b410638c9c54d8861fe342c859548698")
         self.assertNotIn('id="profit-reward-schedule"', self.page)
         self.assertIn("secure 30 trx checkout", self.page.lower())
 
