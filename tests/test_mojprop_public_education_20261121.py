@@ -21,6 +21,18 @@ TRUSTED_EDUCATIONAL_REFERENCES=frozenset((
     "https://www.investor.gov/introduction-investing/general-resources/news-alerts/alerts-bulletins/investor-bulletins/social-media-stock-scams",
 ))
 
+# Only this independently reviewed Signal Desk macro article may cite these
+# six exact research/owner links; all buyer guides retain strict URL rules.
+GOLD_MACRO_RESEARCH="gold-macro-scenarios-q4-2026-20261122.md"
+GOLD_RESEARCH_APPROVED_LINKS=frozenset((
+    "https://fred.stlouisfed.org/series/DFII10",
+    "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_real_yield_curve",
+    "https://www.gold.org/goldhub/research/gold-demand-trends/gold-demand-trends-q3-2026/outlook",
+    "https://www.elibrary.imf.org/view/journals/068/2026/007/article-A001-en.xml",
+    "https://mojplaywin.com/mojtaba.bot.ai/",
+    "https://mojplaywin.com/moj-prop-intake/?format=html&service=signals",
+))
+
 class MojPropEducationPublicationTests(unittest.TestCase):
     def test_root_readme_links_to_public_education_hub(self):
         repo_readme=(ROOT.parents[2]/"README.md").read_text(encoding="utf-8")
@@ -30,7 +42,11 @@ class MojPropEducationPublicationTests(unittest.TestCase):
         self.assertIn("30 TRX simulated challenge",repo_readme)
 
     def test_public_guide_catalog_is_complete(self):
-        self.assertEqual({p.name for p in ROOT.glob("*.md")},set(GUIDES)|{"README.md",FREE_SIGNAL_SAMPLE})
+        expected=set(GUIDES)|{"README.md",FREE_SIGNAL_SAMPLE}
+        # Mainline may contain the independent dated Signal Desk brief.
+        if (ROOT/GOLD_MACRO_RESEARCH).is_file():
+            expected.add(GOLD_MACRO_RESEARCH)
+        self.assertEqual({p.name for p in ROOT.glob("*.md")},expected)
         index=(ROOT/"README.md").read_text(encoding="utf-8")
         for name in GUIDES:
             with self.subTest(guide=name):self.assertIn(f"./{name}",index)
@@ -61,9 +77,15 @@ class MojPropEducationPublicationTests(unittest.TestCase):
     def test_official_external_links_only_point_to_owner_domain(self):
         for p in ROOT.glob("*.md"):
             body=p.read_text(encoding="utf-8")
+            if p.name == GOLD_MACRO_RESEARCH:
+                self.assertIn("Not a real-time XAUUSD trading signal",body)
+                self.assertIn("No buy/sell/entry/stop-loss/target levels",body)
             for url in re.findall(r"\]\((https?://[^)]+)\)",body):
                 with self.subTest(page=p.name,url=url):
                     if url in TRUSTED_EDUCATIONAL_REFERENCES:
+                        continue
+                    if p.name == GOLD_MACRO_RESEARCH:
+                        self.assertIn(url,GOLD_RESEARCH_APPROVED_LINKS)
                         continue
                     self.assertTrue(url.startswith("https://mojplaywin.com/"))
                     self.assertIn("utm_source=github",url)
