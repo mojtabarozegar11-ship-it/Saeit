@@ -28,7 +28,7 @@ REQUIRED = {
     "prop_firm/simulation_payout.py": "fcb94c6bed91554aa58ad8943bebc71061748924",
     "prop_firm/starter30_paid_admission.py": "3668de1fd9741d96e15fd6a999432b8a8107540b",
     "prop_firm/policy_integrity.py": "68dfaf2a31e6f63f2c25f8eea93843f27f73d7d8",
-    "prop_firm/starter30_live.py": "91e06d6cb463c7c8ed34949f2e0a6d5975e9cc2a",
+    "prop_firm/starter30_live.py": "c93df3e6e959e9a62f00c36d53ec94c90c9e4883",
     "prop_firm/customer_portal_views.py": "7d4d087a0ac03d6b445b495cf6702db5a00579d5",
     "prop_firm/models.py": "5576f0d29347e4ee41af6d63cb385583815bd03e",
     "prop_firm/simulation_identity_adapter.py": "0b4e6bf2050634816314b0ced5b8e424f5a5d2ad",
