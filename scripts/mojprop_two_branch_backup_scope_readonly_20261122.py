@@ -125,6 +125,54 @@ def check_sources(repo: Path) -> dict:
     }
 
 
+def derive_drop_free_candidate(sql: bytes, required_tables: set[str]) -> bytes:
+    """In-memory empty-target SQL candidate, not an authorized restore.
+
+    Strip exactly 30 DROP TABLE IF EXISTS lines (one per own source table),
+    retaining all remaining SQL bytes unchanged. Reject unfamiliar DDL, target
+    switches and cross-database destinations. Never execute or write SQL.
+    """
+    if type(sql) is not bytes or len(sql) > MAX_SQL_BYTES or len(required_tables) != 30:
+        raise ValueError("invalid source or table count")
+    created = re.findall(
+        rb"(?im)^[ \t]*CREATE TABLE[ \t]+(?:IF NOT EXISTS[ \t]+)?\x60([^\x60]+)\x60", sql
+    )
+    actual_tables = {n.decode("utf8", "replace") for n in created}
+    if len(created) != 30 or actual_tables != required_tables:
+        raise ValueError("source CREATE TABLE schema differs from target")
+    prohibited = (
+        rb"(?im)^[ \t]*(?:CREATE|DROP|ALTER)[ \t]+(?:DATABASE|SCHEMA)\b",
+        rb"(?im)^[ \t]*USE[ \t]+",
+        rb"(?im)^[ \t]*(?:TRUNCATE[ \t]+TABLE|RENAME[ \t]+TABLE)\b",
+        rb"(?im)^[ \t]*(?:SOURCE[ \t]+|\\\.[ \t]+|DELIMITER\b)",
+        rb"(?im)\bINTO[ \t]+(?:OUTFILE|DUMPFILE)\b",
+        rb"(?is)/\*!\d{5,6}[ \t]*(?:DROP[ \t]+TABLE|USE[ \t]+|CREATE[ \t]+DATABASE)",
+        rb"(?im)^[ \t]*(?:CREATE|ALTER|DROP)[ \t]+TABLE[ \t]+"
+        rb"(?:IF[ \t]+(?:NOT[ \t]+)?EXISTS[ \t]+)?\x60[^\x60]+\x60[ \t]*\.",
+    )
+    if any(re.search(pattern, sql) for pattern in prohibited):
+        raise ValueError("unscoped SQL operations")
+    removed, kept = [], []
+    drop_re = re.compile(
+        rb"[ \t]*DROP[ \t]+TABLE[ \t]+IF[ \t]+EXISTS[ \t]+\x60([A-Za-z_0-9]+)\x60"
+        rb"[ \t]*;[ \t]*(?:\r?\n)?", flags=re.I
+    )
+    for line in sql.splitlines(keepends=True):
+        if re.match(rb"(?i)^[ \t]*DROP[ \t]+TABLE\b", line):
+            match = drop_re.fullmatch(line)
+            if match is None:
+                raise ValueError("non-exact DROP statement")
+            removed.append(match.group(1).decode("utf8", "replace"))
+        else:
+            kept.append(line)
+    if len(removed) != 30 or set(removed) != actual_tables or len(set(removed)) != 30:
+        raise ValueError("removed SQL statements do not match 30 source tables")
+    result = b"".join(kept)
+    if re.search(rb"(?im)^[ \t]*(?:DROP|TRUNCATE)[ \t]+TABLE\b", result):
+        raise ValueError("unsafe DDL remains")
+    return result
+
+
 def inspect_archive(path: Path, expected_sha: str, live_tables: set[str]) -> dict:
     """Read exact gzip bytes and return only counts/booleans, never SQL contents."""
     result = {
@@ -137,6 +185,9 @@ def inspect_archive(path: Path, expected_sha: str, live_tables: set[str]) -> dic
         "rehearsed_independent_restore": False,
         "archived_migration_names_15_of_15": False,
         "archived_unique_receiver_marked_applied": False,
+        "drop_free_candidate_in_memory": False,
+        "drop_free_candidate_sha256": None,
+        "drop_lines_removed_for_candidate": 0,
     }
     if (not path.is_absolute() or path.is_symlink() or not path.is_file()
             or path.stat().st_nlink != 1
@@ -184,7 +235,17 @@ def inspect_archive(path: Path, expected_sha: str, live_tables: set[str]) -> dic
     result["no_destructive_ddl"] = not bool(re.search(
         rb"(?im)^[ \t]*(?:DROP|TRUNCATE)[ \t]+TABLE\b|^[ \t]*RENAME[ \t]+TABLE\b", sql
     ))
-    # SQL checks alone are NEVER sufficient evidence of restore correctness.
+    # Derive only in memory if the complete source table set matches.
+    if result["digest_verified"] and result["exact_30_table_schema"]:
+        try:
+            candidate = derive_drop_free_candidate(sql, live_tables)
+        except ValueError:
+            pass
+        else:
+            result["drop_free_candidate_in_memory"] = True
+            result["drop_free_candidate_sha256"] = hashlib.sha256(candidate).hexdigest()
+            result["drop_lines_removed_for_candidate"] = 30
+    # SQL source verification is NOT proof that any actual restore succeeded.
     return result
 
 
