@@ -23,7 +23,7 @@ class EnglishFreeTermsSourceParityTests(unittest.TestCase):
         self.assertIn("Get written Starter30 conditions — free", content)
         self.assertIn("secure 30 TRX checkout", content)
         self.assertIn("payer-wallet verification", content)
-        self.assertIn("unique invoice receiver", content)
+        self.assertIn("single owner-approved receive-only wallet", content)
         self.assertIn(FREE, content)
         self.assertIn(">Open secure 30 TRX checkout</a>", content)
         self.assertIn('href="/mojprop-starter30-checkout/"', content)
