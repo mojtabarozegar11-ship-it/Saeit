@@ -1,8 +1,6 @@
 name: Social Drafts - Daily Safe Pilot
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '17 6 * * *'
 permissions:
   contents: read
 jobs:
