@@ -1,22 +1,142 @@
-name: Zomorod business deployment — temporarily suspended
-# Fail-closed safety state. The live private app.php differs from repository
-# sources; the previous push-triggered workflow could overwrite host-only code.
-# This placeholder performs no network, file, database, email or payment writes.
-# Reenable only after approved merge of reviewed additive overlay safeguards.
+name: Manually publish verified Zomorod business private files
+# A PR merge must never trigger a live write; release requires explicit manual dispatch.
 on:
   workflow_dispatch:
+    inputs:
+      expected_current_app_sha256:
+        description: 'SHA256 of verified live private app.php from a recent read-only host audit'
+        required: true
+        type: string
+      expected_current_dossier_sha256:
+        description: 'SHA256 of live genetics-center.php, or ABSENT if independently verified missing'
+        required: true
+        type: string
+      verified_cpanel_ssh_port:
+        description: 'Confirmed direct cPanel SSH port supplied by owner/provider (no guessed defaults)'
+        required: true
+        type: string
+      expected_merged_app_sha256:
+        description: 'SHA256 from verified read-only additive overlay preview; never the plain GitHub app.php hash'
+        required: true
+        type: string
 permissions:
   contents: read
+concurrency:
+  group: zomorod-business-safe-update
+  cancel-in-progress: false
 jobs:
-  do-not-deploy:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
+  update:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit'
+      && github.ref == 'refs/heads/main'
+      && github.actor == 'mojtabarozegar11-ship-it'
+      && github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 12
     steps:
-      - name: Reject deployment pending owner-approved additive release
+      - uses: actions/checkout@v4
+      - name: Validate both PHP files and guarded installer
         run: |
-          echo "BUSINESS_DEPLOYMENT=BLOCKED_TO_PRESERVE_LIVE_HOST_CUSTOMIZATIONS"
-          echo "BUSINESS_LIVE_FILE_MODIFIED=no"
-          echo "BUSINESS_ACCOUNTING_DATABASE_MODIFIED=no"
-          echo "::error::Full-file deployment is paused until the owner approves the tested additive-merge release."
-          exit 78
+          set -euo pipefail
+          test "${GITHUB_ACTOR}" = 'mojtabarozegar11-ship-it'
+          test "${GITHUB_REF}" = 'refs/heads/main'
+          test "${GITHUB_EVENT_NAME}" = 'workflow_dispatch'
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/genetics-center.php
+          bash -n scripts/zomorod_business_genetics_guarded_install.sh
+          bash -n scripts/zomorod_business_genetics_readonly_preflight.sh
+          bash -n scripts/zomorod_business_homepage_invariant.sh
+          python3 -B -m py_compile scripts/zomorod_business_public_surface_invariant.py
+          python3 -B -m py_compile scripts/zomorod_business_public_reference_audit.py
+          python3 -B -m py_compile scripts/zomorod_business_pre_switch_drift_guard.py
+          python3 -B -m py_compile scripts/zomorod_business_verified_rollback.py
+          test -s scripts/zomorod_business_genetics_readonly_preflight.sh
+          test -s content/zomorod-business/app.php
+          test -s content/zomorod-business/genetics-center.php
+          test -s scripts/zomorod_business_genetics_guarded_install.sh
+          test -s scripts/zomorod_business_homepage_invariant.sh
+          test -s scripts/zomorod_business_public_surface_invariant.py
+          test -s scripts/zomorod_business_public_reference_audit.py
+          test -s scripts/zomorod_business_pre_switch_drift_guard.py
+          test -s scripts/zomorod_business_verified_rollback.py
+          python3 -m py_compile scripts/zomorod_business_genetics_overlay_preview.py
+      - name: Prepare verified direct cPanel SSH connection (no VPS or relay)
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          PORT: ${{ inputs.verified_cpanel_ssh_port }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$PORT" =~ ^[0-9]{1,5}$ ]] || { echo 'DIRECT_CPANEL_PORT=invalid'; exit 2; }
+          port="$((10#$PORT))"
+          (( port >= 1 && port <= 65535 )) || { echo 'DIRECT_CPANEL_PORT=out_of_range'; exit 2; }
+          [[ -n "$HOST_KEY" ]] || { echo 'DIRECT_CPANEL_KEY=missing'; exit 2; }
+          d="$RUNNER_TEMP/zomorod-business-update"
+          install -d -m 700 "$d"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -p "$port" -t ed25519 178.239.147.125 > "$d/host.known" 2>/dev/null
+          test -s "$d/host.known"
+          actual="$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$actual" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo 'DIRECT_CPANEL_HOSTKEY=unverified'; exit 3; }
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port $port
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # Authenticated no-side-effect probe; never stage unless this succeeds.
+          ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = zomorod2 && test -d /home/zomorod2/.private/zomorod-business'
+          echo 'DIRECT_CPANEL=verified'
+          echo "DIRECT_CONFIG=$d" >> "$GITHUB_ENV"
+      - name: Stage and publish the verified private files only
+        shell: bash
+        env:
+          EXPECTED_APP: ${{ inputs.expected_current_app_sha256 }}
+          EXPECTED_DOSSIER: ${{ inputs.expected_current_dossier_sha256 }}
+          EXPECTED_MERGED: ${{ inputs.expected_merged_app_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_APP" =~ ^[0-9a-f]{64}$ ]] || exit 2
+          if [[ "$EXPECTED_DOSSIER" != ABSENT ]]; then
+            [[ "$EXPECTED_DOSSIER" =~ ^[0-9a-f]{64}$ ]] || exit 2
+          fi
+          [[ "$EXPECTED_MERGED" =~ ^[0-9a-f]{64}$ ]] || { echo 'RELEASE=NO_VERIFIED_ADDITIVE_CANDIDATE'; exit 2; }
+          source_dir=content/zomorod-business
+          dossier_hash="$(sha256sum "$source_dir/genetics-center.php" | awk '{print $1}')"
+          d="$DIRECT_CONFIG"
+          stage="/home/zomorod2/.private/zomorod-business/.stage-$GITHUB_SHA"
+          # This command reads only; it must pass BEFORE creating any staging files.
+          ssh -T -F "$d/config" saeit-cpanel bash -s -- "$EXPECTED_APP" "$EXPECTED_DOSSIER" < scripts/zomorod_business_genetics_readonly_preflight.sh
+          # Refuse to overwrite any earlier staging directory.
+          ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && install -d -m 700 '$stage'"
+          # Never stage the reviewed GitHub app.php as the target; it differs from live.
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/proposed-app.php'" < "$source_dir/app.php"
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/genetics-center.php'" < "$source_dir/genetics-center.php"
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/overlay.py'" < scripts/zomorod_business_genetics_overlay_preview.py
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/install.sh'" < scripts/zomorod_business_genetics_guarded_install.sh
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/homepage-guard.sh'" < scripts/zomorod_business_homepage_invariant.sh
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/public-surface.py'" < scripts/zomorod_business_public_surface_invariant.py
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/public-references.py'" < scripts/zomorod_business_public_reference_audit.py
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/pre-switch.py'" < scripts/zomorod_business_pre_switch_drift_guard.py
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/rollback.py'" < scripts/zomorod_business_verified_rollback.py
+          # Build the additive candidate privately from the exact current live file.
+          ssh -T -F "$d/config" saeit-cpanel "PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/Saeit/.venv/bin/python '$stage/overlay.py' '$EXPECTED_APP' --render-stage '$stage' < '$stage/proposed-app.php'"
+          # Installer verifies the independently reviewed candidate SHA256 before touching live files.
+          ssh -T -F "$d/config" saeit-cpanel "bash '$stage/install.sh' '$EXPECTED_APP' '$EXPECTED_DOSSIER' '$EXPECTED_MERGED' '$dossier_hash' '$GITHUB_SHA' '$stage'"
+      - name: Remove temporary SSH keys
+        if: always()
+        run: rm -rf "${RUNNER_TEMP}/zomorod-business-update"
