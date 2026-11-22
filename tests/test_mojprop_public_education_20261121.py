@@ -12,6 +12,14 @@ GUIDES=(
     "sixty-day-practice-plan.md",
     "secure-trx-invoice-checklist.md",
 )
+# Reviewed, independent free Signal Desk teaching material; six historical guides
+# retain their immutable editorial and no-draft acceptance checks.
+FREE_SIGNAL_SAMPLE="signal-desk-free-scenario-sample.md"
+# Exactly two explicit authority references, never a general off-site allow rule.
+TRUSTED_EDUCATIONAL_REFERENCES=frozenset((
+    "https://www.law.cornell.edu/cfr/text/17/4.41",
+    "https://www.investor.gov/introduction-investing/general-resources/news-alerts/alerts-bulletins/investor-bulletins/social-media-stock-scams",
+))
 
 class MojPropEducationPublicationTests(unittest.TestCase):
     def test_root_readme_links_to_public_education_hub(self):
@@ -22,10 +30,11 @@ class MojPropEducationPublicationTests(unittest.TestCase):
         self.assertIn("30 TRX simulated challenge",repo_readme)
 
     def test_public_guide_catalog_is_complete(self):
-        self.assertEqual({p.name for p in ROOT.glob("*.md")},set(GUIDES)|{"README.md"})
+        self.assertEqual({p.name for p in ROOT.glob("*.md")},set(GUIDES)|{"README.md",FREE_SIGNAL_SAMPLE})
         index=(ROOT/"README.md").read_text(encoding="utf-8")
         for name in GUIDES:
             with self.subTest(guide=name):self.assertIn(f"./{name}",index)
+        self.assertIn(f"./{FREE_SIGNAL_SAMPLE}",index)
 
     def test_guides_are_educational_and_no_editorial_drafts(self):
         for name in GUIDES:
@@ -54,6 +63,8 @@ class MojPropEducationPublicationTests(unittest.TestCase):
             body=p.read_text(encoding="utf-8")
             for url in re.findall(r"\]\((https?://[^)]+)\)",body):
                 with self.subTest(page=p.name,url=url):
+                    if url in TRUSTED_EDUCATIONAL_REFERENCES:
+                        continue
                     self.assertTrue(url.startswith("https://mojplaywin.com/"))
                     self.assertIn("utm_source=github",url)
 
