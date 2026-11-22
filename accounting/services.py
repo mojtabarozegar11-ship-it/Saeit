@@ -40,13 +40,16 @@ def ledger_summary(limit=12):
             "memo": entry.memo, "total": _money(total),
         })
     posted = JournalEntry.objects.filter(status=JournalEntry.Status.POSTED).prefetch_related("lines")
+    posted_count = posted.count()
     return {
         "accounts": balances,
         "recent_entries": entries,
-        "posted_entries": posted.count(),
+        "posted_entries": posted_count,
         "draft_entries": JournalEntry.objects.filter(status=JournalEntry.Status.DRAFT).count(),
         "integrity": {
-            "balanced_posted_entries": all(_is_balanced(entry) for entry in posted),
+            "balanced_posted_entries": bool(posted_count) and all(_is_balanced(entry) for entry in posted),
+            "evidence_count": posted_count,
+            "no_posted_entries": posted_count == 0,
             "source": "Django double-entry ledger",
         },
     }

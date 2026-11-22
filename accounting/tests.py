@@ -1,7 +1,10 @@
 from datetime import date
 from decimal import Decimal
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
+from django.contrib import admin
+from django.core.exceptions import ValidationError
+from .admin import JournalEntryAdmin
 from .models import Account, JournalEntry, JournalLine
 from .services import ledger_summary
 
@@ -33,3 +36,33 @@ class AccountingDashboardTests(TestCase):
     def test_unbalanced_posted_entry_is_reported_not_crashed(self):
         JournalEntry.objects.create(reference="JV-BAD", occurred_on=date(2026, 11, 4), memo="نامتوازن", status=JournalEntry.Status.POSTED)
         self.assertFalse(ledger_summary()["integrity"]["balanced_posted_entries"])
+
+    def test_journal_requires_at_least_two_lines(self):
+        one = JournalEntry.objects.create(
+            reference="JV-ONE", occurred_on=date(2026, 11, 8),
+            memo="one-sided test", status=JournalEntry.Status.DRAFT
+        )
+        JournalLine.objects.create(
+            entry=one, account=self.cash, debit=Decimal("10.00")
+        )
+        with self.assertRaises(ValidationError):
+            one.validate_balanced()
+
+    def test_zero_posted_entries_is_not_treated_as_verified_balanced(self):
+        JournalLine.objects.all().delete()
+        JournalEntry.objects.all().delete()
+        summary = ledger_summary()
+        self.assertEqual(summary["integrity"]["evidence_count"], 0)
+        self.assertTrue(summary["integrity"]["no_posted_entries"])
+        self.assertFalse(summary["integrity"]["balanced_posted_entries"])
+
+    def test_posted_journal_not_mutable_through_admin(self):
+        editor = get_user_model().objects.create_superuser(
+            username="finance-qa", email="qa@example.test", password="local-test-only"
+        )
+        request = RequestFactory().get("/admin/accounting/journalentry/")
+        request.user = editor
+        posted = JournalEntry.objects.get(reference="JV-1")
+        entry_admin = JournalEntryAdmin(JournalEntry, admin.site)
+        self.assertFalse(entry_admin.has_change_permission(request, posted))
+        self.assertFalse(entry_admin.has_delete_permission(request, posted))
