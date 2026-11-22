@@ -9,11 +9,33 @@ STARTER30 = ROOT / "templates" / "moj-prop-v4" / "starter-30-trx" / "index.html"
 
 
 class Starter30NavigationAndPaymentCopyTests(unittest.TestCase):
-    def test_home_directly_exposes_canonical_page_and_checkout(self):
+    def test_home_links_canonical_rules_and_free_request_not_disabled_checkout(self):
         source = HOME.read_text(encoding="utf-8")
         self.assertIn('href="/moj-prop/starter-30-trx/"', source)
-        self.assertIn('href="/mojprop-starter30-checkout/"', source)
         self.assertIn('id="starter30-featured"', source)
+        self.assertNotIn('href="/mojprop-starter30-checkout/"', source)
+        self.assertNotIn("Go to secure 30 TRX checkout", source)
+        self.assertIn(
+            'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"',
+            source,
+        )
+        self.assertIn('href="/moj-prop/signals/"', source)
+        self.assertIn("No TRX payment is available at present.", source)
+        self.assertIn("The free request does not charge you", source)
+
+    def test_home_maintains_original_layout_and_existing_store_research_routes(self):
+        source = HOME.read_text(encoding="utf-8")
+        for marker in (
+            'class="mw-shell"',
+            'class="mw-hero"',
+            'class="mw-actions"',
+            'href="/store/"',
+            'href="/research/"',
+            'id="starter30-featured"',
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, source)
+        self.assertEqual(source.count('id="starter30-featured"'), 1)
 
     def test_moj_prop_separates_plan1_prelaunch_from_starter30_payment(self):
         source = MOJ_PROP.read_text(encoding="utf-8")
