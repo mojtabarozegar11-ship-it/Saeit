@@ -83,5 +83,15 @@ class SignalDeskEducationalAssetTests(unittest.TestCase):
         self.assertIn("Moj Prop Signal Desk — free educational terms", readme)
 
 
+    def test_08_canonical_official_links_cannot_duplicate_attribution_query(self):
+        import re
+        for path in (ARTICLE, DIR / "README.md"):
+            text = path.read_text(encoding="utf-8")
+            for url in re.findall(r"\\]\\((https://mojplaywin[.]com/[^)]+)\\)", text):
+                with self.subTest(file=path.name, url=url):
+                    self.assertEqual(url.count("?"), 1)
+                    self.assertEqual(url.count("utm_source=github"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
