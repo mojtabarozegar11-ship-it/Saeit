@@ -184,7 +184,7 @@ def server_census(connection):
             else:
                 cursor.execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
             try:
-                return collect(cursor)
+                return collect(cursor, table_names=lambda: connection.introspection.table_names(cursor))
             finally:
                 cursor.execute("ROLLBACK")
     finally:
@@ -251,7 +251,7 @@ def reason_tags(value):
         return ("unrecorded_reason",)
     return tuple(label for label, pattern in REASON_RULES if re.search(pattern, msg)) or ("other_reason",)
 
-def task_reconciliation(cursor):
+def task_reconciliation(cursor, *, table_names=None):
     cursor.execute("SELECT * FROM core_agenttask WHERE 1=0")
     columns = {c[0].lower() for c in cursor.description}
     optional = ("project_id", "product_id", "factory_run_id")
@@ -308,6 +308,18 @@ def task_reconciliation(cursor):
         return [dict(zip(keys, k), total=n) for k,n in sorted(counter.items(), key=lambda x: str(x[0]))]
     runs = {"state": "field_absent_or_no_linked_tasks"}
     if run_ids:
+        if table_names is None:
+            if not isinstance(cursor, sqlite3.Cursor):
+                raise ValueError("run_table_metadata_unavailable")
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            names = {row[0] for row in cursor.fetchall()}
+        else:
+            names = set(table_names())
+    else:
+        names = set()
+    if run_ids and "core_factoryrun" not in names:
+        runs = {"state": "run_schema_incomplete"}
+    elif run_ids:
         # Read only the status/product association for runs; no raw IDs exported.
         cursor.execute("SELECT * FROM core_factoryrun WHERE 1=0")
         run_cols = {c[0].lower() for c in cursor.description}
@@ -351,9 +363,9 @@ def task_reconciliation(cursor):
         "cause_proven_by_keyword": False,
     }
 
-def collect(cursor):
+def collect(cursor, *, table_names=None):
     result = _census_collect(cursor)
-    evidence = task_reconciliation(cursor)
+    evidence = task_reconciliation(cursor, table_names=table_names)
     if evidence["pending"] != result["nonterminal_tasks"]:
         raise ValueError("reconciliation_count_mismatch_or_orphans")
     result["task_reconciliation"] = evidence

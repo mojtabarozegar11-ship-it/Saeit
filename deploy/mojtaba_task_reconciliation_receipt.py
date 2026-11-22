@@ -72,23 +72,40 @@ def validate_reconciliation(r, agents, pending):
     cases = r["exhausted_cases_snapshot_local"]
     require(isinstance(cases,list) and len(cases) <= 1000 and len(cases)==sum(exhausted.values()))
     case_groups = Counter()
+    case_links = Counter()
+    case_run_links = Counter()
     for index,c in enumerate(cases,1):
         require(isinstance(c,dict) and set(c)=={"case","action","status","attempts","maximum","reason_tags","links","run_link_state"})
         require(type(c["case"]) is int and c["case"]==index and valid_code(c["action"]) and status(c["status"]) and tags(c["reason_tags"]))
         require(count(c["attempts"]) and count(c["maximum"]) and c["attempts"]>=c["maximum"])
         require(isinstance(c["links"],dict) and set(c["links"])==FIELDS and all(member(LINKS)(v) for v in c["links"].values()))
         require(member(RUN_LINKS | {"not_evaluated"})(c["run_link_state"]))
+        for field, state in c["links"].items():
+            case_links[c["action"], c["status"], field, state] += 1
+        linked = c["action"] in FACTORY_ACTIONS and all(
+            c["links"][field] == "present" for field in ("product_id", "factory_run_id"))
+        if c["run_link_state"] != "not_evaluated":
+            require(linked)
+            case_run_links[c["action"],c["run_link_state"]] += 1
         case_groups[c["action"],c["status"],tuple(c["reason_tags"])] += 1
     require(case_groups == exhausted)
+    require(all(n <= links[key] for key,n in case_links.items()))
     run = r["run_links"]
     require(isinstance(run,dict) and run.get("state") in {"observed","field_absent_or_no_linked_tasks","run_schema_incomplete"})
     if run["state"] == "observed":
         require(set(run)=={"state","groups"})
         rows=groups(run["groups"],("action","link_state"),(member(FACTORY_ACTIONS),member(RUN_LINKS)))
+        require(all(n <= rows[key] for key,n in case_run_links.items()))
+        for c in cases:
+            if c["action"] in FACTORY_ACTIONS and all(c["links"][f]=="present" for f in ("product_id","factory_run_id")):
+                require(c["run_link_state"] != "not_evaluated")
         for action in FACTORY_ACTIONS:
-            require(sum(n for (a,_),n in rows.items() if a==action)<=sum(n for (a,_),n in actual.items() if a==action))
+            linked_upper = sum(min(links[action,state,"product_id","present"],
+                                   links[action,state,"factory_run_id","present"])
+                               for a,state in actual if a==action)
+            require(sum(n for (a,_),n in rows.items() if a==action)<=linked_upper)
     else:
-        require(set(run)=={"state"})
+        require(set(run)=={"state"} and not case_run_links)
     candidate_groups=r["same_action_product_run_candidate_groups"]
     candidate_tasks=r["same_action_product_run_candidate_tasks"]
     require(count(candidate_groups) and count(candidate_tasks) and 2*candidate_groups<=candidate_tasks<=pending and bool(candidate_groups)==bool(candidate_tasks))
