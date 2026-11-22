@@ -64,7 +64,7 @@ class MojPropCatalogSamplesContractTests(unittest.TestCase):
         self.assertIn("./journal-template.csv", starter)
         self.assertIn("./journal-guide.txt", starter)
         self.assertIn("secure 30 TRX checkout", starter)
-        self.assertIn("Open secure 30 TRX checkout", starter)
+        self.assertIn("Review 30 TRX checkout requirements", starter)
         self.assertIn('href="/mojprop-starter30-checkout/"', starter)
         self.assertIn("payer-wallet verification", starter)
         self.assertIn("No real funded account", starter)
