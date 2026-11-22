@@ -53,6 +53,37 @@ if (strlen($original) < 250 || strlen($original) > 950000
     || strpos($original, 'https://mojplaywin.com/') === false
     || strpos($original, 'https://zomorodmelal.ir/') !== false) fallbackSitemap();
 $mojPropPaths = ['/moj-prop/rules/', '/moj-prop/signals/', '/moj-prop/payment/', '/moj-prop/contact/', '/moj-prop/selected-traders/', '/moj-prop/education/', '/moj-prop/education/risk-management/', '/moj-prop/education/drawdown-and-position-sizing/', '/moj-prop/education/sixty-day-simulated-challenge/', '/moj-prop/education/best-day-consistency/', '/moj-prop/education/simulated-versus-live/', '/moj-prop/catalog/'];
+// 2026-11-22: 21 independently verified, self-canonical, indexable live language pages.
+// The already-submitted root sitemap previously omitted these; preserve the original
+// low-count passthrough branch and all existing English + public robot/store URLs.
+$mojPropLocalePaths = [
+    '/moj-prop/languages/',
+    '/moj-prop/languages/ar-eg/',
+    '/moj-prop/languages/ar/',
+    '/moj-prop/languages/bn/',
+    '/moj-prop/languages/de/',
+    '/moj-prop/languages/en/',
+    '/moj-prop/languages/es/',
+    '/moj-prop/languages/fr/',
+    '/moj-prop/languages/hi/',
+    '/moj-prop/languages/id/',
+    '/moj-prop/languages/ja/',
+    '/moj-prop/languages/mr/',
+    '/moj-prop/languages/pcm/',
+    '/moj-prop/languages/pt/',
+    '/moj-prop/languages/ru/',
+    '/moj-prop/languages/sw/',
+    '/moj-prop/languages/te/',
+    '/moj-prop/languages/tr/',
+    '/moj-prop/languages/ur/',
+    '/moj-prop/languages/vi/',
+    '/moj-prop/languages/zh/',
+];
+if (count($mojPropLocalePaths) !== 21
+    || count(array_unique($mojPropLocalePaths)) !== 21) fallbackSitemap();
+array_push($mojPropPaths, ...$mojPropLocalePaths);
+// LIVE-VERIFIED BOT SITEMAP PRESERVATION: public landing only; no API, paid checkout or status.
+$mojPropPaths[] = '/mojtaba.bot.ai/';
 $locCount = substr_count($original, '<loc>');
 if ($locCount < 20) {
     preg_match_all('~<loc>([^<]+)</loc>~', $original, $matchedLocs);
@@ -77,6 +108,8 @@ if ($locCount < 20) {
     exit;
 }
 $paths = ['/market/', '/industry/', '/economy/'];
+// LIVE-VERIFIED STORE SITEMAP PRESERVATION: three approved public product detail pages.
+$paths = array_merge($paths, ['/store/product/72/', '/store/product/225/', '/store/product/879/']);
 $paths = array_merge($paths, $mojPropPaths);
 $extra = '';
 // MPW_REVENUE_SITEMAP_LINKS_20261020 -- 13 additional verified indexable main-domain pages
