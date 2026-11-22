@@ -127,6 +127,14 @@ def manual_release_job_guarded(source: str, header: str, job: str,
     condition = " ".join(line.strip() for line in condition_match.group(1).splitlines())
     condition = condition.replace(">-", " ").replace(">", " ").strip()
     condition = " ".join(condition.split())
+    # GitHub accepts both raw if expressions and a wrapped expression.
+    # Strip only a complete wrapper. Retain the entire predicate body.
+    if condition.startswith("${{ ") and condition.endswith(" }}"):
+        condition = condition[4:-3].strip()
+    elif "${{" in condition or "}}" in condition:
+        return False
+    if " || " in condition:
+        return False  # Reject unsafe alternate release paths.
     allowed = "github.event_name == 'workflow_dispatch'"
     if require_static_owner_approval:
         if "owner_approved_static_release:" not in header:
