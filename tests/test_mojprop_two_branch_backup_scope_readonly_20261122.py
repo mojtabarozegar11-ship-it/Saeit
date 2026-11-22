@@ -167,6 +167,31 @@ class MojPropTwoBranchArchiveProofTests(TestCase):
             self.assertTrue(result["archived_unique_receiver_marked_applied"])
 
 
+    def test_13_legacy_applied_markers_without_legacy_tables_are_flagged(self):
+        self.assertEqual(MOD.LEGACY_ROOT_TABLES, frozenset({
+            "prop_firm_proptrader", "prop_firm_propaccount",
+            "prop_firm_propexecution", "prop_firm_propequityobservation",
+            "prop_firm_propdecisionlog",
+        }))
+        applied = set(MOD.LEGACY) | set(MOD.ISOLATED)
+        isolated_tables = {
+            "prop_firm_propsimulationpayment",
+            "prop_firm_propsimulationidentity",
+        }
+        self.assertTrue(MOD.legacy_markers_contradict_schema(applied, isolated_tables))
+
+    def test_14_legacy_root_check_never_flags_isolated_only_or_complete_schema(self):
+        self.assertFalse(MOD.legacy_markers_contradict_schema(
+            set(MOD.ISOLATED), set()
+        ))
+        self.assertFalse(MOD.legacy_markers_contradict_schema(
+            set(MOD.LEGACY), set(MOD.LEGACY_ROOT_TABLES)
+        ))
+        self.assertTrue(MOD.legacy_markers_contradict_schema(
+            set(MOD.LEGACY), set(MOD.LEGACY_ROOT_TABLES) - {"prop_firm_propaccount"}
+        ))
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()
