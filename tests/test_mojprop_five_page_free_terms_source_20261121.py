@@ -25,7 +25,7 @@ class EnglishFreeTermsSourceParityTests(unittest.TestCase):
         self.assertIn("payer-wallet verification", content)
         self.assertIn("single owner-approved receive-only wallet", content)
         self.assertIn(FREE, content)
-        self.assertIn(">Open secure 30 TRX checkout</a>", content)
+        self.assertIn(">Review 30 TRX checkout requirements</a>", content)
         self.assertIn('href="/mojprop-starter30-checkout/"', content)
         self.assertNotIn("payment admission under independent verification", content)
 
