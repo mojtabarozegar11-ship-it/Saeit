@@ -7,6 +7,11 @@ PORTAL = ROOT / "prop_firm" / "customer_portal_views.py"
 
 
 class SimulationStagePortalContractTests(unittest.TestCase):
+    def test_payout_gate_requires_funded_simulation_kind(self):
+        payout = (ROOT / "prop_firm" / "simulation_payout.py").read_text(encoding="utf-8")
+        self.assertIn("account.kind != PropSimulationAccount.Kind.FUNDED_SIMULATION", payout)
+        self.assertIn("only an isolated funded-simulation account", payout)
+
     def test_portal_reads_stage_receipts_without_transition_or_payout_side_effects(self):
         source = PORTAL.read_text(encoding="utf-8")
         start = source.index("def _stage_history(")
