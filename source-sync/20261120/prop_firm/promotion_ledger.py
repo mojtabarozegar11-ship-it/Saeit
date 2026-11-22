@@ -40,10 +40,11 @@ def _digest(value, name):
     return value
 
 
-def _payload(*, account, target_index, evidence_digest, funding_evidence_digest):
+def _payload(*, account, from_index, target_index, evidence_digest,
+             funding_evidence_digest):
     return [
         "atomic_stage_transition_v1",
-        f"from_tier={account.tier_index}",
+        f"from_tier={from_index}",
         f"to_tier={target_index}",
         f"from_capital_usd={account.starting_capital_usd}",
         f"to_capital_usd={LEVELS[target_index]}",
@@ -51,6 +52,43 @@ def _payload(*, account, target_index, evidence_digest, funding_evidence_digest)
         f"performance_evidence={evidence_digest}",
         f"funding_evidence={funding_evidence_digest}",
     ]
+
+
+def _replay_result(account, existing, payload):
+    """Validate and return an already-committed transition receipt."""
+    if (
+        existing.category != "promotion"
+        or existing.qualifies is not True
+        or existing.policy_version != account.policy_version
+        or existing.reasons != payload
+    ):
+        raise PromotionTransitionRejected(
+            "decision key already binds to different transition evidence"
+        )
+    try:
+        from_index = int(payload[1].split("=", 1)[1])
+        target_index = int(payload[2].split("=", 1)[1])
+    except (IndexError, ValueError) as exc:
+        raise PromotionTransitionRejected(
+            "stored transition receipt is malformed"
+        ) from exc
+    if (
+        not 0 <= from_index < target_index < len(LEVELS)
+        or account.tier_index != target_index
+        or account.starting_capital_usd != Decimal(LEVELS[target_index])
+        or account.status != PropAccount.Status.ACTIVE
+    ):
+        raise PromotionTransitionRejected(
+            "account state does not match the committed transition receipt"
+        )
+    return {
+        "status": "idempotent_replay",
+        "decision_id": existing.pk,
+        "account_id": str(account.pk),
+        "from_tier": from_index,
+        "to_tier": target_index,
+        "starting_capital_usd": str(account.starting_capital_usd),
+    }
 
 
 def commit_next_level_transition(
@@ -96,18 +134,6 @@ def commit_next_level_transition(
             raise PromotionTransitionRejected(
                 "only a funded simulation compartment can transition levels"
             )
-        if account.status != PropAccount.Status.PASSED:
-            raise PromotionTransitionRejected("account must be PASSED before promotion")
-        if account.tier_index >= len(LEVELS) - 1:
-            raise PromotionTransitionRejected("maximum level already reached")
-
-        target_index = account.tier_index + 1
-        payload = _payload(
-            account=account,
-            target_index=target_index,
-            evidence_digest=evidence_digest,
-            funding_evidence_digest=funding_evidence_digest,
-        )
 
         existing = (
             PropDecisionLog.objects.select_for_update()
@@ -115,24 +141,35 @@ def commit_next_level_transition(
             .first()
         )
         if existing is not None:
-            if (
-                existing.category != "promotion"
-                or existing.qualifies is not True
-                or existing.policy_version != account.policy_version
-                or existing.evidence_digest != evidence_digest
-                or existing.reasons != payload
-            ):
-                raise PromotionTransitionRejected(
-                    "decision key already binds to different transition evidence"
-                )
-            return {
-                "status": "idempotent_replay",
-                "decision_id": existing.pk,
-                "account_id": str(account.pk),
-                "from_tier": account.tier_index,
-                "to_tier": target_index,
-                "starting_capital_usd": str(account.starting_capital_usd),
-            }
+            expected = _payload(
+                account=account,
+                from_index=int(existing.reasons[1].split("=", 1)[1])
+                if isinstance(existing.reasons, list) and len(existing.reasons) > 2
+                and str(existing.reasons[1]).startswith("from_tier=")
+                else -1,
+                target_index=int(existing.reasons[2].split("=", 1)[1])
+                if isinstance(existing.reasons, list) and len(existing.reasons) > 2
+                and str(existing.reasons[2]).startswith("to_tier=")
+                else -1,
+                evidence_digest=evidence_digest,
+                funding_evidence_digest=funding_evidence_digest,
+            )
+            return _replay_result(account, existing, expected)
+
+        if account.status != PropAccount.Status.PASSED:
+            raise PromotionTransitionRejected("account must be PASSED before promotion")
+        if account.tier_index >= len(LEVELS) - 1:
+            raise PromotionTransitionRejected("maximum level already reached")
+
+        from_index = account.tier_index
+        target_index = from_index + 1
+        payload = _payload(
+            account=account,
+            from_index=from_index,
+            target_index=target_index,
+            evidence_digest=evidence_digest,
+            funding_evidence_digest=funding_evidence_digest,
+        )
 
         # Account.clean() still enforces the immutable purchased contract,
         # KYC/eligibility, and funded-tier capital constraints.
@@ -155,12 +192,14 @@ def commit_next_level_transition(
             reasons=payload,
             evidence_digest=evidence_digest,
         )
-        account.save(update_fields=["tier_index", "starting_capital_usd", "status", "updated_at"])
+        account.save(
+            update_fields=["tier_index", "starting_capital_usd", "status", "updated_at"]
+        )
         return {
             "status": "committed",
             "decision_id": decision.pk,
             "account_id": str(account.pk),
-            "from_tier": target_index - 1,
+            "from_tier": from_index,
             "to_tier": target_index,
             "starting_capital_usd": str(account.starting_capital_usd),
         }
