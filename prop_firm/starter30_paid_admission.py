@@ -149,6 +149,81 @@ def require_live_unique_invoice_recipient_schema() -> None:
         )
 
 
+
+# Preserve historical customer records. An applied migration name does not
+# establish that its legacy tables exist on the *isolated* MojProp database.
+_LEGACY_INITIAL_MIGRATION = "0001_initial"
+_LEGACY_SOURCE_TABLES = frozenset((
+    "prop_firm_proptrader",
+    "prop_firm_propaccount",
+    "prop_firm_propexecution",
+    "prop_firm_propequityobservation",
+    "prop_firm_propdecisionlog",
+))
+_REQUIRED_ISOLATED_MIGRATIONS = frozenset((
+    "0001_simulation_isolation",
+    "0002_starter30_payment",
+    "0003_payment_table_router_alignment",
+    "0004_simulation_payout_commitment",
+    "0005_optional_payer_wallet",
+    "0006_unique_invoice_receivers",
+))
+
+
+def _isolated_migration_lineage_defects(
+    *,
+    applied_names: set[str],
+    physical_tables: set[str],
+) -> tuple[str, ...]:
+    """Pure detector: history must match the schema; never repair history here."""
+    if (type(applied_names) is not set
+            or type(physical_tables) is not set
+            or any(type(n) is not str for n in applied_names | physical_tables)):
+        return ("isolated_migration_provenance_unavailable",)
+    reasons = []
+    if not _REQUIRED_ISOLATED_MIGRATIONS <= applied_names:
+        reasons.append("isolated_native_trx_unique_receiver_migration_incomplete")
+    if (_LEGACY_INITIAL_MIGRATION in applied_names
+            and not _LEGACY_SOURCE_TABLES <= physical_tables):
+        reasons.append("historical_migrations_not_backed_by_isolated_schema")
+    if ("prop_firm_propsimulationpayment" not in physical_tables):
+        reasons.append("isolated_native_trx_payment_table_missing")
+    return tuple(reasons)
+
+
+def require_live_isolated_migration_lineage() -> None:
+    """Reject new paid invoices on orphaned historical/isolated DB migration state.
+
+    Read-only physical-table introspection and a SELECT on the existing
+    isolated django_migrations table. No MigrationExecutor, --fake, DDL, DML,
+    migrations or restore operation. The UNIQUE index is checked by the
+    separately required physical recipient schema gate.
+    """
+    try:
+        from config.mojprop_db_router import MOJPROP_DB_ALIAS
+        from django.db import connections
+
+        conn = connections[MOJPROP_DB_ALIAS]
+        with conn.cursor() as cursor:
+            tables = set(conn.introspection.table_names(cursor))
+            cursor.execute(
+                "SELECT name FROM django_migrations WHERE app = %s",
+                ["prop_firm"],
+            )
+            applied = {row[0] for row in cursor.fetchall()}
+    except Exception as exc:
+        raise Starter30PaidAdmissionHold(
+            "Starter30 isolated migration history cannot be verified"
+        ) from exc
+    issues = _isolated_migration_lineage_defects(
+        applied_names=applied, physical_tables=tables
+    )
+    if issues:
+        raise Starter30PaidAdmissionHold(
+            "Starter30 requires a coherent isolated migration and payment schema"
+        )
+
+
 def require_paid_admission_readiness() -> None:
     """Reject a NEW invoice before touching an identity, DB or blockchain."""
     errors = paid_admission_defects()
