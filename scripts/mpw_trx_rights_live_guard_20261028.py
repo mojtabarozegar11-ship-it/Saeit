@@ -76,14 +76,18 @@ def digest(raw):
 def transform(key,src):
     if key not in PATCHES: raise RuntimeError("UNKNOWN_MODULE")
     statuses=[]
-    for old,new in PATCHES[key]:
+    for anchor_index,(old,new) in enumerate(PATCHES[key],start=1):
         if src.count(new)==1:
             statuses.append(False)
         elif src.count(old)==1:
             src=src.replace(old,new,1)
             statuses.append(True)
         else:
-            raise RuntimeError("SOURCE_DRIFT_OR_AMBIGUOUS:"+key)
+            raise RuntimeError(
+                f"SOURCE_DRIFT_OR_AMBIGUOUS:{key}:anchor={anchor_index}:"
+                f"old_count={src.count(old)}:new_count={src.count(new)}:"
+                f"sha256={digest(src.encode('utf8'))}"
+            )
     if len(set(statuses))!=1:
         raise RuntimeError("PARTIAL_MODULE_PATCH:"+key)
     compile(src,key,"exec")
