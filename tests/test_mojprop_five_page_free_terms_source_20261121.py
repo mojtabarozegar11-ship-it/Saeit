@@ -19,7 +19,7 @@ EDUCATIONAL = (
 class EnglishFreeTermsSourceParityTests(unittest.TestCase):
     def test_product_does_not_invite_unverified_invoice_or_trx_payment(self):
         content = PRODUCT.read_text(encoding="utf-8")
-        self.assertIn("Request free written Starter30 terms", content)
+        self.assertIn("Request 30 TRX plan details", content)
         self.assertIn("Get written Starter30 conditions — free", content)
         self.assertIn("payment admission under independent verification", content)
         self.assertIn("unique invoice receiver", content)
@@ -55,7 +55,7 @@ class EnglishFreeTermsSourceParityTests(unittest.TestCase):
     def test_english_home_primary_free_terms_cta_matches_public_release(self):
         page = ROOT / "templates/moj-prop-v4/index.html"
         text = page.read_text(encoding="utf-8")
-        self.assertIn("Request written terms — free", text)
+        self.assertIn("Request 30 TRX plan details", text)
         self.assertIn("listed entry fee 30 TRX", text)
         self.assertIn("real company-funded reward-settlement controls", text)
         self.assertIn(FREE, text)
