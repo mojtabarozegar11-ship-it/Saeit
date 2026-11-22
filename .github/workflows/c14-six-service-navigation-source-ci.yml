@@ -1,0 +1,31 @@
+name: C14 six existing public service links, isolated static-source guard
+on:
+  push:
+    branches:
+      - fix/zomorod-six-live-service-links-c14-20261114
+    paths:
+      - content/zomorod-nova-pages/services.html
+      - tests/test_six_service_live_links_c14_isolated.py
+      - .github/workflows/c14-six-service-navigation-source-ci.yml
+  pull_request:
+    paths:
+      - content/zomorod-nova-pages/services.html
+      - tests/test_six_service_live_links_c14_isolated.py
+      - .github/workflows/c14-six-service-navigation-source-ci.yml
+permissions:
+  contents: read
+jobs:
+  sales-links-no-network:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify six live service URLs and preserve current original site template
+        run: python3 -m unittest discover -s tests -p test_six_service_live_links_c14_isolated.py -q
+      - name: Affirm this CI never publishes or contacts customers
+        run: |
+          echo "ZM_C14_LIVE_LINKS_PREPARED_IN_SOURCE=6"
+          echo "ZM_C14_PRODUCTION_RELEASE_PERFORMED=false"
+          echo "ZM_C14_CUSTOMER_DATA_ACCESSED=false"
