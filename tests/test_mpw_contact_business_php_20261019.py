@@ -22,7 +22,9 @@ def test_new_contact_branch_is_scoped_and_does_not_modify_allowed_routes():
     assert new.count("mpw-contact-safe-business-20261019")==2
     assert new.count("'Business'=>[")==1 and new.count("'Press'=>[")==1
     assert 'mailto:' in new
-    assert 'support@mojplaywin.com' in new
+    assert 'mojplaywin@gmail.com' in new
+    assert 'support@mojplaywin.com' not in new
+    assert new.count('mojplaywin@gmail.com') == 3
     assert "This is not a separately staffed business mailbox" in new
     assert "a dedicated press office or guaranteed reply is not claimed" in new
     assert "Coming soon" in new, "Only the original source and self-test may contain this label"
@@ -38,3 +40,12 @@ def test_php_syntax_and_selftest():
         outcome=subprocess.run(command,text=True,capture_output=True,timeout=25)
         assert outcome.returncode==0,(outcome.stdout,outcome.stderr)
     assert "MPW_MAIN_ONLY_BRIDGE_SELFTEST=PASS" in outcome.stdout
+
+
+def test_post_release_smoke_matches_verified_customer_inbox():
+    workflow=(ROOT/".github/workflows/mpw-contact-business-release-20261019.yml").read_text("utf-8")
+    assert "mailto:mojplaywin@gmail.com?subject=Business%20Partnership" in workflow
+    assert "mailto:mojplaywin@gmail.com?subject=Press%20Inquiry" in workflow
+    assert "mailto:support@mojplaywin.com" not in workflow
+    assert "[approved-mpw-contact-business-20261019]" in workflow
+    assert "if: failure() && steps.publish.outcome == 'success'" in workflow

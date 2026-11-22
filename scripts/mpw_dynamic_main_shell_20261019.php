@@ -204,7 +204,7 @@ function transformMain(string $body, string $path, string $newHeader, string $ne
 
     // Contact-only disclosure. Routes, stores, agents, and child sites are unchanged.
     if ($path==='/contact/') {
-        $mail='support@mojplaywin.com';
+        $mail='mojplaywin@gmail.com';
         $cards=[
           'Business'=>[
             'Business proposals via support',
@@ -249,7 +249,7 @@ function transformMain(string $body, string $path, string $newHeader, string $ne
           'contact-specific social description',true);
         if(substr_count($body,'class="mpw-contact-direct"')!==2 ||
            str_contains($body,'>Coming soon<') ||
-           !str_contains($body,'mailto:support@mojplaywin.com?subject=Business%20Partnership')) {
+           !str_contains($body,'mailto:mojplaywin@gmail.com?subject=Business%20Partnership')) {
             throw new RuntimeException('Contact profile upgrade verification failed');
         }
     }
@@ -304,7 +304,7 @@ if (PHP_SAPI==='cli' && ($argv[1]??'')==='selftest') {
     $contactOutput=transformMain($contactHtml,'/contact/',$h,$f);
     if(str_contains($contactOutput,'>Coming soon<') ||
        !str_contains($contactOutput,'mpw-contact-safe-business-20261019') ||
-       !str_contains($contactOutput,'mailto:support@mojplaywin.com?subject=Business%20Partnership') ||
+       !str_contains($contactOutput,'mailto:mojplaywin@gmail.com?subject=Business%20Partnership') ||
        !str_contains($contactOutput,'Press%20Inquiry%20-%20MojPlayWin')) {
         throw new RuntimeException('Contact-specific verified transformation failed');
     }
