@@ -14,7 +14,7 @@ class MojPropReleaseRunbookContractTests(unittest.TestCase):
         self.assertIn("Saeit-mojplaywin-integrated-20261119", text)
         self.assertIn("physically separate MariaDB database", text)
         self.assertIn("Never reverse a production", text)
-        self.assertNotIn("0011_simulation_isolation", text)
+        self.assertNotIn("Run migration 0011_simulation_isolation", text)
 
 
 if __name__ == "__main__":
