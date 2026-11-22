@@ -16,6 +16,7 @@ from .mpw_two_books_panel import dashboard as mpw_two_books_dashboard
 from .operations import operations_summary
 from .management_report import management_report
 from .controls import controls_summary
+from .continuity_views import continuity_status
 from .integrated_views import integrated_dashboard
 from .integrated_ledger_api import integrated_ledger_api
 from .commerce_funnel import commerce_funnel_api
@@ -31,6 +32,7 @@ urlpatterns = [
     path("api/management-report/", management_report, name="command_center_management_report_api"),
     path("api/operations/summary/", operations_summary, name="command_center_operations_summary_api"),
     path("api/controls/summary/", controls_summary, name="command_center_controls_summary_api"),
+    path("api/continuity/", continuity_status, name="command_center_continuity_api"),
     path("integrated/", integrated_dashboard, name="command_center_integrated_dashboard"),
     path("api/integrated-ledger/", integrated_ledger_api, name="command_center_integrated_ledger_api"),
     path("api/commerce-funnel/", commerce_funnel_api, name="command_center_commerce_funnel_api"),
