@@ -20,7 +20,17 @@ class MojPropTruthfulPublicStatusTests(unittest.TestCase):
             with self.subTest(path=path):
                 html = path.read_text(encoding="utf-8")
                 self.assertNotIn("DESK ONLINE", html)
-                self.assertIn("REQUEST REVIEW — NO PAYMENT", html)
+                if path == PUBLIC_SURFACES[0]:
+                    # The English v4 offer is now listed at 30 TRX, but checkout
+                    # remains gated. No obsolete Plan 1 or real funded capital.
+                    self.assertIn("payment and new enrollment are currently unavailable", html.lower())
+                    self.assertIn("do not send trx", html.lower())
+                    self.assertNotIn("Plan 1 (free)", html)
+                    self.assertIn("not withdrawable cash or real funded capital", html.lower())
+                else:
+                    # Historical public informational page retains its prior
+                    # unchargeable manual-review warning unchanged.
+                    self.assertIn("REQUEST REVIEW — NO PAYMENT", html)
                 self.assertIn("No payment", html)
                 self.assertIn("live account", html.lower())
 
