@@ -61,8 +61,8 @@ class Starter30ClosedPaymentContract(unittest.TestCase):
                 self.assertNotIn("walletconnect", source.lower())
                 self.assertNotIn("tronweb.trx.sendtransaction", source.lower())
         starter = self.sources["starter"].lower()
-        self.assertIn("secure 30 trx checkout", starter)
-        self.assertIn("payer-wallet verification", starter)
+        self.assertIn("the secure checkout first verifies your email", starter)
+        self.assertIn("requires your sending tron wallet address", starter)
         self.assertIn("/mojprop-starter30-checkout/", self.sources["starter"])
         self.assertNotIn("payment is currently unavailable", starter)
         self.assertNotIn(
