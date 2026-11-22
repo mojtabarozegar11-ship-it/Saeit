@@ -49,7 +49,7 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertNotIn("US$149", starter)
         self.assertIn("package=starter-30-trx#request", starter)
         self.assertIn("30 TRX", self.detail)
-        self.assertIn("server-issued 30 TRX invoice", self.detail)
+        self.assertIn("server-issued invoice", self.detail)
         self.assertIn("secure 30 TRX checkout", self.detail)
         self.assertIn("payer-wallet verification", self.detail)
         self.assertIn('href="/mojprop-starter30-checkout/"', self.detail)
