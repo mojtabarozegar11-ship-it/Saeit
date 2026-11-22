@@ -8,11 +8,16 @@ from html.parser import HTMLParser
 from pathlib import Path
 import unittest
 
-PAGE=Path(__file__).resolve().parents[1]/"templates"/"moj-prop-v4"/"index.html"
+ROOT=Path(__file__).resolve().parents[1]
+PAGE=ROOT/"templates"/"moj-prop-v4"/"index.html"
+HISTORICAL_CANDIDATE=ROOT/"docs"/"mojprop"/"historical-static-evidence"/"reviewed-mojprop-home-candidate-20261121.html"
 # Immutable live baseline from independently reviewed source.
 LIVE_SHA256="029d2493c80480afd0b8d01683254c63a236a4d930c6cc43410def81906848e5"
 LIVE_BLOB="fea39dbc409ba8c4c30a807313a20b8d4db19283"
-# Reviewed new candidate (never assert this is live solely from GitHub).
+# Separately reviewed source after the historical candidate (never proof of live host).
+CURRENT_SOURCE_SHA256="24bfa25bef9876e54759ff3538ea470340b21084e50b8c01abb005e0a19f1e86"
+CURRENT_SOURCE_BLOB="45d7fc5a5d31ecc55dba34e5efc1b9b8b23444c4"
+# Immutable earlier reviewed candidate (not proof of live deployment).
 CANDIDATE_SHA256="4b00b000ecc971073345aa2ca7baaf6753bf83d9bb5243e4ad1276b7012c13e7"
 CANDIDATE_BLOB="463ebd2dfb5d803cd20ac17f2c53422d36d65ad9"
 COPY_CHANGES=(
@@ -47,8 +52,11 @@ class Scan(HTMLParser):
 
 class OfficialMojPropLiveParityTests(unittest.TestCase):
     def test_exact_reviewed_copy_and_preserved_original_live_source(self):
-        # Exact new source candidate (not proof of live deployment).
-        b=PAGE.read_bytes()
+        current=PAGE.read_bytes()
+        self.assertEqual(hashlib.sha256(current).hexdigest(),CURRENT_SOURCE_SHA256)
+        self.assertEqual(hashlib.sha1(b"blob "+str(len(current)).encode()+b"\0"+current).hexdigest(),CURRENT_SOURCE_BLOB)
+        # The original reviewed source remains an immutable, private-free fixture.
+        b=HISTORICAL_CANDIDATE.read_bytes()
         self.assertEqual(hashlib.sha256(b).hexdigest(),CANDIDATE_SHA256)
         self.assertEqual(hashlib.sha1(b"blob "+str(len(b)).encode()+b"\0"+b).hexdigest(),CANDIDATE_BLOB)
 
