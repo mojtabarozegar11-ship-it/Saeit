@@ -20,8 +20,8 @@ from pathlib import Path
 
 PUBLIC_EFFECTIVE_ROOT = Path("/home/zomorod2/Saeit-mojplaywin-integrated-20261119")
 
-# Pinned reviewed GitHub main blobs as of 22 Nov 2026. Never guess current
-# mainline parity from a runtime environment variable or a Django release flag.
+# Pinned reviewed candidate blobs for the isolated simulation-stage ledger as of 22 Nov 2026.
+# Never guess parity from a runtime environment variable or a Django release flag.
 REQUIRED = {
     "prop_firm/simulation_policy.py": "15c5771e340315ebd649f92224ddd9bce138a256",
     "prop_firm/rules.py": "550269ebf2de3e2f1b50ade0939680597845e224",
@@ -30,7 +30,8 @@ REQUIRED = {
     "prop_firm/policy_integrity.py": "68dfaf2a31e6f63f2c25f8eea93843f27f73d7d8",
     "prop_firm/starter30_live.py": "3c006d15dd6b35d5128ec3af7d03def28841b8e4",
     "prop_firm/customer_portal_views.py": "f918d8b6645dd168014e6a2dd718bd851afc7884",
-    "prop_firm/models.py": "e6e0a50ca29002fdf58133cf7eda5c22dee3c8ac",
+    # Candidate model blob includes the isolated simulation tier and transition receipt.
+    "prop_firm/models.py": "cc668e879ad7f730d08732f0284f1c8979d7987e",
     "prop_firm/simulation_identity_adapter.py": "0b4e6bf2050634816314b0ced5b8e424f5a5d2ad",
     "prop_firm/starter30_checkout_email.py": "dc6cdf6daae0b3649a1db4811f4aa3834e37df38",
     "prop_firm/starter30_receiver_pool.py": "2e34e773846fc8903915a784bf3d07de5a411014",
