@@ -126,6 +126,8 @@ def inspect_archive(path: Path, expected_sha: str, live_tables: set[str]) -> dic
         "no_database_switch": False,
         "no_destructive_ddl": False,
         "rehearsed_independent_restore": False,
+        "archived_migration_names_15_of_15": False,
+        "archived_unique_receiver_marked_applied": False,
     }
     if (not path.is_absolute() or path.is_symlink() or not path.is_file()
             or path.stat().st_nlink != 1
@@ -145,6 +147,21 @@ def inspect_archive(path: Path, expected_sha: str, live_tables: set[str]) -> dic
         rb"(?im)^[ \t]*CREATE TABLE[ \t]+(?:IF NOT EXISTS[ \t]+)?\x60([^\x60]+)\x60", sql
     )
     table_names = {x.decode("utf-8", errors="replace") for x in names}
+    # The mysqldump may place VALUES on following lines. Inspect the complete
+    # semicolon-terminated migration INSERT; never expose row text or recipients.
+    migration_marker = b"INSERT INTO " + bytes([96]) + b"django_migrations" + bytes([96])
+    migration_values = (
+        sql.split(migration_marker, 1)[1].split(b";", 1)[0]
+        if migration_marker in sql else b""
+    )
+    result["archived_migration_names_15_of_15"] = (
+        bool(migration_values)
+        and all(name.encode() in migration_values for name in LEGACY)
+        and all(name.encode() in migration_values for name in list(ISOLATED)[:5])
+    )
+    result["archived_unique_receiver_marked_applied"] = (
+        b"0006_unique_invoice_receivers" in migration_values
+    )
     result["digest_verified"] = True
     result["tables_defined"] = len(names)
     result["tables_matched"] = len(live_tables & table_names)
@@ -214,6 +231,11 @@ def inspect_live() -> dict:
         "backups": archive_rows,
         "schema_archive_coverage_proven": all(x["exact_30_table_schema"]
                                                and x["digest_verified"] for x in archive_rows),
+        "migration_archive_coverage_proven": all(
+            x["archived_migration_names_15_of_15"]
+            and not x["archived_unique_receiver_marked_applied"]
+            for x in archive_rows
+        ),
         "independent_restore_verified": False,
         "production_migration_approved": False,
         "financial_release_proven": False,
