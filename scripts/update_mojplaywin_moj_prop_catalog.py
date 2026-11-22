@@ -109,11 +109,14 @@ def source_root(run_id: str) -> Path:
         raise RuntimeError("Invalid staged Moj Prop source")
     for relative in FILES + PRESERVED_LIVE_FILES + (BASELINE_CATALOG, BASELINE_HOME, BASELINE_SIGNAL, BASELINE_SIGNAL_FREE_PREVIEW):
         assert_file(path / relative)
-    html = {str(relative): (path / relative).read_text("utf-8") for relative in HTML_FILES}
-    if ("const endpoint='/moj-prop-intake/';" not in html["index.html"]
-            or '<option value="week">This week</option>' not in html["index.html"]
-            or "href=\"/moj-prop/catalog/\"" not in html["index.html"]):
-        raise RuntimeError("Staged homepage lacks working intake contract")
+    # The owner-maintained live home is intentionally not staged by this
+    # publisher. Validate only assets that this release is authorized to copy;
+    # the live home contract is checked separately by the deployment workflow.
+    html = {
+        str(relative): (path / relative).read_text("utf-8")
+        for relative in HTML_FILES
+        if (path / relative).is_file()
+    }
     catalog = html["catalog/index.html"]
     if ("/moj-prop/samples/prop-blueprint/" not in catalog
             or "/moj-prop/samples/gold-market-brief/" not in catalog
@@ -162,9 +165,8 @@ def source_root(run_id: str) -> Path:
                            "risk_plan_recorded", "reflection_recorded"]
             or any(row != [str(i), "", "", ""] for i, row in enumerate(rows[1:], 1))):
         raise RuntimeError("Starter30 CSV must contain exactly 10 EMPTY simulated sessions")
-    if ("/moj-prop/starter-30-trx/" not in html["index.html"]
-            or "/moj-prop/starter-30-trx/" not in catalog):
-        raise RuntimeError("Starter30 package is not discoverable from the live catalog and home")
+    if "/moj-prop/starter-30-trx/" not in catalog:
+        raise RuntimeError("Starter30 package is not discoverable from the live catalog")
     return path
 
 
