@@ -87,7 +87,7 @@ class SignalDeskEducationalAssetTests(unittest.TestCase):
         import re
         for path in (ARTICLE, DIR / "README.md"):
             text = path.read_text(encoding="utf-8")
-            for url in re.findall(r"\\]\\((https://mojplaywin[.]com/[^)]+)\\)", text):
+            for url in re.findall(r"\]\((https://mojplaywin[.]com/[^)]+)\)", text):
                 with self.subTest(file=path.name, url=url):
                     self.assertEqual(url.count("?"), 1)
                     self.assertEqual(url.count("utm_source=github"), 1)
