@@ -7,7 +7,7 @@ class MojPlayWinSiteTests(TestCase):
         response=self.client.get("/",HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code,200)
         html=unescape(response.content.decode("utf-8"))
-        for marker in ("MojPlayWin","Ideas become knowledge","Research & Innovation","site/heroes/game-studio.",'href="https://mojplaywin.com/"',"mojplaywin-matte-gold-theme"):
+        for marker in ("MojPlayWin","MOJ PROP","Research & Innovation","site/heroes/game-studio.",'href="https://mojplaywin.com/"',"mojplaywin-matte-gold-theme"):
             self.assertIn(marker,html)
         self.assertIn('class="site-standard-v2 mojplaywin-site mojplaywin-home"',html)
 

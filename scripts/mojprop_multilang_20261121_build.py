@@ -136,7 +136,7 @@ def prepare():
  if BASE.exists():raise RuntimeError('Language directory already exists; no overwrite')
  eng=src[str(EN)]
  eng=once(eng,'<link rel="canonical" href="https://mojplaywin.com/moj-prop/">','<link rel="canonical" href="https://mojplaywin.com/moj-prop/">\n'+hreflangs())
- english_nav='<div id="mojprop-languages-entry-20261121" style="max-width:1240px;margin:12px auto;padding:14px 28px;border:1px solid #7a663e;border-radius:12px;background:#121b24;color:#f2d59d"><strong>MOJ PROP worldwide:</strong> <a href="/moj-prop/languages/" style="color:#f9d38a;text-decoration:underline">Read in 20 languages</a> · The official English terms and payment status apply.</div>\n'
+ english_nav='<div id="mojprop-languages-entry-20261121" style="max-width:1240px;margin:12px auto;padding:14px 28px;border:1px solid #7a663e;border-radius:12px;background:#121b24;color:#f2d59d"><strong>MOJ PROP worldwide:</strong> <a href="/moj-prop/" lang="en" aria-current="page" style="color:#f9d38a;text-decoration:underline">English</a> · <a href="/moj-prop/languages/" style="color:#f9d38a;text-decoration:underline">Read in 20 languages</a> · The official English terms and payment status apply.</div>\n'
  eng=once(eng,'<body>', '<body>\n'+english_nav)
  if eng.count('id="mojprop-languages-entry-20261121"')!=1:raise RuntimeError('English nav failed')
  sitemap=src[str(SITEMAP)]
