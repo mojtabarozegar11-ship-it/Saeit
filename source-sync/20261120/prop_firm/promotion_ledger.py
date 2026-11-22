@@ -54,6 +54,22 @@ def _payload(*, account, from_index, target_index, evidence_digest,
     ]
 
 
+def _receipt_indices(reasons):
+    if not isinstance(reasons, list) or len(reasons) < 3:
+        return -1, -1
+    try:
+        if not str(reasons[1]).startswith("from_tier="):
+            return -1, -1
+        if not str(reasons[2]).startswith("to_tier="):
+            return -1, -1
+        return (
+            int(str(reasons[1]).split("=", 1)[1]),
+            int(str(reasons[2]).split("=", 1)[1]),
+        )
+    except (TypeError, ValueError):
+        return -1, -1
+
+
 def _replay_result(account, existing, payload):
     """Validate and return an already-committed transition receipt."""
     if (
@@ -141,16 +157,11 @@ def commit_next_level_transition(
             .first()
         )
         if existing is not None:
+            from_index, target_index = _receipt_indices(existing.reasons)
             expected = _payload(
                 account=account,
-                from_index=int(existing.reasons[1].split("=", 1)[1])
-                if isinstance(existing.reasons, list) and len(existing.reasons) > 2
-                and str(existing.reasons[1]).startswith("from_tier=")
-                else -1,
-                target_index=int(existing.reasons[2].split("=", 1)[1])
-                if isinstance(existing.reasons, list) and len(existing.reasons) > 2
-                and str(existing.reasons[2]).startswith("to_tier=")
-                else -1,
+                from_index=from_index,
+                target_index=target_index,
                 evidence_digest=evidence_digest,
                 funding_evidence_digest=funding_evidence_digest,
             )
