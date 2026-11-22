@@ -39,7 +39,8 @@ class MojPropTruthfulPublicStatusTests(unittest.TestCase):
         html = (ROOT / "templates/moj-prop/payment/index.html").read_text(
             encoding="utf-8"
         )
-        self.assertIn("No public TRX wallet address is displayed.", html)
+        self.assertIn("no public wallet address is displayed", html.lower())
+        self.assertIn("Only a server-issued invoice can show the approved receive-only wallet.", html)
         self.assertIn("written offer", html)
         self.assertNotIn("payment_verified", html)
         self.assertIn("does not create a confirmed order", html.lower())
