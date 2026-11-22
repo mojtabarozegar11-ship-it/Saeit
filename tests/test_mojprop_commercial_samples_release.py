@@ -280,7 +280,7 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
 
     def test_mismatched_live_starter30_digest_prevents_incorrect_rollback(self):
         release.deploy("123", "a" * 40)
-        buyer_access = self.route / "catalog/index.html"
+        buyer_access = self.route / "starter-30-trx/index.html"
         buyer_access.write_bytes(buyer_access.read_bytes() + b"\noperator revision\n")
         with self.assertRaisesRegex(RuntimeError, "subsequently modified"):
             release.restore(self.backups / "moj-prop-catalog-123")
