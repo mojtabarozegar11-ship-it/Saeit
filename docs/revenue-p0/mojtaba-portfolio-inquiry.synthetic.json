@@ -1,0 +1,11 @@
+{
+  "canonical_bot": "mojtaba.bot.ai",
+  "offer_id": "farm_economics",
+  "scope_items": 2,
+  "evidence_items": 3,
+  "consent": true,
+  "rights_documents": 0,
+  "inventory_documents": 0,
+  "delivery_documents": 0,
+  "synthetic_example": true
+}

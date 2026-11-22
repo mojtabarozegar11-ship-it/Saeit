@@ -1,0 +1,10 @@
+{
+  "canonical_bot": "mojtaba.bot.ai",
+  "offer_id": "farm_economics",
+  "currency": "IRR",
+  "direct_cost": "1000000",
+  "overhead_cost": "200000",
+  "processor_fee_fraction": "0",
+  "target_margin_fraction": "0.20",
+  "synthetic_example": true
+}
