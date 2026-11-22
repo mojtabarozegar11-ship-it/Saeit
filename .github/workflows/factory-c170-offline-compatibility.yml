@@ -1,0 +1,43 @@
+name: Factory C170 corrected source offline compatibility (NO REMOTE)
+on:
+  pull_request:
+    paths:
+      - 'scripts/factory_c170_owner_proc_footprint_readonly.py'
+      - 'tests/test_factory_c170_owner_proc_footprint_readonly.py'
+      - '.github/workflows/factory-c170-offline-compatibility.yml'
+permissions:
+  contents: read
+concurrency:
+  group: factory-c170-compat-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  owner-python38-offline:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Verify corrected source and immutable tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -L scripts/factory_c170_owner_proc_footprint_readonly.py
+          test ! -L tests/test_factory_c170_owner_proc_footprint_readonly.py
+          test "$(git hash-object scripts/factory_c170_owner_proc_footprint_readonly.py)" = '8747858dad6ce46eb06547b38c00ffc87b44f421'
+          test "$(git hash-object tests/test_factory_c170_owner_proc_footprint_readonly.py)" = 'fbe8bf98d216c4616233eb4842a5e7462531c832'
+      - name: Run 20 offline fail-closed process metadata checks
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_factory_c170_owner_proc_footprint_readonly.py' -q
+          printf 'C170_OFFLINE_ONLY_NO_CPINEL_NO_SQL_NO_SECRETS\n' >> "$GITHUB_STEP_SUMMARY"
