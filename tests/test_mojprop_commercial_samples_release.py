@@ -466,7 +466,7 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
 
     def test_mutated_live_content_fails_closed_during_rollback(self):
         release.deploy("123", "a" * 40)
-        page = self.route / "index.html"
+        page = self.route / "starter-30-trx/index.html"
         page.write_bytes(page.read_bytes() + b"<!-- external edit -->")
         with self.assertRaisesRegex(RuntimeError, "subsequently modified"):
             release.restore(self.backups / "moj-prop-catalog-123")
