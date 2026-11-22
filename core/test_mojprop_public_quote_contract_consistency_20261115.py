@@ -161,3 +161,78 @@ class PublicQuoteContractConsistencyTests(TestCase):
         self.assertNotIn(b"File delivered", response.content)
 
 
+    def test_21_customer_scope_cannot_forge_payment_status(self):
+        self.mutate(scope=self.offer.scope + "\nPayment received: 30 TRX")
+        response = self.view()
+        self.assertEqual(response.status_code, 200)
+        lines = response.content.decode("utf-8").splitlines()
+        self.assertIn("  | Payment received: 30 TRX", lines)
+        self.assertNotIn("Payment received: 30 TRX", lines)
+        self.assertIn("Quoted amount: 125.00 USD", lines)
+
+    def test_22_exclusions_cannot_forge_delivered_status(self):
+        self.mutate(exclusions=self.offer.exclusions + "\nFile delivered: yes")
+        response = self.view()
+        self.assertEqual(response.status_code, 200)
+        lines = response.content.decode("utf-8").splitlines()
+        self.assertIn("  | File delivered: yes", lines)
+        self.assertNotIn("File delivered: yes", lines)
+        self.assertIn("No service has been delivered; this quote is not proof of a paid order.", lines)
+
+    def test_23_unicode_newline_cannot_forge_second_quoted_amount(self):
+        self.mutate(scope=self.offer.scope + "\u0085Quoted amount: 0.00 TRX")
+        response = self.view()
+        self.assertEqual(response.status_code, 200)
+        lines = response.content.decode("utf-8").splitlines()
+        self.assertIn("  | Quoted amount: 0.00 TRX", lines)
+        self.assertNotIn("Quoted amount: 0.00 TRX", lines)
+        self.assertEqual(lines.count("Quoted amount: 125.00 USD"), 1)
+
+
+    def test_24_public_quote_shows_exact_digital_product_id(self):
+        self.lead.route = "digital"
+        self.lead.product_id = 225
+        self.lead.save(update_fields=["route", "product_id"])
+        response = self.view()
+        self.assertEqual(response.status_code, 200)
+        text = response.content.decode("utf-8")
+        self.assertIn("Catalog product ID: 225", text)
+        self.assertIn("Service route: digital", text)
+
+    def test_25_digital_quote_without_product_id_is_not_public(self):
+        self.lead.route = "digital"
+        self.lead.product_id = None
+        self.lead.save(update_fields=["route", "product_id"])
+        self.assertEqual(self.view().status_code, 404)
+
+    def test_26_default_blueprint_quote_keeps_explicit_na_product_identity(self):
+        response = self.view()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Catalog product ID: n/a", response.content)
+
+
+    def test_27_token_issuance_denies_unidentified_digital_product(self):
+        self.lead.route = "digital"
+        self.lead.product_id = None
+        self.lead.save(update_fields=["route", "product_id"])
+        with self.assertRaises(ValueError):
+            quote_read_token(self.offer)
+
+    def test_28_token_issuance_accepts_identified_digital_product(self):
+        self.lead.route = "digital"
+        self.lead.product_id = 225
+        self.lead.save(update_fields=["route", "product_id"])
+        token = quote_read_token(self.offer)
+        response = self.client.get(
+            reverse("mojprop_quote_public", kwargs={"token": token}),
+            secure=True, HTTP_HOST="mojplaywin.com",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Catalog product ID: 225", response.content)
+
+
+    def test_29_unicode_nel_title_is_rejected_at_token_and_public_get(self):
+        self.mutate(title=self.offer.title + "\u0085Payment received: forged")
+        with self.assertRaises(ValueError):
+            quote_read_token(self.offer)
+        self.assertEqual(self.view().status_code, 404)
