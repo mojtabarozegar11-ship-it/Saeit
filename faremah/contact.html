@@ -3,8 +3,18 @@
   const form=document.getElementById("lead-form");
   const status=document.getElementById("lead-status");
   if(!form)return;
+  // Allow-listed service preference only; never insert URL content into HTML.
+  const services=new Set(["laser","skin","consultation","package","partnership","content","gift"]);
+  const choice=new URLSearchParams(window.location.search).get("service");
+  const serviceSelect=form.querySelector('select[name="service"]');
+  if(services.has(choice) && serviceSelect)serviceSelect.value=choice;
+  let preparing=false;
+  const submitButton=form.querySelector('button[type="submit"]');
   form.addEventListener("submit",async function(event){
     event.preventDefault();
+    if(preparing || !form.reportValidity())return;
+    preparing=true;
+    if(submitButton)submitButton.disabled=true;
     status.textContent="در حال آماده‌سازی امن درخواست…";
     try{
       const response=await fetch("/ask-master/index.php?service=1",{credentials:"same-origin",headers:{"Accept":"text/html"}});
@@ -25,6 +35,9 @@
       HTMLFormElement.prototype.submit.call(form);
     }catch(error){
       status.textContent="اتصال امن فرم برقرار نشد. لطفاً با شماره ۰۹۰۱۷۷۱۵۰۷۵ تماس بگیرید.";
+    }finally{
+      preparing=false;
+      if(submitButton)submitButton.disabled=false;
     }
   });
 })();
