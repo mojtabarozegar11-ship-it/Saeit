@@ -7,7 +7,7 @@ class MojPropStarter30PublicRouteTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         for marker in ("MOJPROP-STARTER30", "30 TRX",
                        "No real funded account or customer capital is involved",
-                       "server-issued 30 TRX invoice", "$1,000", "60 days", "50%",
+                       "server-issued invoice", "$1,000", "60 days", "50%",
                        "does not guarantee that the trader will generate profit or pass"):
             self.assertContains(response, marker)
 
@@ -19,4 +19,4 @@ class MojPropStarter30PublicRouteTests(SimpleTestCase):
         self.assertNotContains(response, 'name="payer_address"')
         self.assertNotContains(response, 'name="txid"')
         self.assertContains(response, 'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx&amp;utm_source=moj_prop&amp;utm_medium=onsite&amp;utm_campaign=starter30_lead&amp;utm_content=free_terms"')
-        self.assertNotContains(response, 'href="/mojprop-starter30-checkout/"')
+        self.assertContains(response, 'href="/mojprop-starter30-checkout/"')

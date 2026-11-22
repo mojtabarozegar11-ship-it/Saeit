@@ -49,9 +49,10 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertNotIn("US$149", starter)
         self.assertIn("package=starter-30-trx#request", starter)
         self.assertIn("30 TRX", self.detail)
-        self.assertIn("server-issued 30 TRX invoice", self.detail)
-        self.assertIn('href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx&amp;utm_source=moj_prop&amp;utm_medium=onsite&amp;utm_campaign=starter30_lead&amp;utm_content=free_terms"', self.detail)
-        self.assertNotIn('href="/mojprop-starter30-checkout/"', self.detail)
+        self.assertIn("server-issued invoice", self.detail)
+        self.assertIn("secure 30 TRX checkout", self.detail)
+        self.assertIn("payer-wallet verification", self.detail)
+        self.assertIn('href="/mojprop-starter30-checkout/"', self.detail)
 
     def test_single_consent_based_crm_route_and_no_unmarked_149_dollar_quote(self):
         for page in (self.home, self.catalog, self.detail):
@@ -85,7 +86,7 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertEqual(self.detail.count('<script type="application/ld+json">'), 1)
         self.assertIn('<script defer src="/mpw-measure/tracker.js"></script>', self.detail)
         self.assertIn('<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>', self.detail)
-        self.assertIn("Pay only through the server-issued 30 TRX invoice", self.detail)
+        self.assertIn("Payment must use only the secure checkout", self.detail)
         self.assertEqual(lower.count("<form"), 1)
         self.assertIn('<form action="/mojprop-starter30-status/" method="get"', self.detail)
         self.assertNotIn('method="post"', lower)

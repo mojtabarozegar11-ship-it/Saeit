@@ -21,12 +21,13 @@ class EnglishFreeTermsSourceParityTests(unittest.TestCase):
         content = PRODUCT.read_text(encoding="utf-8")
         self.assertIn("Request free written Starter30 terms", content)
         self.assertIn("Get written Starter30 conditions — free", content)
-        self.assertIn("payment admission under independent verification", content)
-        self.assertIn("unique invoice receiver", content)
+        self.assertIn("secure 30 TRX checkout", content)
+        self.assertIn("payer-wallet verification", content)
+        self.assertIn("single owner-approved receive-only wallet", content)
         self.assertIn(FREE, content)
-        self.assertNotIn("Checkout available · 30 TRX", content)
-        self.assertNotIn(">Start secure 30 TRX checkout</a>", content)
-        self.assertNotIn('href="/mojprop-starter30-checkout/"', content)
+        self.assertIn(">Open secure 30 TRX checkout</a>", content)
+        self.assertIn('href="/mojprop-starter30-checkout/"', content)
+        self.assertNotIn("payment admission under independent verification", content)
 
     def test_education_articles_route_reader_to_free_precise_offer(self):
         for slug in EDUCATIONAL:

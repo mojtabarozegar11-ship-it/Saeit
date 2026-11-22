@@ -17,7 +17,7 @@ class Starter30UTMLandingContract(unittest.TestCase):
         html = HTML.read_text("utf-8")
         self.assertEqual(html.count(SCRIPT_TAG), 1)
         self.assertIn('href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx&amp;utm_source=moj_prop&amp;utm_medium=onsite&amp;utm_campaign=starter30_lead&amp;utm_content=free_terms"', html)
-        self.assertNotIn('href="/mojprop-starter30-checkout/"', html)
+        self.assertIn('href="/mojprop-starter30-checkout/"', html)
         self.assertIn('<link rel="canonical" href="https://mojplaywin.com/moj-prop/starter-30-trx/">', html)
         self.assertIn("30 TRX", html)
         self.assertIn("simulated", html.lower())
