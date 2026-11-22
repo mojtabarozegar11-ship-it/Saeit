@@ -101,9 +101,9 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             buf = io.StringIO()
             wsgi = root / "owner-public-wsgi-shim.txt"
             wsgi.write_text(
-                "APP='" + str(root) + "'\\n"
-                "if APP not in sys.path: sys.path.insert(0, APP)\\n"
-                "os.chdir(APP)\\n", encoding="utf-8"
+                "APP='" + str(root) + "'\n"
+                "if APP not in sys.path: sys.path.insert(0, APP)\n"
+                "os.chdir(APP)\n", encoding="utf-8"
             )
             with patch.object(MOD, "PUBLIC_EFFECTIVE_ROOT", root), patch.object(MOD, "PUBLIC_WSGI", wsgi):
                 with contextlib.redirect_stdout(buf):
@@ -149,9 +149,9 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             self.fill(root)
             wsgi = root / "mismatched-wsgi-shim.txt"
             wsgi.write_text(
-                "APP='/home/zomorod2/old-unreviewed-tree'\\n"
-                "if APP not in sys.path: sys.path.insert(0, APP)\\n"
-                "os.chdir(APP)\\n", encoding="utf-8"
+                "APP='/home/zomorod2/old-unreviewed-tree'\n"
+                "if APP not in sys.path: sys.path.insert(0, APP)\n"
+                "os.chdir(APP)\n", encoding="utf-8"
             )
             buf = io.StringIO()
             with patch.object(MOD, "PUBLIC_EFFECTIVE_ROOT", root), patch.object(MOD, "PUBLIC_WSGI", wsgi):
