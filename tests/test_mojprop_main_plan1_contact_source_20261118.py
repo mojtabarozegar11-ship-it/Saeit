@@ -55,7 +55,7 @@ class MainlinePlanOneContactGuards(unittest.TestCase):
     def test_03_only_simulated_balance_offered(self):
         self.assertIn("$1,000 simulated",self.page)
         self.assertIn("$100,000 virtual",self.page)
-        self.assertIn("not real funded capital",self.page)
+        self.assertIn("not withdrawable cash or real funded capital",self.page)
 
     def test_04_fourteen_progression_levels_are_ordered(self):
         self.assertEqual(self.product.count("<li><strong>Level "),14)
@@ -73,12 +73,12 @@ class MainlinePlanOneContactGuards(unittest.TestCase):
         self.assertIn("passing",self.page.lower())
 
     def test_07_payment_is_closed(self):
-        self.assertIn("Payment and new enrollment are currently unavailable",self.page)
+        self.assertIn("payment and new enrollment are currently unavailable",self.page)
         self.assertIn("Payment is currently unavailable",self.product)
 
     def test_08_no_direct_disabled_checkout_link(self):
         for html in (self.page,self.product):
-            self.assertNotIn('href="/mojprop-starter30-checkout/"',html)
+            self.assertNotIn("/mojprop-starter30-checkout/", self.tags.urls+self.product_tags.urls)
             self.assertNotIn("Checkout available · 30 TRX",html)
 
     def test_09_no_transfer_invocation(self):
@@ -102,7 +102,7 @@ class MainlinePlanOneContactGuards(unittest.TestCase):
         self.assertRegex(self.page,r'<form id="status-form"[^>]*hidden[^>]*aria-hidden="true"')
 
     def test_14_not_a_real_funded_account(self):
-        self.assertIn("not real funded capital",self.page)
+        self.assertIn("not withdrawable cash or real funded capital",self.page)
         self.assertIn("not cash payments or real funded broker accounts",self.product)
 
     def test_15_canonical_urls_preserved(self):
