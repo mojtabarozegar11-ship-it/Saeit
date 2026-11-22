@@ -1,7 +1,7 @@
 """Merge two *already existing* prop_firm migration histories without schema DDL.
 
 GitHub/source-sync legacy: 0001_initial through 0010_reward_reserve_ledger
-Isolated Starter30: 0001_simulation_isolation through 0006_unique_invoice_receivers
+Isolated Starter30: 0001_simulation_isolation through 0007_alter_propsimulationaccount_policy_version
 
 IMPORTANT: 15 DeleteModel operations below are STATE-ONLY. They remove obsolete
 historical ORM declarations from Django's future migration state, NOT rows,
@@ -21,7 +21,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
     dependencies = [
         ("prop_firm", "0010_reward_reserve_ledger"),
-        ("prop_firm", "0006_unique_invoice_receivers"),
+        ("prop_firm", "0007_alter_propsimulationaccount_policy_version"),
     ]
 
     operations = [
