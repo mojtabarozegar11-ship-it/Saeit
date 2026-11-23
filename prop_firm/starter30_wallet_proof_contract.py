@@ -19,6 +19,7 @@ import secrets
 from typing import Callable
 
 from django.core import signing
+from services.mpw_trx_merchant_binding import validate_tron_recipient
 
 _TAG = "mojprop-starter30-wallet-control-v1"
 _DOMAIN = "mojplaywin.com"
@@ -36,11 +37,15 @@ class WalletProofUnavailable(ValueError):
 
 
 def _validated_public_address(value: str) -> str:
-    # Base58 format is only a cheap input gate. Checksum is validated by the
-    # wallet verifier and the existing TRON address parser at integration.
+    # Enforce actual Base58Check checksum locally, not just a leading T.
+    # A chain prefix alone cannot distinguish mainnet from test networks;
+    # the separate server-signed challenge fixes the intended network.
     if type(value) is not str or _TRON.fullmatch(value) is None:
         raise WalletProofUnavailable("invalid TRON wallet address")
-    return value
+    try:
+        return validate_tron_recipient(value)
+    except ValueError as exc:
+        raise WalletProofUnavailable("invalid TRON wallet checksum") from exc
 
 
 def _message(payload: dict) -> str:
