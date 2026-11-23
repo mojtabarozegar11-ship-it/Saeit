@@ -1,3 +1,6 @@
+import io
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from core import weather_agent
@@ -142,3 +145,51 @@ def test_met_norway_tos_false_like_values_are_not_authorizations(monkeypatch):
         monkeypatch.setenv("MOJ_MET_NORWAY_TOS_ACCEPTED_BY_OWNER", value)
         with pytest.raises(RuntimeError, match="MET_NORWAY_OWNER_TOS_ACCEPTANCE_REQUIRED"):
             weather_agent._fetch(35.6892, 51.3890)
+
+
+def test_met_weather_cache_respects_iran_three_hour_minimum(monkeypatch):
+    # Simulated consent exists only inside this test; no real network is used.
+    monkeypatch.setenv("MOJ_MET_NORWAY_TOS_ACCEPTED_BY_OWNER", "1")
+    calls = []
+    monkeypatch.setattr(weather_agent.cache, "get", lambda key: None)
+    monkeypatch.setattr(
+        weather_agent.cache,
+        "set",
+        lambda key, payload, timeout: calls.append((key, payload, timeout)),
+    )
+
+    class CachedResponse(io.BytesIO):
+        def __init__(self):
+            super().__init__(b'{"provider":"MET Norway"}')
+            self.headers = {"Expires": "Thu, 01 Jan 1970 00:00:00 GMT"}
+
+    monkeypatch.setattr(weather_agent, "urlopen", lambda *args, **kwargs: CachedResponse())
+    payload = weather_agent._fetch(35.6892, 51.3890)
+    assert payload["provider"] == "MET Norway"
+    assert len(calls) == 1
+    assert calls[0][2] >= 3 * 60 * 60
+
+
+def test_met_weather_cache_honours_expiry_longer_than_three_hours(monkeypatch):
+    monkeypatch.setenv("MOJ_MET_NORWAY_TOS_ACCEPTED_BY_OWNER", "1")
+    monkeypatch.setattr(weather_agent.cache, "get", lambda key: None)
+    timeouts = []
+    monkeypatch.setattr(
+        weather_agent.cache, "set",
+        lambda key, payload, timeout: timeouts.append(timeout),
+    )
+    monkeypatch.setattr(
+        weather_agent,
+        "parsedate_to_datetime",
+        lambda header: datetime.now(timezone.utc) + timedelta(hours=6),
+    )
+
+    class CachedResponse(io.BytesIO):
+        def __init__(self):
+            super().__init__(b'{}')
+            self.headers = {"Expires": "far-future-placeholder"}
+
+    monkeypatch.setattr(weather_agent, "urlopen", lambda *args, **kwargs: CachedResponse())
+    weather_agent._fetch(35.6892, 51.3890)
+    assert len(timeouts) == 1
+    assert timeouts[0] >= 5 * 60 * 60
