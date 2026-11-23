@@ -114,10 +114,12 @@ class MasterAgentChat:
             return reply
 
         # A configured API key is NOT case-specific consent for a billable
-        # model call. Keep public customer chat in a deterministic, API-free
-        # intake mode until a scoped one-time grant can be verified here.
-        # Never send customer-supplied text to an external model by default.
-        reply = (
+        # model call. Keep customer chat in deterministic, API-free mode.
+        # Offer only route-grounded product information; do not claim a sale.
+        from .customer_sales_faq import local_sales_answer
+
+        sales_answer = local_sales_answer(text)
+        reply = sales_answer or (
             "پیام دریافت و ثبت شد. پردازش هوش مصنوعی پولی برای این درخواست "
             "مجوز اختصاصی ندارد و فراخوانی نشده است. هیچ اقدامی اجرا نشد. "
             "برای خدمات یا پیگیری، از مسیر رسمی درخواست و پشتیبانی استفاده کنید."
@@ -130,7 +132,7 @@ class MasterAgentChat:
             metadata={
                 "agent": "master_agent",
                 "capability_pack": "1.0.0",
-                "execution": "local_no_external_ai_api",
+                "execution": "local_sales_navigation" if sales_answer else "local_no_external_ai_api",
                 "llm_called": False,
             },
         )
