@@ -86,32 +86,14 @@ def build_public_report(data):
 
 
 def generate_research_contents(weather_summary):
-    # An installed API key is not approval for a recurring paid agent call.
-    # The owner must explicitly enable paid content for the current date.
-    paid_approved_today = (
-        os.getenv('MOJ_PAID_LLM_ENABLED') == '1'
-        and os.getenv('MOJ_WEATHER_PAID_CONTENT_APPROVAL_DATE') == timezone.localdate().isoformat()
-    )
-    key = os.getenv('OPENAI_API_KEY') if paid_approved_today else None
-    if not key:
-        # Reposting the same two generic articles every day was duplicate SEO
-        # content, not new research. No paid generation and no fake output.
-        return []
-    from openai import OpenAI
+    """No paid generation until a per-task one-time scoped grant exists.
 
-    client = OpenAI(api_key=key)
-    prompt = f'''دو محتوای فارسی مستقل و حرفه‌ای برای وب‌سایت Zomorodmelal تولید کن؛ نویسنده هر دو «مجتبی روزگار، محقق و پژوهشگر» باشد. یکی درباره «تحقیقات، فناوری و نوآوری کاربردی» و دیگری درباره «آموزش و تحلیل کاربردی برای تصمیم‌گیری». محتواها علمی، قابل بررسی، غیرتبلیغاتی، کاربردی و مناسب SEO باشند. برای هر محتوا JSON با title, summary, body, meta_description, keywords, sources بده. از ادعا یا منبع ساختگی خودداری کن. اگر داده‌ای نیازمند منبع است، فقط از منابع رسمی و معتبر استفاده کن. زمینه امروز: {weather_summary[:4000]}'''
-    response = client.chat.completions.create(
-        model=os.getenv('OPENAI_WEATHER_CONTENT_MODEL', os.getenv('OPENAI_CHAT_MODEL','gpt-5.6')),
-        response_format={'type':'json_object'},
-        messages=[
-            {'role':'system','content':'تو سردبیر علمی و SEO هستی. جعل منبع و ادعای تأییدنشده ممنوع است.'},
-            {'role':'user','content':prompt},
-        ],
-    )
-    obj = json.loads(response.choices[0].message.content or '{}')
-    return obj.get('contents', obj if isinstance(obj, list) else [])
-
+    Daily environment flags and the presence of OPENAI_API_KEY are *not*
+    authoritative spending approvals; a scheduled weather cycle could
+    otherwise incur repeated charges. Weather collection and sourced,
+    approval-gated drafts remain available without a generative AI API.
+    """
+    return []
 
 def run_daily_cycle():
     from .models import NewsletterSource, NewsletterStory
