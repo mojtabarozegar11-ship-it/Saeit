@@ -10,6 +10,8 @@ import re
 
 MOJ_PROP_URL = "https://mojplaywin.com/moj-prop/"
 MOJ_PROP_CHECKOUT_URL = "https://mojplaywin.com/mojprop-starter30-checkout/"
+MOJ_PROP_TERMS_REQUEST_URL = "https://mojplaywin.com/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx"
+MOJ_SIGNALS_REQUEST_URL = "https://mojplaywin.com/moj-prop-intake/?format=html&service=signals"
 MOJ_SIGNALS_URL = "https://mojplaywin.com/moj-prop/signals/"
 MOJ_STORE_URL = "https://mojplaywin.com/store/"
 
@@ -44,23 +46,23 @@ def local_sales_answer(message):
                 "entry price is 30 TRX, but the landing page is not proof that "
                 "checkout or funded access is ready. Do not send TRX until "
                 "the server issues a unique invoice and the terms are verified. "
-                f"Details: {MOJ_PROP_URL} | Checkout information: {MOJ_PROP_CHECKOUT_URL}"
+                f"Details: {MOJ_PROP_URL} | Free written terms request: {MOJ_PROP_TERMS_REQUEST_URL} | Checkout information: {MOJ_PROP_CHECKOUT_URL}"
             )
         return (
             "مج‌پراپ یک چالش معاملاتی شبیه‌سازی‌شده است. قیمت معرفی‌شدهٔ Starter30 "
             "برابر ۳۰ TRX است؛ نمایش صفحه به‌معنای آماده‌بودن پرداخت یا صدور حساب نیست. "
             "تا زمان دریافت فاکتور اختصاصی صادرشده از سرور و بررسی شرایط، هیچ TRX ارسال نکنید. "
-            f"اطلاعات: {MOJ_PROP_URL} | صفحهٔ اطلاعات ثبت‌نام: {MOJ_PROP_CHECKOUT_URL}"
+            f"اطلاعات: {MOJ_PROP_URL} | درخواست رایگان شرایط کتبی: {MOJ_PROP_TERMS_REQUEST_URL} | صفحهٔ اطلاعات ثبت‌نام: {MOJ_PROP_CHECKOUT_URL}"
         )
     if signals:
         if re.search(r"\b(signals?|copy trading)\b", text) and not any("\u0600" <= c <= "\u06ff" for c in text):
             return (
                 "For the MOJ PROP trading-signal information page, see "
-                f"{MOJ_SIGNALS_URL}. Live subscription availability, performance and "
+                f"{MOJ_SIGNALS_URL}. Request free written scope: {MOJ_SIGNALS_REQUEST_URL}. Live subscription availability, performance and "
                 "delivery have not been verified here; do not pay without a valid server invoice."
             )
         return (
-            f"اطلاعات خدمات سیگنال معاملاتی: {MOJ_SIGNALS_URL}. "
+            f"اطلاعات خدمات سیگنال معاملاتی: {MOJ_SIGNALS_URL}. درخواست رایگان پیشنهاد کتبی: {MOJ_SIGNALS_REQUEST_URL}. "
             "فعال‌بودن اشتراک، نتایج معاملات و تحویل سرویس در این پاسخ تأیید نمی‌شود. "
             "بدون فاکتور معتبر سرور پرداخت نکنید."
         )
