@@ -6,6 +6,7 @@ import hashlib
 import fcntl
 import json
 import os
+import secrets
 from pathlib import Path
 import stat
 import subprocess
@@ -59,6 +60,19 @@ def require_reviewed_payment_command():
     blob = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
     if blob != PAYMENT_COMMAND_BLOB:
         raise ValueError("Payment command differs from pinned reviewed source")
+
+
+def fresh_python_cache_prefix():
+    """Force imports to read current source, not an attacker-controlled __pycache__.
+
+    -B only disables writing bytecode; Python can still LOAD stale .pyc files.
+    A fresh, never-existing import cache path plus -B prevents both reads from
+    pre-existing caches and writing cache into the owner state directory.
+    """
+    prefix = STATE / (".cold-import-" + secrets.token_hex(16))
+    if prefix.exists() or prefix.is_symlink():
+        raise ValueError("Fresh Python import cache prefix is not empty")
+    return prefix
 
 
 def private_dir(path):
@@ -134,11 +148,14 @@ def run():
         except BlockingIOError:
             return {"overlap_skipped": True}
         cursor = read_cursor(STATE/"cursor.json")
+        import_cache_prefix = fresh_python_cache_prefix()
         result = subprocess.run(
-            [str(PYTHON), "-B", str(ROOT/"manage.py"), "mpw_reconcile_pending_trx",
+            [str(PYTHON), "-B", "-X", "pycache_prefix=" + str(import_cache_prefix),
+             str(ROOT/"manage.py"), "mpw_reconcile_pending_trx",
              "--after-id", str(cursor), "--limit", str(LIMIT)],
             cwd=ROOT, capture_output=True, text=True, timeout=240,
-            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, check=False,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1",
+                 "PYTHONPYCACHEPREFIX": str(import_cache_prefix)}, check=False,
         )
         if result.returncode != 0:
             raise RuntimeError("Reconciliation command failed")
