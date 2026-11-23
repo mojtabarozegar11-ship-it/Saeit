@@ -319,8 +319,6 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
         or transfer_b.solidified is not True
     ):
         raise Starter30PaymentRejected("two provider proofs disagree")
-    if transfer_a.amount_sun != NATIVE_AMOUNT_SUN:
-        raise Starter30PaymentRejected("exact 30 native TRX transfer is required")
     outcome = _settle_verified_invoice(invoice_ref=invoice_ref, transfer_a=transfer_a)
     if outcome is _EXPIRED_INVOICE:
         raise Starter30PaymentRejected("invoice has expired")
@@ -339,6 +337,10 @@ def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
             .select_related("invoice_owner", "invoice_owner__identity")
             .get(invoice_owner__invoice_ref=invoice_ref)
         )
+        # Bind settlement to the immutable persisted invoice amount under the
+        # row lock, not to a process-wide default that can drift from the order.
+        if transfer_a.amount_sun != payment.amount_sun:
+            raise Starter30PaymentRejected("transfer amount differs from persisted invoice")
         # An on-chain txid is public. Only the exclusive invoice recipient
         # identifies which buyer's invoice this transfer actually pays.
         try:
