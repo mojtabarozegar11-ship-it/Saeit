@@ -330,6 +330,37 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
 _EXPIRED_INVOICE = object()
 
 
+def require_unambiguous_payer_claim(
+    *, payment_pk, payer_hex41: str | None, recipient: str, block_time
+) -> None:
+    """Reject same-sender same-receiver overlapping invoice windows.
+
+    All historical windows are included, even EXPIRED or REVIEW, because
+    status at reconciliation time does not alter the actual transfer's
+    original block timestamp. This is a conservative replay defense, NOT
+    cryptographic proof of wallet control. No database mutation is made.
+    """
+    if not payer_hex41:
+        raise Starter30PaymentRejected(
+            "payer wallet ownership is unverified; contact support"
+        )
+    competing_claim = (
+        PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS)
+        .filter(
+            payer_hex41=payer_hex41,
+            recipient=recipient,
+            issued_at__lte=block_time,
+            expires_at__gt=block_time,
+        )
+        .exclude(pk=payment_pk)
+        .exists()
+    )
+    if competing_claim:
+        raise Starter30PaymentRejected(
+            "ambiguous sending-wallet claim; contact support for manual review"
+        )
+
+
 def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
     """Commit expiry before error; keep all other settlement work atomic."""
     with transaction.atomic(using=MOJPROP_DB_ALIAS):
@@ -384,31 +415,12 @@ def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
             expected_sender = hex_to_tron_address(payment.payer_hex41)
             if transfer_a.sender != expected_sender:
                 raise Starter30PaymentRejected("sender does not match the wallet bound to this invoice")
-        # One receiving wallet is reused for every Starter30 invoice. Since a
-        # publicly known sender address can be typed by multiple email-verified
-        # users, a public TXID cannot safely identify one of *overlapping*
-        # invoices. This check considers even expired/reviewed records whose
-        # original window covered the actual on-chain transfer time.
-        # Treat an ambiguous claim as a support case, NEVER an automatic PAID.
-        if not payment.payer_hex41:
-            raise Starter30PaymentRejected(
-                "payer wallet ownership is unverified; contact support"
-            )
-        competing_claim = (
-            PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS)
-            .filter(
-                payer_hex41=payment.payer_hex41,
-                recipient=payment.recipient,
-                issued_at__lte=transfer_a.block_time,
-                expires_at__gt=transfer_a.block_time,
-            )
-            .exclude(pk=payment.pk)
-            .exists()
+        require_unambiguous_payer_claim(
+            payment_pk=payment.pk,
+            payer_hex41=payment.payer_hex41,
+            recipient=payment.recipient,
+            block_time=transfer_a.block_time,
         )
-        if competing_claim:
-            raise Starter30PaymentRejected(
-                "ambiguous sending-wallet claim; contact support for manual review"
-            )
         if PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS).filter(txid=transfer_a.tx_hash).exists():
             raise Starter30PaymentRejected("transaction is already assigned")
         owner = payment.invoice_owner
