@@ -9,6 +9,8 @@ class Command(BaseCommand):
     help = "Queue a daily Company Activity Intelligence Agent report set."
 
     def handle(self, *args, **options):
+        # Fail closed before creating a plan or content when canonical owner is off.
+        ensure_agent()
         now = timezone.now()
         plan, _ = CompanyActivityAgentPlan.objects.get_or_create(
             code="company-activity-intelligence",
@@ -22,7 +24,6 @@ class Command(BaseCommand):
                 "next_run_at": now,
             },
         )
-        ensure_agent()
         if not plan.active or (plan.next_run_at and plan.next_run_at > now):
             self.stdout.write("COMPANY_ACTIVITY_AGENT=WAIT")
             return
