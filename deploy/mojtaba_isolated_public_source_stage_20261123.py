@@ -132,10 +132,58 @@ def run(inbox: Path) -> None:
             shutil.rmtree(tmp)
 
 
+def package(root: Path, out: Path) -> None:
+    """Construct a hash-verified, 14-file bundle from pinned reviewed main."""
+    import io
+    import subprocess
+    assert subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip() == MAIN_SHA
+    paths = [
+        "core/canonical_content_owner.py",
+        "core/company_activity_agent.py",
+        "core/knowledge_agent.py",
+        "core/management/commands/company_activity_agent_cycle.py",
+        "core/management/commands/knowledge_agent_generate.py",
+        "core/management/commands/mojtaba_capability_status.py",
+        "core/newsletter_engine.py",
+        "core/weather_agent.py",
+        "core/chat_runtime.py",
+        "core/customer_sales_faq.py",
+        "core/task_health_sample.py",
+        "core/mojtaba_readonly_status.py",
+        *PORTAL_FILES,
+    ]
+    out.mkdir(mode=0o700, parents=True, exist_ok=True)
+    pins = {}
+    with tarfile.open(out / "source.tar.gz", "w:gz") as tar:
+        for rel in paths:
+            p = root / rel
+            assert p.is_file() and not p.is_symlink()
+            blob = p.read_bytes()
+            assert len(blob) < 1_000_000
+            if rel.endswith(".py"):
+                compile(blob, rel, "exec")
+            pins[rel] = {"sha256": digest(blob), "bytes": len(blob)}
+            entry = tarfile.TarInfo(rel)
+            entry.size = len(blob)
+            entry.mode = 0o600
+            tar.addfile(entry, io.BytesIO(blob))
+    (out / "pins.json").write_text(
+        json.dumps({"main_commit": MAIN_SHA, "source_files": pins}, indent=2),
+        encoding="utf8",
+    )
+    print("EXACT_MERGED_SOURCE_FILES_PINNED=14")
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise SystemExit("Usage: stage.py ABSOLUTE_SCOPED_INBOX")
-    run(Path(sys.argv[1]).resolve())
-    print("PASSENGER_LIVE_FILES_CHANGED=NO")
-    print("DATABASE_WRITES=NO")
-    print("PRODUCTION_DEPLOYED=NO")
+    if len(sys.argv) == 4 and sys.argv[1] == "package":
+        package(Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve())
+    elif len(sys.argv) == 2:
+        run(Path(sys.argv[1]).resolve())
+        print("PASSENGER_LIVE_FILES_CHANGED=NO")
+        print("DATABASE_WRITES=NO")
+        print("PRODUCTION_DEPLOYED=NO")
+    else:
+        raise SystemExit("Usage: stage.py package PINNED_SOURCE OUT | stage.py ABSOLUTE_SCOPED_INBOX")
