@@ -20,20 +20,26 @@ def test_weather_does_not_publish_as_an_unrelated_active_agent(monkeypatch):
     Agent.objects.create(code="trading-observer", name="Trading Observer", mission="market", active=True)
     _offline_weather_cycle(monkeypatch)
 
-    with pytest.raises(RuntimeError, match="No active content agent"):
+    with pytest.raises(RuntimeError, match="CANONICAL_CONTENT_OWNER_NOT_ACTIVE"):
         weather_agent.run_daily_cycle()
 
     assert not NewsletterStory.objects.filter(fingerprint__startswith="weather-iran-").exists()
 
 
-def test_weather_assigns_report_to_content_director(monkeypatch):
+def test_weather_assigns_unpublished_report_to_the_canonical_bot(monkeypatch):
     Agent.objects.create(code="trading-observer", name="Trading Observer", mission="market", active=True)
-    director = Agent.objects.create(code="content-director", name="Content Director", mission="content", active=True)
+    director = Agent.objects.create(code="content-director", name="Retired Director", mission="legacy", active=False)
+    central = Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba Bot", mission="canonical", active=True)
     _offline_weather_cycle(monkeypatch)
 
     result = weather_agent.run_daily_cycle()
 
-    assert NewsletterStory.objects.get(pk=result["weather_story_id"]).agent_id == director.id
+    story = NewsletterStory.objects.get(pk=result["weather_story_id"])
+    assert story.agent_id == central.id
+    assert story.status == "draft"
+    assert story.published_at is None
+    director.refresh_from_db()
+    assert director.active is False
 
 
 def test_weather_api_key_alone_never_authorizes_paid_content(monkeypatch):
@@ -47,7 +53,7 @@ def test_weather_api_key_alone_never_authorizes_paid_content(monkeypatch):
 
 
 def test_weather_does_not_regenerate_existing_daily_content(monkeypatch):
-    Agent.objects.create(code="content-director", name="Content Director", mission="content", active=True)
+    Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba Bot", mission="content", active=True)
     _offline_weather_cycle(monkeypatch)
     calls = []
 
@@ -67,8 +73,30 @@ def test_weather_does_not_regenerate_existing_daily_content(monkeypatch):
 
 
 def test_weather_does_not_publish_an_incomplete_31_province_report(monkeypatch):
-    Agent.objects.create(code="content-director", name="Content Director", mission="content", active=True)
+    Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba Bot", mission="content", active=True)
     monkeypatch.setattr(weather_agent, "province_forecast", lambda days=7: [])
     with pytest.raises(RuntimeError, match='Incomplete seven-day weather forecast'):
         weather_agent.run_daily_cycle()
     assert not NewsletterStory.objects.filter(fingerprint__startswith='weather-iran-').exists()
+
+
+def test_legacy_content_agent_cannot_authorize_weather_or_network(monkeypatch):
+    Agent.objects.create(code="content-director", name="Old Content", mission="legacy", active=True)
+    monkeypatch.setattr(weather_agent, "province_forecast", lambda days=7: (_ for _ in ()).throw(AssertionError("network attempted")))
+    with pytest.raises(RuntimeError, match="CANONICAL_CONTENT_OWNER_NOT_ACTIVE"):
+        weather_agent.run_daily_cycle()
+    assert not NewsletterStory.objects.exists()
+
+
+def test_repeat_weather_cycle_never_overwrites_a_reviewed_story(monkeypatch):
+    Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba Bot", mission="content", active=True)
+    _offline_weather_cycle(monkeypatch)
+    first = weather_agent.run_daily_cycle()
+    story = NewsletterStory.objects.get(pk=first["weather_story_id"])
+    story.body = "Reviewed immutable editorial text"
+    story.status = "approved"
+    story.save(update_fields=["body", "status"])
+    weather_agent.run_daily_cycle()
+    story.refresh_from_db()
+    assert story.body == "Reviewed immutable editorial text"
+    assert story.status == "approved"
