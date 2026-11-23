@@ -21,7 +21,11 @@ from pathlib import Path
 PUBLIC_EFFECTIVE_ROOT = Path("/home/zomorod2/Saeit-mojprop-candidate-20261122")
 PUBLIC_WSGI = Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py")
 
-# Pinned reviewed GitHub main blobs as of 22 Nov 2026. Never guess current
+# Historical receiver-pool source blobs: 60d413881e61cad3b31902acb73b7188a52f0394, 1562410bf3a569e2e132190764896fe3841a74e5
+# Updated 2026-11-23 ONLY for source-exactness of the reviewed new single-
+# owner receiving-wallet policy; NOT proof of live WSGI, historical receipts,
+# finance approval, any wallet balance or permission to issue invoices.
+# Pinned reviewed source bundles; never guess current
 # mainline parity from a runtime environment variable or a Django release flag.
 REQUIRED = {
     "prop_firm/simulation_policy.py": "15c5771e340315ebd649f92224ddd9bce138a256",
@@ -34,7 +38,7 @@ REQUIRED = {
     "prop_firm/models.py": "5576f0d29347e4ee41af6d63cb385583815bd03e",
     "prop_firm/simulation_identity_adapter.py": "0b4e6bf2050634816314b0ced5b8e424f5a5d2ad",
     "prop_firm/starter30_checkout_email.py": "dc6cdf6daae0b3649a1db4811f4aa3834e37df38",
-    "prop_firm/starter30_receiver_pool.py": "60d413881e61cad3b31902acb73b7188a52f0394",
+    "prop_firm/starter30_receiver_pool.py": "505a78b499d1f2f41f77de1c3396f80c826261bd",
     "config/mojprop_db_router.py": "9c0763798778b9de8037ade341fd96b6d6de49d7",
 }
 EXPECTED_COUNT = 12
