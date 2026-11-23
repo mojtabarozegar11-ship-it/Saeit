@@ -18,6 +18,7 @@ from core.customer_sales_faq import local_sales_answer
 # arbitrary chat text, privileged commands, customer data or a paid API.
 _PUBLIC_HELP_PROMPTS = {
     "prop": "MOJ PROP Starter30",
+    "prop-bg": "Moj Prop цена",
     "signals": "trading signals",
     "store": "digital store",
 }
