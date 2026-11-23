@@ -10,7 +10,7 @@ _BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 def synthetic_tron_address(marker: int) -> str:
     """Valid Base58Check structure for tests, not a funded live wallet."""
-    payload = b"\\x41" + bytes([marker]) * 20
+    payload = bytes([0x41]) + bytes([marker]) * 20
     raw = payload + hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
     n = int.from_bytes(raw, "big")
     result = ""
