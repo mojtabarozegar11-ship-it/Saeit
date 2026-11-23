@@ -11,6 +11,7 @@ from django.db import connections, DatabaseError
 from core.chat_operation_security import is_authorized_chat_operator
 from core.models import Agent, AgentTask, ApprovalRequest, ChatSession
 from core.unified_bot_identity import BOT_CODE
+from core.task_health_sample import bounded_recent_task_health
 
 
 STATUS_COMMANDS = frozenset({
@@ -53,15 +54,17 @@ def owner_runtime_snapshot(user):
 
     # Every query is a SELECT; even an unconfigured or unavailable AI key is
     # only a configuration-presence signal, not inference readiness.
+    task_health = bounded_recent_task_health()
     return {
         "registered_agents": Agent.objects.count(),
         "active_agents": Agent.objects.filter(active=True).count(),
         "canonical_agents": Agent.objects.filter(code=BOT_CODE, active=True).count(),
-        "nonterminal_tasks": AgentTask.objects.exclude(
-            status__in=TERMINAL_STATES,
-        ).count(),
-        "queued_tasks": AgentTask.objects.filter(status="queued").count(),
-        "blocked_tasks": AgentTask.objects.filter(status="blocked").count(),
+        "nonterminal_tasks": task_health["nonterminal"],
+        "queued_tasks": task_health["queued"],
+        "blocked_tasks": task_health["blocked"],
+        "task_sampled_rows": task_health["sampled_task_rows"],
+        "task_sample_limit": task_health["sample_limit"],
+        "task_population_complete": False,
         "chat_sessions": ChatSession.objects.count(),
         "pending_chat_approvals": ApprovalRequest.objects.filter(
             target_type="ChatOperation", status="pending",
@@ -89,7 +92,9 @@ def render_owner_status(snapshot):
         f"هویت مرکزی فعال: {snapshot['canonical_agents']}\n"
         f"وظایف غیرنهایی: {snapshot['nonterminal_tasks']} "
         f"(در صف: {snapshot['queued_tasks']}؛ "
-        f"مسدود: {snapshot['blocked_tasks']})\n"
+        f"مسدود: {snapshot['blocked_tasks']}) "
+        f"— فقط نمونهٔ {snapshot['task_sampled_rows']} وظیفهٔ اخیر "
+        f"از سقف {snapshot['task_sample_limit']}؛ کل تاریخچه شمارش نشده است.\n"
         f"نشست‌های گفت‌وگو: {snapshot['chat_sessions']}؛ "
         f"تأییدهای معوق فرمان چت: {snapshot['pending_chat_approvals']}\n"
         + prop_text + "\n"

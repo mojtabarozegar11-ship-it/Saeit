@@ -41,6 +41,26 @@ class MojtabaOwnerReadOnlyStatusTests(TestCase):
             capability_code="product_research", status="blocked",
         )
 
+    @patch("core.mojtaba_readonly_status._isolated_prop_counts")
+    def test_operator_task_summary_is_an_explicit_sample_not_a_full_census(self, isolated):
+        isolated.return_value = None
+        AgentTask.objects.create(
+            agent=self.agent, action_type="historical-failure", status="failed",
+        )
+        AgentTask.objects.bulk_create([
+            AgentTask(agent=self.agent, action_type="recent-task", status="completed")
+            for _ in range(130)
+        ])
+        report = owner_runtime_snapshot(self.owner)
+        self.assertEqual(report["task_sampled_rows"], 128)
+        self.assertEqual(report["task_sample_limit"], 128)
+        self.assertFalse(report["task_population_complete"])
+        self.assertEqual(report["nonterminal_tasks"], 0)
+        text = render_owner_status(report)
+        self.assertIn("فقط نمونهٔ 128 وظیفهٔ اخیر", text)
+        self.assertIn("کل تاریخچه شمارش نشده است", text)
+        self.assertIn("وظایف غیرنهایی:", text)
+
     def test_command_is_exact_and_not_implicit_authority(self):
         for text in (
             "bot status", "Bot Status!", "MOJTABA STATUS", "وضعیت ربات؟",

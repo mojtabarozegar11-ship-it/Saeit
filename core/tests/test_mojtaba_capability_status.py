@@ -2,6 +2,7 @@
 import io
 import json
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.core.management import call_command
 from django.test import TestCase
@@ -68,6 +69,49 @@ class CanonicalCapabilityStatusTests(TestCase):
         self.assertEqual(task.status, "failed")
         self.assertGreaterEqual(snapshot["runtime_tasks"]["failed"], 1)
         self.assertIn("FAILED_AGENT_TASKS_REQUIRE_REVIEW", snapshot["blockers"])
+
+    def test_task_health_is_an_explicit_bounded_sample_not_full_census(self):
+        central, _ = Agent.objects.get_or_create(
+            code="mojtaba-bot-ai",
+            defaults={"name": "Central", "mission": "central", "active": True},
+        )
+        # This older failure falls outside the most recent 128 rows, which
+        # means an observed sample of zero failures is NOT proof of zero.
+        old_failure = AgentTask.objects.create(
+            agent=central, status="failed", action_type="legacy-review",
+        )
+        AgentTask.objects.bulk_create([
+            AgentTask(agent=central, status="completed", action_type="recent")
+            for _ in range(130)
+        ])
+        with patch("core.observability.RuntimeObservability.snapshot",
+                   side_effect=AssertionError("full historical census called")) as full_scan:
+            report = capability_snapshot()
+        full_scan.assert_not_called()
+        health = report["runtime_tasks"]
+        self.assertEqual(health["sampled_task_rows"], 128)
+        self.assertEqual(health["sample_limit"], 128)
+        self.assertFalse(health["complete_population_verified"])
+        self.assertEqual(health["failed"], 0)
+        self.assertIn("AGENT_TASK_FULL_CENSUS_UNVERIFIED", report["blockers"])
+        old_failure.refresh_from_db()
+        self.assertEqual(old_failure.status, "failed")
+
+    def test_command_is_readonly_and_reports_sample_scope(self):
+        central, _ = Agent.objects.get_or_create(
+            code="mojtaba-bot-ai",
+            defaults={"name": "Central", "mission": "central", "active": True},
+        )
+        AgentTask.objects.create(agent=central, status="queued", action_type="review")
+        with patch("core.observability.RuntimeObservability.snapshot",
+                   side_effect=AssertionError("full status aggregation")):
+            report = capability_snapshot()
+        self.assertEqual(report["runtime_tasks"]["queued"], 1)
+        self.assertEqual(
+            report["runtime_tasks"]["metric_scope"],
+            "LATEST_PRIMARY_KEY_SAMPLE_NOT_FULL_TASK_COUNTS",
+        )
+        self.assertFalse(report["runtime_tasks"]["complete_population_verified"])
 
     def test_missing_owner_is_a_blocker_not_an_implicit_provision(self):
         Agent.objects.filter(code="mojtaba-bot-ai").update(active=False)
