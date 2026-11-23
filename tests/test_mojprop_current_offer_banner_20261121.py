@@ -28,7 +28,10 @@ class MojPropCurrentOfferBannerTest(unittest.TestCase):
         )
         self.assertIn("invoice eligibility is conditional", text)
         self.assertIn("No TRX before a unique invoice.", text)
-        self.assertIn("MOJ-PROP-01 prelaunch.", text)
+        # MOJ-PROP-01 remains disclosed in the separate prelaunch section;
+        # do not force its notice into the Starter30 metadata snippet.
+        self.assertIn("MOJ-PROP-01", text)
+        self.assertIn("Prelaunch only.", text)
 
 
 if __name__ == "__main__":
