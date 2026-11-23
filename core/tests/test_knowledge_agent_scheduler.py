@@ -75,7 +75,11 @@ class KnowledgeAgentSchedulerTests(TestCase):
     def test_legacy_knowledge_agent_does_not_get_reactivated(self):
         Agent.objects.filter(code="mojtaba-bot-ai").update(active=False)
         legacy = Agent.objects.create(code="knowledge-content-director", name="Retired", mission="old", active=False)
+        from core.knowledge_agent_models import KnowledgeBook, KnowledgeDomain
+        before = (KnowledgeAgentPlan.objects.count(), KnowledgeBook.objects.count(), KnowledgeDomain.objects.count())
         self.assertIsNone(queue_cycle())
+        after = (KnowledgeAgentPlan.objects.count(), KnowledgeBook.objects.count(), KnowledgeDomain.objects.count())
+        self.assertEqual(after, before)
         legacy.refresh_from_db()
         self.assertFalse(legacy.active)
         self.assertEqual(KnowledgeAgentRun.objects.count(), 0)
