@@ -12,6 +12,7 @@ from core.canonical_content_owner import CANONICAL_AGENT_CODE
 from core.knowledge_agent_models import KnowledgeAgentRun
 from core.models import Agent, AgentTask
 from core.newsletter_models import NewsletterSchedule, NewsletterStory, NewsletterSubmission
+from core.observability import RuntimeObservability
 
 
 RETIRED_CONTENT_CODES = (
@@ -44,6 +45,7 @@ def capability_snapshot():
     pending_news = NewsletterSubmission.objects.filter(status="queued").count()
     running_news = NewsletterSubmission.objects.filter(status="processing").count()
     pending_knowledge = KnowledgeAgentRun.objects.filter(status="queued").count()
+    task_health = RuntimeObservability().snapshot(stale_after_seconds=900)
 
     blockers = []
     if not canonical_active:
@@ -60,6 +62,10 @@ def capability_snapshot():
         blockers.append("NEWSROOM_SUBMISSIONS_PENDING")
     if pending_knowledge:
         blockers.append("KNOWLEDGE_GENERATION_PENDING")
+    if task_health.stale_running:
+        blockers.append("STALE_RUNNING_AGENT_TASKS")
+    if task_health.failed:
+        blockers.append("FAILED_AGENT_TASKS_REQUIRE_REVIEW")
 
     return {
         "scope": "DJANGO_DATABASE_READ_ONLY",
@@ -78,6 +84,15 @@ def capability_snapshot():
             ),
         },
         "knowledge_queued_runs": pending_knowledge,
+        "runtime_tasks": {
+            "queued": task_health.queued,
+            "running": task_health.running,
+            "completed": task_health.completed,
+            "failed": task_health.failed,
+            "cancelled": task_health.cancelled,
+            "stale_running_over_15_minutes": task_health.stale_running,
+            "recorded_total_cost_not_verified_revenue": str(task_health.total_cost),
+        },
         "blockers": blockers,
         "publication_live_verified": False,
         "host_cron_verified": False,
