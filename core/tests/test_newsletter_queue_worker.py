@@ -18,6 +18,7 @@ from core.newsletter_models import NewsletterSchedule, NewsletterStory, Newslett
 class NewsletterQueueWorkerTests(TestCase):
     def setUp(self):
         self.owner = get_user_model().objects.create_user(username="newsletter_queue_owner")
+        Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba Bot", mission="canonical", active=True)
 
     def submission(self, suffix):
         return NewsletterSubmission.objects.create(
@@ -46,7 +47,9 @@ class NewsletterQueueWorkerTests(TestCase):
         self.assertEqual({a.status, b.status}, {"drafted"})
         self.assertEqual(NewsletterStory.objects.filter(status="draft").count(), 2)
         self.assertEqual(NewsletterStory.objects.filter(status="published").count(), 0)
-        self.assertTrue(Agent.objects.filter(code="content-director", active=True).exists())
+        self.assertTrue(Agent.objects.filter(code="mojtaba-bot-ai", active=True).exists())
+        self.assertFalse(Agent.objects.filter(code="content-director").exists())
+        self.assertTrue(all(story.agent.code == "mojtaba-bot-ai" for story in NewsletterStory.objects.all()))
 
     def test_batch_limit_never_claims_unselected_submissions(self):
         first = self.submission("first")
@@ -75,9 +78,9 @@ class NewsletterQueueWorkerTests(TestCase):
         self.assertEqual(NewsletterStory.objects.count(), 1)
 
     def test_disabled_successor_does_not_get_reactivated_or_lose_queue(self):
-        agent = Agent.objects.create(
-            code="content-director", name="Content Director", mission="Review", active=False
-        )
+        agent = Agent.objects.get(code="mojtaba-bot-ai")
+        agent.active = False
+        agent.save(update_fields=["active"])
         item = self.submission("disabled")
         receipt = self.run_queue()
         agent.refresh_from_db()
@@ -85,6 +88,19 @@ class NewsletterQueueWorkerTests(TestCase):
         self.assertFalse(agent.active)
         self.assertEqual(item.status, "queued")
         self.assertEqual(receipt["result"]["held"], 1)
+        self.assertFalse(NewsletterStory.objects.exists())
+
+    def test_retired_legacy_content_director_never_revived(self):
+        Agent.objects.create(
+            code="content-director", name="Legacy Director", mission="Retired", active=False
+        )
+        Agent.objects.filter(code="mojtaba-bot-ai").update(active=False)
+        item = self.submission("legacy-still-retired")
+        receipt = self.run_queue()
+        item.refresh_from_db()
+        self.assertEqual(item.status, "queued")
+        self.assertEqual(receipt["result"]["held"], 1)
+        self.assertFalse(Agent.objects.filter(code="content-director", active=True).exists())
         self.assertFalse(NewsletterStory.objects.exists())
 
     def test_failed_drafting_rolls_back_claim_for_recovery(self):
