@@ -61,16 +61,19 @@ def require_matching_finalized_proofs(
         raise SettlementProofRejected("sender and recipient cannot match")
     if type(first) is not FinalizedTransferProof or type(second) is not FinalizedTransferProof:
         raise SettlementProofRejected("two structured proofs required")
-    if (not first.provider_id or not second.provider_id
-            or not first.operator_id or not second.operator_id
-            or first.provider_id == second.provider_id
-            or first.operator_id == second.operator_id):
+    identifiers = (first.provider_id, second.provider_id, first.operator_id, second.operator_id)
+    if any(type(v) is not str or not v.strip() for v in identifiers):
+        raise SettlementProofRejected("nonempty provider/operator identifiers required")
+    provider_a, provider_b, operator_a, operator_b = (v.strip().casefold() for v in identifiers)
+    if (provider_a == provider_b or operator_a == operator_b):
         raise SettlementProofRejected("independent providers and operators required")
     for proof in (first, second):
         if proof.solidified is not True or proof.successful is not True:
             raise SettlementProofRejected("transfer not final and successful")
         if type(proof.amount_sun) is not int or proof.amount_sun != amount:
             raise SettlementProofRejected("transfer amount differs from invoice")
+        if type(proof.network) is not str or type(proof.txid) is not str:
+            raise SettlementProofRejected("malformed network or txid proof")
         if proof.network != snapshot.network or proof.txid.lower() != txid:
             raise SettlementProofRejected("network or txid mismatch")
         if normalized_address(proof.sender_hex41) != sender:
