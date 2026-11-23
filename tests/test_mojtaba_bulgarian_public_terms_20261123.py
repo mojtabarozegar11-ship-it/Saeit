@@ -3,7 +3,6 @@
 No external API, finance execution, customer email, DB write or paid plan.
 """
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth.models import AnonymousUser
@@ -46,7 +45,7 @@ class BulgarianStarter30GuideTests(SimpleTestCase):
         self.assertIsNone(local_sales_answer("колко струва нещо друго"))
         self.assertIsNone(local_sales_answer("взлом на чужд телефон"))
         self.assertIsNone(local_sales_answer("Moj Prop цена " + ("x" * 2100)))
-        self.assertIsNone(local_sales_answer("Moj Prop"))
+        self.assertIn("entry price is 30 TRX", local_sales_answer("Moj Prop"))
         # The plain English commercial guide is still available by the exact
         # original portal topic, even when the public Bulgarian topic is added.
 
