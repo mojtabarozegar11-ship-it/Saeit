@@ -20,6 +20,12 @@ SOURCE_ATTRIBUTION = 'Weather forecast from MET Norway (Norwegian Meteorological
 
 
 def _fetch(lat, lon, days=7):
+    # MET Norway Terms of Service (revision 2026-11-05) expressly require
+    # an authorized HUMAN to read and accept the legally binding terms.
+    # AI delegation, public availability and a configured User-Agent do NOT
+    # constitute such acceptance. Default fail closed before cache/network IO.
+    if os.getenv('MOJ_MET_NORWAY_TOS_ACCEPTED_BY_OWNER') != '1':
+        raise RuntimeError('MET_NORWAY_OWNER_TOS_ACCEPTANCE_REQUIRED')
     # Respect the provider's Expires header. Unlike Open-Meteo's free API,
     # MET Norway permits commercial usage under CC BY 4.0 with attribution.
     key = f'met_norway_locationforecast_v1:{lat:.4f}:{lon:.4f}'
