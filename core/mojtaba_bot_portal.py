@@ -12,6 +12,16 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.clickjacking import xframe_options_deny
 from django.views.decorators.http import require_GET
 
+from core.customer_sales_faq import local_sales_answer
+
+# Public visitors may select ONLY predefined informational topics, never
+# arbitrary chat text, privileged commands, customer data or a paid API.
+_PUBLIC_HELP_PROMPTS = {
+    "prop": "MOJ PROP Starter30",
+    "signals": "trading signals",
+    "store": "digital store",
+}
+
 
 @never_cache
 @xframe_options_deny
@@ -26,8 +36,13 @@ def mojtaba_bot_portal(request):
     # Do not re-expose that unsafe route through the central assistant portal.
     # Unpaid CRM requests remain available without a DB or provider preflight.
 
+    selected_topic = request.GET.get("topic", "")
+    prompt = _PUBLIC_HELP_PROMPTS.get(selected_topic)
+    public_answer = local_sales_answer(prompt) if prompt else None
     nonce = token_urlsafe(24)
     context = {
+        "public_help_topic": selected_topic if prompt else "",
+        "public_help_answer": public_answer or "",
         "signed_in": signed_in,
         "nonce": nonce,
         "csrf_for_chat": get_token(request) if signed_in else "",
