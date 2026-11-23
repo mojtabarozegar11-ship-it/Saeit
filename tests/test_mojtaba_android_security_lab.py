@@ -118,7 +118,7 @@ class OwnerAndroidSecurityLabTests(unittest.TestCase):
     def test_training_course_lists_only_synthetic_lessons(self):
         result = self.call("training_lessons")
         self.assertTrue(result["synthetic"])
-        self.assertEqual(len(result["lessons"]), 3)
+        self.assertEqual(len(result["lessons"]), 4)
         self.assertEqual(result["network_requests"], 0)
         self.assertFalse(result["remote_access"])
         self.assertFalse(result["real_data_collected"])
@@ -128,6 +128,7 @@ class OwnerAndroidSecurityLabTests(unittest.TestCase):
             ("normal_notes", "low"),
             ("overprivileged_app", "high"),
             ("fictional_transfer", "high"),
+            ("fictional_covert_surveillance", "high"),
         ):
             with self.subTest(case=case_id):
                 result = self.call("training_case", {"case_id": case_id})
@@ -141,6 +142,7 @@ class OwnerAndroidSecurityLabTests(unittest.TestCase):
             ("android_permissions", "B"),
             ("accessibility_misuse", "A"),
             ("synthetic_exfiltration", "C"),
+            ("covert_surveillance_detection", "A"),
         ):
             with self.subTest(lesson=lesson_id):
                 prompt = self.call("training_quiz", {"lesson_id": lesson_id})
@@ -171,12 +173,28 @@ class OwnerAndroidSecurityLabTests(unittest.TestCase):
         for operation, args in (
             ("training_lessons", {}),
             ("training_case", {"case_id": "fictional_transfer"}),
+            ("training_case", {"case_id": "fictional_covert_surveillance"}),
             ("training_quiz", {"lesson_id": "synthetic_exfiltration"}),
+            ("training_quiz", {"lesson_id": "covert_surveillance_detection"}),
         ):
             response = json.dumps(self.call(operation, args))
             self.assertNotIn("https://", response)
             self.assertNotIn("READ_REAL_SMS", response)
             self.assertNotIn("REMOTE_CONTROL", response)
+
+    def test_covert_surveillance_scenario_has_no_real_collection_or_access(self):
+        report = self.call("training_case", {"case_id": "fictional_covert_surveillance"})
+        self.assertEqual(report["risk_level"], "high")
+        self.assertTrue(report["fictional"])
+        self.assertEqual(report["network_requests"], 0)
+        self.assertFalse(report["actual_compromise_detected"])
+        serialized = json.dumps(report)
+        self.assertIn("SIMULATED_READ_DEMO_MEDIA_NO_FILES", serialized)
+        self.assertIn("SIMULATED_DATA_TRANSFER_NO_NETWORK", serialized)
+        for private_operation in ("read_sms", "read_photos", "remote_control", "install_spyware"):
+            with self.subTest(operation=private_operation), self.assertRaises(ValueError):
+                self.call(private_operation)
+
 
 
 if __name__ == "__main__":
