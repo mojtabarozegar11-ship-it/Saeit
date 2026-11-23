@@ -48,6 +48,12 @@ def seed_library():
     return plan
 
 def queue_cycle():
+    # The central identity must be active before seeding or mutating library
+    # models. Otherwise the retired knowledge capability could still create
+    # plans and books even though no AgentTask was scheduled.
+    agent = get_canonical_content_owner()
+    if agent is None:
+        return None
     plan = seed_library()
     now = timezone.now()
     if not plan.active:
@@ -62,11 +68,6 @@ def queue_cycle():
         plan.last_run_at = now
         plan.next_run_at = None
         plan.save(update_fields=["last_run_at", "next_run_at", "updated_at"])
-        return None
-    # A retired knowledge director must never be recreated by this scheduler.
-    # Hold the plan and its original books until the canonical bot is active.
-    agent = get_canonical_content_owner()
-    if agent is None:
         return None
     run = KnowledgeAgentRun.objects.create(
         plan=plan,
