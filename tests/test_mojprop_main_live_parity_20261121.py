@@ -23,8 +23,11 @@ PREVIOUS_SOURCE_BLOB="45d7fc5a5d31ecc55dba34e5efc1b9b8b23444c4"
 # Earlier reviewed main source, prior to the three no-premature-checkout edits.
 PRIOR_SOURCE_SHA256="9b1915d0297a2242b86038be0070fb4ed5c914159432fa342c199beaee1cc351"
 PRIOR_SOURCE_BLOB="8b5b625c7ef872eb0921c0975fc44c3e6b74b138"
-CURRENT_SOURCE_SHA256="bd3eb8ab95d50f79d8803b7975a5c553a8dde16deeeadf8d7f5e67002d1b4860"
-CURRENT_SOURCE_BLOB="b6aa56cd16ed43fafadf98e885cde4a6e913b841"
+# Prior same-PR source before four metadata/social conditional-invoice edits.
+SOURCE_BEFORE_META_SHA256="bd3eb8ab95d50f79d8803b7975a5c553a8dde16deeeadf8d7f5e67002d1b4860"
+SOURCE_BEFORE_META_BLOB="b6aa56cd16ed43fafadf98e885cde4a6e913b841"
+CURRENT_SOURCE_SHA256="46c6260e62e2a9fe424d7a7dd07752ad7f17342f59b63888fe8f20b7c45da842"
+CURRENT_SOURCE_BLOB="8736318e3f3473987c711e51bf63b7728edaefd4"
 # Immutable earlier reviewed candidate (not proof of live deployment).
 CANDIDATE_SHA256="4b00b000ecc971073345aa2ca7baaf6753bf83d9bb5243e4ad1276b7012c13e7"
 CANDIDATE_BLOB="463ebd2dfb5d803cd20ac17f2c53422d36d65ad9"
@@ -89,8 +92,11 @@ class OfficialMojPropLiveParityTests(unittest.TestCase):
         self.assertNotIn("A new customer payment has been verified", page)
         self.assertNotIn("checkout is open after email and payer-wallet verification", page)
         self.assertIn("Any new paid enrollment depends on independent seller", page)
-        self.assertIn("New paid admission is conditional on independently verified", page)
+        self.assertIn("New paid admission is conditional on independent buyer", page)
         self.assertIn("payment and enrollment remain conditional on independent checks", page)
+        self.assertNotIn("payment unavailable", page)
+        self.assertIn("invoice eligibility is conditional", page)
+        self.assertIn("Never send TRX without a unique server-issued invoice.", page)
 
     def test_official_info_and_order_policy_not_misrepresented(self):
         s=PAGE.read_text(encoding="utf8")
