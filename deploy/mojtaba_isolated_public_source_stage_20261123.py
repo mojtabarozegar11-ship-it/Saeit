@@ -70,9 +70,12 @@ def run(inbox: Path) -> None:
         mf = NEW_STAGE / "candidate_manifest.json"
         prior = json.loads(mf.read_text(encoding="utf8"))
         assert prior["source_main_commit"] == MAIN_SHA
+        assert set(prior["candidate_files"]) == set(pins)
         assert len(prior["candidate_files"]) == 14
-        assert all(digest((NEW_STAGE / rel).read_bytes()) == record["sha256"]
-                   for rel, record in prior["candidate_files"].items())
+        assert all(
+            digest((NEW_STAGE / rel).read_bytes()) == record["sha256"] == pins[rel]["sha256"]
+            for rel, record in prior["candidate_files"].items()
+        )
         print("EXACT_MAIN_STAGE_REUSED_AND_HASH_CHECKED=YES")
         print("EXACT_STAGE_MANIFEST_SHA256=" + digest(mf.read_bytes()))
         return
@@ -136,10 +139,17 @@ def package(root: Path, out: Path) -> None:
     """Construct a hash-verified, 14-file bundle from pinned reviewed main."""
     import io
     import subprocess
-    assert subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "HEAD"],
-        capture_output=True, text=True, check=True,
-    ).stdout.strip() == MAIN_SHA
+    # The older self-hosted runner's git can make checkout@v4 fall back to
+    # GitHub's exact-ref source archive, which has no .git directory. Its
+    # workflow ref is pinned to MAIN_SHA; never infer HEAD from parent PR repo.
+    if (root / ".git").exists():
+        assert subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip() == MAIN_SHA
+    else:
+        assert root.name == "reviewed-main"
+        print("PINNED_CHECKOUT_MODE=EXACT_SHA_SOURCE_ARCHIVE_NO_GIT_METADATA")
     paths = [
         "core/canonical_content_owner.py",
         "core/company_activity_agent.py",
