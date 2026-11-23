@@ -53,7 +53,11 @@ def require_failed_retry(evidence: RetryEvidence, *, buyer_identity_id: str) -> 
             or evidence.final_at.tzinfo is None
             or evidence.final_at.utcoffset() is None):
         raise RetryNotEligible("verified timezone-aware finality required")
-    # A future-dated final result is not authoritative evidence of a completed\n    # failed challenge. Reject it before allowing a discounted invoice.\n    if evidence.final_at > datetime.now(timezone.utc):\n        raise RetryNotEligible("challenge finality cannot be in the future")\n    if (type(evidence.redemption_used) is not bool
+    # A future-dated final result is not authoritative evidence of a completed
+    # failed challenge. Reject it before allowing a discounted invoice.
+    if evidence.final_at > datetime.now(timezone.utc):
+        raise RetryNotEligible("challenge finality cannot be in the future")
+    if (type(evidence.redemption_used) is not bool
             or type(evidence.dispute_open) is not bool
             or type(evidence.original_payment_final) is not bool):
         raise RetryNotEligible("invalid redemption evidence")
