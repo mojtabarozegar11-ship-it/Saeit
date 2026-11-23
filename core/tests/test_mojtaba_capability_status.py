@@ -1,6 +1,7 @@
 """Read-only operational status regression tests; no network or publication."""
 import io
 import json
+from datetime import timedelta
 
 from django.core.management import call_command
 from django.test import TestCase
@@ -37,6 +38,36 @@ class CanonicalCapabilityStatusTests(TestCase):
         self.assertFalse(data["host_cron_verified"])
         self.assertFalse(data["payment_and_revenue_verified"])
         self.assertIn("blockers", data)
+
+    def test_stale_agent_work_is_reported_without_mutating_task(self):
+        central, _ = Agent.objects.get_or_create(
+            code="mojtaba-bot-ai",
+            defaults={"name": "Central", "mission": "central", "active": True},
+        )
+        task = AgentTask.objects.create(
+            agent=central, action_type="monitoring", status="running",
+        )
+        stale_time = timezone.now() - timedelta(hours=2)
+        AgentTask.objects.filter(pk=task.pk).update(updated_at=stale_time)
+        snapshot = capability_snapshot()
+        task.refresh_from_db()
+        self.assertEqual(task.status, "running")
+        self.assertEqual(task.updated_at, stale_time)
+        self.assertGreaterEqual(snapshot["runtime_tasks"]["stale_running_over_15_minutes"], 1)
+        self.assertIn("STALE_RUNNING_AGENT_TASKS", snapshot["blockers"])
+        self.assertFalse(snapshot["publication_live_verified"])
+
+    def test_failed_tasks_are_visible_but_not_claimed(self):
+        central, _ = Agent.objects.get_or_create(
+            code="mojtaba-bot-ai",
+            defaults={"name": "Central", "mission": "central", "active": True},
+        )
+        task = AgentTask.objects.create(agent=central, status="failed", action_type="review")
+        snapshot = capability_snapshot()
+        task.refresh_from_db()
+        self.assertEqual(task.status, "failed")
+        self.assertGreaterEqual(snapshot["runtime_tasks"]["failed"], 1)
+        self.assertIn("FAILED_AGENT_TASKS_REQUIRE_REVIEW", snapshot["blockers"])
 
     def test_missing_owner_is_a_blocker_not_an_implicit_provision(self):
         Agent.objects.filter(code="mojtaba-bot-ai").update(active=False)
