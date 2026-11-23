@@ -11,7 +11,8 @@ from ava_core.capabilities import ActionRequest, CapabilityHub
 
 class OwnerAndroidSecurityLabTests(unittest.TestCase):
     def setUp(self):
-        self.hub = CapabilityHub(owner_id="agent-training-001")
+        self.hub = CapabilityHub(owner_id="agent-training-001",
+                                 authorize=lambda owner, request, operation: owner == request.owner_id)
         self.hub.register(*security_lab_capability())
         self.counter = 0
 
@@ -23,7 +24,7 @@ class OwnerAndroidSecurityLabTests(unittest.TestCase):
         )
         receipt = self.hub.execute(req)
         self.assertTrue(receipt.result.success)
-        self.assertEqual(receipt.effect, "local")
+        self.assertEqual(receipt.effect, "read")
         return json.loads(receipt.result.detail)
 
     def test_status_cannot_connect_to_real_devices(self):
