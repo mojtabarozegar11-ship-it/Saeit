@@ -9,10 +9,15 @@ from __future__ import annotations
 CANONICAL_AGENT_CODE = "mojtaba-bot-ai"
 
 
-def require_canonical_content_owner():
+def get_canonical_content_owner():
+    """Return only a preexisting active canonical agent; never create one."""
     from .models import Agent
 
-    owner = Agent.objects.filter(code=CANONICAL_AGENT_CODE, active=True).first()
+    return Agent.objects.filter(code=CANONICAL_AGENT_CODE, active=True).first()
+
+
+def require_canonical_content_owner():
+    owner = get_canonical_content_owner()
     if owner is None:
         raise RuntimeError("CANONICAL_CONTENT_OWNER_NOT_ACTIVE")
     return owner
