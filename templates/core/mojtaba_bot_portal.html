@@ -42,6 +42,10 @@
     .bubble.user{background:#18463f}
     .speaker{font-size:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:800;margin-bottom:5px}
     .status{min-height:22px;font-size:14px;color:var(--accent)}
+    .topic-links{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}
+    .topic-links a{display:inline-block;border:1px solid var(--accent);border-radius:8px;padding:9px 13px;color:var(--ink);text-decoration:none}
+    .topic-links a[aria-current="true"]{background:#215e55;border-color:#b0eee0}
+    .public-answer{border:1px solid #628394;border-radius:10px;padding:15px;background:#091923;white-space:pre-wrap;overflow-wrap:anywhere}
     footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding:25px 0}
   </style>
 </head>
@@ -56,6 +60,19 @@
     <h1>Mojtaba.bot.ai</h1>
     <p class="sub">This page uses MojPlayWin's existing authenticated assistant API. A public page or API endpoint is not evidence that a single production worker, autonomous execution, paid services, or customer delivery have been certified.</p>
     <div class="notice">No wallet transfer, trading order, social post, paid subscription or factory operation can be initiated by loading this page. Do not send private keys, passwords, seed phrases or identity documents through the chat.</div>
+    <section class="panel" id="public-help" aria-label="Public service guidance">
+      <h2>Ask about our services — no sign-in or payment</h2>
+      <p>Choose a topic to get an immediate, prewritten answer from the official Mojtaba.bot.ai service guide. This is not a generative AI conversation, trading advice, a purchase, or proof that paid services are active. No question, customer profile or wallet information is submitted.</p>
+      <nav class="topic-links" aria-label="Choose a service topic">
+        <a href="?topic=prop#public-help" {% if public_help_topic == "prop" %}aria-current="true"{% endif %}>MOJ PROP · 30 TRX simulation</a>
+        <a href="?topic=signals#public-help" {% if public_help_topic == "signals" %}aria-current="true"{% endif %}>Educational signals</a>
+        <a href="?topic=store#public-help" {% if public_help_topic == "store" %}aria-current="true"{% endif %}>Digital store</a>
+      </nav>
+      {% if public_help_answer %}
+      <div id="public-answer" class="public-answer" role="status" aria-live="polite">{{ public_help_answer }}</div>
+      {% endif %}
+      <p class="small">For written terms or a service proposal, use the official request links below. Do not send TRX without a unique server-issued invoice and independently verified terms.</p>
+    </section>
     {% if signed_in %}
     <section class="panel" aria-label="Authenticated assistant">
       <h2>Protected assistant conversation</h2>
