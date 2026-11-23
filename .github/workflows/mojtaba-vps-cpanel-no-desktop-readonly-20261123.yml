@@ -1,8 +1,8 @@
 name: Mojtaba VPS runner to cPanel read-only alternative path 20261123
 
 on:
-  push:
-    branches: [audit/mojtaba-vps-relay-no-desktop-20261123]
+  pull_request:
+    branches: [main]
     paths:
       - ".github/workflows/mojtaba-vps-cpanel-no-desktop-readonly-20261123.yml"
 
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   read-only-cpanel-via-existing-vps:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/audit/mojtaba-vps-relay-no-desktop-20261123'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'audit/mojtaba-vps-relay-no-desktop-20261123' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 5
     steps:
