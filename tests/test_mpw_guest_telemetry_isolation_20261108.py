@@ -19,6 +19,8 @@ def source_function(name, namespace=None):
                if name == "patch_commercial" else [])
     if name == "patch_commercial":
         scope["Http404"] = LookupError
+        helpers.append(next(n for n in source.body if isinstance(n, ast.FunctionDef)
+                            and n.name == "_confirmed_new_invoice_redirect"))
     exec(compile(ast.Module(body=helpers + [node], type_ignores=[]), str(SOURCE), "exec"), scope)
     return scope[name]
 
@@ -62,8 +64,11 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertFalse(helper(object(), "begin_checkout", object()))
 
     def test_invoice_response_preserved_when_telemetry_or_lookup_fails(self):
-        # Match the actual invoice handler contract: a committed HTTP 201.
-        response = types.SimpleNamespace(status_code=201)
+        # The real successful invoice handler redirects 302 to the owner invoice.
+        response = types.SimpleNamespace(
+            status_code=302,
+            get=lambda k, default="": "/commerce/trx-easy/invoice/72/" if k == "Location" else default,
+        )
         request = object()
         product = object()
         product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
@@ -89,7 +94,7 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertEqual(dispatch.call_count, 2)
             # A rejected invoice is not a completed checkout; never report it
             # as an invoice_created event.
-            rejected = types.SimpleNamespace(status_code=400)
+            rejected = types.SimpleNamespace(status_code=400, get=lambda k, default="": default)
             dispatch.return_value = rejected
             self.assertIs(namespace["start_order"](request, product_id=72), rejected)
             self.assertEqual(record.call_count, 1)
