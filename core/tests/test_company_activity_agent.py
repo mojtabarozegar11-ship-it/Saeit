@@ -43,7 +43,13 @@ class CompanyActivityAgentTests(TestCase):
         legacy = Agent.objects.create(
             code=AGENT_CODE, name="Retired Reporter", mission="Old report", active=False,
         )
+        # Seed migrations add other active agents to the isolated test DB.
+        # This capability must not activate a new one or revive the legacy
+        # agent; it cannot assert the entire registry has only one row.
+        active_before = set(Agent.objects.filter(active=True).values_list("pk", flat=True))
         self.assertEqual(ensure_agent().pk, canonical.pk)
+        active_after = set(Agent.objects.filter(active=True).values_list("pk", flat=True))
         legacy.refresh_from_db()
         self.assertFalse(legacy.active)
-        self.assertEqual(Agent.objects.filter(active=True).count(), 1)
+        self.assertEqual(active_after, active_before)
+        self.assertEqual(Agent.objects.filter(code="mojtaba-bot-ai", active=True).count(), 1)
