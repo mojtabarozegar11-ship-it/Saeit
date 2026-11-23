@@ -1,5 +1,6 @@
 from django.utils import timezone
-from .models import Agent, AgentTask
+from .models import AgentTask
+from .canonical_content_owner import get_canonical_content_owner
 from .knowledge_agent_models import KnowledgeAgentPlan, KnowledgeDomain, KnowledgeBook, KnowledgeAgentRun
 from .knowledge_quality import quality_contract
 
@@ -62,13 +63,17 @@ def queue_cycle():
         plan.next_run_at = None
         plan.save(update_fields=["last_run_at", "next_run_at", "updated_at"])
         return None
+    # A retired knowledge director must never be recreated by this scheduler.
+    # Hold the plan and its original books until the canonical bot is active.
+    agent = get_canonical_content_owner()
+    if agent is None:
+        return None
     run = KnowledgeAgentRun.objects.create(
         plan=plan,
         book=book,
         objective=f"تولید بخش بعدی برای {book.title}؛ مبنا از {START.isoformat()}؛ با منابع قابل ردیابی.",
         approval_required=True,  # paid model calls always require explicit authorization
     )
-    agent, _ = Agent.objects.get_or_create(code="knowledge-content-director", defaults={"name":"Knowledge Content Director","mission":plan.mission,"risk_level":"low","active":True})
     # An unattended, API-backed generation can incur a charge even when its
     # draft is private. Route it through the high-risk owner approval path.
     AgentTask.objects.create(
