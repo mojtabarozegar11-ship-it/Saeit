@@ -41,6 +41,14 @@ class InvoiceReceiverAttributionTests(SimpleTestCase):
         values.update(overrides)
         return self.settings(**values)
 
+    def test_pool_mode_never_unlocks_even_if_legacy_flags_attested(self):
+        with self.config(
+            MPW_MOJPROP_INVOICE_ADDRESS_POOL_VERIFIED=True,
+            MPW_MOJPROP_SINGLE_RECEIVER_MODE=False,
+        ):
+            with self.assertRaises(pool.InvoiceAttributionUnavailable):
+                pool.attested_receivers()
+
     def test_default_closed_even_with_addresses(self):
         with self.config(MPW_MOJPROP_INVOICE_ADDRESS_POOL_VERIFIED=False):
             with self.assertRaises(pool.InvoiceAttributionUnavailable):
@@ -56,9 +64,10 @@ class InvoiceReceiverAttributionTests(SimpleTestCase):
             with self.assertRaises(pool.InvoiceAttributionUnavailable):
                 pool.attested_receivers()
 
-    def test_valid_returns_immutable_unique_pool(self):
+    def test_verified_legacy_multi_wallet_pool_is_forbidden(self):
         with self.config():
-            self.assertEqual(pool.attested_receivers(), (self.A, self.B))
+            with self.assertRaisesRegex(pool.InvoiceAttributionUnavailable, "sole owner-approved"):
+                pool.attested_receivers()
 
     def test_reject_shared_store_wallet(self):
         with self.config([self.A, self.SHARED]):
@@ -93,22 +102,23 @@ class InvoiceReceiverAttributionTests(SimpleTestCase):
                 with self.assertRaises(pool.InvoiceAttributionUnavailable):
                     pool.attested_receivers()
 
-    def test_pick_next_unused_not_recycled(self):
-        with self.config():
-            addresses = pool.attested_receivers()
-            self.assertEqual(pool.select_unused_receiver(addresses, set()), self.A)
-            self.assertEqual(pool.select_unused_receiver(addresses, {self.A}), self.B)
-            with self.assertRaises(pool.InvoiceAttributionUnavailable):
-                pool.select_unused_receiver(addresses, {self.A, self.B})
+    def test_only_one_authorized_receiver_can_be_selected(self):
+        self.assertEqual(pool.select_unused_receiver((self.SHARED,), set()), self.SHARED)
+        self.assertEqual(pool.select_unused_receiver((self.SHARED,), {self.SHARED}), self.SHARED)
+        with self.assertRaisesRegex(pool.InvoiceAttributionUnavailable, "multiple"):
+            pool.select_unused_receiver((self.A, self.B), set())
 
     def test_reject_untrusted_allocation_types(self):
         with self.assertRaises(pool.InvoiceAttributionUnavailable):
             pool.select_unused_receiver([self.A], set())
 
-    def test_verify_exact_unique_invoice_address(self):
-        with self.config():
+    def test_verified_owner_only_invoice_binding(self):
+        with self.config(
+            MPW_MOJPROP_SINGLE_RECEIVER_MODE=True,
+            MPW_MOJPROP_SINGLE_RECEIVER_CONTROL_REF="single-receiver-offline-proof-20261122",
+        ):
             self.assertIsNone(pool.require_payment_binding(
-                recorded_recipient=self.A, onchain_recipient=self.A
+                recorded_recipient=self.SHARED, onchain_recipient=self.SHARED
             ))
 
     def test_public_txid_cannot_credit_other_invoice(self):
