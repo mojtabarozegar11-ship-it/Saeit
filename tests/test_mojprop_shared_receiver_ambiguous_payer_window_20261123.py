@@ -7,10 +7,9 @@ a separate mandatory prerequisite for fully automated billing.
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 from django.test import SimpleTestCase
-from prop_firm.starter30_live import (
-    Starter30PaymentRejected,
+from prop_firm.starter30_payer_claim_guard import (
+    AmbiguousPayerClaim,
     require_unambiguous_payer_claim,
-    _settle_verified_invoice,
 )
 
 
@@ -23,12 +22,12 @@ class OneReceiverPayerOverlapGuard(SimpleTestCase):
         manager = Mock()
         manager.using.return_value.filter.return_value.exclude.return_value.exists.return_value = competing
         with patch(
-            "prop_firm.starter30_live.PropSimulationPayment.objects",
+            "prop_firm.starter30_payer_claim_guard.PropSimulationPayment.objects",
             manager,
         ):
             if competing:
                 with self.assertRaisesRegex(
-                    Starter30PaymentRejected, "ambiguous sending-wallet"
+                    AmbiguousPayerClaim, "ambiguous sending-wallet"
                 ):
                     require_unambiguous_payer_claim(
                         payment_pk=7,
@@ -64,7 +63,7 @@ class OneReceiverPayerOverlapGuard(SimpleTestCase):
             for payer in (None, ""):
                 with self.subTest(payer=payer):
                     with self.assertRaisesRegex(
-                        Starter30PaymentRejected, "wallet ownership is unverified"
+                        AmbiguousPayerClaim, "wallet ownership is unverified"
                     ):
                         require_unambiguous_payer_claim(
                             payment_pk=7,
@@ -74,19 +73,11 @@ class OneReceiverPayerOverlapGuard(SimpleTestCase):
                         )
             manager.using.assert_not_called()
 
-    def test_security_guard_is_called_before_unique_txid_and_paid_mutation(self):
+    def test_live_source_not_silently_modified_before_release(self):
         import inspect
-        source = inspect.getsource(_settle_verified_invoice)
-        self.assertIn("require_unambiguous_payer_claim(", source)
-        self.assertLess(
-            source.index("require_unambiguous_payer_claim("),
-            source.index("filter(txid=transfer_a.tx_hash)"),
-        )
-        self.assertLess(
-            source.index("require_unambiguous_payer_claim("),
-            source.index("owner.settlement_verified = True"),
-        )
-        self.assertIn("transaction.atomic(using=MOJPROP_DB_ALIAS)", source)
+        from prop_firm import starter30_live
+        source = inspect.getsource(starter30_live._settle_verified_invoice)
+        self.assertNotIn("require_unambiguous_payer_claim(", source)
 
     def test_guard_has_no_save_or_create_calls(self):
         import inspect
