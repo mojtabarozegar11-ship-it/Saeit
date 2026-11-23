@@ -1,0 +1,68 @@
+name: MojPlayWin first-buyer contact redirects — public GET only
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mpw-contact-redirect-readonly-20261123.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contact-redirect-audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Trace bounded no-session public GET redirect outcomes
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -a route_names=(
+            "main_contact"
+            "existing_legacy_contact"
+            "first_party_general_inquiry"
+            "first_party_revenue_index"
+            "mojprop_contact"
+            "mojprop_nojs_intake"
+            "store"
+          )
+          declare -a route_urls=(
+            "https://mojplaywin.com/contact/"
+            "https://mojplaywin.com/ask-master/index.php?service=1"
+            "https://mojplaywin.com/mpw-editorial/revenue/inquiry.php?service=general"
+            "https://mojplaywin.com/mpw-editorial/revenue/index.html"
+            "https://mojplaywin.com/moj-prop/contact/"
+            "https://mojplaywin.com/moj-prop-intake/?format=html"
+            "https://mojplaywin.com/store/"
+          )
+          for i in "${!route_names[@]}"; do
+            name="${route_names[$i]}"
+            url="${route_urls[$i]}"
+            # Public GET only. No cookies, credentials, query identifiers,
+            # customer POST, payment or cPanel secret. Bounded at six redirects.
+            output=$(curl --proto '=https' --proto-redir '=https' \
+              --max-redirs 6 --location --connect-timeout 5 --max-time 20 \
+              --retry 0 --silent --show-error --output /dev/null \
+              --user-agent 'MojPlayWinOwnerPublicContactAudit/20261123' \
+              --write-out '%{http_code}|%{num_redirects}|%{exitcode}|%{url_effective}' \
+              "$url" 2>/dev/null || true)
+            IFS='|' read -r code hops exitcode final <<< "$output"
+            [[ "${code:-}" =~ ^[0-9]{3}$ ]] || code="000"
+            [[ "${hops:-}" =~ ^[0-9]+$ ]] || hops="unknown"
+            [[ "${exitcode:-}" =~ ^[0-9]+$ ]] || exitcode="unknown"
+            case "${final:-}" in
+              https://mojplaywin.com/*|https://www.mojplaywin.com/*)
+                final_location="same_origin"
+                ;;
+              "") final_location="unknown" ;;
+              *) final_location="external_or_unexpected" ;;
+            esac
+            echo "CONTACT_AUDIT_${name}_HTTP=$code"
+            echo "CONTACT_AUDIT_${name}_HOPS=$hops"
+            echo "CONTACT_AUDIT_${name}_CURL_EXIT=$exitcode"
+            echo "CONTACT_AUDIT_${name}_FINAL_CLASS=$final_location"
+            printf '%s\n' "| $name | $code | $hops | $exitcode | $final_location |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo 'NO_POST_NO_PAYMENT_NO_CUSTOMER_DATA=true'
+          echo 'READONLY_EXTERNAL_RUNNER=true'
