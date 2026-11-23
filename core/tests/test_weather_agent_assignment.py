@@ -100,3 +100,28 @@ def test_repeat_weather_cycle_never_overwrites_a_reviewed_story(monkeypatch):
     story.refresh_from_db()
     assert story.body == "Reviewed immutable editorial text"
     assert story.status == "approved"
+
+
+def test_met_norway_terms_must_be_human_accepted_before_network_or_cache(monkeypatch):
+    monkeypatch.delenv("MOJ_MET_NORWAY_TOS_ACCEPTED_BY_OWNER", raising=False)
+    monkeypatch.setattr(
+        weather_agent, "urlopen",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("external API accessed")),
+    )
+    monkeypatch.setattr(
+        weather_agent.cache, "get",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("weather cache accessed")),
+    )
+    with pytest.raises(RuntimeError, match="MET_NORWAY_OWNER_TOS_ACCEPTANCE_REQUIRED"):
+        weather_agent._fetch(35.6892, 51.3890)
+
+
+def test_met_norway_tos_false_like_values_are_not_authorizations(monkeypatch):
+    monkeypatch.setattr(
+        weather_agent, "urlopen",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("external API accessed")),
+    )
+    for value in ("", "0", "false", "True", "approved-by-agent"):
+        monkeypatch.setenv("MOJ_MET_NORWAY_TOS_ACCEPTED_BY_OWNER", value)
+        with pytest.raises(RuntimeError, match="MET_NORWAY_OWNER_TOS_ACCEPTANCE_REQUIRED"):
+            weather_agent._fetch(35.6892, 51.3890)
