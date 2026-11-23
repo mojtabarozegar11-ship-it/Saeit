@@ -38,8 +38,8 @@ class KnowledgeAgentGenerateTests(TestCase):
             approval_required=True,
         )
         agent, _ = Agent.objects.get_or_create(
-            code="knowledge-content-director",
-            defaults={"name":"Knowledge Content Director","mission":"Controlled drafts","risk_level":"low","active":True},
+            code="mojtaba-bot-ai",
+            defaults={"name":"Mojtaba Bot","mission":"Central controlled drafts","risk_level":"low","active":True},
         )
         self.task = AgentTask.objects.create(
             agent=agent,
@@ -151,3 +151,22 @@ class KnowledgeAgentGenerateTests(TestCase):
             call_command("knowledge_agent_generate", approval_grant_id=grant.pk, stdout=StringIO())
 
         self.assertEqual(client.chat.completions.create.call_count, 1)
+
+    def test_legacy_task_never_spends_even_with_a_stored_approval(self):
+        legacy = Agent.objects.create(
+            code="knowledge-content-director", name="Retired Knowledge", mission="legacy", active=False,
+        )
+        self.task.agent = legacy
+        self.task.save(update_fields=["agent"])
+        grant = self._approved_paid_grant()
+        output = StringIO()
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "configured-key"}), patch(
+            "core.management.commands.knowledge_agent_generate.OpenAI"
+        ) as openai:
+            call_command("knowledge_agent_generate", approval_grant_id=grant.pk, stdout=output)
+        self.assertIn("held_for_canonical_owner", output.getvalue())
+        openai.assert_not_called()
+        grant.refresh_from_db()
+        self.run.refresh_from_db()
+        self.assertIsNone(grant.used_at)
+        self.assertEqual(self.run.status, "queued")
