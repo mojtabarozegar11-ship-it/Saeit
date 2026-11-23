@@ -56,7 +56,7 @@ def require_reviewed_payment_command():
     if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or not 1000 <= info.st_size <= 20000:
         raise ValueError("Reviewed payment command has unsafe file metadata")
     raw = command.read_bytes()
-    blob = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\\0" + raw).hexdigest()
+    blob = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
     if blob != PAYMENT_COMMAND_BLOB:
         raise ValueError("Payment command differs from pinned reviewed source")
 
