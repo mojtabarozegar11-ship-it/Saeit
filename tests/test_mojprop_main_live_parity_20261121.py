@@ -18,10 +18,13 @@ LIVE_BLOB="fea39dbc409ba8c4c30a807313a20b8d4db19283"
 # Archived independently pinned source version; never treat a source hash as live-deployment evidence.
 PREVIOUS_SOURCE_SHA256="24bfa25bef9876e54759ff3538ea470340b21084e50b8c01abb005e0a19f1e86"
 PREVIOUS_SOURCE_BLOB="45d7fc5a5d31ecc55dba34e5efc1b9b8b23444c4"
-# Current main source reviewed as TWO textual diffs from PREVIOUS_SOURCE_BLOB on 2026-11-23.
+# Source history retained; this PR additionally corrects 3 exact buyer-facing payment-open claims.
 # The public cPanel homepage has a DIFFERENT SHA256; these are SOURCE-only pins.
-CURRENT_SOURCE_SHA256="9b1915d0297a2242b86038be0070fb4ed5c914159432fa342c199beaee1cc351"
-CURRENT_SOURCE_BLOB="8b5b625c7ef872eb0921c0975fc44c3e6b74b138"
+# Earlier reviewed main source, prior to the three no-premature-checkout edits.
+PRIOR_SOURCE_SHA256="9b1915d0297a2242b86038be0070fb4ed5c914159432fa342c199beaee1cc351"
+PRIOR_SOURCE_BLOB="8b5b625c7ef872eb0921c0975fc44c3e6b74b138"
+CURRENT_SOURCE_SHA256="bd3eb8ab95d50f79d8803b7975a5c553a8dde16deeeadf8d7f5e67002d1b4860"
+CURRENT_SOURCE_BLOB="b6aa56cd16ed43fafadf98e885cde4a6e913b841"
 # Immutable earlier reviewed candidate (not proof of live deployment).
 CANDIDATE_SHA256="4b00b000ecc971073345aa2ca7baaf6753bf83d9bb5243e4ad1276b7012c13e7"
 CANDIDATE_BLOB="463ebd2dfb5d803cd20ac17f2c53422d36d65ad9"
@@ -84,6 +87,10 @@ class OfficialMojPropLiveParityTests(unittest.TestCase):
         self.assertNotIn("wait until payment is explicitly reopened.", page)
         # Never infer from source or GET-only evidence that finance rails are ready.
         self.assertNotIn("A new customer payment has been verified", page)
+        self.assertNotIn("checkout is open after email and payer-wallet verification", page)
+        self.assertIn("Any new paid enrollment depends on independent seller", page)
+        self.assertIn("New paid admission is conditional on independently verified", page)
+        self.assertIn("payment and enrollment remain conditional on independent checks", page)
 
     def test_official_info_and_order_policy_not_misrepresented(self):
         s=PAGE.read_text(encoding="utf8")
