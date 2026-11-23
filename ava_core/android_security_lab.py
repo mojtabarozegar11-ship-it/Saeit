@@ -20,11 +20,11 @@ from .capabilities import ActionRequest, AdapterResult, CapabilitySpec, Operatio
 
 NAME = "owner_android_security_lab"
 SPEC = CapabilitySpec(NAME, (
-    OperationSpec("status", "local"),
-    OperationSpec("simulate_authentication", "local"),
-    OperationSpec("export_synthetic_messages", "local"),
-    OperationSpec("inspect_device_report", "local"),
-    OperationSpec("triage_apk", "local"),
+    OperationSpec("status", "read"),
+    OperationSpec("simulate_authentication", "read"),
+    OperationSpec("export_synthetic_messages", "read"),
+    OperationSpec("inspect_device_report", "read"),
+    OperationSpec("triage_apk", "read"),
 ))
 
 # These are examples, NOT messages taken from any person's device.
