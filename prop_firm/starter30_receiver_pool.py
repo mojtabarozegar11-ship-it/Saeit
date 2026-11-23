@@ -58,11 +58,13 @@ def select_unused_receiver(pool: tuple[str, ...], used: set[str]) -> str:
 
 
 def require_payment_binding(*, recorded_recipient: str, onchain_recipient: str) -> None:
-    """Trust only a current, unique, owner-attested invoice receiver.
+    """Match the on-chain recipient to the single owner-approved receive wallet.
 
-    Actual uniqueness is enforced by a database UNIQUE constraint on the
-    PropSimulationPayment.recipient column. Transaction dual-RPC proofs alone
-    are NOT evidence of invoice ownership.
+    In single-receiver mode that wallet is reused by multiple invoices, and
+    the database does NOT enforce UNIQUE(recipient). This condition verifies
+    the merchant wallet only, never buyer wallet ownership or a unique invoice
+    attribution. Independent finalized-chain proof and unique TXID are also
+    insufficient to authenticate a text-supplied payer address.
     """
     allowed = attested_receivers()
     if recorded_recipient not in allowed or onchain_recipient != recorded_recipient:
