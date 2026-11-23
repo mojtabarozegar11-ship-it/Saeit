@@ -15,7 +15,9 @@ def load_patch(dispatch, record):
                  and n.name == "_new_trx_merchant_canary_is_true")
     scope = {"_dispatch": dispatch, "_record_funnel_event_best_effort": record,
              "Http404": LookupError}
-    exec(compile(ast.Module(body=[guard, node], type_ignores=[]), str(SOURCE), "exec"), scope)
+    redirect_guard = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                          and n.name == "_confirmed_new_invoice_redirect")
+    exec(compile(ast.Module(body=[guard, redirect_guard, node], type_ignores=[]), str(SOURCE), "exec"), scope)
     return scope["patch_commercial"]
 
 class RejectedInvoiceTelemetryTests(unittest.TestCase):
