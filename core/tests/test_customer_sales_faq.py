@@ -6,7 +6,8 @@ from django.test import TestCase
 
 from core.chat_runtime import MasterAgentChat
 from core.customer_sales_faq import (
-    MOJ_PROP_URL, MOJ_SIGNALS_URL, MOJ_STORE_URL,
+    MOJ_PROP_URL, MOJ_PROP_TERMS_REQUEST_URL, MOJ_SIGNALS_URL,
+    MOJ_SIGNALS_REQUEST_URL, MOJ_STORE_URL,
     local_sales_answer,
 )
 from core.models import ApprovalRequest, ChatMessage, ChatSession
@@ -19,6 +20,7 @@ class SalesReplyUnitTests(TestCase):
         self.assertIn("simulated", reply)
         self.assertIn("Do not send TRX", reply)
         self.assertIn(MOJ_PROP_URL, reply)
+        self.assertIn(MOJ_PROP_TERMS_REQUEST_URL, reply)
         self.assertNotIn("payment confirmed", reply.lower())
 
     def test_persian_prop_supports_arabic_yeh_and_zwnj(self):
@@ -26,10 +28,12 @@ class SalesReplyUnitTests(TestCase):
         self.assertIn("۳۰ TRX", reply)
         self.assertIn("شبیه‌سازی", reply)
         self.assertIn("هیچ TRX ارسال نکنید", reply)
+        self.assertIn(MOJ_PROP_TERMS_REQUEST_URL, reply)
 
     def test_signals_not_claimed_active(self):
         reply = local_sales_answer("Where do I find trading signals?")
         self.assertIn(MOJ_SIGNALS_URL, reply)
+        self.assertIn(MOJ_SIGNALS_REQUEST_URL, reply)
         self.assertIn("not been verified", reply)
         self.assertNotIn("guaranteed", reply.lower())
 
@@ -51,6 +55,7 @@ class SalesReplyChatIntegrationTests(TestCase):
             reply = MasterAgentChat().respond(session, "MOJ PROP challenge details")
         model.assert_not_called()
         self.assertIn(MOJ_PROP_URL, reply)
+        self.assertIn(MOJ_PROP_TERMS_REQUEST_URL, reply)
         self.assertIn("Do not send TRX", reply)
         answer = ChatMessage.objects.get(session=session, role="assistant")
         self.assertEqual(answer.metadata["execution"], "local_sales_navigation")
