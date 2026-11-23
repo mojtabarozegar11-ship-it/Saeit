@@ -35,7 +35,7 @@ def local_sales_answer(message):
     # an English-only answer simply because it also contains "Moj Prop".
     # Restrict multilingual matching to the explicit brand/Starter30 intent:
     # never answer arbitrary Bulgarian questions, and never create an invoice.
-    brand = bool(re.search(r"\\b(moj[ -]?prop|starter30)\\b", text))
+    brand = bool(re.search(r"\b(moj[ -]?prop|starter30)\b", text))
     bulgarian = brand and any(term in text for term in (
         "колко струва", "цената", "цена", "такса", "плащане",
         "как да платя", "виртуален", "баланс", "етап", "български",
