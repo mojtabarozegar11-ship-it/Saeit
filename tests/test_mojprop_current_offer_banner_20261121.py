@@ -23,10 +23,15 @@ class MojPropCurrentOfferBannerTest(unittest.TestCase):
     def test_meta_description_matches_current_offer(self):
         text = PAGE.read_text(encoding="utf-8")
         self.assertIn(
-            "Moj Prop Starter30: 60-day simulated trading challenge",
+            "Moj Prop Starter30: 60-day simulated trading, $1,000 virtual start",
             text,
         )
-        self.assertIn("MOJ-PROP-01 prelaunch.", text)
+        self.assertIn("invoice eligibility is conditional", text)
+        self.assertIn("No TRX before a unique invoice.", text)
+        # MOJ-PROP-01 remains disclosed in the separate prelaunch section;
+        # do not force its notice into the Starter30 metadata snippet.
+        self.assertIn("MOJ-PROP-01", text)
+        self.assertIn("Prelaunch only.", text)
 
 
 if __name__ == "__main__":
