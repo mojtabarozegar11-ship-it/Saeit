@@ -5,7 +5,8 @@ No fabricated activities, projects, outcomes or financial claims.
 """
 from datetime import timedelta
 from django.utils import timezone
-from .models import Agent, NewsletterStory
+from .models import NewsletterStory
+from .canonical_content_owner import CANONICAL_AGENT_CODE, require_canonical_content_owner
 
 AGENT_CODE = "company-activity-intelligence"
 REPORT_TYPES = ("DAILY_DIGEST", "ACTIVITY_ANALYSIS", "TREND_ANALYSIS", "UNIT_ANALYSIS", "PROJECT_ANALYSIS", "EXECUTIVE_BRIEF")
@@ -37,22 +38,19 @@ def activity_snapshot(days=1):
 
 
 def report_contract():
-    return {"agent": AGENT_CODE, "mission": "تحلیل روزانه فعالیت‌های واقعی ثبت‌شده شرکت", "report_types": list(REPORT_TYPES), "pipeline": list(PIPELINE), "source_of_truth": "NewsletterStory.company_activity_*", "fabrication_forbidden": True, "publication_requires_owner_approval": True, "public_numeric_financial_claims": False}
+    return {"agent": CANONICAL_AGENT_CODE, "capability": AGENT_CODE, "mission": "تحلیل روزانه فعالیت‌های واقعی ثبت‌شده شرکت", "report_types": list(REPORT_TYPES), "pipeline": list(PIPELINE), "source_of_truth": "NewsletterStory.company_activity_*", "fabrication_forbidden": True, "publication_requires_owner_approval": True, "public_numeric_financial_claims": False}
 
 
 def ensure_agent():
-    agent, _ = Agent.objects.get_or_create(code=AGENT_CODE, defaults={"name": "Company Activity Intelligence Agent", "mission": "تولید گزارش و تحلیل روزانه از فعالیت‌های واقعی صفحه شرکت؛ بدون جعل فعالیت.", "risk_level": "low", "active": True})
-    if not agent.active:
-        agent.active = True
-        agent.save(update_fields=["active", "updated_at"])
-    return agent
+    """Use the existing canonical bot: never reactivate retired report agents."""
+    return require_canonical_content_owner()
 
 
 def build_report_inputs(days=1):
     snap = activity_snapshot(days)
     if not snap["source_count"]:
         return None
-    return {"agent": AGENT_CODE, "window_days": days, "source_activity_ids": snap["source_ids"], "activity_count": snap["source_count"], "unit_distribution": snap["units"], "project_distribution": snap["projects"], "instruction": "فقط بر اساس این رکوردها گزارش بساز؛ هیچ فعالیت، پروژه، نتیجه یا عددی خارج از منابع اضافه نشود."}
+    return {"agent": CANONICAL_AGENT_CODE, "capability": AGENT_CODE, "window_days": days, "source_activity_ids": snap["source_ids"], "activity_count": snap["source_count"], "unit_distribution": snap["units"], "project_distribution": snap["projects"], "instruction": "فقط بر اساس این رکوردها گزارش بساز؛ هیچ فعالیت، پروژه، نتیجه یا عددی خارج از منابع اضافه نشود."}
 
 
 def build_report_content(report_type, rows, snapshot):

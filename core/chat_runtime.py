@@ -1,7 +1,3 @@
-import os
-
-from openai import OpenAI
-
 from .models import ChatMessage
 from .master_agent_capability_pack import capability_pack_prompt
 from .chat_operation_security import is_authorized_chat_operator
@@ -117,33 +113,27 @@ class MasterAgentChat:
             )
             return reply
 
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            reply = (
-                "پیام دریافت شد. اتصال مدل هوش مصنوعی هنوز در محیط سرور "
-                "پیکربندی نشده است؛ بنابراین هیچ اقدامی اجرا نشد."
-            )
-        else:
-            client = OpenAI(api_key=api_key)
-            history = list(session.messages.order_by("-created_at")[:20])
-            messages = [
-                {"role": "system", "content": master_system_prompt()},
-                *[
-                    {"role": item.role, "content": item.content}
-                    for item in reversed(history)
-                    if item.role in {"user", "assistant"}
-                ],
-            ]
-            response = client.chat.completions.create(
-                model=os.getenv("OPENAI_CHAT_MODEL", "gpt-5.6"),
-                messages=messages,
-            )
-            reply = response.choices[0].message.content or ""
+        # A configured API key is NOT case-specific consent for a billable
+        # model call. Keep customer chat in deterministic, API-free mode.
+        # Offer only route-grounded product information; do not claim a sale.
+        from .customer_sales_faq import local_sales_answer
+
+        sales_answer = local_sales_answer(text)
+        reply = sales_answer or (
+            "پیام دریافت و ثبت شد. پردازش هوش مصنوعی پولی برای این درخواست "
+            "مجوز اختصاصی ندارد و فراخوانی نشده است. هیچ اقدامی اجرا نشد. "
+            "برای خدمات یا پیگیری، از مسیر رسمی درخواست و پشتیبانی استفاده کنید."
+        )
 
         ChatMessage.objects.create(
             session=session,
             role="assistant",
             content=reply,
-            metadata={"agent": "master_agent", "capability_pack": "1.0.0"},
+            metadata={
+                "agent": "master_agent",
+                "capability_pack": "1.0.0",
+                "execution": "local_sales_navigation" if sales_answer else "local_no_external_ai_api",
+                "llm_called": False,
+            },
         )
         return reply

@@ -6,6 +6,7 @@ from openai import OpenAI
 from core.knowledge_agent_models import KnowledgeAgentRun
 from core.approval import ApprovalService
 from core.models import AgentTask, ApprovalGrant
+from core.canonical_content_owner import CANONICAL_AGENT_CODE
 
 
 class Command(BaseCommand):
@@ -28,6 +29,11 @@ class Command(BaseCommand):
             input_data__run_id=run.pk,
             status__in=("queued", "blocked"),
         ).order_by("-id").first()
+        # Historical tasks stay intact; a retired agent cannot spend against
+        # an old approval or change the book behind the canonical owner's back.
+        if task is None or task.agent.code != CANONICAL_AGENT_CODE or not task.agent.active:
+            self.stdout.write("KNOWLEDGE_AGENT: held_for_canonical_owner; no model call")
+            return
         key = os.getenv("OPENAI_API_KEY")
         if not key:
             summary = "OPENAI_API_KEY is not configured; no content was fabricated."
@@ -61,6 +67,8 @@ class Command(BaseCommand):
             locked_task = AgentTask.objects.select_for_update().filter(pk=task.pk).first() if task else None
             if claimed.status != "queued" or not locked_task or locked_task.status != "queued":
                 raise CommandError("Knowledge generation is not queued or approved for execution")
+            if locked_task.agent.code != CANONICAL_AGENT_CODE or not locked_task.agent.active:
+                raise CommandError("Knowledge generation requires the active canonical bot")
             try:
                 grant = ApprovalGrant.objects.select_related("approval").get(pk=grant_id)
             except ApprovalGrant.DoesNotExist as exc:

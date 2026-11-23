@@ -7,10 +7,13 @@ from django.utils import timezone
 
 from core.knowledge_agent import DEFAULT_OUTLINE, queue_cycle, seed_library
 from core.knowledge_agent_models import KnowledgeAgentPlan, KnowledgeAgentRun
-from core.models import AgentTask
+from core.models import Agent, AgentTask
 
 
 class KnowledgeAgentSchedulerTests(TestCase):
+    def setUp(self):
+        Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba Bot", mission="central", active=True)
+
     def test_scheduler_creates_one_run_and_respects_cadence(self):
         plan = KnowledgeAgentPlan.objects.create(
             code="knowledge-content-director", title="Scheduler Test", mission="test", goal="test",
@@ -21,6 +24,8 @@ class KnowledgeAgentSchedulerTests(TestCase):
         self.assertEqual(KnowledgeAgentRun.objects.filter(plan=first.plan).count(), 1)
         task = AgentTask.objects.get(action_type="knowledge_content_generation", input_data__run_id=first.pk)
         self.assertEqual(task.risk_snapshot, "high")
+        self.assertEqual(task.agent.code, "mojtaba-bot-ai")
+        self.assertFalse(Agent.objects.filter(code="knowledge-content-director").exists())
         self.assertTrue(task.input_data["paid_model"])
         self.assertTrue(first.approval_required)
         self.assertIsNotNone(first.plan.next_run_at)
@@ -66,3 +71,16 @@ class KnowledgeAgentSchedulerTests(TestCase):
         call_command("knowledge_agent_cycle", stdout=output)
         self.assertIn("KNOWLEDGE_AGENT: inactive", output.getvalue())
         self.assertEqual(KnowledgeAgentRun.objects.filter(plan=plan).count(), 0)
+
+    def test_legacy_knowledge_agent_does_not_get_reactivated(self):
+        Agent.objects.filter(code="mojtaba-bot-ai").update(active=False)
+        legacy = Agent.objects.create(code="knowledge-content-director", name="Retired", mission="old", active=False)
+        from core.knowledge_agent_models import KnowledgeBook, KnowledgeDomain
+        before = (KnowledgeAgentPlan.objects.count(), KnowledgeBook.objects.count(), KnowledgeDomain.objects.count())
+        self.assertIsNone(queue_cycle())
+        after = (KnowledgeAgentPlan.objects.count(), KnowledgeBook.objects.count(), KnowledgeDomain.objects.count())
+        self.assertEqual(after, before)
+        legacy.refresh_from_db()
+        self.assertFalse(legacy.active)
+        self.assertEqual(KnowledgeAgentRun.objects.count(), 0)
+        self.assertEqual(AgentTask.objects.count(), 0)

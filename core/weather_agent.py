@@ -9,6 +9,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from .met_weather_adapter import SOURCE_MODEL, normalize_locationforecast
+from .canonical_content_owner import require_canonical_content_owner
 
 PROVINCES = [
  ('آذربایجان شرقی','تبریز',38.0962,46.2738),('آذربایجان غربی','ارومیه',37.5527,45.0761),('اردبیل','اردبیل',38.2498,48.2933),('اصفهان','اصفهان',32.6546,51.6680),('البرز','کرج',35.8400,50.9391),('ایلام','ایلام',33.6374,46.4227),('بوشهر','بوشهر',28.9234,50.8203),('تهران','تهران',35.6892,51.3890),('چهارمحال و بختیاری','شهرکرد',32.3256,50.8644),('خراسان جنوبی','بیرجند',32.8663,59.2211),('خراسان رضوی','مشهد',36.2605,59.6168),('خراسان شمالی','بجنورد',37.4750,57.3333),('خوزستان','اهواز',31.3183,48.6706),('زنجان','زنجان',36.6736,48.4787),('سمنان','سمنان',35.5729,53.3971),('سیستان و بلوچستان','زاهدان',29.4963,60.8629),('فارس','شیراز',29.5918,52.5837),('قزوین','قزوین',36.2688,50.0041),('قم','قم',34.6416,50.8746),('کردستان','سنندج',35.3219,46.9862),('کرمان','کرمان',30.2839,57.0834),('کرمانشاه','کرمانشاه',34.3142,47.0650),('کهگیلویه و بویراحمد','یاسوج',30.6682,51.5880),('گلستان','گرگان',36.8456,54.4393),('گیلان','رشت',37.2808,49.5832),('لرستان','خرم‌آباد',33.4878,48.3558),('مازندران','ساری',36.5633,53.0601),('مرکزی','اراک',34.0917,49.6892),('هرمزگان','بندرعباس',27.1832,56.2666),('همدان','همدان',34.7980,48.5146),('یزد','یزد',31.8974,54.3569),
@@ -19,6 +20,12 @@ SOURCE_ATTRIBUTION = 'Weather forecast from MET Norway (Norwegian Meteorological
 
 
 def _fetch(lat, lon, days=7):
+    # MET Norway Terms of Service (revision 2026-11-05) expressly require
+    # an authorized HUMAN to read and accept the legally binding terms.
+    # AI delegation, public availability and a configured User-Agent do NOT
+    # constitute such acceptance. Default fail closed before cache/network IO.
+    if os.getenv('MOJ_MET_NORWAY_TOS_ACCEPTED_BY_OWNER') != '1':
+        raise RuntimeError('MET_NORWAY_OWNER_TOS_ACCEPTANCE_REQUIRED')
     # Respect the provider's Expires header. Unlike Open-Meteo's free API,
     # MET Norway permits commercial usage under CC BY 4.0 with attribution.
     key = f'met_norway_locationforecast_v1:{lat:.4f}:{lon:.4f}'
@@ -41,8 +48,10 @@ def _fetch(lat, lon, days=7):
             ttl = 0
     else:
         ttl = 0
-    if ttl > 0:
-        cache.set(key, payload, timeout=ttl)
+    # Iran lies outside the Nordic region. MET Norway's Locationforecast
+    # service requires at least 3 hours between identical requests there,
+    # even if the Expires header is sooner or absent. Respect longer expiry.
+    cache.set(key, payload, timeout=max(ttl, 3 * 60 * 60))
     return payload
 
 
@@ -79,62 +88,37 @@ def build_public_report(data):
 
 
 def generate_research_contents(weather_summary):
-    # An installed API key is not approval for a recurring paid agent call.
-    # The owner must explicitly enable paid content for the current date.
-    paid_approved_today = (
-        os.getenv('MOJ_PAID_LLM_ENABLED') == '1'
-        and os.getenv('MOJ_WEATHER_PAID_CONTENT_APPROVAL_DATE') == timezone.localdate().isoformat()
-    )
-    key = os.getenv('OPENAI_API_KEY') if paid_approved_today else None
-    if not key:
-        # Reposting the same two generic articles every day was duplicate SEO
-        # content, not new research. No paid generation and no fake output.
-        return []
-    from openai import OpenAI
+    """No paid generation until a per-task one-time scoped grant exists.
 
-    client = OpenAI(api_key=key)
-    prompt = f'''دو محتوای فارسی مستقل و حرفه‌ای برای وب‌سایت Zomorodmelal تولید کن؛ نویسنده هر دو «مجتبی روزگار، محقق و پژوهشگر» باشد. یکی درباره «تحقیقات، فناوری و نوآوری کاربردی» و دیگری درباره «آموزش و تحلیل کاربردی برای تصمیم‌گیری». محتواها علمی، قابل بررسی، غیرتبلیغاتی، کاربردی و مناسب SEO باشند. برای هر محتوا JSON با title, summary, body, meta_description, keywords, sources بده. از ادعا یا منبع ساختگی خودداری کن. اگر داده‌ای نیازمند منبع است، فقط از منابع رسمی و معتبر استفاده کن. زمینه امروز: {weather_summary[:4000]}'''
-    response = client.chat.completions.create(
-        model=os.getenv('OPENAI_WEATHER_CONTENT_MODEL', os.getenv('OPENAI_CHAT_MODEL','gpt-5.6')),
-        response_format={'type':'json_object'},
-        messages=[
-            {'role':'system','content':'تو سردبیر علمی و SEO هستی. جعل منبع و ادعای تأییدنشده ممنوع است.'},
-            {'role':'user','content':prompt},
-        ],
-    )
-    obj = json.loads(response.choices[0].message.content or '{}')
-    return obj.get('contents', obj if isinstance(obj, list) else [])
-
+    Daily environment flags and the presence of OPENAI_API_KEY are *not*
+    authoritative spending approvals; a scheduled weather cycle could
+    otherwise incur repeated charges. Weather collection and sourced,
+    approval-gated drafts remain available without a generative AI API.
+    """
+    return []
 
 def run_daily_cycle():
-    from .models import Agent, NewsletterSource, NewsletterStory
+    from .models import NewsletterSource, NewsletterStory
+    # Fail closed before requesting all 31 external forecasts if central owner
+    # has not been activated. Never revive a retired specialist Agent.
+    agent = require_canonical_content_owner()
     data = province_forecast(7)
     if len(data) != len(PROVINCES) or any(len(item.get('forecast', [])) != 7 for item in data):
         raise RuntimeError('Incomplete seven-day weather forecast; publication withheld')
     report = build_public_report(data)
     day = timezone.localdate()
-    # Weather publication belongs to an explicitly designated content agent.
-    # Never attribute it to an arbitrary active agent (e.g. factory or trading).
-    agent = Agent.objects.filter(code='content-research', active=True).first()
-    if agent is None:
-        agent = Agent.objects.filter(code='content-director', active=True).first()
-    if not agent:
-        raise RuntimeError('No active content agent')
     src, _ = NewsletterSource.objects.get_or_create(url=SOURCE_URL, defaults={'publisher':'MET Norway','title':'MET Norway Locationforecast (CC BY 4.0)','kind':'research'})
     fp = f'weather-iran-{day.isoformat()}'
     story, created = NewsletterStory.objects.get_or_create(fingerprint=fp, defaults={
         'agent':agent,'source':src,'story_type':'report','title':f'گزارش روزانه هواشناسی ایران | {day.isoformat()}',
         'slug':f'weather-iran-{day.isoformat()}','summary':'برآورد پیش‌بینی ۷ روزه مراکز ۳۱ استان با انتساب به MET Norway.',
         'body':report,'author_name':'مجتبی روزگار','event_date':day,'seo_keywords':['هواشناسی ایران','پیش بینی هوا','آب و هوای استان ها','هواشناسی ۷ روزه','مجتبی روزگار'],
-        'status':'published','published_at':timezone.now(),
+        # This capability prepares a sourced daily draft; publication
+        # belongs to the existing newsroom approval/release workflow.
+        'status':'draft','published_at':None,
     })
-    if not created:
-        story.body=report
-        story.source=src
-        story.summary='برآورد پیش‌بینی ۷ روزه مراکز ۳۱ استان با انتساب به MET Norway.'
-        story.status='published'
-        story.published_at=timezone.now()
-        story.save(update_fields=['body','source','summary','status','published_at','updated_at'])
+    # A rerun must not overwrite an edited/approved/published report.
+    # The fingerprint makes collection idempotent for each calendar day.
     # A repeated scheduler invocation must not spend another API request after
     # both daily research items have already been recorded.
     existing_daily_contents = NewsletterStory.objects.filter(
@@ -154,7 +138,9 @@ def run_daily_cycle():
             'slug':f'weather-research-{day.isoformat()}-{idx}','summary':item.get('summary','')[:3000],
             'body':item.get('body',''),'author_name':'مجتبی روزگار','event_date':day,
             'seo_keywords':item.get('keywords',[]) if isinstance(item.get('keywords',[]),list) else [],
-            'status':'published','published_at':timezone.now(),
+            # LLM output is never auto-published merely because generation
+            # was separately authorized; editorial approval is independent.
+            'status':'draft','published_at':None,
         })
         content_created += int(was_created)
     return {'date':str(day),'provinces':len(data),'weather_story_id':story.id,'weather_created':created,'research_contents_created':content_created}
