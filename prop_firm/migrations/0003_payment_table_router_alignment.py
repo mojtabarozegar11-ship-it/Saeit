@@ -1,7 +1,10 @@
 from django.db import migrations
+from config.mojprop_db_router import MOJPROP_DB_ALIAS
 
 
 def create_payment_table(apps, schema_editor):
+    if schema_editor.connection.alias != MOJPROP_DB_ALIAS:
+        return
     model = apps.get_model("prop_firm", "PropSimulationPayment")
     table_names = set(schema_editor.connection.introspection.table_names())
     if model._meta.db_table not in table_names:
@@ -9,6 +12,8 @@ def create_payment_table(apps, schema_editor):
 
 
 def drop_payment_table(apps, schema_editor):
+    if schema_editor.connection.alias != MOJPROP_DB_ALIAS:
+        return
     model = apps.get_model("prop_firm", "PropSimulationPayment")
     table_names = set(schema_editor.connection.introspection.table_names())
     if model._meta.db_table in table_names:
@@ -21,5 +26,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(create_payment_table, drop_payment_table),
+        migrations.RunPython(
+            create_payment_table, drop_payment_table,
+            hints={"model_name": "propsimulationpayment"},
+        ),
     ]

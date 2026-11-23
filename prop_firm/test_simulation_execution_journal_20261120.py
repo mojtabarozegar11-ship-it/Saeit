@@ -30,7 +30,14 @@ else:
     from django.conf import settings
     settings.configure(
         SECRET_KEY="journal-isolated-ci-only",
-        INSTALLED_APPS=["prop_firm.apps.MojPropConfig"],
+        # Legacy prop_firm migrations depend on AUTH_USER_MODEL; include
+        # their migration-only dependencies in this isolated SQLite process.
+        # The production router still bars non-simulation tables from mojprop.
+        INSTALLED_APPS=[
+            "django.contrib.contenttypes",
+            "django.contrib.auth",
+            "prop_firm.apps.MojPropConfig",
+        ],
         DATABASES={
             "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
             "mojprop": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:",
