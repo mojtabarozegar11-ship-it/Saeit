@@ -13,7 +13,8 @@ from core.unified_bot_identity import BOT_CODE
 
 
 def build_canonical_runtime(*, agent_id, using, brain, propose_goals,
-                            capabilities, authorize_action, claim_store=None):
+                            capabilities, authorize_action, claim_store=None,
+                            enable_android_security_lab=False):
     if not isinstance(using, str) or not using.strip():
         raise ValueError("Explicit authoritative database alias required")
     if not callable(authorize_action):
@@ -27,6 +28,17 @@ def build_canonical_runtime(*, agent_id, using, brain, propose_goals,
                 and Agent.objects.using(using).filter(
                     pk=agent_id, code=BOT_CODE, active=True).exists()
                 and authorize_action(owner, request, operation) is True)
+
+    # Explicit host-side opt-in only: public requests cannot register modules.
+    if type(enable_android_security_lab) is not bool:
+        raise TypeError("Security lab opt-in must be a host boolean")
+    if enable_android_security_lab:
+        from ava_core.android_security_lab import NAME, security_lab_capability
+        if not isinstance(capabilities, tuple):
+            raise TypeError("Capabilities must be a trusted tuple")
+        if any(spec.name == NAME for spec, _ in capabilities):
+            raise ValueError("Security lab already registered")
+        capabilities = capabilities + (security_lab_capability(),)
 
     # Alternate claim stores are injected only by trusted host code, not by
     # a model or request. Existing site receipt protocol has its own store.
