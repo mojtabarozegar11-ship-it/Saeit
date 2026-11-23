@@ -107,6 +107,8 @@ class InvoiceReceiverAttributionTests(SimpleTestCase):
         self.assertEqual(pool.select_unused_receiver((self.SHARED,), {self.SHARED}), self.SHARED)
         with self.assertRaisesRegex(pool.InvoiceAttributionUnavailable, "multiple"):
             pool.select_unused_receiver((self.A, self.B), set())
+        with self.assertRaisesRegex(pool.InvoiceAttributionUnavailable, "non-owner"):
+            pool.select_unused_receiver((self.A,), set())
 
     def test_reject_untrusted_allocation_types(self):
         with self.assertRaises(pool.InvoiceAttributionUnavailable):
