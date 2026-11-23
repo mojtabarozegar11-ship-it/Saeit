@@ -31,6 +31,28 @@ def local_sales_answer(message):
     text = _clean(message)
     if len(text) > 2000:
         return None
+    # A price inquiry from a Bulgarian-speaking buyer must not fall back to
+    # an English-only answer simply because it also contains "Moj Prop".
+    # Restrict multilingual matching to the explicit brand/Starter30 intent:
+    # never answer arbitrary Bulgarian questions, and never create an invoice.
+    brand = bool(re.search(r"\\b(moj[ -]?prop|starter30)\\b", text))
+    bulgarian = brand and any(term in text for term in (
+        "колко струва", "цената", "цена", "такса", "плащане",
+        "как да платя", "виртуален", "баланс", "етап", "български",
+    ))
+    if bulgarian:
+        return (
+            "MOJ PROP Starter30 е симулирано търговско предизвикателство, "
+            "а не реална брокерска сметка. Обявената начална такса е 30 TRX. "
+            "Стартовият виртуален баланс е 1 000 USD; при успешно преминаване "
+            "на следващи етапи виртуалният лимит може условно да нарасне "
+            "до 100 000 USD. Това не е гаранция за одобрение, доход или награда. "
+            "Наличността на платено записване не е потвърдена тук. "
+            "НЕ изпращайте TRX преди уникална фактура от сървъра и проверка "
+            "на писмените условия. "
+            f"Правила: {MOJ_PROP_URL} | Безплатно искане на условия: "
+            f"{MOJ_PROP_TERMS_REQUEST_URL}"
+        )
     en = bool(re.search(r"\b(moj[ -]?prop|starter30|prop firm|funded challenge|trading challenge)\b", text))
     prop = en or any(word in text for word in ("مج پراپ", "مج‌پراپ", "پراپ", "چالش معامله"))
     signals = bool(re.search(r"\b(signals?|copy trading)\b", text)) or any(
