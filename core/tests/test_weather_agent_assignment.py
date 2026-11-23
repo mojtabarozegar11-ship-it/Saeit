@@ -52,6 +52,23 @@ def test_weather_api_key_alone_never_authorizes_paid_content(monkeypatch):
     assert generated == []  # No paid call and no daily repost of identical text.
 
 
+def test_weather_same_day_flags_never_spend_without_one_use_grant(monkeypatch):
+    from django.utils import timezone
+    import sys
+    import types
+
+    class ForbiddenModelClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("paid model initialized without one-use grant")
+
+    monkeypatch.setenv("OPENAI_API_KEY", "present-but-not-authorized")
+    monkeypatch.setenv("MOJ_PAID_LLM_ENABLED", "1")
+    monkeypatch.setenv("MOJ_WEATHER_PAID_CONTENT_APPROVAL_DATE", timezone.localdate().isoformat())
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=ForbiddenModelClient))
+
+    assert weather_agent.generate_research_contents("Source-specific daily forecast") == []
+
+
 def test_weather_does_not_regenerate_existing_daily_content(monkeypatch):
     Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba Bot", mission="content", active=True)
     _offline_weather_cycle(monkeypatch)
