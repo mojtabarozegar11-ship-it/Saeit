@@ -39,6 +39,11 @@ class RetryRedemptionPolicyTests(unittest.TestCase):
                 require_failed_retry(replace(self.valid, **change),
                                      buyer_identity_id="buyer-1")
 
+    def test_future_dated_final_failure_is_not_redeemable(self):
+        future = replace(self.valid, final_at=datetime(2099, 1, 1, tzinfo=timezone.utc))
+        with self.assertRaises(RetryNotEligible):
+            require_failed_retry(future, buyer_identity_id="buyer-1")
+
     def test_invalid_evidence_fails_closed(self):
         for change in ({"final_at": None}, {"final_at": datetime(2026, 11, 22)},
                        {"redemption_used": 1}, {"dispute_open": 0},
