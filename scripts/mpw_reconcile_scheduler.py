@@ -1,6 +1,7 @@
 """Owner-local cron runner for the gated MojPlayWin reconciliation command.
 No GitHub dependency. Install only after production approval.
 """
+import ast
 import fcntl
 import json
 import os
@@ -11,9 +12,34 @@ import sys
 import tempfile
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
+PUBLIC_WSGI = Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py")
 PYTHON = Path("/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python")
 STATE = Path("/home/zomorod2/.local/share/mpw-reconcile")
 LIMIT = 3
+
+
+def require_effective_wsgi_source():
+    """Fail closed if this owner-local writer targets a different app than live WSGI.
+
+    Parsing the startup file as data never imports/executes it. A preview or
+    staging Django tree must not reconcile live invoices by accident.
+    """
+    if PUBLIC_WSGI.is_symlink() or not PUBLIC_WSGI.is_file():
+        raise ValueError("Live WSGI root cannot be established")
+    tree = ast.parse(PUBLIC_WSGI.read_text(encoding="utf-8"))
+    app_values = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "APP"
+            for target in node.targets
+        ):
+            if not isinstance(node.value, ast.Constant) or type(node.value.value) is not str:
+                raise ValueError("Live WSGI APP must be one literal path")
+            app_values.append(node.value.value)
+    if len(app_values) != 1 or not Path(app_values[0]).is_absolute():
+        raise ValueError("Live WSGI APP is absent or ambiguous")
+    if Path(app_values[0]) != ROOT or ROOT.resolve() != ROOT:
+        raise ValueError("Scheduler source differs from live WSGI APP; no settlement run")
 
 
 def private_dir(path):
@@ -76,6 +102,7 @@ def validate_result(raw, cursor, limit):
 def run():
     if ROOT.resolve() != ROOT or not (ROOT/"manage.py").is_file() or not PYTHON.is_file():
         raise ValueError("Owner runtime unavailable")
+    require_effective_wsgi_source()
     private_dir(STATE)
     fd = os.open(STATE/"run.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
     with os.fdopen(fd, "rb+") as lock:
