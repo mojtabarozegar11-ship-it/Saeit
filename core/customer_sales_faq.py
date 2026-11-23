@@ -65,14 +65,20 @@ def local_sales_answer(message):
         if en and not any("\u0600" <= c <= "\u06ff" for c in text):
             return (
                 "MOJ PROP offers a simulated trading challenge. The listed Starter30 "
-                "entry price is 30 TRX, but the landing page is not proof that "
-                "checkout or funded access is ready. Do not send TRX until "
+                "entry price is 30 TRX, with a $1,000 virtual starting balance. "
+                "Later stages may conditionally increase virtual limits up to $100,000; "
+                "passing a stage, receiving a payout or being enrolled is not guaranteed. "
+                "The landing page is not proof that checkout or funded access is ready. "
+                "Do not send TRX until "
                 "the server issues a unique invoice and the terms are verified. "
                 f"Details: {MOJ_PROP_URL} | Free written terms request: {MOJ_PROP_TERMS_REQUEST_URL} | Checkout information: {MOJ_PROP_CHECKOUT_URL}"
             )
         return (
             "مج‌پراپ یک چالش معاملاتی شبیه‌سازی‌شده است. قیمت معرفی‌شدهٔ Starter30 "
-            "برابر ۳۰ TRX است؛ نمایش صفحه به‌معنای آماده‌بودن پرداخت یا صدور حساب نیست. "
+            "برابر ۳۰ TRX است و سرمایه آغازین فقط ۱٬۰۰۰ دلار مجازی است. "
+            "در صورت موفقیت در مراحل بعدی، سقف سرمایه مجازی می‌تواند به‌صورت مشروط تا ۱۰۰٬۰۰۰ دلار افزایش یابد؛ "
+            "قبولی، سود، پاداش یا فعال‌بودن خرید تضمین نمی‌شود. "
+            "نمایش صفحه به‌معنای آماده‌بودن پرداخت یا صدور حساب نیست. "
             "تا زمان دریافت فاکتور اختصاصی صادرشده از سرور و بررسی شرایط، هیچ TRX ارسال نکنید. "
             f"اطلاعات: {MOJ_PROP_URL} | درخواست رایگان شرایط کتبی: {MOJ_PROP_TERMS_REQUEST_URL} | صفحهٔ اطلاعات ثبت‌نام: {MOJ_PROP_CHECKOUT_URL}"
         )
