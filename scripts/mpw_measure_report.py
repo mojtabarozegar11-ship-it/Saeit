@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path("/home/zomorod2/.mpw-measure/events")
 SITES = ("store", "prop")
 EVENTS = frozenset(("page", "engaged", "product_click", "plan_click",
-                    "buy_click", "form_submit", "help_click"))
+                    "buy_click", "form_submit", "help_click", "lead_click"))
 PAGE_SETS = {
     "store": {
         "/store/", "/store/product/", "/commerce/trx-easy/", "/commerce/book/",
@@ -76,7 +76,7 @@ def summarize(records, days: int, invalid: int = 0):
             sessions[e["session"]].append(e)
         qualified = {
             sid for sid, rows in sessions.items()
-            if any(x["event"] in ("engaged", "buy_click", "form_submit") for x in rows)
+            if any(x["event"] in ("engaged", "buy_click", "lead_click", "form_submit") for x in rows)
         }
         entry = {
             sid for sid, rows in sessions.items()
@@ -86,6 +86,10 @@ def summarize(records, days: int, invalid: int = 0):
         buys = {
             sid for sid, rows in sessions.items()
             if any(x["event"] == "buy_click" for x in rows)
+        }
+        leads = {
+            sid for sid, rows in sessions.items()
+            if any(x["event"] == "lead_click" for x in rows)
         }
         checkout = {
             sid for sid, rows in sessions.items()
@@ -107,6 +111,7 @@ def summarize(records, days: int, invalid: int = 0):
             "entry_page_sessions": len(entry),
             "qualified_entry_sessions": len(entry_qualified),
             "buy_click_sessions": len(buys),
+            "written_terms_lead_click_sessions": len(leads),
             "buy_clicks_from_qualified_entry": len(entry_qualified & buys),
             "checkout_page_sessions": None,
             "checkout_page_coverage": "not_instrumented: Django checkout retains script-src none",
