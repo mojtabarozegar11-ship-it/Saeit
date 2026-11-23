@@ -20,6 +20,11 @@ LESSONS = (
         "goal_fa": "بازبینی ضرورت مجوز دسترس‌پذیری بدون دسترسی به گوشی واقعی",
     },
     {
+        "id": "covert_surveillance_detection",
+        "title_fa": "آزمون کشف نشانه‌های نفوذ و جاسوسی مخفیانه",
+        "goal_fa": "تشخیص رفتارهای هشداردهنده و انتخاب پاسخ دفاعی بدون دسترسی به گوشی واقعی",
+    },
+    {
         "id": "synthetic_exfiltration",
         "title_fa": "تحلیل رویداد ساختگی انتقال داده",
         "goal_fa": "تشخیص الگوهای مشکوک در لاگ آموزشی غیرواقعی",
@@ -36,6 +41,12 @@ CASES = {
         ("training.overprivileged", "READ_SMS_PERMISSION", 3),
         ("training.overprivileged", "ACCESSIBILITY_PERMISSION", 3),
         ("training.overprivileged", "OVERLAY_PERMISSION", 2),
+    ),
+    "fictional_covert_surveillance": (
+        ("training.fictional_monitor", "UNEXPECTED_PRIVILEGED_PERMISSION", 3),
+        ("training.fictional_monitor", "UNRECOGNIZED_BACKGROUND_ACTIVITY", 2),
+        ("training.fictional_monitor", "SIMULATED_READ_DEMO_MEDIA_NO_FILES", 3),
+        ("training.fictional_monitor", "SIMULATED_DATA_TRANSFER_NO_NETWORK", 4),
     ),
     "fictional_transfer": (
         ("training.fictional", "READ_DEMO_MESSAGES", 3),
@@ -63,6 +74,16 @@ QUESTIONS = {
         },
         "answer": "A",
         "explanation_fa": "مجوز دسترس‌پذیری حساس است؛ باید ضرورت و منبع برنامه بررسی شود.",
+    },
+    "covert_surveillance_detection": {
+        "question_fa": "در سناریوی کاملاً ساختگی، برنامه‌ای ناشناس هم مجوز غیرضروری می‌خواهد و هم فعالیت پس‌زمینه مشکوک دارد. پاسخ دفاعی مناسب چیست؟",
+        "options": {
+            "A": "بررسی منبع نصب و مجوزها، لغو دسترسی مشکوک و اسکن امنیتی دستگاه خود",
+            "B": "اجازه دادن به تمام مجوزهای جدید",
+            "C": "منتقل کردن فایل‌های واقعی دیگران به محیط آزمون",
+        },
+        "answer": "A",
+        "explanation_fa": "چند شاخص همزمان نیازمند بررسی هستند، اما هیچ شاخصی به‌تنهایی نفوذ را اثبات نمی‌کند؛ سناریو هیچ داده واقعی ندارد.",
     },
     "synthetic_exfiltration": {
         "question_fa": "در گزارش تمرینی، رویداد SIMULATED_DATA_TRANSFER_NO_NETWORK چه معنایی دارد؟",
