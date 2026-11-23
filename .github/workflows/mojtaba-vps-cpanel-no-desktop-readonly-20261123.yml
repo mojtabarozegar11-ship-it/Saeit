@@ -1,0 +1,149 @@
+name: Mojtaba VPS runner to cPanel read-only alternative path 20261123
+
+on:
+  push:
+    branches: [audit/mojtaba-vps-relay-no-desktop-20261123]
+    paths:
+      - ".github/workflows/mojtaba-vps-cpanel-no-desktop-readonly-20261123.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtabot-vps-cpanel-readonly-alternative-20261123
+  cancel-in-progress: false
+
+jobs:
+  read-only-cpanel-via-existing-vps:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/audit/mojtaba-vps-relay-no-desktop-20261123'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Validate existing VPS runner and pinned cPanel SSH host key
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          echo "ACCESS_ROUTE=GITHUB_ACTIONS_TO_EXISTING_VPS_RUNNER_TO_CPANEL"
+          echo "REMOTE_DESKTOP_USED=NO"
+          test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mojtaba-readonly-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; t=sys.stdin.read(); print(t.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          timeout 16s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/host.known" 2>/dev/null
+          test -s "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "CPANEL_PINNED_HOST_KEY=VERIFIED"
+          # The runner is already on the owner-authorized VPS. There is no
+          # workstation access, root login, PTY, tunnel or SSH forwarding.
+          timeout 70s ssh -T \
+            -i "$d/host.key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/host.known" \
+            -o ForwardAgent=no \
+            -o RequestTTY=no \
+            -o ConnectTimeout=12 \
+            -o ServerAliveInterval=5 \
+            -o ServerAliveCountMax=2 \
+            -p 1396 zomorod2@zohal.pws-dns.net \
+            'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_READONLY_PY'
+          import hashlib
+          import json
+          import subprocess
+          from pathlib import Path
+
+          account = Path("/home/zomorod2")
+          app = account / "Saeit-mojprop-candidate-20261122"
+          wsgi = account / "mojplaywin.com/passenger_wsgi.py"
+          print("REMOTE_USER_IS_SCOPED_ACCOUNT=", account.is_dir())
+          print("PASSENGER_WSGI_PRESENT=", wsgi.is_file())
+          if wsgi.is_file():
+              text = wsgi.read_text(encoding="utf8", errors="replace")
+              print("PASSENGER_APP_ROOT_REFERENCE_MATCH=", str(app) in text)
+          print("SOURCE_APP_DIR_PRESENT=", app.is_dir())
+
+          # Print hashes only from fixed allowlisted paths, never source code,
+          # secrets, process arguments, emails or customer records.
+          allowed = [
+              "core/mojtaba_bot_portal.py",
+              "templates/core/mojtaba_bot_portal.html",
+              "core/customer_sales_faq.py",
+              "core/chat_runtime.py",
+              "core/task_health_sample.py",
+          ]
+          for rel in allowed:
+              p = app / rel
+              if p.is_file() and not p.is_symlink():
+                  print("APP_SOURCE", rel, "SHA256", hashlib.sha256(p.read_bytes()).hexdigest())
+              else:
+                  print("APP_SOURCE", rel, "MISSING_OR_NOT_REGULAR")
+
+          stage = account / "separated-backups/mojtaba-canonical-content-20261123/release-candidate-2952-shared-fast-health"
+          manifest = stage / "candidate_manifest.json"
+          if manifest.is_file():
+              data = json.loads(manifest.read_text(encoding="utf8"))
+              pinned = data.get("candidate_files", {})
+              originals = data.get("original_files", {})
+              stage_ok = all(
+                  (stage / rel).is_file() and
+                  hashlib.sha256((stage / rel).read_bytes()).hexdigest() == entry.get("sha256")
+                  for rel, entry in pinned.items()
+              )
+              original_ok = all(
+                  (app / rel).is_file() and
+                  hashlib.sha256((app / rel).read_bytes()).hexdigest() == entry.get("sha256")
+                  for rel, entry in originals.items()
+              )
+              print("ISOLATED_STAGE_FILE_COUNT=", len(pinned))
+              print("ISOLATED_STAGE_HASHES_MATCH=", stage_ok)
+              print("LIVE_ORIGINAL_HASHES_UNCHANGED=", original_ok)
+              print("STAGE_MANIFEST_SHA256=", hashlib.sha256(manifest.read_bytes()).hexdigest())
+          else:
+              print("ISOLATED_STAGE_MANIFEST=MISSING")
+
+          try:
+              result = subprocess.run(
+                  ["uapi", "--output=json", "Quota", "get_quota_info"],
+                  capture_output=True, text=True, timeout=15, check=True,
+              )
+              payload = json.loads(result.stdout)
+              q = payload.get("result", {}).get("data", {})
+              print("CPANEL_QUOTA_USED_MB=", q.get("megabytes_used", "unknown"))
+              print("CPANEL_QUOTA_LIMIT_MB=", q.get("megabyte_limit", "unknown"))
+          except (OSError, ValueError, subprocess.SubprocessError):
+              print("CPANEL_QUOTA=UNKNOWN_QUERY_FAILED")
+
+          print("REMOTE_HOST_DATABASE_WRITES=0")
+          print("REMOTE_HOST_FILE_WRITES=0")
+          print("REMOTE_HOST_CRON_CHANGES=0")
+          REMOTE_READONLY_PY
+
+      - name: Check only public, unauthenticated portal GET
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PUBLIC_READONLY_PY'
+          from urllib.error import HTTPError, URLError
+          from urllib.request import Request, urlopen
+          from html.parser import HTMLParser
+
+          url = "https://mojplaywin.com/mojtaba.bot.ai/?topic=prop"
+          try:
+              request = Request(url, headers={"User-Agent": "Mojtaba-Readonly-Public-Portal-20261123/1.0"})
+              with urlopen(request, timeout=18) as response:
+                  body = response.read(400000).decode("utf8", "replace")
+                  print("PUBLIC_PORTAL_HTTP=", response.status)
+                  print("PUBLIC_SERVICE_GUIDE_IS_LIVE=", 'id="public-answer"' in body)
+                  print("PUBLIC_OWNER_CHAT_VISIBLE=", 'id="chat-form"' in body)
+                  print("PUBLIC_PROP_LINK_VISIBLE=", '/moj-prop/' in body)
+          except (HTTPError, URLError, TimeoutError, ValueError):
+              print("PUBLIC_PORTAL_READONLY_GET=UNAVAILABLE")
+          print("PUBLIC_GET_ONLY=YES")
+          PUBLIC_READONLY_PY
