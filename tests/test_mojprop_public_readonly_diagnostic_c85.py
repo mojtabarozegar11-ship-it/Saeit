@@ -47,7 +47,11 @@ class PublicReachabilityDiagnosticTests(unittest.TestCase):
         self.assertIn("--proto '=https'", source)
         self.assertIn("--tlsv1.2", source)
         self.assertIn("--connect-timeout 6 --max-time 15", source)
-        self.assertIn("--max-redirs 1", source)
+        # Keep one redirect for every route except the independently
+        # observed two-hop main contact URL; do not allow a global bypass.
+        self.assertIn("redirect_limit=1", source)
+        self.assertIn('[[ "$name" == "mpw_contact" ]] && redirect_limit=3', source)
+        self.assertIn('--max-redirs "$redirect_limit"', source)
 
     def test_http000_is_labeled_by_curl_exit_not_claimed_to_be_http_response(self):
         source = self.content
