@@ -42,7 +42,9 @@ INDEPENDENT_DB_EVIDENCE_ROOT = Path("/home/zomorod2/.mojprop-private-db-restore-
 URLCONF = Path("config/urls.py")
 SETTINGSCONF = Path("config/settings.py")
 FILES = (
-    # Keep the public payment-status disclosure aligned with the live checkout.\n    Path("templates/moj-prop/payment/index.html"),\n    Path("core/models.py"),
+    # Keep the public payment-status disclosure aligned with the live checkout.
+    Path("templates/moj-prop/payment/index.html"),
+    Path("core/models.py"),
     Path("core/admin.py"),
     # The no-JS presenter must be installed before the importing CRM view.
     Path("core/mojprop_accessible_intake.py"),
