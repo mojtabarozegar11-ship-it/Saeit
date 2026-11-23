@@ -56,10 +56,15 @@ jobs:
           for item in "${targets[@]}"; do
             name="${item%%|*}"
             url="${item#*|}"
+            # Contact has two safe, documented same-origin redirects before HTTP 200
+            # (public GET audit 2026-11-23, run 45111297531). Other routes
+            # keep their tighter one-redirect guard; no payment/POST enabled.
+            redirect_limit=1
+            [[ "$name" == "mpw_contact" ]] && redirect_limit=3
             # -w emits diagnostics even when curl cannot complete HTTP.
             # Do not print response bodies, resolved IPs, secrets or buyer data.
             # Exit codes are curl transport errors, never HTTP status codes.
-            metrics="$(curl --proto '=https' --tlsv1.2 -L --max-redirs 1 \
+            metrics="$(curl --proto '=https' --tlsv1.2 -L --max-redirs "$redirect_limit" \
               --connect-timeout 6 --max-time 15 --silent --show-error \
               -H 'Cache-Control: no-cache' \
               -o "$check_dir/$name.body" \
