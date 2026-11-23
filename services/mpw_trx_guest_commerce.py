@@ -276,6 +276,21 @@ def patch_public(namespace):
     namespace["purchases"] = purchases
 
 
+def _confirmed_new_invoice_redirect(response) -> bool:
+    """Telemetry only: buyer-verified invoice POST yields an exact redirect.
+
+    This runs after bound_checkout() has verified the guest email/order
+    ownership and returned an invoice redirect; it never grants entitlement.
+    """
+    import re
+    if getattr(response, "status_code", None) not in (302, 303):
+        return False
+    location = response.get("Location", "")
+    return type(location) is str and re.fullmatch(
+        r"/commerce/trx-easy/invoice/[1-9][0-9]*/", location
+    ) is not None
+
+
 def patch_commercial(namespace):
     if namespace.get("_mpw_guest_checkout_installed") is True:
         return
@@ -304,10 +319,11 @@ def patch_commercial(namespace):
                         raise Http404("New TRX invoices unavailable")
                 response = _dispatch(request, view, args, kwargs, create=make_claim)
                 if view_name == "start_order":
-                    # Django responses expose status_code; the fallback keeps the
-                    # isolated adapter contract testable without faking a response.
-                    status_code = getattr(response, "status_code", 200)
-                    if 200 <= status_code < 300:
+                    # The successful paid-invoice creation response is a 302
+                    # redirect to a *specific* newly issued invoice. Recording
+                    # only 2xx silently omitted all genuine checkout starts.
+                    # Never count a failed POST or an arbitrary login redirect.
+                    if _confirmed_new_invoice_redirect(response):
                         # Order creation and its response are authoritative. The
                         # separate analytics lookup may be absent or unavailable.
                         try:
