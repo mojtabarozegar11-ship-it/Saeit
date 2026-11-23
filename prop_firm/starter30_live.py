@@ -3,7 +3,7 @@
 The route is English-only and uses only the dedicated mojprop database.
 It accepts exactly 30 TRX, verifies a submitted transaction through two
 independent SolidityNode providers, and grants a simulated account only inside
-one database transaction after both proofs agree. The sending-wallet address is mandatory for new invoices, but the address text alone is not cryptographic proof of the invoice buyer's wallet control.
+one database transaction after both proofs agree. A payer wallet may be supplied to bind an invoice, but it is optional; when omitted, the settled sender is recorded from the verified on-chain transfer.
 """
 from __future__ import annotations
 
@@ -330,37 +330,6 @@ def settle_invoice(*, invoice_ref: str, txid: str) -> dict:
 _EXPIRED_INVOICE = object()
 
 
-def require_unambiguous_payer_claim(
-    *, payment_pk, payer_hex41: str | None, recipient: str, block_time
-) -> None:
-    """Reject same-sender same-receiver overlapping invoice windows.
-
-    All historical windows are included, even EXPIRED or REVIEW, because
-    status at reconciliation time does not alter the actual transfer's
-    original block timestamp. This is a conservative replay defense, NOT
-    cryptographic proof of wallet control. No database mutation is made.
-    """
-    if not payer_hex41:
-        raise Starter30PaymentRejected(
-            "payer wallet ownership is unverified; contact support"
-        )
-    competing_claim = (
-        PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS)
-        .filter(
-            payer_hex41=payer_hex41,
-            recipient=recipient,
-            issued_at__lte=block_time,
-            expires_at__gt=block_time,
-        )
-        .exclude(pk=payment_pk)
-        .exists()
-    )
-    if competing_claim:
-        raise Starter30PaymentRejected(
-            "ambiguous sending-wallet claim; contact support for manual review"
-        )
-
-
 def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
     """Commit expiry before error; keep all other settlement work atomic."""
     with transaction.atomic(using=MOJPROP_DB_ALIAS):
@@ -415,12 +384,6 @@ def _settle_verified_invoice(*, invoice_ref: str, transfer_a):
             expected_sender = hex_to_tron_address(payment.payer_hex41)
             if transfer_a.sender != expected_sender:
                 raise Starter30PaymentRejected("sender does not match the wallet bound to this invoice")
-        require_unambiguous_payer_claim(
-            payment_pk=payment.pk,
-            payer_hex41=payment.payer_hex41,
-            recipient=payment.recipient,
-            block_time=transfer_a.block_time,
-        )
         if PropSimulationPayment.objects.using(MOJPROP_DB_ALIAS).filter(txid=transfer_a.tx_hash).exists():
             raise Starter30PaymentRejected("transaction is already assigned")
         owner = payment.invoice_owner
