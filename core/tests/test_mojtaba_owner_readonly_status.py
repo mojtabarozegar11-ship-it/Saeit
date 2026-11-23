@@ -56,7 +56,7 @@ class MojtabaOwnerReadOnlyStatusTests(TestCase):
                 self.assertFalse(is_status_command(text))
 
     @patch("core.mojtaba_readonly_status._isolated_prop_counts")
-    @patch("core.chat_runtime.OpenAI")
+    @patch("openai.OpenAI")
     @patch("core.operation_executor.subprocess.run")
     def test_owner_gets_live_counts_without_model_or_execution(
         self, executor, model, isolated,
@@ -85,7 +85,7 @@ class MojtabaOwnerReadOnlyStatusTests(TestCase):
         executor.assert_not_called()
 
     @patch("core.mojtaba_readonly_status.owner_runtime_snapshot")
-    @patch("core.chat_runtime.OpenAI")
+    @patch("openai.OpenAI")
     def test_customer_and_staff_never_obtain_private_metrics(self, model, snapshot):
         for user in (self.customer, self.staff):
             with self.subTest(user=user.username):
