@@ -48,7 +48,13 @@ def select_unused_receiver(pool: tuple[str, ...], used: set[str]) -> str:
     # finalized-chain proof must identify the invoice. Never accept a pool.
     if len(pool) != 1:
         raise InvoiceAttributionUnavailable("multiple invoice receivers prohibited")
-    return pool[0]
+    try:
+        only_owner_receiver = approved_recipient()
+    except Exception as exc:
+        raise InvoiceAttributionUnavailable("owner receiving wallet unavailable") from exc
+    if pool[0] != only_owner_receiver:
+        raise InvoiceAttributionUnavailable("non-owner invoice recipient prohibited")
+    return only_owner_receiver
 
 
 def require_payment_binding(*, recorded_recipient: str, onchain_recipient: str) -> None:
