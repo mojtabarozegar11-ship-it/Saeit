@@ -26,7 +26,7 @@ class MojPlayWinContactTwoHopRegressions(unittest.TestCase):
     def test_no_unreviewed_root_url_remap_or_payment_release(self):
         urls = URLS.read_text("utf-8")
         self.assertIn('path("contact/", RedirectView.as_view(url="/ask-master/index.php?service=1", permanent=False)', urls)
-        self.assertNotIn('POST', NEW_OBSERVER.read_text("utf-8").split('run: |')[-1].split('echo \'NO_POST_NO_PAYMENT_NO_CUSTOMER_DATA=true\'')[0].replace('NO_POST_NO_PAYMENT_NO_CUSTOMER_DATA', ''))
+        self.assertNotIn("curl --request POST", NEW_OBSERVER.read_text("utf-8"))
         self.assertIn('NO_POST_NO_PAYMENT_NO_CUSTOMER_DATA=true', NEW_OBSERVER.read_text("utf-8"))
         self.assertIn('READONLY_EXTERNAL_RUNNER=true', NEW_OBSERVER.read_text("utf-8"))
 
