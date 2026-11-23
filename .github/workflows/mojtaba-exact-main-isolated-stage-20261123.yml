@@ -1,0 +1,53 @@
+name: Mojtaba exact-main isolated source stage via VPS
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojtaba-exact-main-isolated-stage-20261123.yml"
+      - "deploy/mojtaba_isolated_public_source_stage_20261123.py"
+permissions: {contents: read}
+concurrency:
+  group: mojtabot-exact-stage-20261123
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'audit/mojtaba-exact-stage-no-desktop-20261123'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/checkout@v4
+        with:
+          ref: f33269ff19dccd70131c93df04068618b65bb18e
+          path: reviewed-main
+          persist-credentials: false
+      - name: Transfer exact-source package to isolated cPanel backup directory
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mojtaba-stage-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          PYTHONDONTWRITEBYTECODE=1 python3 -B deploy/mojtaba_isolated_public_source_stage_20261123.py package reviewed-main "$d"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          timeout 16s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          ssh_opts=(-T -i "$d/key" -p 1396 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ForwardAgent=no -o RequestTTY=no -o ConnectTimeout=12)
+          scp_opts=(-P 1396 -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ForwardAgent=no -o ConnectTimeout=12)
+          host=zomorod2@zohal.pws-dns.net
+          base=/home/zomorod2/separated-backups/mojtaba-canonical-content-20261123
+          inbox="$base/.incoming-f332-stage-$GITHUB_RUN_ID"
+          timeout 30s ssh "${ssh_opts[@]}" "$host" "test -d '$base' && test ! -e '$inbox' && umask 077 && mkdir -m 700 '$inbox'"
+          timeout 30s scp "${scp_opts[@]}" "$d/pins.json" "$d/source.tar.gz" deploy/mojtaba_isolated_public_source_stage_20261123.py "$host:$inbox/" >/dev/null
+          timeout 100s ssh "${ssh_opts[@]}" "$host" "PYTHONDONTWRITEBYTECODE=1 python3 -B '$inbox/mojtaba_isolated_public_source_stage_20261123.py' '$inbox'"
+          echo 'ACCESS_PATH=EXISTING_GITHUB_VPS_RUNNER_TO_CPANEL'
+          echo 'REMOTE_DESKTOP_USED=NO'
+          echo 'STAGE_ONLY_NO_PASSENGER_DEPLOY=YES'
