@@ -48,8 +48,10 @@ def _fetch(lat, lon, days=7):
             ttl = 0
     else:
         ttl = 0
-    if ttl > 0:
-        cache.set(key, payload, timeout=ttl)
+    # Iran lies outside the Nordic region. MET Norway's Locationforecast
+    # service requires at least 3 hours between identical requests there,
+    # even if the Expires header is sooner or absent. Respect longer expiry.
+    cache.set(key, payload, timeout=max(ttl, 3 * 60 * 60))
     return payload
 
 
