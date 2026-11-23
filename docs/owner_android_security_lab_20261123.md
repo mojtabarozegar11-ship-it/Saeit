@@ -25,6 +25,9 @@ adapter's JSON response is **not** proof of live device state.
 | `export_synthetic_messages` | Return three demonstration records | No real messages |
 | `inspect_device_report` | Validate a manually supplied whitelisted security report | No contacts, numbers, messages or photo paths |
 | `triage_apk` | SHA256, ZIP bounds, optional cleartext Manifest permission hints | User-supplied base64 APK, never installed or executed |
+| `training_lessons` | Return three Persian educational lessons | Hard-coded training descriptions only |
+| `training_case` | Compute a score over one of three synthetic event sets | No device logs or captured data |
+| `training_quiz` | Present or score a three-choice training question | Fixed answer key and explanations only |
 
 Compiled Android binary manifests are **not decoded**. A complete commercial
 APK security assessment requires additional tooling and consented owner
@@ -50,3 +53,19 @@ device enrollment or remote control is implemented here.
 Covert access; interception of WhatsApp/SMS; extraction of other people's
 files or photos; surveillance; scanning other handsets; stealth installation;
 remote device control without the device owner's informed authorization.
+
+## Offline training walkthrough (owner-only)
+
+The host must authenticate the canonical owner and authorize each operation.
+The adapter is still disabled on live sites until the approved deployment and
+host registration occur. No public access is added by this change.
+
+1. Call `training_lessons` to enumerate the three Persian lessons.
+2. Call `training_case` with `{"case_id":"overprivileged_app"}` to inspect a fictional app asking for SMS, accessibility and overlay capabilities. Its training score is high; this is **not** proof of malware.
+3. Repeat with `{"case_id":"normal_notes"}` and `{"case_id":"fictional_transfer"}` to compare severity.
+4. Call `training_quiz` with `{"lesson_id":"android_permissions"}` to obtain the multiple-choice question, then with `{"lesson_id":"android_permissions","choice":"B"}` to grade it.
+
+All examples are internally hard-coded. Inputs do not accept a phone number,
+IP, remote hostname, chat logs, photos or arbitrary device events. No networking,
+message collection, stealth operations, real device control or file writes are
+implemented. Unit tests cover invalid inputs and absence of external effects.
