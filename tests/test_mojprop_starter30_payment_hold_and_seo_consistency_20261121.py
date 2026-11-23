@@ -97,6 +97,7 @@ class Starter30ClosedPaymentContract(unittest.TestCase):
                     or "secure checkout" in description.lower()
                     or "secure 30 trx checkout" in description.lower()
                     or "checkout opens" in description.lower()
+                    or "invoice eligibility is conditional" in description.lower()
                 )
                 for field in ("og:description", "twitter:description"):
                     snippets = page.meta[field]
