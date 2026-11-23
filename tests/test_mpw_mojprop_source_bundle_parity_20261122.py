@@ -173,12 +173,13 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
         )
         self.assertEqual(
             MOD.REQUIRED["prop_firm/starter30_receiver_pool.py"],
-            "1562410bf3a569e2e132190764896fe3841a74e5",
+            "505a78b499d1f2f41f77de1c3396f80c826261bd",
         )
         self.assertIn('if getattr(settings, "MPW_MOJPROP_SINGLE_RECEIVER_MODE", False) is not True:', source)
         self.assertIn("return (approved_recipient(),)", source)
         self.assertNotIn("return tuple(values)", source)
         self.assertIn("multiple invoice receivers prohibited", source)
+        self.assertIn("non-owner invoice recipient prohibited", source)
 
 
 
