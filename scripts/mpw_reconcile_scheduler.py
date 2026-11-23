@@ -2,6 +2,7 @@
 No GitHub dependency. Install only after production approval.
 """
 import ast
+import hashlib
 import fcntl
 import json
 import os
@@ -11,11 +12,15 @@ import subprocess
 import sys
 import tempfile
 
-ROOT = Path("/home/zomorod2/Saeit-staging")
+ROOT = Path("/home/zomorod2/Saeit-mojprop-candidate-20261122")
 PUBLIC_WSGI = Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py")
 PYTHON = Path("/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python")
 STATE = Path("/home/zomorod2/.local/share/mpw-reconcile")
 LIMIT = 3
+# Reviewed bounded existing-invoice command; *source* bytes only, NOT approval
+# for a cron install or permission to change customer finances.
+PAYMENT_COMMAND_BLOB = "b401e229a5c53c20cf4a110fdf501d68d5a24737"
+PAYMENT_COMMAND_PATH = "core/management/commands/mpw_reconcile_pending_trx.py"
 
 
 def require_effective_wsgi_source():
@@ -40,6 +45,20 @@ def require_effective_wsgi_source():
         raise ValueError("Live WSGI APP is absent or ambiguous")
     if Path(app_values[0]) != ROOT or ROOT.resolve() != ROOT:
         raise ValueError("Scheduler source differs from live WSGI APP; no settlement run")
+
+
+def require_reviewed_payment_command():
+    """Never run a stale, symlinked, or unreviewed finance command."""
+    command = ROOT / PAYMENT_COMMAND_PATH
+    if command.is_symlink() or command.parent.is_symlink() or not command.is_file():
+        raise ValueError("Reviewed local payment command is missing or unsafe")
+    info = command.stat()
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or not 1000 <= info.st_size <= 20000:
+        raise ValueError("Reviewed payment command has unsafe file metadata")
+    raw = command.read_bytes()
+    blob = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
+    if blob != PAYMENT_COMMAND_BLOB:
+        raise ValueError("Payment command differs from pinned reviewed source")
 
 
 def private_dir(path):
@@ -103,6 +122,7 @@ def run():
     if ROOT.resolve() != ROOT or not (ROOT/"manage.py").is_file() or not PYTHON.is_file():
         raise ValueError("Owner runtime unavailable")
     require_effective_wsgi_source()
+    require_reviewed_payment_command()
     private_dir(STATE)
     fd = os.open(STATE/"run.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
     with os.fdopen(fd, "rb+") as lock:
