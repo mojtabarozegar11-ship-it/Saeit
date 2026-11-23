@@ -73,3 +73,20 @@ class MojtabaCanonicalHostSafetyTests(TestCase):
         self.assertFalse(AuditLog.objects.filter(
             action="mojtaba_canonical_action_claim_v1",
         ).exists())
+
+    def test_security_lab_explicit_opt_in_stays_host_authorized(self):
+        bot = self.build(enable_android_security_lab=True)
+        self.assertIn("owner_android_security_lab", bot.status().connected_capabilities)
+        req = ActionRequest(
+            "owner-lab-opt-in-check", bot.owner_id,
+            "owner_android_security_lab", "status", {},
+        )
+        with self.assertRaises(PermissionError):
+            bot.execute_action(req)
+        self.assertFalse(AuditLog.objects.filter(
+            action="mojtaba_canonical_action_claim_v1",
+        ).exists())
+
+    def test_security_lab_opt_in_rejects_untrusted_text_flag(self):
+        with self.assertRaises(TypeError):
+            self.build(enable_android_security_lab="true")
