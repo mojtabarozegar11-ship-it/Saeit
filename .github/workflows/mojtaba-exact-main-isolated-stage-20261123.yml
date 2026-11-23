@@ -22,6 +22,11 @@ jobs:
           ref: f33269ff19dccd70131c93df04068618b65bb18e
           path: reviewed-main
           persist-credentials: false
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            core
+            templates
       - name: Transfer exact-source package to isolated cPanel backup directory
         shell: bash
         env:
