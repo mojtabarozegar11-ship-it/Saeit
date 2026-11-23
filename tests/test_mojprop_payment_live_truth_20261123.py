@@ -16,6 +16,11 @@ class MojPropPaymentLiveTruthTests(unittest.TestCase):
             "no transfer should be sent without a server-issued invoice.", text
         )
 
+    def test_checkout_review_link_requires_server_invoice(self):
+        text = PAYMENT.read_text(encoding="utf-8")
+        self.assertIn('href="/mojprop-starter30-checkout/"', text)
+        self.assertIn("never transfer TRX before a server-issued invoice", text)
+
     def test_visible_payment_status_never_claims_unconditional_collectability(self):
         text = PAYMENT.read_text(encoding="utf-8")
         self.assertIn(
