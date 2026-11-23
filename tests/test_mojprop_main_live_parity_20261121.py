@@ -14,12 +14,12 @@ HISTORICAL_CANDIDATE=ROOT/"docs"/"mojprop"/"historical-static-evidence"/"reviewe
 # Immutable live baseline from independently reviewed source.
 LIVE_SHA256="029d2493c80480afd0b8d01683254c63a236a4d930c6cc43410def81906848e5"
 LIVE_BLOB="fea39dbc409ba8c4c30a807313a20b8d4db19283"
-# Current committed source was changed by 2026-11-22 reviewed checkout-copy
-# commit bb45e12fe8a5f7477f5f9c539a07d1c45385b3a7. Independent GitHub blob
-# comparison confirms this source-only update did not change pricing, links,
-# payment endpoints, scripts, historical candidate, or live deployment.
-# Preserve exact bytes as a pin: a source wording change is NOT an attestation
-# that the corresponding checkout is ready or live.
+# Separately reviewed source after the historical candidate (never proof of live host).
+# Archived independently pinned source version; never treat a source hash as live-deployment evidence.
+PREVIOUS_SOURCE_SHA256="24bfa25bef9876e54759ff3538ea470340b21084e50b8c01abb005e0a19f1e86"
+PREVIOUS_SOURCE_BLOB="45d7fc5a5d31ecc55dba34e5efc1b9b8b23444c4"
+# Current main source reviewed as TWO textual diffs from PREVIOUS_SOURCE_BLOB on 2026-11-23.
+# The public cPanel homepage has a DIFFERENT SHA256; these are SOURCE-only pins.
 CURRENT_SOURCE_SHA256="9b1915d0297a2242b86038be0070fb4ed5c914159432fa342c199beaee1cc351"
 CURRENT_SOURCE_BLOB="8b5b625c7ef872eb0921c0975fc44c3e6b74b138"
 # Immutable earlier reviewed candidate (not proof of live deployment).
@@ -77,13 +77,13 @@ class OfficialMojPropLiveParityTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(baseline).hexdigest(),LIVE_SHA256)
         self.assertEqual(hashlib.sha1(b"blob "+str(len(baseline)).encode()+b"\0"+baseline).hexdigest(),LIVE_BLOB)
 
-    def test_server_invoice_gate_copy_is_explicit_and_simulation_is_separate(self):
-        source=PAGE.read_text(encoding="utf8")
-        self.assertIn("do not send TRX before a unique server-issued invoice",source)
-        self.assertIn("Starter30 checkout is open after email and payer-wallet verification",source)
-        self.assertIn("MOJ-PROP-01",source)
-        self.assertIn("not payable today",source.lower())
-        self.assertNotIn("wait until payment is explicitly reopened",source)
+    def test_latest_source_invoice_caution_is_explicit(self):
+        page=PAGE.read_text(encoding="utf8")
+        self.assertIn("do not send TRX before a unique server-issued invoice.", page)
+        self.assertIn("pay only against a unique server-issued 30 TRX invoice.", page)
+        self.assertNotIn("wait until payment is explicitly reopened.", page)
+        # Never infer from source or GET-only evidence that finance rails are ready.
+        self.assertNotIn("A new customer payment has been verified", page)
 
     def test_official_info_and_order_policy_not_misrepresented(self):
         s=PAGE.read_text(encoding="utf8")
