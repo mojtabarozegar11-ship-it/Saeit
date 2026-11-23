@@ -25,6 +25,9 @@ SPEC = CapabilitySpec(NAME, (
     OperationSpec("export_synthetic_messages", "read"),
     OperationSpec("inspect_device_report", "read"),
     OperationSpec("triage_apk", "read"),
+    OperationSpec("training_lessons", "read"),
+    OperationSpec("training_case", "read"),
+    OperationSpec("training_quiz", "read"),
 ))
 
 # These are examples, NOT messages taken from any person's device.
@@ -159,6 +162,13 @@ def security_lab_adapter(request: ActionRequest) -> AdapterResult:
         return _inspect_device_report(request.arguments)
     if request.operation == "triage_apk":
         return _triage_apk(request.arguments)
+    if request.operation in ("training_lessons", "training_case", "training_quiz"):
+        from .android_security_training import list_lessons, run_synthetic_case, quiz
+        if request.operation == "training_lessons":
+            return _success(list_lessons())
+        if request.operation == "training_case":
+            return _success(run_synthetic_case(request.arguments))
+        return _success(quiz(request.arguments))
     raise ValueError("Undeclared security lab operation")
 
 
