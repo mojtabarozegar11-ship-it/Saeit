@@ -3,7 +3,22 @@
 The mock signer is deliberately used only inside unit tests. There is no
 customer payment, private key, real signature, mail or DB mutation here.
 """
+import hashlib
 from unittest.mock import Mock, patch
+
+_BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+def synthetic_tron_address(marker: int) -> str:
+    """Valid Base58Check structure for tests, not a funded live wallet."""
+    payload = b"\\x41" + bytes([marker]) * 20
+    raw = payload + hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
+    n = int.from_bytes(raw, "big")
+    result = ""
+    while n:
+        n, remainder = divmod(n, 58)
+        result = _BASE58[remainder] + result
+    return result
+
 from django.test import SimpleTestCase
 from django.core import signing
 from prop_firm.starter30_wallet_proof_contract import (
@@ -12,8 +27,8 @@ from prop_firm.starter30_wallet_proof_contract import (
     verify_wallet_proof,
 )
 
-SENDER = "T" + "K" * 33
-RECIPIENT = "T" + "M" * 33
+SENDER = synthetic_tron_address(1)
+RECIPIENT = synthetic_tron_address(2)
 INVOICE = "MOJPROP30-EXACTINV12345678"
 BUYER = "a" * 64
 TERMS = "b" * 64
@@ -88,7 +103,7 @@ class Starter30WalletProofContractTests(SimpleTestCase):
         ticket, message = self.issue()
         store = Mock(return_value=True)
         with self.assertRaisesRegex(WalletProofUnavailable, "does not match"):
-            self.verify(ticket, message, store=store, recover=Mock(return_value="T" + "Z" * 33))
+            self.verify(ticket, message, store=store, recover=Mock(return_value=synthetic_tron_address(3)))
         store.assert_not_called()
 
     def test_altered_message_fails_before_recovering_signature(self):
