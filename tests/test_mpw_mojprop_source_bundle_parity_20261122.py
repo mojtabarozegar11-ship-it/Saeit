@@ -167,6 +167,20 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
         self.assertEqual(MOD.PUBLIC_WSGI,
             Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py"))
 
+    def test_13_reviewed_new_invoice_receiver_is_exclusively_owner_approved(self):
+        source = (ROOT / "prop_firm/starter30_receiver_pool.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(
+            MOD.REQUIRED["prop_firm/starter30_receiver_pool.py"],
+            "1562410bf3a569e2e132190764896fe3841a74e5",
+        )
+        self.assertIn('if getattr(settings, "MPW_MOJPROP_SINGLE_RECEIVER_MODE", False) is not True:', source)
+        self.assertIn("return (approved_recipient(),)", source)
+        self.assertNotIn("return tuple(values)", source)
+        self.assertIn("multiple invoice receivers prohibited", source)
+
+
 
 if __name__ == "__main__":
     import unittest
