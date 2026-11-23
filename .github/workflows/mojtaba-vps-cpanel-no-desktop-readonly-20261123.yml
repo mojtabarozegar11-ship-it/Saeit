@@ -56,6 +56,8 @@ jobs:
             'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'REMOTE_READONLY_PY'
           import hashlib
           import json
+          import os
+          import tarfile
           import subprocess
           from pathlib import Path
 
@@ -107,6 +109,46 @@ jobs:
               print("STAGE_MANIFEST_SHA256=", hashlib.sha256(manifest.read_bytes()).hexdigest())
           else:
               print("ISOLATED_STAGE_MANIFEST=MISSING")
+
+          exact = account / "separated-backups/mojtaba-canonical-content-20261123/release-candidate-main-f33269ff-public-help"
+          exact_manifest = exact / "candidate_manifest.json"
+          if exact_manifest.is_file():
+              exact_data = json.loads(exact_manifest.read_text(encoding="utf8"))
+              public_restore = exact / "public-portal-prechange.tar.gz"
+              original_pins = exact_data.get("original_files", {})
+              source_pins = exact_data.get("candidate_files", {})
+              exact_source_ok = len(source_pins) == 14 and all(
+                  (exact / rel).is_file()
+                  and hashlib.sha256((exact / rel).read_bytes()).hexdigest() == record.get("sha256")
+                  for rel, record in source_pins.items()
+              )
+              original_match = len(original_pins) == 10 and all(
+                  (app / rel).is_file()
+                  and hashlib.sha256((app / rel).read_bytes()).hexdigest() == record.get("sha256")
+                  for rel, record in original_pins.items()
+              )
+              public_rollback_ok = False
+              if public_restore.is_file():
+                  with tarfile.open(public_restore, "r:gz") as archive:
+                      public_rollback_ok = all(
+                          hashlib.sha256(archive.extractfile(rel).read()).hexdigest()
+                          == original_pins[rel]["sha256"]
+                          for rel in ("core/mojtaba_bot_portal.py", "templates/core/mojtaba_bot_portal.html")
+                      )
+              print("EXACT_MAIN_RELEASE_SOURCE_COUNT=", len(source_pins))
+              print("EXACT_MAIN_RELEASE_SHA_MATCH=", exact_source_ok)
+              print("EXACT_MAIN_LIVE_ORIGINALS_MATCH=", original_match)
+              print("EXACT_MAIN_PORTAL_BACKUP_RESTORE_MATCH=", public_rollback_ok)
+              print("EXACT_MAIN_MANIFEST_SHA256=", hashlib.sha256(exact_manifest.read_bytes()).hexdigest())
+          else:
+              print("EXACT_MAIN_RELEASE_STAGE=MISSING")
+          restart = account / "mojplaywin.com/tmp/restart.txt"
+          print("PASSENGER_RESTART_PARENT_EXISTING=", restart.parent.is_dir())
+          print("PASSENGER_RESTART_PARENT_SYMLINK=", restart.parent.is_symlink())
+          print("PASSENGER_RESTART_PARENT_SCOPED_OWNER=", (
+              restart.parent.is_dir() and restart.parent.stat().st_uid == os.getuid()
+          ))
+          print("PASSENGER_RESTART_FILE_SYMLINK=", restart.is_symlink())
 
           try:
               result = subprocess.run(
