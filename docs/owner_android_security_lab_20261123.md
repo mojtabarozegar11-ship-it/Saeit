@@ -25,8 +25,8 @@ adapter's JSON response is **not** proof of live device state.
 | `export_synthetic_messages` | Return three demonstration records | No real messages |
 | `inspect_device_report` | Validate a manually supplied whitelisted security report | No contacts, numbers, messages or photo paths |
 | `triage_apk` | SHA256, ZIP bounds, optional cleartext Manifest permission hints | User-supplied base64 APK, never installed or executed |
-| `training_lessons` | Return three Persian educational lessons | Hard-coded training descriptions only |
-| `training_case` | Compute a score over one of three synthetic event sets | No device logs or captured data |
+| `training_lessons` | Return four Persian educational lessons | Hard-coded training descriptions only |
+| `training_case` | Compute a score over one of four synthetic event sets | No device logs or captured data |
 | `training_quiz` | Present or score a three-choice training question | Fixed answer key and explanations only |
 
 Compiled Android binary manifests are **not decoded**. A complete commercial
@@ -69,3 +69,16 @@ All examples are internally hard-coded. Inputs do not accept a phone number,
 IP, remote hostname, chat logs, photos or arbitrary device events. No networking,
 message collection, stealth operations, real device control or file writes are
 implemented. Unit tests cover invalid inputs and absence of external effects.
+
+## Covert surveillance and intrusion detection — simulated exercise
+
+This addition is a **defensive exercise**, not a stealth intrusion feature.
+The `fictional_covert_surveillance` case contains four hard-coded fictional
+indicators: unexpected privileged permission, unexplained background activity,
+simulated demo media access with **no file reads**, and a simulated transfer with
+**no network connection**. Only static training strings and scores are returned.
+
+- Run `training_case` with `{"case_id":"fictional_covert_surveillance"}`.
+- Present `training_quiz` with `{"lesson_id":"covert_surveillance_detection"}`.
+- A high exercise score is not a claim of compromise on any real phone.
+- This feature does not accept real phone identifiers, files, accounts or messages.
