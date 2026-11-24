@@ -7,6 +7,7 @@ python3 scripts/mojprop_commercial_locale_publish_20261124.py
 No payment, Django, migration, worker, cron, sitemap, or other site changes.
 """
 import hashlib
+from collections import Counter
 import json
 import os
 from pathlib import Path
@@ -14,7 +15,7 @@ import stat
 import tempfile
 from html.parser import HTMLParser
 
-from mojprop_commercial_locale_seo_20261124 import COPY, BASE, MARKER, transform
+from mojprop_commercial_locale_seo_20261124 import COPY, MARKER, transform
 
 ROOT = Path("/home/zomorod2/mojplaywin.com/moj-prop/languages")
 BACKUPS = Path("/home/zomorod2/.private_mojplaywin_main_agents")
@@ -68,7 +69,7 @@ def publish():
         updated = transform(text, code)
         before_links = Links(text).links
         after_links = Links(updated).links
-        if sorted(before_links) != sorted(after_links):
+        if Counter(before_links) != Counter(after_links):
             raise RuntimeError("Link or script attributes changed: " + code)
         plan[code] = (path, raw, updated.encode("utf-8"), stat.S_IMODE(path.stat().st_mode))
     unchanged = sum(before == after for _, before, after, _ in plan.values())
