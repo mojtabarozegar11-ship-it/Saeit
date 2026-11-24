@@ -31,6 +31,9 @@ _OWNER_GATES = (
     ("MPW_MOJPROP_QUALIFIED_PAYOUT_RESERVE_VERIFIED", "real_reward_reserve_unverified"),
     ("MPW_MOJPROP_REAL_REWARD_SETTLEMENT_VERIFIED", "real_payout_rail_unverified"),
 )
+_SETTLEMENT_MODES = frozenset(("manual_owner", "automatic_provider"))
+
+
 _EXPECTED_POLICY = (
     ("starting_balance_usd", Decimal("1000")),
     ("challenge_window_days", 60),
@@ -91,6 +94,9 @@ def paid_admission_defects(*, check_attestations: bool = True) -> tuple[str, ...
             defects.append("verified_profit_commitment_not_100_percent")
 
     if check_attestations:
+        settlement_mode = getattr(settings, "MPW_MOJPROP_REWARD_SETTLEMENT_MODE", "")
+        if settlement_mode not in _SETTLEMENT_MODES:
+            defects.append("reward_settlement_mode_invalid")
         for name, reason in _OWNER_GATES:
             if getattr(settings, name, False) is not True:
                 defects.append(reason)
@@ -241,6 +247,6 @@ def require_paid_admission_readiness() -> None:
     if errors:
         raise Starter30PaidAdmissionHold(
             "Starter30 new payment admission is on hold until complete "
-            "approved rules, a 100% trader reward engine, and real "
-            "reward funding/settlement proof agree"
+            "approved rules, a 100% trader reward engine, and verified "
+            "reward funding plus manual-owner or provider settlement proof agree"
         )
