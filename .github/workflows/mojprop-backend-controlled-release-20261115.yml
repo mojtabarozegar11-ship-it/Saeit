@@ -176,6 +176,20 @@ jobs:
               raise SystemExit("Passenger application binding missing")
           PY
           check STAGING_URLS test -f /home/zomorod2/Saeit-staging/config/urls.py
+          timeout 45s ssh -F "$WORK/config" saeit-host 'bash -s' <<'REMOTE_MODEL_INVENTORY'
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          for rel, label in (("core/models.py", "MODELS"), ("core/admin.py", "ADMIN")):
+              path = Path("/home/zomorod2/Saeit-staging") / rel
+              tree = ast.parse(path.read_text(encoding="utf-8"), filename=rel)
+              names = sorted(
+                  node.name for node in tree.body
+                  if isinstance(node, ast.ClassDef) and "MojProp" in node.name
+              )
+              print("MOJPROP_LIVE_" + label + "_CLASSES=" + (",".join(names) or "NONE"))
+          PY
+          REMOTE_MODEL_INVENTORY
           echo "MOJPROP_PREFLIGHT_ALL_REQUIRED_PATHS=PASS"
           REMOTE_PREFLIGHT
           timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
