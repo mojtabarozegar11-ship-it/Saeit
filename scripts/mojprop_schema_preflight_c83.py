@@ -126,11 +126,26 @@ def has_reviewed_legacy_suffix(live_root, staged_root, relative):
         "MojPropRequest" if relative == "core/models.py"
         else "MojPropRequestAdmin"
     )
-    return (
-        _legacy_contract_signature(baseline, legacy_name) is not None
-        and _legacy_contract_signature(content, legacy_name)
-        == _legacy_contract_signature(baseline, legacy_name)
-    )
+    baseline_contract = _legacy_contract_signature(baseline, legacy_name)
+    live_contract = _legacy_contract_signature(content, legacy_name)
+    if baseline_contract is not None and live_contract == baseline_contract:
+        return True
+    # The live cPanel tree may retain only the reviewed five-field admin
+    # declaration from the older intake-only release. It has no methods or
+    # executable behavior, so replacing that partial class with the reviewed
+    # full admin class is deterministic and preserves every neighboring class.
+    if relative == "core/admin.py" and live_contract == (
+        "MojPropRequestAdmin",
+        (
+            ("assign", ("list_display",)),
+            ("assign", ("list_filter",)),
+            ("assign", ("search_fields",)),
+            ("assign", ("readonly_fields",)),
+            ("assign", ("ordering",)),
+        ),
+    ):
+        return True
+    return False
 
 def migration_operations_signature(path):
     """Fingerprint the WHOLE migration, ignoring only its approved DB parent.
