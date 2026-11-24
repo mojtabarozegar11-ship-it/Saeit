@@ -213,10 +213,12 @@ def _checkout_page(request, product_id, pages_namespace):
         pk=product_id, active=True).first()
     if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
         raise Http404
+    from services.mpw_trx_email_recovery import _email_send_enabled
     _record_funnel_event_best_effort(request, "begin_checkout", product)
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
         "mpw_trx_easy_enabled": True, "mpw_guest_checkout": True,
+        "mpw_recovery_email_allowed": _email_send_enabled(),
     }))
     response = pages_namespace["_checkout_csrf_referrer"](response)
     response["Content-Security-Policy"] = (
