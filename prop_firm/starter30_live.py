@@ -169,8 +169,9 @@ def issue_invoice(
 ) -> IssuedStarter30Invoice:
     """Allocate an exclusive receiving address to a syntax-valid guest email.
 
-    Mailbox OTP is intentionally not required by the current owner policy;
-    the normalized email digest still binds repeat invoices and records.
+    Mailbox OTP and payer-wallet prebinding are intentionally not required for
+    guest checkout. The normalized email digest binds repeat invoices and
+    records; finalized on-chain evidence binds the actual payment.
 
     The email identity row is locked to make repeat issuance idempotent across
     sessions. The DB UNIQUE recipient constraint handles concurrent *different*
@@ -180,10 +181,9 @@ def issue_invoice(
     if terms_accepted is not True:
         raise Starter30PaymentRejected("simulation disclosure must be accepted")
     verify_pre_invoice_configuration()
-    if type(payer_address) is not str or not payer_address.strip():
-        raise Starter30PaymentRejected(
-            "sending TRON wallet is required when one receive-only wallet is used"
-        )
+    # Guest checkout does not require a wallet connection or predeclared
+    # sender. The finalized on-chain sender is recorded during settlement;
+    # the receive address and exact amount remain mandatory.
     # ``email_proof`` remains in the signature for compatibility with older
     # clients, but the owner policy no longer requires mailbox OTP at checkout.
     try:

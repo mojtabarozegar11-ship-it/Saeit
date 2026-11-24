@@ -63,36 +63,12 @@ _EMAIL_PROOF_SESSION = "mojprop_starter30_checkout_email_proof_v1"
 
 
 def _email_forms(request) -> str:
-    """No receiving address exists until an email OTP is consumed."""
-    token = escape(get_token(request))
-    form = (
-        "<form method='post' action='/mojprop-starter30-checkout/'>"
-        f"<input type='hidden' name='csrfmiddlewaretoken' value='{token}'>"
-        "<input type='hidden' name='action' value='request_email_code'>"
-        + _funnel_hidden_fields(request)
-        + "<label for='email-verification'>Email to verify before checkout</label>"
-        "<input id='email-verification' name='email' type='email' required "
-        "maxlength='254' autocomplete='email'>"
-        "<button type='submit'>Email a one-time verification code</button></form>"
+    """Simple guest checkout: syntax-valid email only; no mailbox OTP."""
+    return (
+        "<p class='ok'>Guest checkout: enter a valid email and accept the terms. "
+        "Email is used only for the receipt and recovery; no verification code is required.</p>"
+        + _form(request)
     )
-    if request.session.get(_EMAIL_CHALLENGE_SESSION):
-        form += (
-            "<form method='post' action='/mojprop-starter30-checkout/'>"
-            f"<input type='hidden' name='csrfmiddlewaretoken' value='{token}'>"
-            "<input type='hidden' name='action' value='verify_email_code'>"
-            + _funnel_hidden_fields(request)
-            + "<label for='email-code'>Verification code from email</label>"
-            "<input id='email-code' name='code' type='password' "
-            "required maxlength='128' autocomplete='one-time-code'>"
-            "<button type='submit'>Verify email and continue</button></form>"
-        )
-    if request.session.get(_EMAIL_PROOF_SESSION):
-        form += (
-            "<p class='ok'>Email verified in this browser for a short time. "
-            "Confirm the same email below to request your exact 30 TRX invoice.</p>"
-            + _form(request)
-        )
-    return form
 
 
 def _page(request, title: str, body: str) -> HttpResponse:
@@ -159,9 +135,7 @@ def _form(request, invoice_ref: str | None = None) -> str:
         + _funnel_hidden_fields(request)
         + "<label for='email'>Email for the isolated simulation identity</label>"
         "<input id='email' name='email' type='email' required autocomplete='email'>"
-        "<label for='payer_address'>Your sending TRON wallet address (required)</label>"
-        "<input id='payer_address' name='payer_address' required autocomplete='off'>"
-        "<small>Required by the current server-side invoice policy. The sending wallet must match the independently verified on-chain sender; never send funds before a unique invoice is issued.</small>"
+        "<p>Wallet connection is optional. After the invoice is issued, send exactly 30 TRX from any TRON wallet to the displayed receive address. The server verifies the final on-chain sender and recipient.</p>"
         "<label><input type='checkbox' name='terms' value='yes' required> "
         "I understand this is simulated trading: no customer capital or real broker account is involved. Every profit I earn after a successful pass is paid in full: 100% of my realized profit is transferred after verification under the published payout rules; no profit or pass result is guaranteed.</label>"
         "<p><a href='/moj-prop/rules/'>Full simulation rules</a> · "
@@ -186,7 +160,7 @@ def starter30_checkout(request):
                 "<h1>Moj Prop Starter30</h1><p>Exact price: <strong>30 TRX</strong>. "
                 "This remains a simulated challenge with a virtual 1,000 USD balance. Every profit earned after a successful pass is paid in full: 100% of the trader's realized profit is transferred after verification under the published payout rules.</p>"
                 "<div class='warn'>Send only after this server issues your unique invoice. "
-                "The receiver is owner-approved. The current invoice policy requires your sending wallet address, and the on-chain sender must match it.</div>"
+                "The receiver is owner-approved. You do not need to connect a wallet or enter a sending address before the invoice is issued.</div>"
                 "<p><strong>Cancellation and refund:</strong> before transaction verification, no payment is credited. "
                 "A verified payment that cannot be matched because of a server failure remains in manual review; "
                 "if the service cannot be delivered, refund is sent to the verified sending wallet.</p>"
@@ -230,7 +204,7 @@ def starter30_checkout(request):
                 email=request.POST.get("email", ""),
                 payer_address=request.POST.get("payer_address", "").strip(),
                 terms_accepted=request.POST.get("terms") == "yes",
-                email_proof=request.session.get(_EMAIL_PROOF_SESSION, ""),
+                email_proof="",
             )
             _record_funnel_event(request, "invoice_created")
             return _page(

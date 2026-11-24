@@ -39,23 +39,15 @@ class Starter30LiveMobileAndDeliveryIntegrityTests(SimpleTestCase):
         page = response.content.decode()
         self.assertIn("input:not([type=checkbox])", page)
         self.assertIn("input[type=checkbox]{width:auto;", page)
-        # Unverified browsers must not be offered a payable invoice form.
-        self.assertIn("name='action' value='request_email_code'", page)
-        self.assertIn("Email a one-time verification code", page)
-        self.assertNotIn("name='terms' value='yes' required", page)
+        # Guest checkout is payable after syntax-valid email and terms only.
+        self.assertNotIn("name='action' value='request_email_code'", page)
+        self.assertNotIn("Email a one-time verification code", page)
+        self.assertIn("name='terms' value='yes' required", page)
         self.assertIn("name='email' type='email' required", page)
         self.assertNotIn("name='payer_address'", page)
-        self.assertNotIn("Create 30 TRX invoice", page)
-        # The gated verified-mail step still has a mobile terms checkbox,
-        # risk/rules disclosures and optional payer wallet.
-        from prop_firm.starter30_views import _form
-        from django.test import RequestFactory
-        gated = _form(RequestFactory().get("/mojprop-starter30-checkout/"))
-        self.assertIn("name='terms' value='yes' required", gated)
-        self.assertIn("href='/moj-prop/rules/'", gated)
-        self.assertIn("href='/moj-prop/payment/'", gated)
-        self.assertIn("name='payer_address'", gated)
-        self.assertIn("Create 30 TRX invoice", gated)
+        self.assertIn("Create 30 TRX invoice", page)
+        self.assertIn("href='/moj-prop/rules/'", page)
+        self.assertIn("href='/moj-prop/payment/'", page)
         self.assertNotIn("href='/mojprop-buyer-portal/'", page)
         telemetry.assert_called_once()
 
