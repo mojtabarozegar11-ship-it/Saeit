@@ -214,8 +214,46 @@ def check_schema_closure(live_root, staged_root):
             if selected != known_legacy or not has_reviewed_legacy_suffix(
                 live_root, staged_root, relative
             ):
-                raise RuntimeError("partial Moj Prop " + label +
-                                   " tree needs reviewed upgrade")
+                live_signature = _class_signature(
+                    (live_root / relative).read_text(encoding="utf-8"),
+                    "MojPropRequest" if relative == "core/models.py"
+                    else "MojPropRequestAdmin",
+                )
+                staged_signature = _class_signature(
+                    (staged_root / LEGACY_BASELINES[relative]).read_text(
+                        encoding="utf-8"
+                    ),
+                    "MojPropRequest" if relative == "core/models.py"
+                    else "MojPropRequestAdmin",
+                )
+                live_node = next(
+                    node for node in ast.parse(
+                        (live_root / relative).read_text(encoding="utf-8"),
+                        filename=relative,
+                    ).body
+                    if isinstance(node, ast.ClassDef)
+                    and node.name == (
+                        "MojPropRequest" if relative == "core/models.py"
+                        else "MojPropRequestAdmin"
+                    )
+                )
+                live_members = ",".join(
+                    node.name for node in live_node.body
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Assign))
+                    and (
+                        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        or any(isinstance(target, ast.Name) for target in node.targets)
+                    )
+                )
+                raise RuntimeError(
+                    "partial Moj Prop " + label +
+                    " tree needs reviewed upgrade; "
+                    + relative + " live_signature="
+                    + hashlib.sha256((live_signature or "").encode()).hexdigest()
+                    + " staged_signature="
+                    + hashlib.sha256((staged_signature or "").encode()).hexdigest()
+                    + " live_members=" + live_members
+                )
 
     for relative, required, label in (
         ("core/models.py", MODELS, "model"),
