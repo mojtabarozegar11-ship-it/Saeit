@@ -157,7 +157,18 @@ def transform(source, code):
     for attr in ('name="description"', 'property="og:description"'):
         source = replace_one(source, r'<meta '+attr+r' content="[^"]*">', lambda m: '<meta '+attr+' content="'+d+'">')
     source = replace_one(source, r'<meta property="og:title" content="[^"]*">', lambda m: '<meta property="og:title" content="'+t+'">')
-    source = replace_one(source, r'<h1>[^<]*</h1>', lambda m: '<h1>'+t+'</h1>\n<p '+MARKER+'>'+d+' <a href="/moj-prop/starter-30-trx/">'+html.escape(cta)+' →</a></p>')
+    # Move the existing tracked link rather than create a second untracked CTA.
+    # Keep its exact attributes (including locale event and campaign parameters).
+    terms = list(re.finditer(r'<a\b([^<>]*)>([^<>]*)</a>', source))
+    tracked = [m for m in terms if 'data-mpw-locale-event="starter30"' in m.group(1)
+               and re.search(r'\bhref="/moj-prop/starter-30-trx/(?:\?[^"]*)?"', m.group(1))]
+    if len(tracked) != 1:
+        raise ValueError("Expected one existing tracked Starter30 link: " + code)
+    link = tracked[0]
+    attrs = link.group(1)
+    source = source[:link.start()] + source[link.end():]
+    localized_link = '<a' + attrs + '>' + html.escape(cta) + ' →</a>'
+    source = replace_one(source, r'<h1>[^<]*</h1>', lambda m: '<h1>'+t+'</h1>\n<p '+MARKER+'>'+d+' '+localized_link+'</p>')
     def structured(match):
         obj = json.loads(match.group(1))
         if obj.get("@type") != "WebPage" or obj.get("url") != canonical:
