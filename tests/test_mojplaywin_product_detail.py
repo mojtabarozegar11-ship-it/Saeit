@@ -1,5 +1,6 @@
 """MojPlayWin product detail recovery without enabling unverified commerce."""
 from django.test import TestCase, override_settings
+from django.core.cache import cache
 from django.db import DatabaseError
 from unittest.mock import patch
 from core.models import CommerceFunnelEvent
@@ -12,6 +13,9 @@ HOSTS = ["mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir",
 
 @override_settings(ALLOWED_HOSTS=HOSTS)
 class MojPlayWinProductDetailsTests(TestCase):
+    def setUp(self):
+        cache.clear()
+
     def get(self, item_id, host="mojplaywin.com"):
         return self.client.get(f"/store/product/{item_id}/", HTTP_HOST=host)
 
