@@ -41,8 +41,6 @@ def _append_csv_env(name, values):
     for value in values:
         if value not in current:
             current.append(value)
-    if value not in current:
-            current.append(value)
     if current:
         os.environ[name] = ",".join(current)
 
