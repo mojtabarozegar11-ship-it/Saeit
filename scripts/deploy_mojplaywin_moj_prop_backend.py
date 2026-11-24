@@ -277,6 +277,21 @@ def install_migration(source: Path, target: Path) -> None:
     print("MOJ_PROP_MIGRATION_PARENT=" + parent)
 
 
+def _replace_class_in_place(source: str, class_name: str, replacement: str) -> str:
+    """Replace one top-level class while preserving owner code around it."""
+    tree = ast.parse(source)
+    matches = [
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == class_name
+    ]
+    if len(matches) != 1:
+        raise RuntimeError("expected exactly one legacy class: " + class_name)
+    node = matches[0]
+    lines = source.splitlines(keepends=True)
+    replacement = replacement.rstrip() + "\n"
+    return "".join(lines[: node.lineno - 1] + [replacement] + lines[node.end_lineno :])
+
+
 def patch_models(target: Path, source: Path) -> None:
     assert_regular(target, "live models")
     assert_regular(source, "staged models")
@@ -293,8 +308,10 @@ def patch_models(target: Path, source: Path) -> None:
         snapshot = (root / LEGACY_BASELINES["core/models.py"]).read_text(
             encoding="utf-8"
         ).rstrip()
-        live = live.rstrip()[:-len(snapshot)]
-        print("MOJ_PROP_REVIEWED_LEGACY_MODEL_UPGRADE=TRUE")
+        if live.rstrip().endswith(snapshot):
+            live = live.rstrip()[:-len(snapshot)]
+        else:
+            print("MOJ_PROP_REVIEWED_LEGACY_MODEL_IN_PLACE=TRUE")
     marker = "\nclass MojPropRequest("
     start = staged.find(marker)
     if start < 0:
@@ -302,8 +319,17 @@ def patch_models(target: Path, source: Path) -> None:
     block = staged[start + 1 :].rstrip() + "\n"
     if "class T(" not in live or "from django.db import models" not in live:
         raise RuntimeError("live models file has no safe additive-model anchors")
-    mode = stat.S_IMODE(target.stat().st_mode)
-    atomic_write_text(target, live.rstrip() + "\n\n" + block, mode)
+    if legacy and "class MojPropRequest(" in live and "class MojPropOffer(" not in live:
+        if live.rstrip().endswith(snapshot):
+            live = live.rstrip()[:-len(snapshot)]
+            mode = stat.S_IMODE(target.stat().st_mode)
+            atomic_write_text(target, live.rstrip() + "\n\n" + block, mode)
+        else:
+            mode = stat.S_IMODE(target.stat().st_mode)
+            atomic_write_text(target, _replace_class_in_place(live, "MojPropRequest", block), mode)
+    else:
+        mode = stat.S_IMODE(target.stat().st_mode)
+        atomic_write_text(target, live.rstrip() + "\n\n" + block, mode)
     print("MOJ_PROP_MODEL_PATCH=PASS")
 
 
@@ -324,8 +350,10 @@ def patch_admin(target: Path, source: Path) -> None:
         snapshot = (root / LEGACY_BASELINES["core/admin.py"]).read_text(
             encoding="utf-8"
         ).rstrip()
-        live = live.rstrip()[:-len(snapshot)]
-        print("MOJ_PROP_REVIEWED_LEGACY_ADMIN_UPGRADE=TRUE")
+        if live.rstrip().endswith(snapshot):
+            live = live.rstrip()[:-len(snapshot)]
+        else:
+            print("MOJ_PROP_REVIEWED_LEGACY_ADMIN_IN_PLACE=TRUE")
     # Source main includes the complete commercial model import; a strict
     # equality test for the old one-model import prevented every fresh setup.
     marker = "\nfrom .models import MojPropRequest, MojPropOffer, MojPropDeliveryEvidence\n"
@@ -335,8 +363,16 @@ def patch_admin(target: Path, source: Path) -> None:
     block = staged[start + 1 :].rstrip() + "\n"
     if "from django.contrib import admin" not in live or "ModelAdmin" not in live:
         raise RuntimeError("live admin file has no safe additive-admin anchors")
-    mode = stat.S_IMODE(target.stat().st_mode)
-    atomic_write_text(target, live.rstrip() + "\n\n" + block, mode)
+    if legacy and "class MojPropRequestAdmin(" in live and "class MojPropOfferAdmin(" not in live:
+        if live.rstrip().endswith(snapshot):
+            mode = stat.S_IMODE(target.stat().st_mode)
+            atomic_write_text(target, live.rstrip()[:-len(snapshot)].rstrip() + "\n\n" + block, mode)
+        else:
+            mode = stat.S_IMODE(target.stat().st_mode)
+            atomic_write_text(target, _replace_class_in_place(live, "MojPropRequestAdmin", block), mode)
+    else:
+        mode = stat.S_IMODE(target.stat().st_mode)
+        atomic_write_text(target, live.rstrip() + "\n\n" + block, mode)
     print("MOJ_PROP_ADMIN_PATCH=PASS")
 
 def _declared_url_routes(source: str) -> dict[str, str]:
