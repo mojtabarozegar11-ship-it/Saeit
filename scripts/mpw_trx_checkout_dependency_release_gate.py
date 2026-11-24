@@ -7,6 +7,8 @@ modify any file, import Django, or bypass any checkout security requirement.
 
 The three pinned sources are stored in the OWNER'S PRIVATE gateway vault,
 not in the public Saeit checkout repository.
+
+This gate remains read-only and fail-closed; the release decision is evidence-only.
 """
 from __future__ import annotations
 
