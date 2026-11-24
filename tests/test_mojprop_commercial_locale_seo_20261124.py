@@ -1,6 +1,7 @@
 """Regression checks for commercial SEO using the existing 20-locale renderer."""
 from html.parser import HTMLParser
 import tempfile
+import unicodedata
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -31,7 +32,10 @@ def originals():
                    "Read the rules.", "No guaranteed profit.",
                    "Information only.", "Read official English terms"]
     with patch.object(legacy, "path", lambda code: "/moj-prop/languages/" + code.lower() + "/"):
-        return {code: legacy.localized(row) for code, row in items.items()}
+        return {code: legacy.localized(row).replace(
+            '<a class="secondary" href="/moj-prop/starter-30-trx/">',
+            '<a class="secondary" data-mpw-locale-event="starter30" href="/moj-prop/starter-30-trx/?utm_source=mojprop_locale&amp;utm_medium=onsite&amp;utm_campaign=lang_' + code.replace("-", "_") + '&amp;utm_content=starter30_terms">')
+            for code, row in items.items()}
 
 
 class CommercialLocaleSeoTests(unittest.TestCase):
@@ -46,11 +50,16 @@ class CommercialLocaleSeoTests(unittest.TestCase):
                 from html import escape
                 self.assertIn("<h1>MOJ PROP | " + escape(title, quote=True) + "</h1>", after)
                 self.assertIn(escape(desc, quote=True), after)
-                self.assertIn('href="/moj-prop/starter-30-trx/">' + escape(cta), after)
+                self.assertIn('>' + escape(cta) + ' →</a>', after)
+                before_links = [a for tag, a in Page(before).tags if tag == "a" and a.get("data-mpw-locale-event") == "starter30"]
+                after_links = [a for tag, a in Page(after).tags if tag == "a" and a.get("data-mpw-locale-event") == "starter30"]
+                self.assertEqual(len(before_links), 1)
+                self.assertEqual(after_links, before_links)
+                self.assertIn("utm_campaign=lang_" + code.replace("-", "_"), after_links[0]["href"])
                 self.assertEqual(Page(before).links("canonical"), Page(after).links("canonical"))
                 self.assertEqual(Page(before).links("alternate"), Page(after).links("alternate"))
                 self.assertEqual(after.count(seo.MARKER), 1)
-                self.assertIn('30 TRX', ''.join(str(__import__('unicodedata').decimal(c)) if c.isdecimal() else c for c in desc))
+                self.assertIn('30 TRX', ''.join(str(unicodedata.decimal(c)) if c.isdecimal() else c for c in desc))
                 self.assertIn('<meta name="robots" content="index,follow', after)
                 with self.assertRaises(ValueError):
                     seo.transform(after, code)
