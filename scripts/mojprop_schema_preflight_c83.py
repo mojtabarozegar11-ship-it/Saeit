@@ -314,26 +314,63 @@ def check_schema_closure(live_root, staged_root):
                     raise RuntimeError("existing Moj Prop " + label +
                                        " differs from reviewed source: " + name)
 
-    # Never let a targeted 'migrate core 0046' silently unapply or rewrite
-    # unrelated newer migrations in an owner-preserved application tree.
+    # Preserve owner migrations that form an independent branch. A numeric
+    # prefix alone is not a conflict: Django identifies migrations by their
+    # full names, and the live tree already contains 0041_factorymarketeligibility.
+    # Block only an unknown migration that is a descendant of the reviewed
+    # Moj Prop chain, because targeting 0047 could otherwise unapply it.
     known = set(MIGRATIONS)
     directory = live_root / "core/migrations"
+    later_dependencies = {}
     for path in directory.glob("*.py"):
         if path.is_symlink():
             raise RuntimeError("unsafe live core migration symlink")
         head = path.stem.split("_", 1)[0]
-        if head.isdigit() and int(head) >= 41 and path.stem not in known:
-            # This is NOT a production deployment exemption. In particular,
-            # a separate live root with 0048 installed must still block a
-            # targeted migrate to 0047 that could reverse an owner's schema.
-            if live_root == staged_root and path.stem in REVIEWED_SELFTEST_ONLY_LATER:
-                data = path.read_bytes()
-                git_blob = hashlib.sha1(
-                    b"blob " + str(len(data)).encode("ascii") + b"\x00" + data
-                ).hexdigest()
-                if len(data) <= 4096 and git_blob == REVIEWED_SELFTEST_ONLY_LATER[path.stem]:
-                    continue
-            raise RuntimeError("unreviewed later or conflicting core migration: " + path.stem)
+        if not (head.isdigit() and int(head) >= 41 and path.stem not in known):
+            continue
+        if live_root == staged_root and path.stem in REVIEWED_SELFTEST_ONLY_LATER:
+            data = path.read_bytes()
+            git_blob = hashlib.sha1(
+                b"blob " + str(len(data)).encode("ascii") + b"\x00" + data
+            ).hexdigest()
+            if len(data) <= 4096 and git_blob == REVIEWED_SELFTEST_ONLY_LATER[path.stem]:
+                continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        migration = next(
+            (node for node in tree.body
+             if isinstance(node, ast.ClassDef) and node.name == "Migration"),
+            None,
+        )
+        if migration is None:
+            raise RuntimeError("owner migration has no Migration class: " + path.stem)
+        dependencies = set()
+        for node in migration.body:
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "dependencies"
+                for target in node.targets
+            ):
+                for entry in ast.walk(node.value):
+                    if (
+                        isinstance(entry, ast.Tuple) and len(entry.elts) == 2
+                        and isinstance(entry.elts[0], ast.Constant)
+                        and entry.elts[0].value == "core"
+                        and isinstance(entry.elts[1], ast.Constant)
+                        and isinstance(entry.elts[1].value, str)
+                    ):
+                        dependencies.add(entry.elts[1].value)
+        later_dependencies[path.stem] = dependencies
+    blocked_later = set()
+    changed = True
+    while changed:
+        changed = False
+        for name, dependencies in later_dependencies.items():
+            if name not in blocked_later and dependencies & (known | blocked_later):
+                blocked_later.add(name)
+                changed = True
+    for name in sorted(blocked_later):
+        raise RuntimeError("unreviewed later or conflicting core migration: " + name)
+    for name in sorted(later_dependencies):
+        print("MOJ_PROP_OWNER_MIGRATION_PRESERVED=" + name)
 
     # Owner-preserved signal modules cannot be silently replaced with an
     # incompatible file merely because the filename matches.
