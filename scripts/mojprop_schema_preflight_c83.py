@@ -366,6 +366,21 @@ def check_schema_closure(live_root, staged_root):
                         and isinstance(entry.elts[1].value, str)
                     ):
                         dependencies.add(entry.elts[1].value)
+        # A numbered core migration cannot be classified as independent
+        # merely because no explicit core parent was parsed. Missing,
+        # computed or empty dependencies are not evidence of ancestry.
+        declarations = [
+            node for node in migration.body
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "dependencies"
+                for target in node.targets
+            )
+        ]
+        if (len(declarations) != 1
+                or not isinstance(declarations[0].value, (ast.List, ast.Tuple))
+                or not dependencies):
+            raise RuntimeError("unreviewed later or conflicting core migration: "
+                               + path.stem + " (explicit core parent required)")
         later_dependencies[path.stem] = dependencies
     blocked_later = set()
     changed = True
