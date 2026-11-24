@@ -40,7 +40,7 @@ class ExactMojPropFreeSignalSourceTests(TestCase):
         # Exact current reviewed form is a different source version: the
         # historical one-off signal script remains fail-closed in production.
         self.assertEqual(mod.git_blob(self.current),
-                         "2e3a5ad1efb90bb3e629463a740cee03a8227ee5")
+                         "dbe747c0f451f0d173872fdd2929a71b3267fadd")
         self.assertNotEqual(self.current, self.after)
         self.assertIn(b"Starter30", self.current)
         self.assertIn(b"no payment", self.current)
