@@ -24,3 +24,5 @@ Change: add the six specialty storefront cards inside the existing green/gold re
 Current Moj Prop conversion-lock repair: 38ef7095b762155a5730dc4b0ab132a4453356a
 Change: when Starter30 release is closed, route visitors to the existing MojPlayWin store and live TRX invoice products instead of leaving a dead-end checkout.
 Deployment request date: 2026-11-24 UTC
+Current Moj Prop manual payout mode: d7aa49dd994401db8d49f8c23cf0eedfd042d1a5
+Deployment request date: 2026-11-24 UTC
