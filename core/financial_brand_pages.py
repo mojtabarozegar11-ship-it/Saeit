@@ -112,7 +112,7 @@ def financial_brand_page(request, brand, locale, page_type):
         title, intro, notice = copy["game_title"], copy["game_intro"], copy["game_notice"]
     palette = PALETTES[next(i for i, item in enumerate(BRANDS) if item[0] == slug)]
     shop_url = "/store/" if locale == "fa" else "/commerce/"
-    destination_url = SIGNAL_PAID_URL if page_type == "signals" else shop_url
+    destination_url = (f"{SIGNAL_PAID_URL}?utm_source=financial_subsite&utm_medium=signal_page&utm_campaign=signal_weekly_brief&utm_content={slug}" if page_type == "signals" else shop_url)
     destination_label = copy["signals_cta"] if page_type == "signals" else copy["cta"]
     free_destination_url = SIGNAL_FREE_PREVIEW_PATH if page_type == "signals" else ""
     free_destination_label = copy["signals_free_cta"] if page_type == "signals" else ""
