@@ -87,6 +87,7 @@ class MojPlayWinProductDetailsTests(TestCase):
                        'walletconnect', 'payment_confirmed'):
             self.assertNotIn(unsafe, html)
 
+    @override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "mpw-product-detail-observation-isolated"}})
     def test_product_detail_records_a_view_not_a_sale(self):
         Product.objects.create(
             pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
@@ -94,6 +95,9 @@ class MojPlayWinProductDetailsTests(TestCase):
         )
         response = self.get(72)
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(CommerceFunnelEvent.objects.filter(event_name="view_item").count(), 1)
+        self.assertEqual(CommerceFunnelEvent.objects.filter(event_name="payment_confirmed").count(), 0)
+        self.assertEqual(self.get(72).status_code, 200)
         self.assertEqual(CommerceFunnelEvent.objects.filter(event_name="view_item").count(), 1)
         self.assertEqual(CommerceFunnelEvent.objects.filter(event_name="payment_confirmed").count(), 0)
 
