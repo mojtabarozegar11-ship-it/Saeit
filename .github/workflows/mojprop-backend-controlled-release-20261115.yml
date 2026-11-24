@@ -212,6 +212,24 @@ jobs:
           timeout 50s ssh -F "$WORK/config" saeit-host \
             "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/update_mojplaywin_moj_prop_catalog.py preflight $GITHUB_RUN_ID"
           echo "MOJ_PROP_LIVE_STATIC_COMPATIBILITY=CHECKED_READ_ONLY"
+      - name: Read-only inspect independent restore evidence on host
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
+          timeout 45s ssh -F "$WORK/config" saeit-host 'python3 - <<'"'"'PY'"'"'
+          from pathlib import Path
+          root = Path("/home/zomorod2/.mojprop-private-db-restore-evidence")
+          if not root.is_dir():
+              print("MOJPROP_INDEPENDENT_RESTORE_EVIDENCE_DIR=ABSENT")
+              raise SystemExit(2)
+          cases = sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith("."))
+          print("MOJPROP_INDEPENDENT_RESTORE_EVIDENCE_DIR=PRESENT")
+          print("MOJPROP_INDEPENDENT_RESTORE_CASE_COUNT=" + str(len(cases)))
+          for case in cases:
+              files = sum(1 for p in case.rglob("*") if p.is_file())
+              print("MOJPROP_INDEPENDENT_RESTORE_CASE_FILES=" + str(files))
+          PY
       - name: Deploy Moj Prop intake backend with backup and migration
         id: backend
         shell: bash
