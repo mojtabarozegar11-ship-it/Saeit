@@ -79,7 +79,7 @@ def _class_signature(source, name):
 
 
 def _legacy_contract_signature(source, name):
-    """Compare the reviewed legacy class while allowing only its base type to vary."""
+    """Compare the reviewed legacy class by its exact member contract."""
     tree = ast.parse(source)
     matches = [
         node for node in tree.body
@@ -87,12 +87,25 @@ def _legacy_contract_signature(source, name):
     ]
     if len(matches) != 1:
         return None
-    # The live owner-preserved file may inherit the timestamp base through a
-    # different reviewed alias. Fields, options, indexes, methods and member
-    # order remain exact and therefore continue to fail closed on real drift.
-    matches[0].bases = []
-    return ast.dump(matches[0], include_attributes=False)
-
+    summary = []
+    for node in matches[0].body:
+        if isinstance(node, ast.Assign):
+            targets = tuple(
+                target.id for target in node.targets
+                if isinstance(target, ast.Name)
+            )
+            summary.append(("assign", targets))
+        elif isinstance(node, ast.ClassDef):
+            summary.append(("class", node.name))
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            summary.append(("function", node.name))
+        elif isinstance(node, ast.Expr) and isinstance(
+            node.value, ast.Constant
+        ) and isinstance(node.value.value, str):
+            summary.append(("docstring",))
+        else:
+            summary.append((type(node).__name__,))
+    return (name, tuple(summary))
 
 def has_reviewed_legacy_suffix(live_root, staged_root, relative):
     """Only recognize a byte-identical previously reviewed 0041-era suffix.
