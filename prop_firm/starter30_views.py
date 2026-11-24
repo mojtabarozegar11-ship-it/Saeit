@@ -134,7 +134,7 @@ def _closed(request):
         request,
         "Starter30 unavailable",
         "<h1>Starter30 checkout</h1><div class='warn'>Payment is not available at this moment. No transfer should be sent.</div>"
-        + _pre_invoice_information_links(),
+        + _pre_invoice_information_links()\n        + "<p><a href='/store/'>Browse available MojPlayWin digital products and open a live TRX invoice</a></p>",
     )
 
 
