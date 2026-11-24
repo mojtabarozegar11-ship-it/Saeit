@@ -38,16 +38,36 @@ MAX_SOURCE_BYTES = 256 * 1024
 
 
 def _wsgi_targets_expected_app(source: str, expected: str) -> bool:
-    """Parse top-level APP assignments without executing Passenger code.
+    """Parse WSGI source without executing it and reject every APP override.
 
-    Exactly one literal string assignment is accepted. Duplicate, computed,
-    nested, or otherwise ambiguous assignments fail closed because Passenger
-    could use a different application root than the one being audited.
+    Passenger must not be allowed to select a different root through a nested
+    assignment, augmented assignment, tuple binding, import alias, function or
+    class binding, or any other statically visible APP binding.
     """
     try:
         tree = ast.parse(source, filename="passenger_wsgi.py")
     except SyntaxError:
         return False
+
+    bindings = 0
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Name)
+            and node.id == "APP"
+            and isinstance(node.ctx, (ast.Store, ast.Del))
+        ):
+            bindings += 1
+        elif isinstance(node, ast.arg) and node.arg == "APP":
+            bindings += 1
+        elif isinstance(node, ast.alias) and node.asname == "APP":
+            bindings += 1
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == "APP":
+                bindings += 1
+        elif isinstance(node, ast.ExceptHandler) and node.name == "APP":
+            bindings += 1
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == "APP":
+            bindings += 1
 
     values = []
     for node in tree.body:
@@ -57,11 +77,13 @@ def _wsgi_targets_expected_app(source: str, expected: str) -> bool:
             targets = [node.target]
         else:
             continue
-        if any(isinstance(target, ast.Name) and target.id == "APP"
-               for target in targets):
+        if any(
+            isinstance(target, ast.Name) and target.id == "APP"
+            for target in targets
+        ):
             values.append(node.value)
 
-    if len(values) != 1:
+    if bindings != 1 or len(values) != 1:
         return False
     value = values[0]
     return (
