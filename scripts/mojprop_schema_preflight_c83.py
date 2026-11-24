@@ -99,10 +99,6 @@ def _legacy_contract_signature(source, name):
             summary.append(("class", node.name))
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             summary.append(("function", node.name))
-        elif isinstance(node, ast.Expr) and isinstance(
-            node.value, ast.Constant
-        ) and isinstance(node.value.value, str):
-            summary.append(("docstring",))
         else:
             summary.append((type(node).__name__,))
     return (name, tuple(summary))
