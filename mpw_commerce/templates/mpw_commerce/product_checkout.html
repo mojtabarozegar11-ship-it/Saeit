@@ -51,10 +51,10 @@
   </div>
   <form method="post" action="/commerce/trx-easy/start/{{ product.pk }}/" accept-charset="UTF-8">
     {% csrf_token %}
-    <label for="purchase-email">Email for purchase ownership and future recovery</label>
+    <label for="purchase-email">Email for purchase ownership</label>
     <input id="purchase-email" name="email" type="email" autocomplete="email"
            inputmode="email" maxlength="254" placeholder="you@example.com" required>
-    <p class="hint">Use an address you control. Keep your invoice reference; if you leave this browser, purchase recovery is available with the same email.</p>
+    <p class="hint">Use an address you control. Keep your invoice reference and, after payment, the transaction hash. {% if mpw_recovery_email_allowed %}You may request recovery using the same purchase email at <a href="/commerce/trx-easy/recover/">purchase recovery</a>.{% else %}Automatic email recovery is not currently offered here. If you lose access to this browser, contact <a href="mailto:support@mojplaywin.com">purchase support</a> for ownership verification. Do not pay again.{% endif %}</p>
     <button type="submit">Create my TRX invoice</button>
   </form>
   <p><small>Already paid? Do not pay again. Use <a href="/commerce/trx-easy/purchases/">My TRX purchases</a>, or contact <a href="mailto:support@mojplaywin.com">purchase support</a> with your order reference and transaction hash. Never share seed phrases or private keys.</small></p>
