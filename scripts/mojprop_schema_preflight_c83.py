@@ -78,35 +78,12 @@ def _class_signature(source, name):
     return ast.dump(matches[0], include_attributes=False)
 
 
-def _legacy_contract_signature(source, name):
-    """Compare the reviewed legacy class by its exact member contract."""
-    tree = ast.parse(source)
-    matches = [
-        node for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == name
-    ]
-    if len(matches) != 1:
-        return None
-    summary = []
-    for node in matches[0].body:
-        if isinstance(node, ast.Assign):
-            targets = tuple(
-                target.id for target in node.targets
-                if isinstance(target, ast.Name)
-            )
-            summary.append(("assign", targets))
-        elif isinstance(node, ast.ClassDef):
-            summary.append(("class", node.name))
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            summary.append(("function", node.name))
-        else:
-            summary.append((type(node).__name__,))
-    return (name, tuple(summary))
-
 def has_reviewed_legacy_suffix(live_root, staged_root, relative):
-    """Only recognize a byte-identical previously reviewed 0041-era suffix.
+    """Recognize only the reviewed legacy block at the end of the live file.
 
-    Never infer that owner-edited or unrelated classes can be overwritten.
+    A member-name match is not proof of equivalent behavior: changed defaults,
+    decorators, method bodies and unreviewed trailing text must not authorize
+    replacement. Owner-specific alternate layouts require separate exact review.
     """
     fixture = LEGACY_BASELINES.get(relative)
     if not fixture:
@@ -117,35 +94,8 @@ def has_reviewed_legacy_suffix(live_root, staged_root, relative):
         return False
     baseline = saved.read_text(encoding="utf-8").rstrip()
     content = live.read_text(encoding="utf-8").rstrip()
-    if bool(baseline) and content.endswith(baseline):
-        return True
-    # Some owner-preserved files contain unrelated classes after the reviewed
-    # C84 block.  Permit only an exact AST match of the single legacy class;
-    # the installer replaces that class in place and preserves all neighbours.
-    legacy_name = (
-        "MojPropRequest" if relative == "core/models.py"
-        else "MojPropRequestAdmin"
-    )
-    baseline_contract = _legacy_contract_signature(baseline, legacy_name)
-    live_contract = _legacy_contract_signature(content, legacy_name)
-    if baseline_contract is not None and live_contract == baseline_contract:
-        return True
-    # The live cPanel tree may retain only the reviewed five-field admin
-    # declaration from the older intake-only release. It has no methods or
-    # executable behavior, so replacing that partial class with the reviewed
-    # full admin class is deterministic and preserves every neighboring class.
-    if relative == "core/admin.py" and live_contract == (
-        "MojPropRequestAdmin",
-        (
-            ("assign", ("list_display",)),
-            ("assign", ("list_filter",)),
-            ("assign", ("search_fields",)),
-            ("assign", ("readonly_fields",)),
-            ("assign", ("ordering",)),
-        ),
-    ):
-        return True
-    return False
+    return bool(baseline) and content.endswith(baseline)
+
 
 def migration_operations_signature(path):
     """Fingerprint the WHOLE migration, ignoring only its approved DB parent.
@@ -343,21 +293,26 @@ def check_schema_closure(live_root, staged_root):
         )
         if migration is None:
             raise RuntimeError("owner migration has no Migration class: " + path.stem)
-        dependencies = set()
-        for node in migration.body:
+        declarations = [
+            node for node in migration.body
             if isinstance(node, ast.Assign) and any(
                 isinstance(target, ast.Name) and target.id == "dependencies"
                 for target in node.targets
-            ):
-                for entry in ast.walk(node.value):
-                    if (
-                        isinstance(entry, ast.Tuple) and len(entry.elts) == 2
-                        and isinstance(entry.elts[0], ast.Constant)
-                        and entry.elts[0].value == "core"
-                        and isinstance(entry.elts[1], ast.Constant)
-                        and isinstance(entry.elts[1].value, str)
-                    ):
-                        dependencies.add(entry.elts[1].value)
+            )
+        ]
+        if len(declarations) != 1 or not isinstance(declarations[0].value, (ast.List, ast.Tuple)):
+            raise RuntimeError("unreviewed later or conflicting core migration: " + path.stem)
+        dependencies = set()
+        for node in declarations:
+            for entry in node.value.elts:
+                if (
+                    isinstance(entry, ast.Tuple) and len(entry.elts) == 2
+                    and isinstance(entry.elts[0], ast.Constant)
+                    and entry.elts[0].value == "core"
+                    and isinstance(entry.elts[1], ast.Constant)
+                    and isinstance(entry.elts[1].value, str)
+                ):
+                    dependencies.add(entry.elts[1].value)
         later_dependencies[path.stem] = dependencies
     blocked_later = set()
     changed = True
