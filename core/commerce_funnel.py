@@ -1,6 +1,12 @@
 """Small, failure-tolerant, privacy-preserving commerce funnel recorder."""
 from __future__ import annotations
 
+import hashlib
+import hmac
+import time
+
+from django.conf import settings
+from django.core.cache import cache
 from django.db import DatabaseError
 
 from .models import CommerceFunnelEvent, Product
@@ -23,6 +29,28 @@ _AUTOMATION_SIGNATURES = (
 )
 
 
+def _observation_dedupe_key(request, event_name: str, product: Product | None) -> str:
+    """Return a short-lived HMAC key for repeated observation requests.
+
+    Raw IP/user-agent values never enter the database or cache key. This is
+    limited to GET/HEAD observation events; invoice, payment and delivery
+    facts are never deduplicated here.
+    """
+    ip = request.META.get("REMOTE_ADDR", "")
+    ua = request.META.get("HTTP_USER_AGENT", "")
+    product_id = getattr(product, "pk", 0) or 0
+    material = "|".join((
+        str(event_name), str(product_id), str(ip)[:120], str(ua)[:300],
+        str(int(time.time() // 900)),
+    ))
+    digest = hmac.new(
+        str(settings.SECRET_KEY).encode("utf-8"),
+        material.encode("utf-8", "replace"),
+        hashlib.sha256,
+    ).hexdigest()
+    return "mpw:funnel:observation:" + digest
+
+
 def _known_automated_observation(request, event_name: str) -> bool:
     if event_name not in _OBSERVATION_EVENTS:
         return False
@@ -42,6 +70,13 @@ def record_funnel_event(request, event_name: str, product: Product | None = None
         return
     if _known_automated_observation(request, event_name):
         return
+    if event_name in _OBSERVATION_EVENTS and getattr(request, "method", "") in ("GET", "HEAD"):
+        try:
+            if not cache.add(_observation_dedupe_key(request, event_name, product), 1, timeout=900):
+                return
+        except Exception:
+            # Telemetry deduplication must never block a storefront or checkout.
+            pass
     try:
         CommerceFunnelEvent.objects.create(
             event_name=event_name,
