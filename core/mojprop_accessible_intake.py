@@ -123,6 +123,18 @@ def _safe_service_prefill(request, *, allow_starter30_post_retry=False):
             "live trade, payment or profit guarantee."
         )
     if service == "signals" and not packages:
+        from services.mojtaba_signal_catalog import PLANS
+
+        plans = request.GET.getlist("plan")
+        if plans and not request.GET.getlist("tier"):
+            if len(plans) == 1 and plans[0] in PLANS:
+                plan = PLANS[plans[0]]
+                return service, (
+                    f"Requested educational plan: {plan.plan_id} "
+                    f"(indicative USD {plan.price_usd:.2f}; written quote required)\n"
+                    f"{plan.description} Please confirm delivery dates, cancellation "
+                    "and payment terms. This is an unpaid request, not a subscription."
+                )
         # This is user-editable suggested copy for a FREE enquiry only.
         # The submitted CRM request still requires explicit consent,
         # real contact details, CSRF, validation and server-side acceptance.
@@ -273,6 +285,17 @@ def request_form(request, *, error=None, status=200):
             'confirmation or download entitlement. Secure store checkout '
             'remains a separate route.</p>'
         )
+    if selected == "signals":
+        from services.mojtaba_signal_catalog import PLANS
+
+        message += '<p>Choose your research plan (indicative price; no charge):</p><ul>'
+        for plan in PLANS.values():
+            message += (
+                '<li><a href="' + ACTION + '&amp;service=signals&amp;plan='
+                + escape(plan.plan_id, quote=True) + '">' + escape(plan.title)
+                + f" — USD {plan.price_usd:.2f}" + '</a></li>'
+            )
+        message += '</ul><p><a href="/commerce/book/1467/">Check one-time Weekly Brief purchase availability</a></p>'
     form = (
         ('<p>Request the free Starter30 written eligibility, risk and payout '
          'conditions before considering any purchase. This does not enroll '
