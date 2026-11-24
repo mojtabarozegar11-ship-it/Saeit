@@ -106,6 +106,44 @@ class NativeTrxReleaseGateTests(unittest.TestCase):
         self.assertFalse(result["ready"])
         self.assertIn("wsgi_effective_app_root_drift", result["error_codes"])
 
+    def test_nested_app_override_fails_closed(self):
+        self.wsgi.write_text(
+            "APP='" + str(self.app) + "'\n"
+            "if True:\n    APP='/other/application'\n",
+            encoding="utf-8",
+        )
+        result = self.check()
+        self.assertFalse(result["ready"])
+        self.assertIn("wsgi_effective_app_root_drift", result["error_codes"])
+
+    def test_augmented_app_override_fails_closed(self):
+        self.wsgi.write_text(
+            "APP='" + str(self.app) + "'\n"
+            "APP += '/other'\n",
+            encoding="utf-8",
+        )
+        result = self.check()
+        self.assertFalse(result["ready"])
+        self.assertIn("wsgi_effective_app_root_drift", result["error_codes"])
+
+    def test_tuple_app_binding_fails_closed(self):
+        self.wsgi.write_text(
+            "APP, other = '" + str(self.app) + "', None\n",
+            encoding="utf-8",
+        )
+        result = self.check()
+        self.assertFalse(result["ready"])
+        self.assertIn("wsgi_effective_app_root_drift", result["error_codes"])
+
+    def test_import_alias_app_binding_fails_closed(self):
+        self.wsgi.write_text(
+            "import os as APP\n",
+            encoding="utf-8",
+        )
+        result = self.check()
+        self.assertFalse(result["ready"])
+        self.assertIn("wsgi_effective_app_root_drift", result["error_codes"])
+
     def test_python_source_symlink_is_not_accepted(self):
         name = "mojplaywin_native_chain_verify.py"
         path = self.scripts / name
