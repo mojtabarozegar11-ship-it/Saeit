@@ -9,7 +9,7 @@ from pathlib import Path
 from django.conf import settings
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 
-from core.financial_brand_pages import BRANDS, SIGNAL_FREE_PREVIEW_PATH, SIGNAL_INTAKE_PATH
+from core.financial_brand_pages import BRANDS, SIGNAL_FREE_PREVIEW_PATH, SIGNAL_INTAKE_PATH, SIGNAL_PAID_URL
 from core.models import MojPropRequest
 
 
@@ -66,7 +66,10 @@ class FreeSignalPageContracts(SimpleTestCase):
                     response = self.client.get(path)
                     self.assertEqual(response.status_code, 200)
                     html = response.content.decode("utf-8")
-                    self.assertEqual(html.count('href="'+html_escape(SIGNAL_INTAKE_PATH, quote=True)+'"'), 2)
+                    paid = SIGNAL_PAID_URL + "?utm_source=financial_subsite&utm_medium=signal_page&utm_campaign=signal_weekly_brief&utm_content=" + slug
+                    self.assertEqual(SIGNAL_PAID_URL, "https://mojplaywin.com/commerce/book/1467/")
+                    self.assertEqual(html.count('href="'+html_escape(paid, quote=True)+'"'), 2)
+                    self.assertEqual(html.count('href="'+html_escape(SIGNAL_INTAKE_PATH, quote=True)+'"'), 1)
                     self.assertEqual(html.count('href="'+SIGNAL_FREE_PREVIEW_PATH+'"'), 1)
                     self.assertIn("mojtaba.bot.ai", html.casefold())
 

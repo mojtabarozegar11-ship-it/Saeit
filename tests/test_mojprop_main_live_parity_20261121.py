@@ -29,8 +29,12 @@ SOURCE_BEFORE_META_BLOB="b6aa56cd16ed43fafadf98e885cde4a6e913b841"
 # Previous within-PR metadata revision exceeded 200-char SEO limit.
 PREVIOUS_META_SOURCE_SHA256="46c6260e62e2a9fe424d7a7dd07752ad7f17342f59b63888fe8f20b7c45da842"
 PREVIOUS_META_SOURCE_BLOB="8736318e3f3473987c711e51bf63b7728edaefd4"
-CURRENT_SOURCE_SHA256="8ad98692e044f178263d69bd2fe3ac422af4cc8046421cdb7f9eee4e95fbfeab"
-CURRENT_SOURCE_BLOB="76ec65ec9ef877d0b2fd9156e5e6895d803807c5"
+# Previous reviewed source, before adding the separate one-time Weekly Brief link.
+PRE_WEEKLY_BRIEF_SOURCE_SHA256="8ad98692e044f178263d69bd2fe3ac422af4cc8046421cdb7f9eee4e95fbfeab"
+PRE_WEEKLY_BRIEF_SOURCE_BLOB="76ec65ec9ef877d0b2fd9156e5e6895d803807c5"
+# Exact source-only delta reviewed by reversing that single link; not live evidence.
+CURRENT_SOURCE_SHA256="fe9bfa09ceb9b6df27cf0b7b8799e1ed9f0799c52b5607ada236da28041d11c3"
+CURRENT_SOURCE_BLOB="cc035333d70ce0008df7d746bc35c8d290e7b7ef"
 # Immutable earlier reviewed candidate (not proof of live deployment).
 CANDIDATE_SHA256="4b00b000ecc971073345aa2ca7baaf6753bf83d9bb5243e4ad1276b7012c13e7"
 CANDIDATE_BLOB="463ebd2dfb5d803cd20ac17f2c53422d36d65ad9"
@@ -69,6 +73,11 @@ class OfficialMojPropLiveParityTests(unittest.TestCase):
         current=PAGE.read_bytes()
         self.assertEqual(hashlib.sha256(current).hexdigest(),CURRENT_SOURCE_SHA256)
         self.assertEqual(hashlib.sha1(b"blob "+str(len(current)).encode()+b"\0"+current).hexdigest(),CURRENT_SOURCE_BLOB)
+        link = '<a class="btn soft" href="/commerce/book/1467/?utm_source=moj_prop_v4&utm_medium=prop_page&utm_campaign=signal_weekly_brief&utm_content=signal_cta">Buy Weekly Brief — $9.90</a>'.encode("utf-8")
+        self.assertEqual(current.count(link), 1)
+        previous = current.replace(link, b"", 1)
+        self.assertEqual(hashlib.sha256(previous).hexdigest(), PRE_WEEKLY_BRIEF_SOURCE_SHA256)
+        self.assertEqual(hashlib.sha1(b"blob "+str(len(previous)).encode()+b"\0"+previous).hexdigest(), PRE_WEEKLY_BRIEF_SOURCE_BLOB)
         # The original reviewed source remains an immutable, private-free fixture.
         b=HISTORICAL_CANDIDATE.read_bytes()
         self.assertEqual(hashlib.sha256(b).hexdigest(),CANDIDATE_SHA256)

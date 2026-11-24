@@ -62,6 +62,7 @@ class CommerceFunnelTests(TestCase):
         self.assertEqual(response.status_code, 200)
         render_view.assert_called_once()
 
+    @override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "mpw-staff-summary-test-isolated"}})
     def test_staff_summary_is_read_only_and_requires_staff(self):
         record_funnel_event(self.client.get("/", HTTP_HOST="mojplaywin.com").wsgi_request, "view_item", self.product)
         self.assertNotEqual(self.client.get("/staff/command-center/api/commerce-funnel/").status_code, 200)
@@ -70,3 +71,5 @@ class CommerceFunnelTests(TestCase):
         response = self.client.get("/staff/command-center/api/commerce-funnel/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["events"]["view_item"], 1)
+        self.assertEqual(self.client.get("/staff/command-center/api/commerce-funnel/").status_code, 200)
+        self.assertEqual(CommerceFunnelEvent.objects.filter(event_name="view_item").count(), 1)
