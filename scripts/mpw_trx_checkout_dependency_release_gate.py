@@ -68,6 +68,8 @@ def _wsgi_targets_expected_app(source: str, expected: str) -> bool:
             bindings += 1
         elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == "APP":
             bindings += 1
+        elif isinstance(node, ast.MatchMapping) and node.rest == "APP":
+            bindings += 1
 
     values = []
     for node in tree.body:
