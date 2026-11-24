@@ -88,6 +88,7 @@ def local_sales_answer(message):
                 "For the one-time MOJ PROP Educational Weekly Brief, use "
                 "https://mojplaywin.com/commerce/book/1467/?utm_source=mojtaba_bot&utm_medium=faq_response&utm_campaign=signal_weekly_brief&utm_content=customer_sales_faq. The trading-signal information page is "
                 f"{MOJ_SIGNALS_URL}. Monthly or quarterly research remains a written-scope request: {MOJ_SIGNALS_REQUEST_URL}. "
+                "A live personalized signal feed or recurring paid subscription has not been verified. "
                 "For your security, do not pay without a valid server invoice."
             )
         return (
