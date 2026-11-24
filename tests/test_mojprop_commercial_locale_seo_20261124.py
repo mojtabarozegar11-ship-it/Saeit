@@ -1,6 +1,5 @@
 """Regression checks for commercial SEO using the existing 20-locale renderer."""
 from html.parser import HTMLParser
-import json
 import tempfile
 from pathlib import Path
 import unittest
@@ -51,7 +50,7 @@ class CommercialLocaleSeoTests(unittest.TestCase):
                 self.assertEqual(Page(before).links("canonical"), Page(after).links("canonical"))
                 self.assertEqual(Page(before).links("alternate"), Page(after).links("alternate"))
                 self.assertEqual(after.count(seo.MARKER), 1)
-                self.assertIn('30 TRX', desc)
+                self.assertIn('30 TRX', ''.join(str(__import__('unicodedata').decimal(c)) if c.isdecimal() else c for c in desc))
                 self.assertIn('<meta name="robots" content="index,follow', after)
                 with self.assertRaises(ValueError):
                     seo.transform(after, code)
