@@ -20,3 +20,7 @@ Change: add leather, family clothing, herbalist, and direct agricultural supply 
 
 Live store theme repair: 538e2debcccc91fd14a05e60c6524c7794a7b224
 Change: add the six specialty storefront cards inside the existing green/gold responsive Zomorod store layout; no replacement template.
+
+Current Moj Prop conversion-lock repair: 38ef7095b762155a5730dc4b0ab132a4453356a
+Change: when Starter30 release is closed, route visitors to the existing MojPlayWin store and live TRX invoice products instead of leaving a dead-end checkout.
+Deployment request date: 2026-11-24 UTC
