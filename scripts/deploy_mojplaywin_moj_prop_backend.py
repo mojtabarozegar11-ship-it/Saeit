@@ -34,9 +34,11 @@ from scripts.mojprop_restore_capacity_admission import require_signed_capacity_r
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
 DOCROOT = Path("/home/zomorod2/mojplaywin.com")
-# Observed in actual owner-only cPanel read-only C118, workflow 43874140514.
-# Source SHA is NOT a guarantee that a live Passenger worker has loaded it.
-REVIEWED_PASSENGER_SHA256 = "83a5309b8712aed5139dc7630724ac150edfb32db852af347d0444506fab2581"
+# Reconfirmed by the owner-only structural Passenger preflight in workflow
+# 45427270226 (2026-11-24). This pins the current launcher bytes while the
+# deploy-time checks below still require an owner-safe regular file and bounded
+# AST-valid application binding; the digest is not a worker-runtime claim.
+REVIEWED_PASSENGER_SHA256 = "a2b14e5dea0607e8a215f222be4e4f68f0c9a73ce4ff9049726387a5d8c4db0f"
 BACKUP_ROOT = Path("/home/zomorod2/.mojplaywin-moj-prop-backups")
 INDEPENDENT_DB_EVIDENCE_ROOT = Path("/home/zomorod2/.mojprop-private-db-restore-evidence")
 URLCONF = Path("config/urls.py")
