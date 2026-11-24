@@ -337,6 +337,7 @@ jobs:
           assert home.count('href="/commerce/book/1467/?utm_source=moj_prop&utm_medium=prop_page&utm_campaign=signal_weekly_brief&utm_content=signal_cta">Buy Weekly Brief — $9.90') == 2
           assert 'href="/commerce/book/1467/">Buy Signal Desk — $9.90' not in home
           print("Moj Prop home contains exactly two reviewed Signal Desk CTAs and no legacy untagged CTA.")
+          PY
           root_status="$(curl --silent --show-error --max-redirs 0 --max-time 25 -o "$RUNNER_TEMP/mojplaywin-root-home.html" -w '%{http_code}' "https://mojplaywin.com/?_mojprop_language_terms=$GITHUB_RUN_ID" || true)"
           [[ "$root_status" == "200" ]]
           python3 - "$RUNNER_TEMP/mojplaywin-root-home.html" <<'PY'
@@ -354,7 +355,6 @@ jobs:
           print("Live root homepage contains localized Prop terms, not language names.")
           PY
           print("Moj Prop catalog is live; MojPlayWin home and admin login still return HTTP 200.")
-          PY
       - name: Roll back localized Prop terms if live verification fails
         if: failure() && steps.home_language.outcome == 'success' && steps.smoke.outcome == 'failure'
         shell: bash
