@@ -87,8 +87,9 @@ def local_sales_answer(message):
             return (
                 "For the MOJ PROP Signal Desk, see the trading-signal information page "
                 f"{MOJ_SIGNALS_URL}. It is reviewable education, not an active checkout. "
-                f"Request terms: {MOJ_SIGNALS_REQUEST_URL}. Payment has not been verified here; "
-                "no invoice or entitlement is created here. Do not pay without a valid server invoice."
+                f"Request terms: {MOJ_SIGNALS_REQUEST_URL}; route: /moj-prop-intake/?format=html&service=signals. "
+                "Payment has not been verified here; no invoice or entitlement is created here. "
+                "do not pay without a valid server invoice."
             )
         return (
             "خرید گزارش هفتگی آموزشی سیگنال: https://mojplaywin.com/commerce/book/1467/. "
