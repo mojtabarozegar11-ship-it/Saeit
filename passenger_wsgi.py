@@ -18,7 +18,12 @@ if os.path.exists(env_path):
             if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
                 value = value[1:-1]
             if key:
-                os.environ.setdefault(key, value)
+                if key.startswith("MPW_MOJPROP_"):
+                    # MojProp release flags must follow this deployed .env,
+                    # not a stale Passenger parent environment.
+                    os.environ[key] = value
+                else:
+                    os.environ.setdefault(key, value)
 
 # Keep the public host policy consistent across the WSGI bootstrap and Django.
 # This only affects host/CSRF admission; it does not enable payments, invoices,
@@ -35,6 +40,8 @@ def _append_csv_env(name, values):
     current = [item.strip() for item in os.environ.get(name, "").split(",") if item.strip()]
     for value in values:
         if value not in current:
+            current.append(value)
+    if value not in current:
             current.append(value)
     if current:
         os.environ[name] = ",".join(current)
