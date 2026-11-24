@@ -24,7 +24,12 @@ from prop_firm.models import (
     PropSimulationInvoiceOwner,
     PropSimulationPayment,
 )
-from prop_firm.simulation_identity_adapter import normalize_email, _identity_keys
+from prop_firm.simulation_identity_adapter import (
+    IdentityAdapterClosed,
+    _identity_keys,
+    normalize_email,
+    register_identity,
+)
 from prop_firm.starter30_receiver_pool import (
     InvoiceAttributionUnavailable,
     attested_receivers,
@@ -137,10 +142,9 @@ def verify_pre_invoice_configuration() -> None:
         _provider_pair()
         _hex_recipient(approved_recipient())
         attested_receivers()
-        # A non-verified anonymous mailbox must never consume a permanent
-        # receiving address, even when all TRON RPC connections work.
-        from prop_firm.starter30_checkout_email import require_email_verification_release
-        require_email_verification_release()
+        # The owner has explicitly chosen not to require mailbox OTP for
+        # checkout. Keep strict email syntax/digest binding below; recovery and
+        # delivery must not treat an unverified address as proof of ownership.
     except (PaymentHold, ValueError, TypeError) as exc:
         raise Starter30PaymentRejected(
             "TRON verification configuration is unavailable; no invoice may be issued"
@@ -163,7 +167,10 @@ def issue_invoice(
     *, email: str, payer_address: str | None = None,
     terms_accepted: bool, email_proof: str = "",
 ) -> IssuedStarter30Invoice:
-    """Allocate an exclusive receiving address only to a verified guest email.
+    """Allocate an exclusive receiving address to a syntax-valid guest email.
+
+    Mailbox OTP is intentionally not required by the current owner policy;
+    the normalized email digest still binds repeat invoices and records.
 
     The email identity row is locked to make repeat issuance idempotent across
     sessions. The DB UNIQUE recipient constraint handles concurrent *different*
@@ -177,15 +184,14 @@ def issue_invoice(
         raise Starter30PaymentRejected(
             "sending TRON wallet is required when one receive-only wallet is used"
         )
-    from prop_firm.starter30_checkout_email import (
-        CheckoutEmailUnavailable, verify_checkout_email_proof,
-    )
+    # ``email_proof`` remains in the signature for compatibility with older
+    # clients, but the owner policy no longer requires mailbox OTP at checkout.
     try:
-        verified_identity_id = verify_checkout_email_proof(email, email_proof)
-    except CheckoutEmailUnavailable as exc:
-        raise Starter30PaymentRejected(str(exc)) from exc
+        normalized = normalize_email(email)
+        identity_id = register_identity(normalized)
+    except IdentityAdapterClosed as exc:
+        raise Starter30PaymentRejected("valid email is required") from exc
     receivers = attested_receivers()
-    normalized = normalize_email(email)
     payer_hex41 = _payer_hex(payer_address) if payer_address and payer_address.strip() else None
     subject_key, email_digest = _identity_keys(normalized)
     for _ in range(min(len(receivers) + 1, 8)):
@@ -196,7 +202,7 @@ def issue_invoice(
                 identity = (
                     PropSimulationIdentity.objects.using(MOJPROP_DB_ALIAS)
                     .select_for_update()
-                    .get(pk=verified_identity_id, provider="email", subject_key=subject_key)
+                    .get(pk=identity_id, provider="email", subject_key=subject_key)
                 )
                 if (
                     identity.email_digest != email_digest
