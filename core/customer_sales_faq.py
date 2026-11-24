@@ -86,7 +86,7 @@ def local_sales_answer(message):
         if re.search(r"\b(signals?|copy trading)\b", text) and not any("\u0600" <= c <= "\u06ff" for c in text):
             return (
                 "For the one-time MOJ PROP Educational Weekly Brief, use "
-                "https://mojplaywin.com/commerce/book/1467/. The Signal Desk page is "
+                "https://mojplaywin.com/commerce/book/1467/?utm_source=mojtaba_bot&utm_medium=faq_response&utm_campaign=signal_weekly_brief&utm_content=customer_sales_faq. The Signal Desk page is "
                 f"{MOJ_SIGNALS_URL}. Monthly or quarterly research remains a written-scope request. "
                 "Do not pay without a valid server invoice."
             )
