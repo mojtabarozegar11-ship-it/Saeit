@@ -144,6 +144,17 @@ class NativeTrxReleaseGateTests(unittest.TestCase):
         self.assertFalse(result["ready"])
         self.assertIn("wsgi_effective_app_root_drift", result["error_codes"])
 
+    def test_mapping_pattern_app_capture_fails_closed(self):
+        self.wsgi.write_text(
+            "APP='" + str(self.app) + "'\n"
+            "match {'x': 1}:\n"
+            "    case {**APP}: pass\n",
+            encoding="utf-8",
+        )
+        result = self.check()
+        self.assertFalse(result["ready"])
+        self.assertIn("wsgi_effective_app_root_drift", result["error_codes"])
+
     def test_python_source_symlink_is_not_accepted(self):
         name = "mojplaywin_native_chain_verify.py"
         path = self.scripts / name
