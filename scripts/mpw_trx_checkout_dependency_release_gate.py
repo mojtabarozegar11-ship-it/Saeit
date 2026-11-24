@@ -59,8 +59,16 @@ def _wsgi_targets_expected_app(source: str, expected: str) -> bool:
             bindings += 1
         elif isinstance(node, ast.arg) and node.arg == "APP":
             bindings += 1
-        elif isinstance(node, ast.alias) and node.asname == "APP":
-            bindings += 1
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                bound_name = alias.asname or alias.name.split(".", 1)[0]
+                if bound_name == "APP":
+                    bindings += 1
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                bound_name = alias.asname or alias.name
+                if bound_name == "APP" or alias.name == "*":
+                    bindings += 1
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if node.name == "APP":
                 bindings += 1
