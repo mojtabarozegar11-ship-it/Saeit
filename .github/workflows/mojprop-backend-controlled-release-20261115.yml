@@ -215,11 +215,17 @@ jobs:
       - name: Deploy Moj Prop intake backend with backup and migration
         id: backend
         shell: bash
+        env:
+          # These are short-lived inputs to the remote process only; neither value is committed or echoed.
+          MOJPROP_APPROVED_RESTORE_CASE_ID: ${{ secrets.MOJPROP_APPROVED_RESTORE_CASE_ID }}
+          MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY: ${{ secrets.MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY }}
+          MOJPROP_PRIVATE_DB_RESTORE_ROOT: /home/zomorod2/.mojprop-private-db-restore-evidence
         run: |
           set -euo pipefail
+          test -n "$MOJPROP_APPROVED_RESTORE_CASE_ID"
+          test -n "$MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY"
           WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
-          timeout 240s ssh -F "$WORK/config" saeit-host \
-            "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_moj_prop_backend.py deploy $GITHUB_RUN_ID $GITHUB_SHA /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
+          printf '%s\n%s\n' "$MOJPROP_APPROVED_RESTORE_CASE_ID" "$MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY" | timeout 240s ssh -F "$WORK/config" saeit-host 'IFS= read -r CASE_ID; IFS= read -r VERIFIER_KEY; export MOJPROP_APPROVED_RESTORE_CASE_ID="$CASE_ID"; export MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY="$VERIFIER_KEY"; export MOJPROP_PRIVATE_DB_RESTORE_ROOT=/home/zomorod2/.mojprop-private-db-restore-evidence; exec python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_moj_prop_backend.py deploy $GITHUB_RUN_ID $GITHUB_SHA /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID'
       - name: Update only /moj-prop/ commercial catalog
         id: deploy
         shell: bash
