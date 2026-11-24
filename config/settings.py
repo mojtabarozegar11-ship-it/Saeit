@@ -148,6 +148,12 @@ MPW_MOJPROP_REWARD_RESERVE_ASSET = env(
     "MPW_MOJPROP_REWARD_RESERVE_ASSET", default=""
 )
 
+# Profit payouts are owner-executed manually; the application records eligibility
+# and TXIDs but never imports a private key or broadcasts a payout.
+MPW_MOJPROP_REWARD_SETTLEMENT_MODE = env(
+    "MPW_MOJPROP_REWARD_SETTLEMENT_MODE", default="manual_owner"
+)
+
 # Owner-attested commercial admission evidence. Values are never rendered.
 MPW_MOJPROP_PAID_RULES_FINALLY_APPROVED = env.bool(
     "MPW_MOJPROP_PAID_RULES_FINALLY_APPROVED", default=False
