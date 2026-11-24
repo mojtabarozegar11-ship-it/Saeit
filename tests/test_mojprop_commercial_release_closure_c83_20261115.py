@@ -149,6 +149,27 @@ class CommercialBackendClosureTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "conflicting core migration"):
             check_schema_closure(self.live, SOURCE)
 
+    def test_explicit_independent_owner_parent_is_preserved(self):
+        path = self.live / "core/migrations/0041_factorymarketeligibility.py"
+        path.write_text(
+            "class Migration:\n    dependencies = [('core', '0040_commercefunnelevent')]\n",
+            encoding="utf-8",
+        )
+        before = path.read_bytes()
+        self.assertFalse(check_schema_closure(self.live, SOURCE)["manual_deploy_authorized"])
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_unknown_empty_or_computed_core_parent_is_denied(self):
+        path = self.live / "core/migrations/0049_unknown.py"
+        for expression in ("[]", "()", "get_dependencies()", "[('other', '0001_initial')]"):
+            with self.subTest(expression=expression):
+                path.write_text(
+                    "class Migration:\n    dependencies = " + expression + "\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(RuntimeError, "unreviewed later"):
+                    check_schema_closure(self.live, SOURCE)
+
     def test_production_migration_targets_exact_reviewed_core_head(self):
         """Guard migration target against current graph without stale literals."""
         body = (SOURCE / "scripts/deploy_mojplaywin_moj_prop_backend.py").read_text(
