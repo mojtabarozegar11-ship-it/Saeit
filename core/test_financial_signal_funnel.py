@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from django.test import SimpleTestCase, override_settings
 
-from core.financial_brand_pages import BRANDS, SIGNAL_INTAKE_PATH
+from core.financial_brand_pages import BRANDS, SIGNAL_INTAKE_PATH, SIGNAL_PAID_URL
 
 PUBLIC_STATIC_ROOT = Path(__file__).resolve().parents[1] / "templates"
 CATALOG = PUBLIC_STATIC_ROOT / "moj-prop-v4/catalog/index.html"
@@ -14,6 +14,14 @@ LOCAL_SIGNAL_INTAKE = "/moj-prop/?service=signals#request"
 
 
 class FinancialBrandSignalFunnelTests(SimpleTestCase):
+    def assert_canonical_signal_destinations(self, html, slug):
+        self.assertEqual(SIGNAL_PAID_URL, "https://mojplaywin.com/commerce/book/1467/")
+        paid = SIGNAL_PAID_URL + "?utm_source=financial_subsite&utm_medium=signal_page&utm_campaign=signal_weekly_brief&utm_content=" + slug
+        self.assertEqual(html.count('href="' + html_escape(paid, quote=True) + '"'), 2)
+        self.assertEqual(html.count('href="' + html_escape(SIGNAL_INTAKE_PATH, quote=True) + '"'), 1)
+        self.assertNotIn('href="/commerce/book/1467/', html)
+        self.assertIn('href="https://mojplaywin.com/mojtaba.bot.ai/"', html)
+
     def test_canonical_inquiry_is_absolute_on_cross_domain_subsites(self):
         # The branded pages are shared across many independently hosted
         # domains. A relative /moj-prop/ link would resolve to the wrong host.
@@ -47,7 +55,7 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
             with self.subTest(hostname=hostname):
                 self.assertEqual(response.status_code, 200)
                 html = response.content.decode("utf-8")
-                self.assertEqual(html.count('href="' + html_escape(SIGNAL_INTAKE_PATH, quote=True) + '"'), 2)
+                self.assert_canonical_signal_destinations(html, "saman")
                 self.assertNotIn('href="/moj-prop/?service=signals#request"', html)
                 self.assertNotIn('href="/commerce/"', html)
 
@@ -72,7 +80,7 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
                 response = self.client.get(f"/{slug}/market-signals/")
                 self.assertEqual(response.status_code, 200)
                 html = response.content.decode("utf-8")
-                self.assertEqual(html.count(html_escape(SIGNAL_INTAKE_PATH, quote=True)), 2)
+                self.assert_canonical_signal_destinations(html, slug)
                 self.assertIn("mojtaba.bot.ai", html.casefold())
                 self.assertNotIn('href="/store/"', html)
                 self.assertNotIn('href="/commerce/"', html)
@@ -83,7 +91,7 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
                 response = self.client.get(f"/ar/{slug}/market-signals/")
                 self.assertEqual(response.status_code, 200)
                 html = response.content.decode("utf-8")
-                self.assertEqual(html.count(html_escape(SIGNAL_INTAKE_PATH, quote=True)), 2)
+                self.assert_canonical_signal_destinations(html, slug)
                 self.assertIn("mojtaba.bot.ai", html.casefold())
 
     def test_store_subsite_keeps_its_store_destination(self):
