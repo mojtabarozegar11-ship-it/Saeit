@@ -123,8 +123,28 @@ jobs:
           [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/)" == "200" ]]
           [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/admin/login/)" == "200" ]]
           WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
-          timeout 45s ssh -F "$WORK/config" saeit-host \
-            'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -d /home/zomorod2/Saeit-staging && test ! -L /home/zomorod2/Saeit-staging && grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/Saeit-staging/config/urls.py'
+          timeout 45s ssh -F "$WORK/config" saeit-host 'bash -s' <<'REMOTE_PREFLIGHT'
+          set -u
+          check() {
+            label="$1"
+            shift
+            if "$@"; then
+              echo "MOJPROP_PREFLIGHT_${label}=PASS"
+            else
+              echo "MOJPROP_PREFLIGHT_${label}=FAIL"
+              exit 1
+            fi
+          }
+          check PUBLIC_DIR test -d /home/zomorod2/mojplaywin.com
+          check PUBLIC_NOT_SYMLINK test ! -L /home/zomorod2/mojplaywin.com
+          check PASSENGER_WSGI test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py
+          check HTACCESS test -f /home/zomorod2/mojplaywin.com/.htaccess
+          check STAGING_DIR test -d /home/zomorod2/Saeit-staging
+          check STAGING_NOT_SYMLINK test ! -L /home/zomorod2/Saeit-staging
+          check WSGI_REFERENCES_STAGING grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py
+          check STAGING_URLS test -f /home/zomorod2/Saeit-staging/config/urls.py
+          echo "MOJPROP_PREFLIGHT_ALL_REQUIRED_PATHS=PASS"
+          REMOTE_PREFLIGHT
           timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
       - name: Package only Moj Prop installer and page
         run: tar -cf "$RUNNER_TEMP/moj-prop-catalog.tar" scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py scripts/mojprop_schema_preflight_c83.py scripts/fixtures/mojprop_legacy_request_source_c84.py scripts/fixtures/mojprop_legacy_admin_source_c84.py scripts/mojprop_db_release_evidence.py scripts/mojprop_restore_capacity_admission.py scripts/mojprop_live_database_identity_c85.py templates/moj-prop-v4 templates/moj-prop/payment/index.html config/urls.py core/models.py core/admin.py core/mojprop_accessible_intake.py core/mojprop_views.py core/mojprop_receipts.py core/mojprop_catalog_contract.py core/mojprop_workflow.py core/mojprop_offer_draft.py core/mojprop_quote_contract.py core/mojprop_quote_views.py core/management/commands/mojprop_sales_action_queue.py core/migrations/0041_mojprop_request.py core/migrations/0042_mojprop_offer.py core/migrations/0043_mojprop_digital_inquiry.py core/migrations/0044_mojprop_acceptance_evidence.py core/migrations/0045_mojprop_delivery_evidence.py core/signal_free_models.py core/guest_recovery_models.py core/signal_free_views.py core/migrations/0046_signal_free_subscription.py core/migrations/0047_mpw_guest_email_recovery.py config/settings.py
