@@ -14,7 +14,6 @@ import argparse
 import ast
 import hashlib
 import json
-import re
 from pathlib import Path
 from typing import Mapping
 
@@ -36,6 +35,40 @@ REQUIRED_SYMBOLS = {
     "mojplaywin_direct_wallet_rates.py": {"fetch_fresh_rates", "RateFeedUnavailable"},
 }
 MAX_SOURCE_BYTES = 256 * 1024
+
+
+def _wsgi_targets_expected_app(source: str, expected: str) -> bool:
+    """Parse top-level APP assignments without executing Passenger code.
+
+    Exactly one literal string assignment is accepted. Duplicate, computed,
+    nested, or otherwise ambiguous assignments fail closed because Passenger
+    could use a different application root than the one being audited.
+    """
+    try:
+        tree = ast.parse(source, filename="passenger_wsgi.py")
+    except SyntaxError:
+        return False
+
+    values = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        else:
+            continue
+        if any(isinstance(target, ast.Name) and target.id == "APP"
+               for target in targets):
+            values.append(node.value)
+
+    if len(values) != 1:
+        return False
+    value = values[0]
+    return (
+        isinstance(value, ast.Constant)
+        and type(value.value) is str
+        and value.value == expected
+    )
 
 
 def audit(
@@ -61,12 +94,7 @@ def audit(
     else:
         try:
             text = wsgi.read_text(encoding="utf-8")
-            # Require exactly one pinned APP assignment. No import or execution
-            # of Passenger configuration from the release audit.
-            assignments = re.findall(
-                r"(?m)^APP\s*=\s*['\"]([^'\"]+)['\"]\s*$", text
-            )
-            if assignments != [str(app_root)]:
+            if not _wsgi_targets_expected_app(text, str(app_root)):
                 errors.append("wsgi_effective_app_root_drift")
         except (OSError, UnicodeError):
             errors.append("wsgi_unreadable")
