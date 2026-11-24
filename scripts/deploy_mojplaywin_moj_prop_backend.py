@@ -301,6 +301,8 @@ def patch_models(target: Path, source: Path) -> None:
     if "class MojPropRequest(" in live and not legacy:
         print("MOJ_PROP_MODEL_ALREADY_PATCHED")
         return
+    snapshot = ""
+    suffix = False
     if legacy:
         root = source.parents[1]
         if not has_reviewed_legacy_suffix(ROOT, root, "core/models.py"):
@@ -308,9 +310,8 @@ def patch_models(target: Path, source: Path) -> None:
         snapshot = (root / LEGACY_BASELINES["core/models.py"]).read_text(
             encoding="utf-8"
         ).rstrip()
-        if live.rstrip().endswith(snapshot):
-            live = live.rstrip()[:-len(snapshot)]
-        else:
+        suffix = live.rstrip().endswith(snapshot)
+        if not suffix:
             print("MOJ_PROP_REVIEWED_LEGACY_MODEL_IN_PLACE=TRUE")
     marker = "\nclass MojPropRequest("
     start = staged.find(marker)
@@ -319,17 +320,14 @@ def patch_models(target: Path, source: Path) -> None:
     block = staged[start + 1 :].rstrip() + "\n"
     if "class T(" not in live or "from django.db import models" not in live:
         raise RuntimeError("live models file has no safe additive-model anchors")
-    if legacy and "class MojPropRequest(" in live and "class MojPropOffer(" not in live:
-        if live.rstrip().endswith(snapshot):
-            live = live.rstrip()[:-len(snapshot)]
-            mode = stat.S_IMODE(target.stat().st_mode)
-            atomic_write_text(target, live.rstrip() + "\n\n" + block, mode)
-        else:
-            mode = stat.S_IMODE(target.stat().st_mode)
-            atomic_write_text(target, _replace_class_in_place(live, "MojPropRequest", block), mode)
+    if legacy and not suffix:
+        updated = _replace_class_in_place(live, "MojPropRequest", block)
+    elif legacy and suffix:
+        updated = live.rstrip()[:-len(snapshot)].rstrip() + "\n\n" + block
     else:
-        mode = stat.S_IMODE(target.stat().st_mode)
-        atomic_write_text(target, live.rstrip() + "\n\n" + block, mode)
+        updated = live.rstrip() + "\n\n" + block
+    mode = stat.S_IMODE(target.stat().st_mode)
+    atomic_write_text(target, updated, mode)
     print("MOJ_PROP_MODEL_PATCH=PASS")
 
 
@@ -343,6 +341,8 @@ def patch_admin(target: Path, source: Path) -> None:
     if "class MojPropRequestAdmin(" in live and not legacy:
         print("MOJ_PROP_ADMIN_ALREADY_PATCHED")
         return
+    snapshot = ""
+    suffix = False
     if legacy:
         root = source.parents[1]
         if not has_reviewed_legacy_suffix(ROOT, root, "core/admin.py"):
@@ -350,9 +350,8 @@ def patch_admin(target: Path, source: Path) -> None:
         snapshot = (root / LEGACY_BASELINES["core/admin.py"]).read_text(
             encoding="utf-8"
         ).rstrip()
-        if live.rstrip().endswith(snapshot):
-            live = live.rstrip()[:-len(snapshot)]
-        else:
+        suffix = live.rstrip().endswith(snapshot)
+        if not suffix:
             print("MOJ_PROP_REVIEWED_LEGACY_ADMIN_IN_PLACE=TRUE")
     # Source main includes the complete commercial model import; a strict
     # equality test for the old one-model import prevented every fresh setup.
@@ -363,17 +362,16 @@ def patch_admin(target: Path, source: Path) -> None:
     block = staged[start + 1 :].rstrip() + "\n"
     if "from django.contrib import admin" not in live or "ModelAdmin" not in live:
         raise RuntimeError("live admin file has no safe additive-admin anchors")
-    if legacy and "class MojPropRequestAdmin(" in live and "class MojPropOfferAdmin(" not in live:
-        if live.rstrip().endswith(snapshot):
-            mode = stat.S_IMODE(target.stat().st_mode)
-            atomic_write_text(target, live.rstrip()[:-len(snapshot)].rstrip() + "\n\n" + block, mode)
-        else:
-            mode = stat.S_IMODE(target.stat().st_mode)
-            atomic_write_text(target, _replace_class_in_place(live, "MojPropRequestAdmin", block), mode)
+    if legacy and not suffix:
+        updated = _replace_class_in_place(live, "MojPropRequestAdmin", block)
+    elif legacy and suffix:
+        updated = live.rstrip()[:-len(snapshot)].rstrip() + "\n\n" + block
     else:
-        mode = stat.S_IMODE(target.stat().st_mode)
-        atomic_write_text(target, live.rstrip() + "\n\n" + block, mode)
+        updated = live.rstrip() + "\n\n" + block
+    mode = stat.S_IMODE(target.stat().st_mode)
+    atomic_write_text(target, updated, mode)
     print("MOJ_PROP_ADMIN_PATCH=PASS")
+
 
 def _declared_url_routes(source: str) -> dict[str, str]:
     """Bind actual urlpatterns routes to view names, not misleading text."""
