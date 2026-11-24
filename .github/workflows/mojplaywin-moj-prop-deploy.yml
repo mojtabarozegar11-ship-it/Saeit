@@ -20,6 +20,7 @@ on:
       - "core/migrations/0041_mojprop_request.py"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
       - "scripts/patch_mojplaywin_moj_prop_home_cta.py"
+      - "scripts/patch_mojprop_home_language_terms_20261124.py"
   push:
     branches: [main]
     paths:
@@ -40,6 +41,7 @@ on:
       - "core/migrations/0041_mojprop_request.py"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
       - "scripts/patch_mojplaywin_moj_prop_home_cta.py"
+      - "scripts/patch_mojprop_home_language_terms_20261124.py"
   workflow_dispatch:
     inputs:
       owner_approved_static_release:
@@ -67,7 +69,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate Moj Prop catalog update payload and installer
         run: |
-          python3 -m py_compile scripts/update_mojplaywin_moj_prop_catalog.py scripts/patch_mojplaywin_moj_prop_home_cta.py scripts/deploy_mojplaywin_moj_prop_backend.py core/mojprop_catalog_contract.py core/mojprop_offer_draft.py core/mojprop_workflow.py
+          python3 -m py_compile scripts/update_mojplaywin_moj_prop_catalog.py scripts/patch_mojplaywin_moj_prop_home_cta.py scripts/patch_mojprop_home_language_terms_20261124.py scripts/deploy_mojplaywin_moj_prop_backend.py core/mojprop_catalog_contract.py core/mojprop_offer_draft.py core/mojprop_workflow.py
           python3 -m unittest discover -s tests -p test_mojprop_commercial_samples_release.py -q
           python3 -m unittest discover -s tests -p test_mojprop_backend_receipts_release_20261115.py -v
           python3 -m unittest discover -s tests -p test_mojprop_direct_support_fallback_c134_20261116.py -q
@@ -152,7 +154,7 @@ jobs:
             'for p in /home/zomorod2/mojplaywin.com /home/zomorod2/Saeit-staging; do if test -L "$p"; then echo "LIVE_PREFLIGHT_SYMLINK=$p"; elif test -d "$p"; then echo "LIVE_PREFLIGHT_DIRECTORY=$p"; else echo "LIVE_PREFLIGHT_MISSING=$p"; fi; done; for p in /home/zomorod2/mojplaywin.com/passenger_wsgi.py /home/zomorod2/mojplaywin.com/.htaccess /home/zomorod2/Saeit-staging/config/urls.py; do if test -f "$p"; then echo "LIVE_PREFLIGHT_FILE=$p"; else echo "LIVE_PREFLIGHT_MISSING_FILE=$p"; fi; done; if grep -Fq "from config.wsgi import application" /home/zomorod2/mojplaywin.com/passenger_wsgi.py; then echo LIVE_PREFLIGHT_WSGI_HAS_SAEIT_STAGING=yes; else echo LIVE_PREFLIGHT_WSGI_HAS_SAEIT_STAGING=no; fi; test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -d /home/zomorod2/Saeit-staging && test ! -L /home/zomorod2/Saeit-staging && grep -Fq "from config.wsgi import application" /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/Saeit-staging/config/urls.py'
           timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
       - name: Package only static Moj Prop commercial deliverables
-        run: tar -cf "$RUNNER_TEMP/moj-prop-catalog.tar" scripts/update_mojplaywin_moj_prop_catalog.py scripts/patch_mojplaywin_moj_prop_home_cta.py templates/moj-prop-v4
+        run: tar -cf "$RUNNER_TEMP/moj-prop-catalog.tar" scripts/update_mojplaywin_moj_prop_catalog.py scripts/patch_mojplaywin_moj_prop_home_cta.py scripts/patch_mojprop_home_language_terms_20261124.py templates/moj-prop-v4
       - name: Upload isolated Moj Prop package
         shell: bash
         run: |
@@ -242,6 +244,14 @@ jobs:
           WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
           timeout 60s ssh -F "$WORK/config" saeit-host \
             "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/patch_mojplaywin_moj_prop_home_cta.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Replace only visible Moj Prop language names with localized Prop terms
+        id: home_language
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
+          timeout 60s ssh -F "$WORK/config" saeit-host \
+            "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/patch_mojprop_home_language_terms_20261124.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
       - name: Verify Moj Prop catalog and preserve root and admin
         id: smoke
         shell: bash
@@ -327,8 +337,32 @@ jobs:
           assert home.count('href="/commerce/book/1467/?utm_source=moj_prop&utm_medium=prop_page&utm_campaign=signal_weekly_brief&utm_content=signal_cta">Buy Weekly Brief — $9.90') == 2
           assert 'href="/commerce/book/1467/">Buy Signal Desk — $9.90' not in home
           print("Moj Prop home contains exactly two reviewed Signal Desk CTAs and no legacy untagged CTA.")
+          root_status="$(curl --silent --show-error --max-redirs 0 --max-time 25 -o "$RUNNER_TEMP/mojplaywin-root-home.html" -w '%{http_code}' "https://mojplaywin.com/?_mojprop_language_terms=$GITHUB_RUN_ID" || true)"
+          [[ "$root_status" == "200" ]]
+          python3 - "$RUNNER_TEMP/mojplaywin-root-home.html" <<'PY'
+          import re, sys
+          from pathlib import Path
+          root = Path(sys.argv[1]).read_text(encoding="utf-8")
+          match = re.search(r'<nav class="mpw-mojprop-language-links" aria-label="MOJ PROP language editions">.*?</nav>', root, re.S)
+          assert match
+          block = match.group(0)
+          assert '<span>MOJ PROP:</span>' in block
+          assert 'MOJ PROP in 20 languages:' not in block
+          assert block.count('<a ') == 20
+          for term in ("Prop", "普罗普", "प्रॉप", "بروب", "প্রপ", "پراپ", "Проп", "プロップ", "ప్రాప్"):
+              assert f'>{term}</a>' in block
+          print("Live root homepage contains localized Prop terms, not language names.")
+          PY
           print("Moj Prop catalog is live; MojPlayWin home and admin login still return HTTP 200.")
           PY
+      - name: Roll back localized Prop terms if live verification fails
+        if: failure() && steps.home_language.outcome == 'success' && steps.smoke.outcome == 'failure'
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
+          timeout 60s ssh -F "$WORK/config" saeit-host \
+            "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/patch_mojprop_home_language_terms_20261124.py rollback $GITHUB_RUN_ID"
       - name: Roll back home CTA if live verification fails
         if: failure() && steps.home_cta.outcome == 'success' && steps.smoke.outcome == 'failure'
         shell: bash
