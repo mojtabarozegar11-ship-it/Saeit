@@ -141,7 +141,40 @@ jobs:
           check HTACCESS test -f /home/zomorod2/mojplaywin.com/.htaccess
           check STAGING_DIR test -d /home/zomorod2/Saeit-staging
           check STAGING_NOT_SYMLINK test ! -L /home/zomorod2/Saeit-staging
-          check WSGI_REFERENCES_STAGING grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py
+          python3 - <<'PY'
+          import ast
+          import hashlib
+          from pathlib import Path
+          entry = Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py")
+          data = entry.read_bytes()
+          tree = ast.parse(data.decode("utf-8"), mode="exec")
+          application_binding = any(
+              isinstance(node, (ast.Assign, ast.AnnAssign)) and any(
+                  isinstance(target, ast.Name) and target.id == "application"
+                  for target in (
+                      node.targets if isinstance(node, ast.Assign) else [node.target]
+                  )
+              )
+              for node in tree.body
+          ) or any(
+              isinstance(node, ast.ImportFrom) and any(
+                  (alias.name == "application" and alias.asname is None)
+                  or alias.asname == "application"
+                  for alias in node.names
+              )
+              for node in tree.body
+          )
+          strings = [
+              node.value for node in ast.walk(tree)
+              if isinstance(node, ast.Constant) and type(node.value) is str
+          ]
+          print("MOJPROP_PASSENGER_ENTRY_SHA256=" + hashlib.sha256(data).hexdigest())
+          print("MOJPROP_PASSENGER_ENTRY_AST=PASS")
+          print("MOJPROP_PASSENGER_APPLICATION_BINDING=" + ("PASS" if application_binding else "FAIL"))
+          print("MOJPROP_PASSENGER_STAGING_TOKEN=" + ("PRESENT" if any("Saeit-staging" in value for value in strings) else "ABSENT"))
+          if not application_binding:
+              raise SystemExit("Passenger application binding missing")
+          PY
           check STAGING_URLS test -f /home/zomorod2/Saeit-staging/config/urls.py
           echo "MOJPROP_PREFLIGHT_ALL_REQUIRED_PATHS=PASS"
           REMOTE_PREFLIGHT
