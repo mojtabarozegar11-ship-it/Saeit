@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from django.core.cache import cache
 
 from command_center.commerce_funnel import commerce_funnel_api
 from core.commerce_funnel import record_funnel_event
@@ -9,6 +10,7 @@ from core.models import CommerceFunnelEvent, Product
 @override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com"])
 class CommerceFunnelTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.product = Product.objects.create(
             title="Test product", product_type="digital", price="4.00",
             currency="USD", active=True,
