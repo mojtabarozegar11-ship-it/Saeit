@@ -85,13 +85,14 @@ def local_sales_answer(message):
     if signals:
         if re.search(r"\b(signals?|copy trading)\b", text) and not any("\u0600" <= c <= "\u06ff" for c in text):
             return (
-                "For the MOJ PROP trading-signal information page, see "
-                f"{MOJ_SIGNALS_URL}. Request free written scope: {MOJ_SIGNALS_REQUEST_URL}. Live subscription availability, performance and "
-                "delivery have not been verified here; do not pay without a valid server invoice."
+                "For the one-time MOJ PROP Educational Weekly Brief, use "
+                "https://mojplaywin.com/commerce/book/1467/. The Signal Desk page is "
+                f"{MOJ_SIGNALS_URL}. Monthly or quarterly research remains a written-scope request. "
+                "Do not pay without a valid server invoice."
             )
         return (
-            f"اطلاعات خدمات سیگنال معاملاتی: {MOJ_SIGNALS_URL}. درخواست رایگان پیشنهاد کتبی: {MOJ_SIGNALS_REQUEST_URL}. "
-            "فعال‌بودن اشتراک، نتایج معاملات و تحویل سرویس در این پاسخ تأیید نمی‌شود. "
+            "خرید گزارش هفتگی آموزشی سیگنال: https://mojplaywin.com/commerce/book/1467/. "
+            f"صفحهٔ سیگنال: {MOJ_SIGNALS_URL}. اشتراک ماهانه یا فصلی هنوز نیازمند پیشنهاد کتبی است. "
             "بدون فاکتور معتبر سرور پرداخت نکنید."
         )
     if store:
