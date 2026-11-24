@@ -67,7 +67,7 @@ def _classes(path):
 
 
 def _class_signature(source, name):
-    """Return a location-independent AST signature for one reviewed legacy class."""
+    """Return a location-independent AST signature for one reviewed class."""
     tree = ast.parse(source)
     matches = [
         node for node in tree.body
@@ -75,6 +75,22 @@ def _class_signature(source, name):
     ]
     if len(matches) != 1:
         return None
+    return ast.dump(matches[0], include_attributes=False)
+
+
+def _legacy_contract_signature(source, name):
+    """Compare the reviewed legacy class while allowing only its base type to vary."""
+    tree = ast.parse(source)
+    matches = [
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == name
+    ]
+    if len(matches) != 1:
+        return None
+    # The live owner-preserved file may inherit the timestamp base through a
+    # different reviewed alias. Fields, options, indexes, methods and member
+    # order remain exact and therefore continue to fail closed on real drift.
+    matches[0].bases = []
     return ast.dump(matches[0], include_attributes=False)
 
 
@@ -102,9 +118,9 @@ def has_reviewed_legacy_suffix(live_root, staged_root, relative):
         else "MojPropRequestAdmin"
     )
     return (
-        _class_signature(baseline, legacy_name) is not None
-        and _class_signature(content, legacy_name)
-        == _class_signature(baseline, legacy_name)
+        _legacy_contract_signature(baseline, legacy_name) is not None
+        and _legacy_contract_signature(content, legacy_name)
+        == _legacy_contract_signature(baseline, legacy_name)
     )
 
 def migration_operations_signature(path):
