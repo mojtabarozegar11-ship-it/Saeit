@@ -193,18 +193,19 @@ class VerifiedPreinvoiceEmailTests(SimpleTestCase):
         self.assertNotIn('"email":', source)
         self.assertNotIn('"wallet":', source)
 
-    def test_invoice_creation_requires_signed_verified_mailbox(self):
+    def test_invoice_creation_keeps_server_side_identity_and_recipient_safety(self):
         source = inspect.getsource(starter30_live.issue_invoice)
-        self.assertIn("verify_checkout_email_proof(email, email_proof)", source)
+        self.assertNotIn("verify_checkout_email_proof(email, email_proof)", source)
         self.assertIn("select_for_update()", source)
         self.assertIn("previous = (", source)
         self.assertIn("previous.recipient", source)
         self.assertIn("except ValidationError", source)
         self.assertIn("recipient=recipient", source)
+        self.assertIn("finalized on-chain", source)
 
-    def test_live_checkout_wires_otp_before_invoice(self):
-        source = inspect.getsource(starter30_views.starter30_checkout)
-        self.assertIn('action == "request_email_code"', source)
-        self.assertIn('action == "verify_email_code"', source)
-        self.assertIn("email_proof=request.session.get(_EMAIL_PROOF_SESSION", source)
-        self.assertIn("request.session.cycle_key()", source)
+    def test_live_checkout_uses_simple_guest_form_without_mailbox_otp(self):
+        source = inspect.getsource(starter30_views._email_forms)
+        self.assertIn("syntax-valid email only", source)
+        self.assertIn("no verification code is required", source)
+        self.assertNotIn("request_email_code", source)
+        self.assertNotIn("Email a one-time verification code", source)
