@@ -238,12 +238,19 @@ def check_schema_closure(live_root, staged_root):
                     )
                 )
                 live_members = ",".join(
-                    node.name for node in live_node.body
-                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Assign))
-                    and (
-                        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                        or any(isinstance(target, ast.Name) for target in node.targets)
+                    (
+                        node.name
+                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        else next(
+                            (
+                                target.id for target in node.targets
+                                if isinstance(target, ast.Name)
+                            ),
+                            "assign",
+                        )
                     )
+                    for node in live_node.body
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Assign))
                 )
                 raise RuntimeError(
                     "partial Moj Prop " + label +
