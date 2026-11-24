@@ -7,6 +7,8 @@ modify any file, import Django, or bypass any checkout security requirement.
 
 The three pinned sources are stored in the OWNER'S PRIVATE gateway vault,
 not in the public Saeit checkout repository.
+
+This gate remains read-only and fail-closed; the release decision is evidence-only.
 """
 from __future__ import annotations
 
@@ -14,7 +16,6 @@ import argparse
 import ast
 import hashlib
 import json
-import re
 from pathlib import Path
 from typing import Mapping
 
@@ -36,6 +37,72 @@ REQUIRED_SYMBOLS = {
     "mojplaywin_direct_wallet_rates.py": {"fetch_fresh_rates", "RateFeedUnavailable"},
 }
 MAX_SOURCE_BYTES = 256 * 1024
+
+
+def _wsgi_targets_expected_app(source: str, expected: str) -> bool:
+    """Parse WSGI source without executing it and reject every APP override.
+
+    Passenger must not be allowed to select a different root through a nested
+    assignment, augmented assignment, tuple binding, import alias, function or
+    class binding, or any other statically visible APP binding.
+    """
+    try:
+        tree = ast.parse(source, filename="passenger_wsgi.py")
+    except SyntaxError:
+        return False
+
+    bindings = 0
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Name)
+            and node.id == "APP"
+            and isinstance(node.ctx, (ast.Store, ast.Del))
+        ):
+            bindings += 1
+        elif isinstance(node, ast.arg) and node.arg == "APP":
+            bindings += 1
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                bound_name = alias.asname or alias.name.split(".", 1)[0]
+                if bound_name == "APP":
+                    bindings += 1
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                bound_name = alias.asname or alias.name
+                if bound_name == "APP" or alias.name == "*":
+                    bindings += 1
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == "APP":
+                bindings += 1
+        elif isinstance(node, ast.ExceptHandler) and node.name == "APP":
+            bindings += 1
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == "APP":
+            bindings += 1
+        elif isinstance(node, ast.MatchMapping) and node.rest == "APP":
+            bindings += 1
+
+    values = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        else:
+            continue
+        if any(
+            isinstance(target, ast.Name) and target.id == "APP"
+            for target in targets
+        ):
+            values.append(node.value)
+
+    if bindings != 1 or len(values) != 1:
+        return False
+    value = values[0]
+    return (
+        isinstance(value, ast.Constant)
+        and type(value.value) is str
+        and value.value == expected
+    )
 
 
 def audit(
@@ -61,12 +128,7 @@ def audit(
     else:
         try:
             text = wsgi.read_text(encoding="utf-8")
-            # Require exactly one pinned APP assignment. No import or execution
-            # of Passenger configuration from the release audit.
-            assignments = re.findall(
-                r"(?m)^APP\s*=\s*['\"]([^'\"]+)['\"]\s*$", text
-            )
-            if assignments != [str(app_root)]:
+            if not _wsgi_targets_expected_app(text, str(app_root)):
                 errors.append("wsgi_effective_app_root_drift")
         except (OSError, UnicodeError):
             errors.append("wsgi_unreadable")
