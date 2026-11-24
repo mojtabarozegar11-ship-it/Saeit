@@ -119,6 +119,14 @@ def has_reviewed_legacy_suffix(live_root, staged_root, relative):
     content = live.read_text(encoding="utf-8").rstrip()
     if bool(baseline) and content.endswith(baseline):
         return True
+    # Do not misclassify a byte-identical legacy block with an unknown
+    # comment-only suffix as the separate in-place class-upgrade case.
+    # That fallback exists for genuinely distinct neighboring Python code.
+    if baseline and content.count(baseline) == 1:
+        trailing = content.split(baseline, 1)[1].strip()
+        if trailing and all(not line.strip() or line.lstrip().startswith("#")
+                            for line in trailing.splitlines()):
+            return False
     # Some owner-preserved files contain unrelated classes after the reviewed
     # C84 block.  Permit only an exact AST match of the single legacy class;
     # the installer replaces that class in place and preserves all neighbours.
