@@ -9,6 +9,7 @@ from scripts.mpw_trx_checkout_dependency_release_gate import (
     audit,
 )
 
+
 SOURCE = {
     "mojplaywin_native_chain_verify.py":
         b"def tron_address_to_hex(address):\n    return address\n"
@@ -46,50 +47,76 @@ class NativeTrxReleaseGateTests(unittest.TestCase):
         self.assertEqual(len(result["checked_source_hashes"]), 3)
 
     def test_prod_pinned_real_hashes_are_immutable(self):
-        self.assertEqual(PINNED_SHA256["mojplaywin_direct_wallet_rates.py"],
-                         "290eae3ed4669a8bb4b98fdcaafca469b37d19bc8a49acded133db46f467264c")
+        self.assertEqual(
+            PINNED_SHA256["mojplaywin_direct_wallet_rates.py"],
+            "290eae3ed4669a8bb4b98fdcaafca469b37d19bc8a49acded133db46f467264c",
+        )
         self.assertEqual(len(PINNED_SHA256), 3)
 
     def test_missing_module_fails_closed(self):
         for name in self.expected:
             with self.subTest(module=name):
-                p = self.scripts / name
-                saved = p.read_bytes()
-                p.unlink()
-                r = self.check()
-                self.assertFalse(r["ready"])
-                self.assertIn("missing_or_symlink:" + name, r["error_codes"])
-                p.write_bytes(saved)
+                path = self.scripts / name
+                saved = path.read_bytes()
+                path.unlink()
+                result = self.check()
+                self.assertFalse(result["ready"])
+                self.assertIn("missing_or_symlink:" + name, result["error_codes"])
+                path.write_bytes(saved)
 
     def test_replaced_or_incomplete_module_fails_closed(self):
         name = "mojplaywin_direct_wallet_rates.py"
-        p = self.scripts / name
-        p.write_bytes(b"malicious or outdated code\n")
-        r = self.check()
-        self.assertFalse(r["ready"])
-        self.assertIn("sha256_mismatch:" + name, r["error_codes"])
+        path = self.scripts / name
+        path.write_bytes(b"malicious or outdated code\n")
+        result = self.check()
+        self.assertFalse(result["ready"])
+        self.assertIn("sha256_mismatch:" + name, result["error_codes"])
 
     def test_broken_wsgirouting_fails_even_when_modules_match(self):
         self.wsgi.write_text("APP='/other/application'\n", encoding="utf-8")
-        r = self.check()
-        self.assertFalse(r["ready"])
-        self.assertIn("wsgi_effective_app_root_drift", r["error_codes"])
+        result = self.check()
+        self.assertFalse(result["ready"])
+        self.assertIn("wsgi_effective_app_root_drift", result["error_codes"])
 
-    def test_duplicate_wsgi_assignment_fails_closed(self):
-        self.wsgi.write_text("APP='" + str(self.app) + "'\nAPP='/other'\n", encoding="utf-8")
-        self.assertIn("wsgi_effective_app_root_drift", self.check()["error_codes"])
+    def test_duplicate_wsgi_assignment_with_comment_fails_closed(self):
+        self.wsgi.write_text(
+            "APP='" + str(self.app) + "'\n"
+            "APP='/other/application'  # Passenger override\n",
+            encoding="utf-8",
+        )
+        result = self.check()
+        self.assertFalse(result["ready"])
+        self.assertIn("wsgi_effective_app_root_drift", result["error_codes"])
+
+    def test_computed_wsgi_assignment_fails_closed(self):
+        self.wsgi.write_text(
+            "ROOT='" + str(self.app) + "'\nAPP=ROOT\n",
+            encoding="utf-8",
+        )
+        result = self.check()
+        self.assertFalse(result["ready"])
+        self.assertIn("wsgi_effective_app_root_drift", result["error_codes"])
+
+    def test_assignment_looking_text_is_not_accepted_as_wsgi_config(self):
+        self.wsgi.write_text(
+            "message = \'APP=\\\"" + str(self.app) + "\\\"\'\n",
+            encoding="utf-8",
+        )
+        result = self.check()
+        self.assertFalse(result["ready"])
+        self.assertIn("wsgi_effective_app_root_drift", result["error_codes"])
 
     def test_python_source_symlink_is_not_accepted(self):
         name = "mojplaywin_native_chain_verify.py"
-        p = self.scripts / name
+        path = self.scripts / name
         copy = self.app / "copy.py"
-        p.rename(copy)
+        path.rename(copy)
         try:
-            p.symlink_to(copy)
+            path.symlink_to(copy)
         except (OSError, NotImplementedError):
             self.skipTest("symlinks unavailable")
-        r = self.check()
-        self.assertIn("missing_or_symlink:" + name, r["error_codes"])
+        result = self.check()
+        self.assertIn("missing_or_symlink:" + name, result["error_codes"])
 
     def test_missing_required_function_not_accepted_even_with_matching_hash(self):
         name = "mojplaywin_native_chain_verify.py"
@@ -97,13 +124,13 @@ class NativeTrxReleaseGateTests(unittest.TestCase):
         (self.scripts / name).write_bytes(body)
         expected = dict(self.expected)
         expected[name] = hashlib.sha256(body).hexdigest()
-        r = audit(self.app, self.wsgi, pinned_hashes=expected)
-        self.assertIn("api_contract_missing:" + name, r["error_codes"])
+        result = audit(self.app, self.wsgi, pinned_hashes=expected)
+        self.assertIn("api_contract_missing:" + name, result["error_codes"])
 
     def test_preflight_does_not_modify_app_files(self):
-        before = {p.name: p.read_bytes() for p in self.scripts.iterdir()}
+        before = {path.name: path.read_bytes() for path in self.scripts.iterdir()}
         self.check()
-        after = {p.name: p.read_bytes() for p in self.scripts.iterdir()}
+        after = {path.name: path.read_bytes() for path in self.scripts.iterdir()}
         self.assertEqual(before, after)
 
 
