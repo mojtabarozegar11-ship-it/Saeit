@@ -1,7 +1,6 @@
 """Localized financial education, analysis, and digital-store landing pages.
 
-No live prices, investment advice, performance claims, or purchasable items are
-fabricated here. Pages only describe the service and link to the existing shop.
+No live personalized feed, investment advice, performance claim, or automatic trading is fabricated here. Pages link only to the verified one-time educational product.
 """
 from django.shortcuts import render
 
@@ -26,6 +25,7 @@ BRANDS = [
 ]
 SIGNAL_INTAKE_PATH = "https://mojplaywin.com/moj-prop-intake/?format=html&service=signals"
 SIGNAL_FREE_PREVIEW_PATH = "https://mojplaywin.com/moj-prop/signals/"
+SIGNAL_PAID_URL = "/commerce/book/1467/"
 
 PALETTES = [
     ("emerald", "#0b322b", "#c9a65a"), ("amethyst", "#2b173c", "#dfbd7a"),
@@ -42,8 +42,8 @@ COPY = {
  "fa": {
   "signals_title":"تحلیل بازار و آموزش تصمیم‌گیری",
   "signals_intro":"مرور ساختارمند بازارهای مالی، سناریوها و مدیریت ریسک؛ با توضیح روشنِ فرض‌ها و محدودیت‌ها.",
-  "signals_notice":"در این صفحه هنوز سیگنال زنده یا سابقهٔ عملکردِ راستی‌آزمایی‌شده منتشر نشده است. هیچ بازده یا سودی تضمین نمی‌شود.",
-  "signals_cta":"Mojtaba.bot.ai · درخواست یادداشت آموزشی",
+  "signals_notice":"محصول هفتگی آموزشی با پرداخت مستقیم TRX فعال است؛ این محصول سیگنال شخصی‌سازی‌شده، اجرای خودکار یا تضمین سود نیست.",
+  "signals_cta":"خرید گزارش هفتگی آموزشی با TRX",
   "signals_free_cta":"مشاهده نمونه رایگان آموزشی",
   "store_title":"فروشگاه محصولات دیجیتال",
   "store_intro":"راهنماها، قالب‌ها و محتوای آموزشی دیجیتال با توضیح روشن دربارهٔ محتوا و شرایط استفاده.",
@@ -57,8 +57,8 @@ COPY = {
  "en": {
   "signals_title":"Market analysis and decision education",
   "signals_intro":"Structured market context, scenarios, and risk management, with assumptions and limitations stated clearly.",
-  "signals_notice":"No live signal or independently verified performance history is published on this page yet. Returns and profits are never guaranteed.",
-  "signals_cta":"Mojtaba.bot.ai · request an educational note",
+  "signals_notice":"The one-time Educational Weekly Brief is available for direct TRX checkout. It is not a personalized live feed, automatic trading service or profit guarantee.",
+  "signals_cta":"Buy the Educational Weekly Brief with TRX",
   "signals_free_cta":"View free educational example",
   "store_title":"Digital products shop",
   "store_intro":"Digital guides, templates, and learning materials with clear descriptions and usage terms.",
@@ -72,8 +72,8 @@ COPY = {
  "ar": {
   "signals_title":"تحليل الأسواق وتعليم اتخاذ القرار",
   "signals_intro":"عرض منظم للسوق والسيناريوهات وإدارة المخاطر، مع توضيح الافتراضات والقيود.",
-  "signals_notice":"لا تُنشر هنا حالياً إشارات مباشرة أو نتائج أداء موثقة مستقلة. لا نضمن أي عائد أو ربح.",
-  "signals_cta":"Mojtaba.bot.ai · طلب مذكرة تعليمية",
+  "signals_notice":"يتوفر التقرير التعليمي الأسبوعي للشراء مرة واحدة عبر TRX؛ وليس خدمة إشارات شخصية مباشرة أو تنفيذاً آلياً ولا يضمن الربح.",
+  "signals_cta":"شراء التقرير التعليمي الأسبوعي عبر TRX",
   "signals_free_cta":"شاهد المثال التعليمي المجاني",
   "store_title":"متجر المنتجات الرقمية",
   "store_intro":"أدلة وقوالب ومواد تعليمية رقمية مع وصف واضح للمحتوى وشروط الاستخدام.",
@@ -112,7 +112,7 @@ def financial_brand_page(request, brand, locale, page_type):
         title, intro, notice = copy["game_title"], copy["game_intro"], copy["game_notice"]
     palette = PALETTES[next(i for i, item in enumerate(BRANDS) if item[0] == slug)]
     shop_url = "/store/" if locale == "fa" else "/commerce/"
-    destination_url = SIGNAL_INTAKE_PATH if page_type == "signals" else shop_url
+    destination_url = SIGNAL_PAID_URL if page_type == "signals" else shop_url
     destination_label = copy["signals_cta"] if page_type == "signals" else copy["cta"]
     free_destination_url = SIGNAL_FREE_PREVIEW_PATH if page_type == "signals" else ""
     free_destination_label = copy["signals_free_cta"] if page_type == "signals" else ""
