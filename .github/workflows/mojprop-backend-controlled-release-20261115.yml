@@ -217,19 +217,7 @@ jobs:
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
-          timeout 45s ssh -F "$WORK/config" saeit-host 'python3 - <<'"'"'PY'"'"'
-          from pathlib import Path
-          root = Path("/home/zomorod2/.mojprop-private-db-restore-evidence")
-          if not root.is_dir():
-              print("MOJPROP_INDEPENDENT_RESTORE_EVIDENCE_DIR=ABSENT")
-              raise SystemExit(2)
-          cases = sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith("."))
-          print("MOJPROP_INDEPENDENT_RESTORE_EVIDENCE_DIR=PRESENT")
-          print("MOJPROP_INDEPENDENT_RESTORE_CASE_COUNT=" + str(len(cases)))
-          for case in cases:
-              files = sum(1 for p in case.rglob("*") if p.is_file())
-              print("MOJPROP_INDEPENDENT_RESTORE_CASE_FILES=" + str(files))
-          PY
+          timeout 45s ssh -F "$WORK/config" saeit-host 'root="/home/zomorod2/.mojprop-private-db-restore-evidence"; if test ! -d "$root"; then echo "MOJPROP_INDEPENDENT_RESTORE_EVIDENCE_DIR=ABSENT"; exit 2; fi; echo "MOJPROP_INDEPENDENT_RESTORE_EVIDENCE_DIR=PRESENT"; echo "MOJPROP_INDEPENDENT_RESTORE_CASE_COUNT=$(find "$root" -mindepth 1 -maxdepth 1 -type d ! -name ".*" | wc -l)"'
       - name: Deploy Moj Prop intake backend with backup and migration
         id: backend
         shell: bash
