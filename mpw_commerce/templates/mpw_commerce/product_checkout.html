@@ -51,10 +51,14 @@
   </div>
   <form method="post" action="/commerce/trx-easy/start/{{ product.pk }}/" accept-charset="UTF-8">
     {% csrf_token %}
-    <label for="purchase-email">Email for purchase ownership and future recovery</label>
+    <label for="purchase-email">{% if product.pk == 1467 %}Purchase email{% else %}Email for purchase ownership and future recovery{% endif %}</label>
     <input id="purchase-email" name="email" type="email" autocomplete="email"
            inputmode="email" maxlength="254" placeholder="you@example.com" required>
+    {% if product.pk == 1467 %}
+    <p class="hint">Enter an email you control to identify your purchase. This purchase does not subscribe you to marketing. Keep your invoice reference and transaction hash for support; do not assume automatic email recovery is available.</p>
+    {% else %}
     <p class="hint">Use an address you control. Keep your invoice reference; if you leave this browser, purchase recovery is available with the same email.</p>
+    {% endif %}
     <button type="submit">Create my TRX invoice</button>
   </form>
   <p><small>Already paid? Do not pay again. Use <a href="/commerce/trx-easy/purchases/">My TRX purchases</a>, or contact <a href="mailto:support@mojplaywin.com">purchase support</a> with your order reference and transaction hash. Never share seed phrases or private keys.</small></p>
