@@ -42,7 +42,7 @@ COPY = {
  "fa": {
   "signals_title":"تحلیل بازار و آموزش تصمیم‌گیری",
   "signals_intro":"مرور ساختارمند بازارهای مالی، سناریوها و مدیریت ریسک؛ با توضیح روشنِ فرض‌ها و محدودیت‌ها.",
-  "signals_notice":"محصول هفتگی آموزشی هنوز برای پرداخت مستقیم TRX فعال نشده است؛ مسیر فعلی فقط درخواست کتبی و بررسی شرایط است و این محصول سیگنال شخصی‌سازی‌شده، اجرای خودکار یا تضمین سود نیست.",
+  "signals_notice":"محصول هفتگی آموزشی هنوز برای پرداخت مستقیم TRX فعال نشده است؛ مسیر فعلی فقط درخواست کتبی و بررسی شرایط است. مجری واحد: mojtaba.bot.ai. این محصول سیگنال شخصی‌سازی‌شده، اجرای خودکار یا تضمین سود نیست.",
   "signals_cta":"درخواست پیشنهاد کتبی سیگنال — بدون پرداخت",
   "signals_free_cta":"مشاهده نمونه رایگان آموزشی",
   "store_title":"فروشگاه محصولات دیجیتال",
@@ -57,7 +57,7 @@ COPY = {
  "en": {
   "signals_title":"Market analysis and decision education",
   "signals_intro":"Structured market context, scenarios, and risk management, with assumptions and limitations stated clearly.",
-  "signals_notice":"The one-time Educational Weekly Brief is not an active checkout. Payment and recurring subscription are not active; live feed and automatic subscription are not active. Request written terms before any payment.",
+  "signals_notice":"The one-time Educational Weekly Brief is not an active checkout. Payment and recurring subscription are not active; live feed and automatic subscription are not active. Request written terms before any payment. Single operator: mojtaba.bot.ai.",
   "signals_cta":"Request a written Signal Desk proposal — no payment",
   "signals_free_cta":"View free educational example",
   "store_title":"Digital products shop",
@@ -72,7 +72,7 @@ COPY = {
  "ar": {
   "signals_title":"تحليل الأسواق وتعليم اتخاذ القرار",
   "signals_intro":"عرض منظم للسوق والسيناريوهات وإدارة المخاطر، مع توضيح الافتراضات والقيود.",
-  "signals_notice":"لم يُفعّل الدفع المباشر عبر TRX للتقرير التعليمي الأسبوعي بعد؛ المسار الحالي لطلب الشروط المكتوبة فقط، وليس خدمة إشارات شخصية مباشرة أو تنفيذاً آلياً ولا يضمن الربح.",
+  "signals_notice":"لم يُفعّل الدفع المباشر عبر TRX للتقرير التعليمي الأسبوعي بعد؛ المسار الحالي لطلب الشروط المكتوبة فقط. المشغّل المركزي: mojtaba.bot.ai. وليس خدمة إشارات شخصية مباشرة أو تنفيذاً آلياً ولا يضمن الربح.",
   "signals_cta":"اطلب مقترحاً تعليمياً مكتوباً — بدون دفع",
   "signals_free_cta":"شاهد المثال التعليمي المجاني",
   "store_title":"متجر المنتجات الرقمية",
