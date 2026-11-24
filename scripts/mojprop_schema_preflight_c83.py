@@ -66,6 +66,18 @@ def _classes(path):
     return set(_class_signatures(path))
 
 
+def _class_signature(source, name):
+    """Return a location-independent AST signature for one reviewed legacy class."""
+    tree = ast.parse(source)
+    matches = [
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == name
+    ]
+    if len(matches) != 1:
+        return None
+    return ast.dump(matches[0], include_attributes=False)
+
+
 def has_reviewed_legacy_suffix(live_root, staged_root, relative):
     """Only recognize a byte-identical previously reviewed 0041-era suffix.
 
@@ -80,7 +92,20 @@ def has_reviewed_legacy_suffix(live_root, staged_root, relative):
         return False
     baseline = saved.read_text(encoding="utf-8").rstrip()
     content = live.read_text(encoding="utf-8").rstrip()
-    return bool(baseline) and content.endswith(baseline)
+    if bool(baseline) and content.endswith(baseline):
+        return True
+    # Some owner-preserved files contain unrelated classes after the reviewed
+    # C84 block.  Permit only an exact AST match of the single legacy class;
+    # the installer replaces that class in place and preserves all neighbours.
+    legacy_name = (
+        "MojPropRequest" if relative == "core/models.py"
+        else "MojPropRequestAdmin"
+    )
+    return (
+        _class_signature(baseline, legacy_name) is not None
+        and _class_signature(content, legacy_name)
+        == _class_signature(baseline, legacy_name)
+    )
 
 def migration_operations_signature(path):
     """Fingerprint the WHOLE migration, ignoring only its approved DB parent.
