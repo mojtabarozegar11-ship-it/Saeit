@@ -29,6 +29,16 @@
   <small>MOJPLAYWIN · DIGITAL PRODUCT · TRON NETWORK</small>
   <h1>{{ product.title }}</h1>
   <p class="price">$ {{ price_usd }} USD</p>
+  {% if product.pk == 1467 %}
+  <div class="notice">
+    <strong>What you receive</strong>
+    <ul>
+      <li>A private ZIP containing the one-time Educational Weekly Market Brief and its review framework.</li>
+      <li>Delivery becomes available only after independent server-side confirmation of the TRON payment.</li>
+      <li>This is not a live personalized signal feed, investment advice, automatic trading or a profit guarantee.</li>
+    </ul>
+  </div>
+  {% endif %}
   <p class="hint">No registration, wallet connection, or wallet signature is required.</p>
   <div class="notice">
     <strong>Before paying</strong>
