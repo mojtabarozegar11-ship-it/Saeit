@@ -25,7 +25,7 @@ BRANDS = [
 ]
 SIGNAL_INTAKE_PATH = "https://mojplaywin.com/moj-prop-intake/?format=html&service=signals"
 SIGNAL_FREE_PREVIEW_PATH = "https://mojplaywin.com/moj-prop/signals/"
-SIGNAL_PAID_URL = "/commerce/book/1467/"
+SIGNAL_PAID_URL = "https://mojplaywin.com/commerce/book/1467/"
 
 PALETTES = [
     ("emerald", "#0b322b", "#c9a65a"), ("amethyst", "#2b173c", "#dfbd7a"),
@@ -45,6 +45,7 @@ COPY = {
   "signals_notice":"محصول هفتگی آموزشی با پرداخت مستقیم TRX فعال است؛ این محصول سیگنال شخصی‌سازی‌شده، اجرای خودکار یا تضمین سود نیست.",
   "signals_cta":"خرید گزارش هفتگی آموزشی با TRX",
   "signals_free_cta":"مشاهده نمونه رایگان آموزشی",
+  "signals_request_cta":"درخواست شرایط خدمات پژوهشی ماهانه و سه‌ماهه",
   "store_title":"فروشگاه محصولات دیجیتال",
   "store_intro":"راهنماها، قالب‌ها و محتوای آموزشی دیجیتال با توضیح روشن دربارهٔ محتوا و شرایط استفاده.",
   "store_notice":"فهرست محصولات و پرداخت این زیردسته هنوز فعال نشده است؛ موجودی، قیمت یا لینک خریدِ ساختگی نمایش داده نمی‌شود.",
@@ -60,6 +61,7 @@ COPY = {
   "signals_notice":"The one-time Educational Weekly Brief is available for direct TRX checkout. It is not a personalized live feed, automatic trading service or profit guarantee.",
   "signals_cta":"Buy the Educational Weekly Brief with TRX",
   "signals_free_cta":"View free educational example",
+  "signals_request_cta":"Request monthly or quarterly research terms",
   "store_title":"Digital products shop",
   "store_intro":"Digital guides, templates, and learning materials with clear descriptions and usage terms.",
   "store_notice":"This sub-store's product listing and checkout are not active yet. No fictional stock, prices, or purchase links are shown.",
@@ -75,6 +77,7 @@ COPY = {
   "signals_notice":"يتوفر التقرير التعليمي الأسبوعي للشراء مرة واحدة عبر TRX؛ وليس خدمة إشارات شخصية مباشرة أو تنفيذاً آلياً ولا يضمن الربح.",
   "signals_cta":"شراء التقرير التعليمي الأسبوعي عبر TRX",
   "signals_free_cta":"شاهد المثال التعليمي المجاني",
+  "signals_request_cta":"اطلب شروط البحث الشهري أو ربع السنوي",
   "store_title":"متجر المنتجات الرقمية",
   "store_intro":"أدلة وقوالب ومواد تعليمية رقمية مع وصف واضح للمحتوى وشروط الاستخدام.",
   "store_notice":"قائمة المنتجات والدفع لهذا المتجر الفرعي غير مفعّلين بعد. لن نعرض مخزوناً أو أسعاراً أو روابط شراء وهمية.",
@@ -122,5 +125,6 @@ def financial_brand_page(request, brand, locale, page_type):
         "page_notice": notice, "copy": copy, "shop_url": shop_url,
         "destination_url": destination_url, "destination_label": destination_label,
         "free_destination_url": free_destination_url, "free_destination_label": free_destination_label,
+        "signal_request_url": SIGNAL_INTAKE_PATH if page_type == "signals" else "",
         "page_palette": palette, "page_direction": "rtl" if locale in {"fa", "ar"} else "ltr",
     })
