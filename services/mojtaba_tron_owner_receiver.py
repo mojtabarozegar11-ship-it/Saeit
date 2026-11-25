@@ -26,6 +26,9 @@ ASSET = "TRX"
 DECIMALS = 6
 MERCHANT_DOMAIN = "mojplaywin.com"
 MERCHANT_ID = "mojplaywin-store"
+MOJPROP_MERCHANT_DOMAIN = "mojprop.top"
+MOJPROP_MERCHANT_ID = "mojprop-store"
+MOJPROP_HOSTS = ("mojprop.top", "www.mojprop.top")
 
 
 def approved_recipient():
@@ -35,25 +38,37 @@ def approved_recipient():
 
 def owner_merchant_registry(*, invoice_enabled: bool = False,
                             finality_enabled: bool = False,
-                            recipient: str = APPROVED_NATIVE_TRX_RECIPIENT):
+                            recipient: str = APPROVED_NATIVE_TRX_RECIPIENT,
+                            include_mojprop: bool = False):
     """Exact-host merchant registry. Never derive a beneficiary from a request.
 
     Both explicit production permissions are necessary; a source merge and
     wallet attestation alone must not begin issuing payable invoices. The
     validated recipient cannot be swapped by a request or deployment typo.
     """
-    if type(invoice_enabled) is not bool or type(finality_enabled) is not bool:
+    if (type(invoice_enabled) is not bool
+            or type(finality_enabled) is not bool
+            or type(include_mojprop) is not bool):
         raise MerchantBindingRejected("TRON collection gates must be explicit booleans")
     if type(recipient) is not str or recipient != approved_recipient():
         raise MerchantBindingRejected("Receiver differs from owner-verified QR")
-    record = MappingProxyType({
-        "domain": MERCHANT_DOMAIN,
-        "merchant_id": MERCHANT_ID,
-        "network": MAINNET,
-        "recipient": recipient,
-        "enabled": invoice_enabled and finality_enabled,
-    })
-    return MappingProxyType({MERCHANT_DOMAIN: record})
+
+    def record(domain: str, merchant_id: str):
+        return MappingProxyType({
+            "domain": domain,
+            "merchant_id": merchant_id,
+            "network": MAINNET,
+            "recipient": recipient,
+            "enabled": invoice_enabled and finality_enabled,
+        })
+
+    records = {MERCHANT_DOMAIN: record(MERCHANT_DOMAIN, MERCHANT_ID)}
+    if include_mojprop:
+        records.update({
+            domain: record(domain, MOJPROP_MERCHANT_ID)
+            for domain in MOJPROP_HOSTS
+        })
+    return MappingProxyType(records)
 
 
 def require_owner_trx_binding(settings, host: str):
