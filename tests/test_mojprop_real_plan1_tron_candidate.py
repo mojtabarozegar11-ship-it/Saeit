@@ -7,7 +7,7 @@ import unittest
 
 from services.mojprop_real_plan1_tron_candidate import (
     Plan1PersistedInvoice, NativeTRXMatchRejected,
-    NATIVE_AMOUNT_SUN, PRODUCT, _hex_recipient,
+    NATIVE_AMOUNT_SUN, PRODUCT, MERCHANT_DOMAIN, MERCHANT_ID, _hex_recipient,
     assess_solidified_native_transfer, validate_persisted_order
 )
 
@@ -22,7 +22,7 @@ class RealPlan1TRXContractTests(unittest.TestCase):
     def setUp(self):
         self.invoice = Plan1PersistedInvoice(
             product=PRODUCT, order_ref="MOJPROP01-ABCDEF123456",
-            merchant_domain="mojplaywin.com", merchant_id="mojplaywin-store",
+            merchant_domain=MERCHANT_DOMAIN, merchant_id=MERCHANT_ID,
             network="tron-mainnet", recipient=OWNER, amount_sun=NATIVE_AMOUNT_SUN,
             issued_at_sec=START, expires_at_sec=END,
             buyer_terms_acceptance="terms-accepted-12452",
