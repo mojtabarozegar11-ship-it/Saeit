@@ -101,6 +101,16 @@ def _ready_order(order, *, buyer_id: int, settlement_intent=None):
             existing_subscription_terms(item, settlement_intent)
         except SubscriptionRejected as exc:
             raise PaymentHold("Subscription invoice terms unavailable") from exc
+    elif kind == "subscription":
+        from mpw_commerce.signal_subscriptions import (
+            subscription_sale_ready, snapshot_subscription, SubscriptionRejected,
+        )
+        if not subscription_sale_ready(item.product):
+            raise PaymentHold("Subscription content is not ready for sale")
+        try:
+            snapshot_subscription(item.pk)
+        except SubscriptionRejected as exc:
+            raise PaymentHold("Subscription terms unavailable") from exc
     elif kind == "digital":
         source = _private_file(item)
         if source.is_symlink() or not source.is_file():
