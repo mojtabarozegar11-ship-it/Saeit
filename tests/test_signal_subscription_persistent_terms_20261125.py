@@ -12,7 +12,8 @@ from core.crown_tron_receipts import PROVIDER
 from core.models import Product, Order, OrderItem, PaymentIntent, PaymentWebhookEvent, LedgerEntry
 from mpw_commerce.models import CommerceFulfillment
 from mpw_commerce.signal_subscriptions import (
-    snapshot_subscription, subscription_access, SubscriptionRejected,
+    snapshot_subscription, subscription_access, existing_subscription_terms,
+    SubscriptionRejected,
 )
 from services.mojtaba_tron_owner_receiver import APPROVED_NATIVE_TRX_RECIPIENT
 
@@ -45,6 +46,23 @@ class SignalSubscriptionTests(TestCase):
         with self.assertRaises(SubscriptionRejected):
             snapshot_subscription(self.item.pk)
 
+    def test_new_subscription_invoice_remains_unavailable(self):
+        from services.mpw_walletless_commercial_intent import _ready_order
+        from services.mpw_trx_walletless_core import PaymentHold
+        snapshot_subscription(self.item.pk)
+        with self.assertRaises(PaymentHold):
+            _ready_order(self.order, buyer_id=self.buyer.pk)
+
+    def test_existing_invoice_cannot_gain_late_subscription_terms(self):
+        intent = PaymentIntent.objects.create(
+            order=self.order, amount=self.order.total, currency="USD",
+            provider=PROVIDER, idempotency_key="existing-no-terms",
+        )
+        with self.assertRaises(SubscriptionRejected):
+            snapshot_subscription(self.item.pk)
+        with self.assertRaises(SubscriptionRejected):
+            existing_subscription_terms(self.item, intent)
+
     def test_real_receipt_contract_expiry_buyer_and_refund(self):
         snapshot_subscription(self.item.pk)
         receiver = APPROVED_NATIVE_TRX_RECIPIENT
@@ -56,6 +74,8 @@ class SignalSubscriptionTests(TestCase):
             provider_reference=json.dumps({"v": 1, "to": receiver, "sun": sun,
                                            "rate": "0.25", "at": timezone.now().isoformat()}),
         )
+        self.assertEqual(existing_subscription_terms(self.item, intent).plan_id,
+                         "education-monthly")
         event = PaymentWebhookEvent.objects.create(
             payment_intent=intent, provider=PROVIDER, event_type="tron_finalized",
             event_id="a" * 64, payload_hash="b" * 64, status="processed",
