@@ -150,10 +150,10 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         # The updated reviewed source additionally allows three bounded unpaid
         # product enquiries; immutable historical C95 deployment pin stays fixed.
         candidate = current.read_bytes()
-        # The live-facing form has a new separately reviewed product-only UX
-        # candidate; do not relabel the immutable original C95 deployment.
+        # The live-facing form adds catalog-backed signal-plan selection.
+        # The historical C95 audit and old release bytes remain immutable.
         self.assertEqual(exact_git_blob(candidate),
-                         "2e3a5ad1efb90bb3e629463a740cee03a8227ee5")
+                         "dbe747c0f451f0d173872fdd2929a71b3267fadd")
         self.assertIn(b"Starter30", candidate)
         self.assertIn(b"csrfmiddlewaretoken", candidate)
         self.assertIn(b"consent", candidate)
