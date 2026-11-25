@@ -170,8 +170,8 @@ def _stage_bytes(run_id: str) -> dict[str, bytes]:
         out[item] = _read_reviewed_stage_file(stage, item)
     page = out["index.html"].decode("utf-8")
     if (not all(mark in page for mark in (
-            "MOJPROP-STARTER30", "The secure checkout first verifies your email",
-            "Review 30 TRX checkout requirements", "requires your sending TRON wallet address",
+            "MOJPROP-STARTER30", "Checkout uses a valid email for the receipt and account recovery; no email code or wallet connection is required to begin.",
+            "Review 30 TRX checkout requirements", "connecting a wallet or declaring a sending address is optional.",
             "100% of every profit earned", "No real funded account",
             '<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>'))
             or 'index,follow' not in page
