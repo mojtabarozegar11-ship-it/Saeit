@@ -11,8 +11,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "templates/moj-prop-v4/starter-30-trx/index.html"
 PIN = ROOT / "scripts/mojprop_starter30_static_release.py"
-APPROVED_LIVE_SHA256 = "67db137bdf38c1f23225eab08014a966081dcd2890b373a68a9252af6698f2d4"
-APPROVED_LIVE_GIT_BLOB = "737e26d5b410638c9c54d8861fe342c859548698"
+APPROVED_LIVE_SHA256 = "a81d4e25d0f6a7c2a75a46f5ea88ddf8ad3b1b5c71c4ee833a6940008975cd38"
+APPROVED_LIVE_GIT_BLOB = "7f49075e7b48dce6a67997ef5d01db616f869ce4"
 
 
 class Scan(HTMLParser):
@@ -56,7 +56,7 @@ class OfficialStarter30LiveSourceTests(unittest.TestCase):
         self.assertEqual(page.h1_count, 1)
         self.assertEqual(page.canonical, ["https://mojplaywin.com/moj-prop/starter-30-trx/"])
         self.assertEqual(page.ctas.count("/mojprop-starter30-checkout/"), 1)
-        self.assertEqual(page.ctas.count("/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx&utm_source=moj_prop&utm_medium=onsite&utm_campaign=starter30_lead&utm_content=free_terms"), 3)
+        self.assertEqual(page.ctas.count("/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx&utm_source=moj_prop&utm_medium=onsite&utm_campaign=starter30_lead&utm_content=free_terms"), 2)
         status = [x for x in page.forms if x.get("method") == "get"
                   and x.get("action") == "/mojprop-starter30-status/"]
         self.assertEqual(len(status), 1)
@@ -66,7 +66,7 @@ class OfficialStarter30LiveSourceTests(unittest.TestCase):
         self.assertIn("required", refs[0])
         self.assertLess(data.index("How the verified 30 TRX checkout works"),
                         data.index("What you receive"))
-        self.assertIn("single owner-approved receive-only wallet", data)
+        self.assertIn("connecting a wallet or declaring a sending address is optional.", data)
 
     def test_campaign_attribution_and_opt_in_tracker_maintained(self):
         page = Scan()
