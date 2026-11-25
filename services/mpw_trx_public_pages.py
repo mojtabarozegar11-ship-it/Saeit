@@ -35,6 +35,7 @@ def public_shop(request):
     from django.db import connection
     from core.models import Product
     from mpw_commerce.buyer_orders import _eligible
+    from mpw_commerce.signal_subscriptions import subscription_sale_ready, subscription_product_terms
     from mpw_commerce.downloads import _private_file
     from services.mpw_walletless_commercial_intent import _commercial_db
     from types import SimpleNamespace
@@ -44,13 +45,17 @@ def public_shop(request):
     except PaymentHold: raise Http404
     cards=[]
     for p in Product.objects.filter(pk__in=getattr(settings,'MPW_TRX_PUBLIC_PRODUCT_IDS',()),active=True).order_by('pk'):
-        if not _eligible(p) or not rights_cleared_for_sale(p): continue
-        try:
-            f=_private_file(SimpleNamespace(product=p))
-            if f.is_symlink() or not f.is_file() or f.stat().st_size<=0: continue
-        except (OSError,ValueError): continue
+        if not rights_cleared_for_sale(p): continue
+        if p.product_type == "subscription":
+            if not subscription_sale_ready(p): continue
+        else:
+            if not _eligible(p): continue
+            try:
+                f=_private_file(SimpleNamespace(product=p))
+                if f.is_symlink() or not f.is_file() or f.stat().st_size<=0: continue
+            except (OSError,ValueError): continue
         cards.append(f'<article><h2>{escape(p.title)}</h2><p>${escape(str(p.price))} USD · Pay the quoted equivalent in TRX</p><a class="button" href="/commerce/book/{p.pk}/">Buy with TRX</a></article>')
-    return _page('Buy digital products with TRX','<p>Choose a product and enter your purchase email to request an invoice. No account signup, wallet connection or wallet signature is needed. Pay the exact TRX amount on TRON mainnet; your private download becomes available only after independent blockchain confirmation.</p>'+''.join(cards))
+    return _page('Buy digital products with TRX','<p>Choose a product and enter your purchase email to request an invoice. No account signup, wallet connection or wallet signature is needed. Pay the exact TRX amount on TRON mainnet; your private download or research access becomes available only after independent blockchain confirmation.</p>'+''.join(cards))
 
 
 @login_required
@@ -60,19 +65,26 @@ def product_checkout(request, product_id):
     from django.shortcuts import render
     from core.models import Product
     from mpw_commerce.buyer_orders import _eligible
+    from mpw_commerce.signal_subscriptions import subscription_sale_ready, subscription_product_terms
     from mpw_commerce.downloads import _private_file
     from types import SimpleNamespace
     _ensure_live(request)
     if product_id not in getattr(settings,'MPW_TRX_PUBLIC_PRODUCT_IDS',()):
         raise Http404
     product=Product.objects.select_related('knowledge_article').filter(pk=product_id).first()
-    if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
+    if product is None or not rights_cleared_for_sale(product):
         raise Http404
-    f=_private_file(SimpleNamespace(product=product))
-    if f.is_symlink() or not f.is_file() or f.stat().st_size<=0: raise Http404
+    subscription = product.product_type == "subscription"
+    if subscription:
+        if not subscription_sale_ready(product): raise Http404
+    else:
+        if not _eligible(product): raise Http404
+        f=_private_file(SimpleNamespace(product=product))
+        if f.is_symlink() or not f.is_file() or f.stat().st_size<=0: raise Http404
     response=_nocache(render(request,'mpw_commerce/product_checkout.html',{
         'product':product,'price_usd':format(product.price,'.2f'),
-        'mpw_trx_easy_enabled':True}))
+        'mpw_trx_easy_enabled':True,
+        'signal_subscription':subscription_product_terms(product) if subscription else None}))
     response=_checkout_csrf_referrer(response)
     response['Content-Security-Policy']="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     return response
@@ -115,7 +127,7 @@ def terms_page(request):
     return _page(
         "Terms of digital purchase",
         '<article><h2>Digital products and TRX checkout</h2>'
-        '<p>Products are digital downloads. The displayed USD price is converted to a quoted TRX amount on the invoice. Payment is considered received only after server-side TRON confirmation.</p>'
+        '<p>Products are digital downloads or explicitly described prepaid educational research terms. Research terms are not automatically renewed. The displayed USD price is converted to a quoted TRX amount on the invoice. Payment is considered received only after server-side TRON confirmation.</p>'
         '<p>Do not pay an expired invoice. If you believe you paid an invoice, use purchase recovery and contact support with the order number.</p>'
         '<p>No investment, trading, income or performance guarantee is made by a digital product listing.</p></article>'
     )
