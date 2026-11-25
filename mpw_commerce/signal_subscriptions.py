@@ -64,6 +64,21 @@ def snapshot_subscription(item_id):
             item=item, plan_id=plan_id, price_usd=price, term_weeks=TERMS[plan_id])
 
 
+def existing_subscription_terms(item, intent):
+    """Validate original pre-invoice terms for settlement, never create them."""
+    sub = SignalSubscription.objects.filter(item=item).first()
+    if (sub is None or item.product_id == 1467 or sub.plan_id not in TERMS
+            or sub.term_weeks != TERMS[sub.plan_id]
+            or sub.price_usd != get_signal_plan(sub.plan_id).price_usd
+            or item.quantity != 1 or item.currency != "USD"
+            or item.unit_price != sub.price_usd
+            or intent.order_id != item.order_id
+            or intent.amount != sub.price_usd or intent.currency != "USD"
+            or intent.provider != PROVIDER or sub.created_at > intent.created_at):
+        raise SubscriptionRejected("Original subscription invoice terms unavailable")
+    return sub
+
+
 def subscription_access(customer, item_id, *, now=None):
     """Read persisted settlement and return only the authenticated buyer's term.
 
@@ -96,8 +111,9 @@ def subscription_access(customer, item_id, *, now=None):
                 "refund", "reversal", "chargeback", "debit")).exists()):
         return None
     try:
+        existing_subscription_terms(item, intent)
         recipient = json.loads(intent.provider_reference)["to"]
-    except (TypeError, ValueError, KeyError):
+    except (TypeError, ValueError, KeyError, SubscriptionRejected):
         return None
     if recipient != APPROVED_NATIVE_TRX_RECIPIENT:
         return None
