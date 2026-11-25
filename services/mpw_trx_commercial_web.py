@@ -63,6 +63,7 @@ def _select_order(product_id: int, buyer_id: int, connection):
     from django.http import Http404
     from core.models import Product, Order, OrderItem, PaymentIntent
     from mpw_commerce.buyer_orders import _eligible
+    from mpw_commerce.signal_subscriptions import subscription_sale_ready
     from mpw_commerce.downloads import _private_file
     from types import SimpleNamespace
 
@@ -70,7 +71,8 @@ def _select_order(product_id: int, buyer_id: int, connection):
         get_user_model().objects.select_for_update().get(pk=buyer_id)
         product=Product.objects.select_for_update().get(
             pk=product_id,active=True,currency="USD")
-        if (not _eligible(product) or not rights_cleared_for_sale(product)
+        subscription = product.product_type == "subscription"
+        if (not (subscription_sale_ready(product) if subscription else _eligible(product)) or not rights_cleared_for_sale(product)
                 or not Decimal("0") < Decimal(product.price) <= Decimal("1000")):
             raise PaymentHold("Digital product not presently eligible")
         for old in Order.objects.select_for_update().filter(
@@ -86,9 +88,10 @@ def _select_order(product_id: int, buyer_id: int, connection):
                 if claim.expires_at>timezone.now():
                     return pi.pk
         # Never issue a payable invoice for a missing or symlinked product.
-        file=_private_file(SimpleNamespace(product=product))
-        if file.is_symlink() or not file.is_file():
-            raise PaymentHold("Private product file is not ready")
+        if not subscription:
+            file=_private_file(SimpleNamespace(product=product))
+            if file.is_symlink() or not file.is_file():
+                raise PaymentHold("Private product file is not ready")
         order=Order.objects.create(customer_id=buyer_id,status="pending",
             total=product.price,currency="USD")
         OrderItem.objects.create(order=order,product=product,quantity=1,
