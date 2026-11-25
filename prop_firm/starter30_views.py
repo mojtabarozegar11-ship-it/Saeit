@@ -110,8 +110,7 @@ def _closed(request):
         request,
         "Starter30 unavailable",
         "<h1>Starter30 checkout</h1><div class='warn'>Payment is not available at this moment. No transfer should be sent.</div>"
-        + _pre_invoice_information_links()
-        ,
+        + _pre_invoice_information_links(),
     )
 
 
