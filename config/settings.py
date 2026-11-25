@@ -309,6 +309,7 @@ MPW_WALLETLESS_EXISTING_PAID_DIGITAL_ACCESS_ENABLED = env.bool(
 MPW_TRX_MERCHANT_BINDINGS = owner_merchant_registry(
     invoice_enabled=MPW_TRX_INVOICE_RELEASE_VERIFIED,
     finality_enabled=MPW_TRX_SOLIDITY_RELEASE_VERIFIED,
+    include_mojprop=True,
 )
 
 

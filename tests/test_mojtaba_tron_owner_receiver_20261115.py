@@ -13,6 +13,7 @@ from services.mpw_trx_merchant_binding import (
 from services.mojtaba_tron_owner_receiver import (
     APPROVED_NATIVE_TRX_RECIPIENT,
     MAINNET, ASSET, DECIMALS, MERCHANT_DOMAIN, MERCHANT_ID,
+    MOJPROP_MERCHANT_ID, MOJPROP_HOSTS,
     approved_recipient, owner_merchant_registry,
     require_owner_trx_binding, public_receiving_terms,
 )
@@ -72,6 +73,18 @@ class QRVerifiedOwnerReceiverTests(unittest.TestCase):
         self.assertEqual(binding.merchant_id, MERCHANT_ID)
         self.assertEqual(binding.recipient, APPROVED_NATIVE_TRX_RECIPIENT)
         self.assertEqual(binding.network, MAINNET)
+
+    def test_explicit_mojprop_hosts_have_distinct_merchant_identity(self):
+        registry = owner_merchant_registry(
+            invoice_enabled=True, finality_enabled=True, include_mojprop=True,
+        )
+        for host in MOJPROP_HOSTS:
+            with self.subTest(host=host):
+                self.assertEqual(registry[host]["domain"], host)
+                self.assertEqual(registry[host]["merchant_id"], MOJPROP_MERCHANT_ID)
+                self.assertEqual(registry[host]["recipient"], APPROVED_NATIVE_TRX_RECIPIENT)
+                self.assertTrue(registry[host]["enabled"])
+        self.assertNotEqual(registry[MERCHANT_DOMAIN]["merchant_id"], MOJPROP_MERCHANT_ID)
 
     def test_no_implicit_www_or_company_alias(self):
         registry = owner_merchant_registry(

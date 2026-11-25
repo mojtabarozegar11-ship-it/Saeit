@@ -13,12 +13,16 @@ import re
 from collections.abc import Mapping
 
 from services.mpw_trx_merchant_binding import validate_tron_recipient
-from services.mojtaba_tron_owner_receiver import approved_recipient
+from services.mojtaba_tron_owner_receiver import (
+    MOJPROP_MERCHANT_DOMAIN,
+    MOJPROP_MERCHANT_ID,
+    approved_recipient,
+)
 
 PRODUCT = "MOJPROP-STARTER30"
 NATIVE_AMOUNT_SUN = 30_000_000  # Exactly 30 native TRX; 1 TRX = 1e6 sun.
-MERCHANT_DOMAIN = "mojplaywin.com"
-MERCHANT_ID = "mojplaywin-store"
+MERCHANT_DOMAIN = MOJPROP_MERCHANT_DOMAIN
+MERCHANT_ID = MOJPROP_MERCHANT_ID
 NETWORK = "tron-mainnet"
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 HEX41 = re.compile(r"41[0-9a-f]{40}\Z")
