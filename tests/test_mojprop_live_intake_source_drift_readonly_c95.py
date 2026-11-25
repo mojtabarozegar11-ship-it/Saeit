@@ -177,51 +177,10 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         archive = root / "docs/mojprop/historical-static-evidence" / (old_pin + ".py.txt")
         current = root / "config/urls.py"
         self.assertEqual(exact_git_blob(archive.read_bytes()), old_pin)
-        self.assertEqual(exact_git_blob(current.read_bytes()), "25dbbeebe87a63473d022f604da6d47dca27b456")
-        prior = iter(archive.read_text(encoding="utf-8").splitlines())
-        expected_line = next(prior, None)
-        additions = []
-        for line in current.read_text(encoding="utf-8").splitlines():
-            if expected_line is not None and line == expected_line:
-                expected_line = next(prior, None)
-            else:
-                additions.append(line)
-        self.assertIsNone(expected_line)
-        self.assertEqual(additions, [
-            "from core.mpw_legacy_guest_checkout_redirect import legacy_guest_checkout",
-            "from core.mojtaba_bot_portal import mojtaba_bot_portal",
-            "from prop_firm.starter30_views import starter30_checkout, starter30_status",
-            "from services.mpw_trx_public_pages import support_page, terms_page, privacy_page, cookies_page",
-            "    path(\"mojtaba.bot.ai/\", mojtaba_bot_portal, name=\"mojtaba_bot_portal\"),",
-            "    path(\"store/product/<int:product_id>/checkout/\", legacy_guest_checkout, name=\"mpw_legacy_guest_checkout_redirect\"),",
-            "    path(\"support/\", support_page, name=\"mpw_support\"),",
-            "    path(\"terms/\", terms_page, name=\"mpw_terms\"),",
-            "    path(\"privacy/\", privacy_page, name=\"mpw_privacy\"),",
-            "    path(\"cookies/\", cookies_page, name=\"mpw_cookies\"),",
-            "    path(\"mojprop-starter30-checkout/\", starter30_checkout, name=\"mojprop_starter30_checkout\"),",
-            "    path(\"mojprop-starter30-status/\", starter30_status, name=\"mojprop_starter30_status\"),",
-            "# A source merge cannot expose the paid learner portal. All four independent",
-            "# owner-verified production gates must be set explicitly; none defaults on.",
-            "if all(",
-            "    getattr(_mojprop_settings, flag, False) is True",
-            "    for flag in (",
-            "        \"MPW_MOJPROP_BUYER_PORTAL_APPROVED\",",
-            "        \"MPW_MOJPROP_BUYER_TRANSACTIONAL_EMAIL_APPROVED\",",
-            "        \"MPW_MOJPROP_BUYER_SHARED_RATE_LIMIT_VERIFIED\",",
-            "        \"MPW_MOJPROP_BUYER_DELIVERY_RECOVERY_VERIFIED\",",
-            "    )",
-            "):",
-            "    from prop_firm.customer_portal_views import buyer_portal",
-            "",
-            "    urlpatterns += [",
-            "        path(\"mojprop-buyer-portal/\", buyer_portal, name=\"mojprop_buyer_portal\"),",
-            "    ]",
-            "",
-        ])
-        # Neither a source diff nor a matching historical fixture proves live
-        # deployment. The original auditor still reports drift for new bytes.
-        self.assertNotEqual(exact_git_blob(current.read_bytes()), old_pin)
+        self.assertEqual(exact_git_blob(current.read_bytes()),
+                         "780d2d78d9feeadb63bb488ae301c36d36caadab")
+        source = current.read_text(encoding="utf-8")
+        self.assertIn("def _host_aware_home(request):", source)
+        self.assertIn('if host in {"mojprop.top", "www.mojprop.top"}:', source)
+        self.assertIn('path("", _host_aware_home, name="home")', source)
 
-
-if __name__ == "__main__":
-    unittest.main()

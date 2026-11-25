@@ -49,8 +49,8 @@ class Starter30NavigationAndPaymentCopyTests(unittest.TestCase):
 
     def test_starter30_uses_current_payment_message(self):
         source = STARTER30.read_text(encoding="utf-8")
-        self.assertIn("The secure checkout first verifies your email", source)
-        self.assertIn("requires your sending TRON wallet address", source)
+        self.assertIn("Checkout uses a valid email for the receipt and account recovery; no email code or wallet connection is required to begin.", source)
+        self.assertIn("connecting a wallet or declaring a sending address is optional.", source)
         self.assertIn("Current status:</strong> Starter30 is the separate 60-day simulated product.", source)
         self.assertNotIn("Payment is currently unavailable", source)
         self.assertNotIn("Current status:</strong> payable simulated challenge", source)

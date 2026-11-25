@@ -25,7 +25,7 @@ FILES = LEGACY_FILES + ("checkout-attribution.js",)
 # The owner must explicitly review/re-pin any revision; do not trust staged
 # tarballs or a caller-supplied commit string as proof of identical bytes.
 REVIEWED_GIT_BLOBS = {
-    "index.html": "737e26d5b410638c9c54d8861fe342c859548698",
+    "index.html": "7f49075e7b48dce6a67997ef5d01db616f869ce4",
     "journal-template.csv": "2d732321f1c1f431685e514789cf26bf2a977d84",
     "journal-guide.txt": "1e02213de4bed3fc9211e388b3f8b135ef2c0f0a",
     "checkout-attribution.js": "dbf6035a9cfeb65dd92995d1302081123ebfbe5c",
@@ -170,8 +170,8 @@ def _stage_bytes(run_id: str) -> dict[str, bytes]:
         out[item] = _read_reviewed_stage_file(stage, item)
     page = out["index.html"].decode("utf-8")
     if (not all(mark in page for mark in (
-            "MOJPROP-STARTER30", "The secure checkout first verifies your email",
-            "Review 30 TRX checkout requirements", "requires your sending TRON wallet address",
+            "MOJPROP-STARTER30", "Checkout uses a valid email for the receipt and account recovery; no email code or wallet connection is required to begin.",
+            "Review 30 TRX checkout requirements", "connecting a wallet or declaring a sending address is optional.",
             "100% of every profit earned", "No real funded account",
             '<script defer src="/moj-prop/starter-30-trx/checkout-attribution.js"></script>'))
             or 'index,follow' not in page
