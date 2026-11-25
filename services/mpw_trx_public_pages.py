@@ -90,6 +90,8 @@ def purchases(request):
         state=commercial_buyer_status(pi.pk,request.user.pk)
         if state.get('can_download'):
             detail=f'<a class="button" href="/commerce/trx-easy/download/{pi.pk}/">Download purchase</a>'
+        elif state.get('subscription'):
+            detail=f'<a class="button" href="/commerce/trx-easy/invoice/{pi.pk}/">Read private research</a>'
         elif pi.status=='awaiting_chain' and _decode(pi).expires_at>timezone.now():
             detail=f'<a href="/commerce/trx-easy/invoice/{pi.pk}/">View payment invoice</a>'
         else:
