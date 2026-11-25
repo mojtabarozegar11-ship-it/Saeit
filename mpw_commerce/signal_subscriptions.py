@@ -24,6 +24,61 @@ class SubscriptionRejected(ValueError):
     pass
 
 
+def subscription_product_terms(product):
+    """Return fixed terms from the approved server catalog, never buyer input."""
+    meta = product.metadata if type(product.metadata) is dict else {}
+    commerce = meta.get("mpw_commerce")
+    plan_id = meta.get("signal_plan_id")
+    if (type(plan_id) is not str or plan_id not in TERMS or product.pk == 1467
+            or product.product_type != "subscription" or product.active is not True
+            or product.currency != "USD" or meta.get("rights_cleared") is not True
+            or type(commerce) is not dict or commerce.get("enabled") is not True
+            or commerce.get("fulfillment") != "subscription"
+            or product.price != get_signal_plan(plan_id).price_usd):
+        return None
+    return {"plan_id": plan_id, "term_weeks": TERMS[plan_id],
+            "price_usd": get_signal_plan(plan_id).price_usd}
+
+
+def subscription_sale_ready(product, *, config=None):
+    """One-time release approval plus current content, not per-order approval."""
+    from django.conf import settings
+    from core.canonical_content_owner import get_canonical_content_owner
+    from mpw_commerce.models import SignalResearchIssue
+    import hashlib
+    import re
+
+    config = settings if config is None else config
+    if (getattr(config, "MPW_SIGNAL_SUBSCRIPTION_RELEASE_APPROVED", False) is not True
+            or product.pk not in getattr(config, "MPW_TRX_PUBLIC_PRODUCT_IDS", ())
+            or subscription_product_terms(product) is None):
+        return False
+    owner = get_canonical_content_owner()
+    if owner is None:
+        return False
+    now = timezone.now()
+    sources = set()
+    for issue in SignalResearchIssue.objects.filter(
+            agent=owner, published_at__gte=now-timedelta(days=7),
+            published_at__lte=now).order_by("-published_at")[:100]:
+        doc = issue.record
+        if type(doc) is not dict:
+            continue
+        digest = hashlib.sha256(json.dumps(doc, sort_keys=True, separators=(",", ":"))
+                                .encode("utf-8")).hexdigest()
+        if (digest != issue.fingerprint or doc.get("author_agent") != "mojtaba.bot.ai"
+                or doc.get("record_id") != issue.record_id
+                or not re.fullmatch(r"[0-9a-f]{64}", issue.source_sha256)):
+            continue
+        if (issue.record_id.startswith("ecb_fx_") and doc.get("asset") == "EUR-FX"
+                and str(doc.get("evidence_url", "")).startswith("https://www.ecb.europa.eu/")):
+            sources.add("fx")
+        if (issue.record_id.startswith("eia_oil_") and doc.get("asset") == "OIL-INVENTORY"
+                and str(doc.get("evidence_url", "")).startswith("https://www.eia.gov/")):
+            sources.add("oil")
+    return sources == {"fx", "oil"}
+
+
 def snapshot_subscription(item_id):
     """Freeze the actual order's selected plan before issuing any invoice.
 
