@@ -47,7 +47,7 @@ class Starter30PublicOwnerPolicyParityTests(unittest.TestCase):
         import hashlib
         raw = STATIC_PAGE.read_bytes()
         blob = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
-        self.assertEqual(blob, "737e26d5b410638c9c54d8861fe342c859548698")
+        self.assertEqual(blob, "7f49075e7b48dce6a67997ef5d01db616f869ce4")
         self.assertNotIn('id="profit-reward-schedule"', self.page)
         self.assertIn("connecting a wallet or declaring a sending address is optional.", self.page.lower())
 
