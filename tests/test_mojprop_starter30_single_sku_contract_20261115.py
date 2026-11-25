@@ -50,8 +50,8 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertIn("package=starter-30-trx#request", starter)
         self.assertIn("30 TRX", self.detail)
         self.assertIn("server-issued invoice", self.detail)
-        self.assertIn("The secure checkout first verifies your email", self.detail)
-        self.assertIn("requires your sending TRON wallet address", self.detail)
+        self.assertIn("Checkout uses a valid email for the receipt and account recovery; no email code or wallet connection is required to begin.", self.detail)
+        self.assertIn("connecting a wallet or declaring a sending address is optional.", self.detail)
         self.assertIn('href="/mojprop-starter30-checkout/"', self.detail)
 
     def test_single_consent_based_crm_route_and_no_unmarked_149_dollar_quote(self):
