@@ -28,8 +28,19 @@ from core.knowledge_views import knowledge_article_detail, knowledge_book_detail
 from prop_firm.starter30_views import starter30_checkout, starter30_status
 from services.mpw_trx_public_pages import support_page, terms_page, privacy_page, cookies_page
 
+
+def _host_aware_home(request):
+    """Keep the new English Moj Prop domain on its own product surface."""
+    host = request.get_host().split(":")[0].lower()
+    if host in {"mojprop.top", "www.mojprop.top"}:
+        return TemplateView.as_view(
+            template_name="moj-prop-v4/starter-30-trx/index.html"
+        )(request)
+    return services(request)
+
+
 urlpatterns = [
-    path("", services, name="home"),
+    path("", _host_aware_home, name="home"),
     path("mojtaba.bot.ai/", mojtaba_bot_portal, name="mojtaba_bot_portal"),
     path("authors/mojtaba-rozegar/", persian_author_profile, name="mojtaba_roozegar_author_profile"),
     path("ghanadi/", TemplateView.as_view(template_name="core/ghanadi.html"), name="ghanadi"),
