@@ -61,7 +61,7 @@ class Starter30ClosedPaymentContract(unittest.TestCase):
                 self.assertNotIn("walletconnect", source.lower())
                 self.assertNotIn("tronweb.trx.sendtransaction", source.lower())
         starter = self.sources["starter"].lower()
-        self.assertIn("the secure checkout first verifies your email", starter)
+        self.assertIn("checkout uses a valid email for the receipt and account recovery; no email code or wallet connection is required to begin.", starter)
         self.assertIn("connecting a wallet or declaring a sending address is optional.", starter)
         self.assertIn("/mojprop-starter30-checkout/", self.sources["starter"])
         self.assertNotIn("payment is currently unavailable", starter)
@@ -72,7 +72,7 @@ class Starter30ClosedPaymentContract(unittest.TestCase):
 
     def test_free_terms_attribution_is_fixed_and_payment_never_leaks_into_link(self):
         starter = self.pages["starter"]
-        self.assertEqual(starter.links.count(FREE_TERMS), 3)
+        self.assertEqual(starter.links.count(FREE_TERMS), 2)
         self.assertTrue(all(not link or "wallet=" not in link and "email=" not in link
                             for link in starter.links))
         self.assertTrue(any(link == FREE_TERMS for link in self.pages["home"].links))
