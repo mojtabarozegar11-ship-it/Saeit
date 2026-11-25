@@ -155,13 +155,13 @@ def source_root(run_id: str) -> Path:
     # No invoice, fee, account or migration is created by this script.
     starter = html["starter-30-trx/index.html"]
     if (not all(mark in starter for mark in (
-            "MOJPROP-STARTER30", "The secure checkout first verifies your email",
+            "MOJPROP-STARTER30", "Checkout uses a valid email for the receipt and account recovery; no email code or wallet connection is required to begin.",
             "Review 30 TRX checkout requirements", 'href="/mojprop-starter30-checkout/"',
             "./journal-template.csv", "./journal-guide.txt",
             "30 TRX", "No real funded account",
             "server-issued invoice",
             "100% of every profit earned",
-            "requires your sending TRON wallet address"))
+            "connecting a wallet or declaring a sending address is optional."))
             or "Payment is currently unavailable" in starter):
         raise RuntimeError("Starter30 page is missing its live checkout and ethical delivery boundary")
     guide = (path / STARTER30_FILES[1]).read_text(encoding="utf-8")
