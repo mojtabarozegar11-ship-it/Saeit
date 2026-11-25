@@ -47,9 +47,9 @@ class MojPropEnglishSitemapTests(SimpleTestCase):
                 response = robots_txt(RequestFactory().get("/robots.txt", HTTP_HOST=host))
                 self.assertEqual(response.status_code, 200)
                 body = response.content.decode("utf-8")
-                self.assertIn("Sitemap: https://mojplaywin.com/sitemap.xml", body)
+                self.assertIn(f"Sitemap: https://{host}/sitemap.xml", body)
                 self.assertIn(
-                    "Sitemap: https://mojplaywin.com/moj-prop/education/sitemap.xml",
+                    f"Sitemap: https://{host}/moj-prop/education/sitemap.xml",
                     body,
                 )
                 self.assertIn("Disallow: /mojprop-starter30-checkout/", body)
