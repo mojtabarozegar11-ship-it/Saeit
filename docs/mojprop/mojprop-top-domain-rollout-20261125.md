@@ -68,11 +68,11 @@ For each language, research its actual commercial vocabulary (including regional
 
 | Workstream | Complete | Remaining | Progress |
 | --- | ---: | ---: | ---: |
-| Architecture and route decision | 10/10 | 0 | 100% |
-| DNS and host binding | 0/3 | 3 | 0% |
-| Application/domain integration | 0/4 | 4 | 0% |
-| Legal, payment and fulfilment release | 0/4 | 4 | 0% |
-| Multilingual SEO and production evidence | 0/4 | 4 | 0% |
+| Source review and architecture | 10/10 | 0 | 100% |
+| DNS and host binding (actions 11–13) | 0/3 | 3 | 0% |
+| Application and database integration (actions 14–16) | 0/3 | 3 | 0% |
+| Seller, payment and fulfilment (actions 17–19) | 0/3 | 3 | 0% |
+| Backup, multilingual SEO and production acceptance (action 20) | 0/1 | 1 | 0% |
 | **Production launch** | **0/20** | **20** | **0%** |
 
 The completed items above are source review and architecture decisions, not deployment. Production launch remains at 0% until the OPEN evidence is obtained and an actual buyer is served.
