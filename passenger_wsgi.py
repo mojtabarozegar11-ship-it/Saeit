@@ -33,6 +33,8 @@ _PUBLIC_HOSTS = (
     "www.mojplaywin.com",
     "mojtaba.bot.ai",
     "www.mojtaba.bot.ai",
+    "mojprop.top",
+    "www.mojprop.top",
 )
 _PUBLIC_ORIGINS = tuple(f"https://{host}" for host in _PUBLIC_HOSTS)
 

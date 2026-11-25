@@ -14,6 +14,8 @@ from .blog_models import BlogPage
 
 INDEXNOW_KEY = "f5e9e3dccc5c2511c452f26b011ec43e"
 
+MOJPROP_HOSTS = {"mojprop.top", "www.mojprop.top"}
+
 
 def _norm(value):
     return " ".join(str(value or "").replace("ي", "ی").replace("ك", "ک").replace("‌", " ").split()).strip().lower()
@@ -68,7 +70,7 @@ def site_search(request):
 @require_GET
 def robots_txt(request):
     host = request.get_host().split(":")[0].lower()
-    if host in {"mojplaywin.com", "www.mojplaywin.com"}:
+    if host in {"mojplaywin.com", "www.mojplaywin.com"} or host in MOJPROP_HOSTS:
         body = (
             "User-agent: *\n"
             "Allow: /\n"
@@ -76,8 +78,8 @@ def robots_txt(request):
             "Disallow: /api/\n"
             "Disallow: /mojprop-starter30-checkout/\n"
             "Disallow: /mojprop-starter30-status/\n"
-            "Sitemap: https://mojplaywin.com/sitemap.xml\n"
-            "Sitemap: https://mojplaywin.com/moj-prop/education/sitemap.xml\n"
+            f"Sitemap: https://{host}/sitemap.xml\n"
+            f"Sitemap: https://{host}/moj-prop/education/sitemap.xml\n"
         )
     else:
         body = (
@@ -98,7 +100,7 @@ def robots_txt(request):
 def indexnow_key(request, key):
     """Public IndexNow verification file for the MojPlayWin host only."""
     host = request.get_host().split(":")[0].lower()
-    if host not in {"mojplaywin.com", "www.mojplaywin.com"} or key != INDEXNOW_KEY:
+    if host not in {"mojplaywin.com", "www.mojplaywin.com"} and host not in MOJPROP_HOSTS or key != INDEXNOW_KEY:
         return HttpResponse(status=404)
     return HttpResponse(INDEXNOW_KEY + "\n", content_type="text/plain; charset=utf-8")
 
@@ -106,7 +108,7 @@ def indexnow_key(request, key):
 @require_GET
 def sitemap_xml(request):
     host = request.get_host().split(":")[0].lower()
-    if host in {"mojplaywin.com", "www.mojplaywin.com"}:
+    if host in {"mojplaywin.com", "www.mojplaywin.com"} or host in MOJPROP_HOSTS:
         urls = [
             "/", "/store/",
             # Public TRX catalog SKUs: expose only the approved, rights-cleared
@@ -123,7 +125,7 @@ def sitemap_xml(request):
             "/moj-prop/education/simulated-versus-live/",
             "/moj-prop/selected-traders/",
         ]
-        origin = "https://mojplaywin.com"
+        origin = "https://mojprop.top" if host in MOJPROP_HOSTS else "https://mojplaywin.com"
     else:
         urls = ["/", "/company/", "/company/executive/", "/about/", "/services/", "/contact/", "/research/", "/research/projects/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/weather/", "/economy/", "/business/", "/studio/", "/newsletter/", "/blog/", "/store/", "/agriculture/free-tools/20261025/", "/auctions/", "/ghanadi/", "/ghanadi/cafe-shiraz/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]
         urls += [f"/blog/{quote(str(code), safe='')}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]

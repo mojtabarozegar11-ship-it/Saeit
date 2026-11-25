@@ -17,11 +17,22 @@ DEBUG = env("DEBUG")
 if not DEBUG and SECRET_KEY == "change-me":
     raise RuntimeError("SECRET_KEY must be configured when DEBUG=False")
 
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+ALLOWED_HOSTS = env.list(
+    "ALLOWED_HOSTS",
+    default=["localhost", "127.0.0.1", "mojplaywin.com", "www.mojplaywin.com", "mojprop.top", "www.mojprop.top"],
+)
 
 if not DEBUG and not ALLOWED_HOSTS:
     raise RuntimeError("ALLOWED_HOSTS must contain at least one host when DEBUG=False")
-CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=[
+        "https://mojplaywin.com",
+        "https://www.mojplaywin.com",
+        "https://mojprop.top",
+        "https://www.mojprop.top",
+    ],
+)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
