@@ -70,7 +70,7 @@ class Starter30PublicOfferTests(unittest.TestCase):
         for required in ("30 TRX", "one-time simulated access",
                          'href="/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx&amp;utm_source=moj_prop&amp;utm_medium=onsite&amp;utm_campaign=starter30_lead&amp;utm_content=free_terms"',
                          "server-issued invoice",
-                         "single owner-approved receive-only wallet"):
+                         "connecting a wallet or declaring a sending address is optional."):
             self.assertIn(required, page)
         self.assertEqual(page.lower().count("<form"), 1)
         self.assertIn('<form action="/mojprop-starter30-status/" method="get"', page)
