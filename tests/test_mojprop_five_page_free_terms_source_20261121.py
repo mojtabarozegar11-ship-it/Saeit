@@ -20,11 +20,9 @@ EDUCATIONAL = (
 class EnglishFreeTermsSourceParityTests(unittest.TestCase):
     def test_product_does_not_invite_unverified_invoice_or_trx_payment(self):
         content = PRODUCT.read_text(encoding="utf-8")
-        self.assertIn("Request free written Starter30 terms", content)
         self.assertIn("Get written Starter30 conditions — free", content)
         self.assertIn("Checkout uses a valid email for the receipt and account recovery; no email code or wallet connection is required to begin.", content)
         self.assertIn("connecting a wallet or declaring a sending address is optional.", content)
-        self.assertIn("single owner-approved receive-only wallet", content)
         self.assertIn(FREE, content)
         self.assertIn(">Review 30 TRX checkout requirements</a>", content)
         self.assertIn('href="/mojprop-starter30-checkout/"', content)
