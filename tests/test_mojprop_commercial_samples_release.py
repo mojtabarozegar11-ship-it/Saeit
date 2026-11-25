@@ -63,10 +63,10 @@ class MojPropCatalogSamplesContractTests(unittest.TestCase):
         starter = (SITE_SOURCE / expected[0]).read_text("utf-8")
         self.assertIn("./journal-template.csv", starter)
         self.assertIn("./journal-guide.txt", starter)
-        self.assertIn("The secure checkout first verifies your email", starter)
+        self.assertIn("Checkout uses a valid email for the receipt and account recovery; no email code or wallet connection is required to begin.", starter)
         self.assertIn("Review 30 TRX checkout requirements", starter)
         self.assertIn('href="/mojprop-starter30-checkout/"', starter)
-        self.assertIn("requires your sending TRON wallet address", starter)
+        self.assertIn("connecting a wallet or declaring a sending address is optional.", starter)
         self.assertIn("No real funded account", starter)
         self.assertNotIn("payment admission under independent verification", starter)
 
