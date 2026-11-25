@@ -77,10 +77,14 @@ def parse_rates(data, *, today):
     return dates[0], dates[5], rows[dates[0]], rows[dates[5]]
 
 
-def build_research(data, *, retrieved_at, reviewer_id):
+def build_research(data, *, retrieved_at, reviewed_at, reviewer_id):
     if (type(retrieved_at) is not datetime or retrieved_at.utcoffset() is None):
         raise SourceRejected("Actual retrieval timestamp required")
+    if (type(reviewed_at) is not datetime or reviewed_at.utcoffset() is None
+            or not retrieved_at <= reviewed_at <= retrieved_at + timedelta(hours=24)):
+        raise SourceRejected("Actual subsequent editorial review time required")
     retrieved_at = retrieved_at.astimezone(timezone.utc)
+    reviewed_at = reviewed_at.astimezone(timezone.utc)
     latest, prior, current, previous = parse_rates(data, today=retrieved_at.date())
     changes = []
     for code in CURRENCIES:
@@ -94,6 +98,6 @@ def build_research(data, *, retrieved_at, reviewer_id):
         invalidation="Reference-rate comparisons are historical. A subsequent ECB observation "
                      "or a change in macroeconomic assumptions invalidates extrapolation.",
         evidence_url=SOURCE_PAGE, observed_at=retrieved_at,
-        reviewed_at=retrieved_at, reviewer_id=reviewer_id,
-        risk_statement=RISK_DISCLAIMER, as_of=retrieved_at,
+        reviewed_at=reviewed_at, reviewer_id=reviewer_id,
+        risk_statement=RISK_DISCLAIMER, as_of=reviewed_at,
     )
