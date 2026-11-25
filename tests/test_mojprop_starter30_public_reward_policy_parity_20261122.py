@@ -49,7 +49,7 @@ class Starter30PublicOwnerPolicyParityTests(unittest.TestCase):
         blob = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
         self.assertEqual(blob, "737e26d5b410638c9c54d8861fe342c859548698")
         self.assertNotIn('id="profit-reward-schedule"', self.page)
-        self.assertIn("requires your sending tron wallet address", self.page.lower())
+        self.assertIn("connecting a wallet or declaring a sending address is optional.", self.page.lower())
 
     def test_04_guide_discloses_policy_not_actual_paid_reward(self):
         t = self.guide.lower()
@@ -61,7 +61,7 @@ class Starter30PublicOwnerPolicyParityTests(unittest.TestCase):
 
     def test_05_no_direct_wallet_or_paid_fee_collection_created(self):
         self.assertIn('action="/mojprop-starter30-status/"', self.page)
-        self.assertIn("requires your sending tron wallet address", self.page.lower())
+        self.assertIn("connecting a wallet or declaring a sending address is optional.", self.page.lower())
         self.assertIn("unique server-issued invoice", self.guide.lower())
         self.assertIn("no customer capital is accepted", self.page.lower())
         self.assertNotIn('action="/mojprop-starter30-checkout/" method="post"', self.page)
