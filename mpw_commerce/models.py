@@ -153,3 +153,28 @@ class CommerceOrderRequest(models.Model):
         max_length=3, choices=[("ETH", "ETH"), ("TRX", "TRX")],
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class SignalSubscription(models.Model):
+    """Order-bound prepaid educational research terms; not a trading account.
+
+    An existing one-time digital item must never acquire this entitlement.
+    Access is derived from the original server-settled receipt on every read.
+    """
+    item = models.OneToOneField(
+        "core.OrderItem", on_delete=models.PROTECT,
+        related_name="mpw_signal_subscription",
+    )
+    plan_id = models.CharField(max_length=40)
+    price_usd = models.DecimalField(max_digits=14, decimal_places=2)
+    term_weeks = models.PositiveSmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(Q(plan_id="education-monthly", term_weeks=4, price_usd="29.90")
+                           | Q(plan_id="education-quarterly", term_weeks=12, price_usd="79.90")),
+                name="mpw_signal_fixed_terms_v1",
+            ),
+        ]
