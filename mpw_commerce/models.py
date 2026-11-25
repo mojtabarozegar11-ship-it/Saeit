@@ -178,3 +178,20 @@ class SignalSubscription(models.Model):
                 name="mpw_signal_fixed_terms_v1",
             ),
         ]
+
+
+class SignalResearchIssue(models.Model):
+    """Private dated research snapshot, not an order or delivery receipt."""
+    agent = models.ForeignKey("core.Agent", on_delete=models.PROTECT)
+    reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    record_id = models.CharField(max_length=64, unique=True)
+    record = models.JSONField()
+    fingerprint = models.CharField(max_length=64, unique=True)
+    source_sha256 = models.CharField(max_length=64)
+    source_rights_reference = models.CharField(max_length=250)
+    published_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["published_at"], name="mpw_signal_issue_date_idx"),
+        ]
