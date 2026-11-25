@@ -139,6 +139,24 @@ def _show_invoice(request, invoice_id):
         invoice=_decode(intent)
     except PaymentHold as exc:
         raise Http404("Invoice could not be verified") from exc
+    if intent.status == "paid":
+        from mpw_commerce.models import CommerceFulfillment
+        grant = CommerceFulfillment.objects.filter(
+            item__order_id=intent.order_id,
+            kind=CommerceFulfillment.Kind.SUBSCRIPTION,
+        ).first()
+        if grant is not None:
+            from mpw_commerce.signal_research_delivery import private_research_html
+            from services.mpw_trx_public_pages import _page
+            content = private_research_html(request.user, grant.item_id)
+            if content is None:
+                content = ('<p>Subscription access is unavailable or expired. '
+                           'If you already paid, contact purchase support; do not pay again.</p>')
+            response = _page("Private Signal Desk research", content)
+            response["Content-Security-Policy"] = (
+                "default-src 'none'; style-src 'unsafe-inline'; "
+                "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+            return _nocache(response)
     if intent.status!=WAITING or invoice.expires_at<=timezone.now():
         # An old invoice must never remain payable, but a paid or expired
         # customer's own invoice URL should still explain the next step.

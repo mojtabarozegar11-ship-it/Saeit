@@ -1,0 +1,128 @@
+"""Persistent Signal Desk terms use the real merchant receipt contract."""
+import hashlib
+import json
+from datetime import timedelta
+from decimal import Decimal
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.utils import timezone
+
+from core.crown_tron_receipts import PROVIDER
+from core.models import Product, Order, OrderItem, PaymentIntent, PaymentWebhookEvent, LedgerEntry
+from mpw_commerce.models import CommerceFulfillment
+from mpw_commerce.signal_subscriptions import (
+    snapshot_subscription, subscription_access, existing_subscription_terms,
+    SubscriptionRejected,
+)
+from services.mojtaba_tron_owner_receiver import APPROVED_NATIVE_TRX_RECIPIENT
+
+
+class SignalSubscriptionTests(TestCase):
+    def setUp(self):
+        self.buyer = get_user_model().objects.create_user(username="signal_sub_buyer")
+        self.other = get_user_model().objects.create_user(username="signal_sub_other")
+        self.product = Product.objects.create(
+            title="Monthly educational research", product_type="subscription",
+            price=Decimal("29.90"), currency="USD", active=True,
+            metadata={"signal_plan_id": "education-monthly", "rights_cleared": True,
+                      "mpw_commerce": {"enabled": True, "fulfillment": "subscription"}},
+        )
+        self.order = Order.objects.create(customer=self.buyer, total=self.product.price,
+                                          currency="USD", status="pending")
+        self.item = OrderItem.objects.create(order=self.order, product=self.product,
+                                             quantity=1, unit_price=self.product.price,
+                                             currency="USD")
+
+    def test_terms_snapshot_is_idempotent_and_unpaid_access_denied(self):
+        sub = snapshot_subscription(self.item.pk)
+        self.assertEqual(sub.term_weeks, 4)
+        self.assertEqual(snapshot_subscription(self.item.pk).pk, sub.pk)
+        self.assertIsNone(subscription_access(self.buyer, self.item.pk))
+
+    def test_digital_product_never_becomes_subscription(self):
+        self.product.product_type = "digital"
+        self.product.save(update_fields=["product_type"])
+        with self.assertRaises(SubscriptionRejected):
+            snapshot_subscription(self.item.pk)
+
+    def test_new_subscription_invoice_remains_unavailable(self):
+        from services.mpw_walletless_commercial_intent import _ready_order
+        from services.mpw_trx_walletless_core import PaymentHold
+        snapshot_subscription(self.item.pk)
+        with self.assertRaises(PaymentHold):
+            _ready_order(self.order, buyer_id=self.buyer.pk)
+
+    def test_existing_invoice_cannot_gain_late_subscription_terms(self):
+        intent = PaymentIntent.objects.create(
+            order=self.order, amount=self.order.total, currency="USD",
+            provider=PROVIDER, idempotency_key="existing-no-terms",
+        )
+        with self.assertRaises(SubscriptionRejected):
+            snapshot_subscription(self.item.pk)
+        with self.assertRaises(SubscriptionRejected):
+            existing_subscription_terms(self.item, intent)
+
+    def test_real_receipt_contract_expiry_buyer_and_refund(self):
+        snapshot_subscription(self.item.pk)
+        receiver = APPROVED_NATIVE_TRX_RECIPIENT
+        sun = 123456789
+        intent = PaymentIntent.objects.create(
+            order=self.order, amount=self.order.total, currency="USD", status="paid",
+            provider=PROVIDER, idempotency_key="wltrx1:" +
+            hashlib.sha256(receiver.encode("ascii")).hexdigest() + ":" + str(sun),
+            provider_reference=json.dumps({"v": 1, "to": receiver, "sun": sun,
+                                           "rate": "0.25", "at": timezone.now().isoformat()}),
+        )
+        self.assertEqual(existing_subscription_terms(self.item, intent).plan_id,
+                         "education-monthly")
+        event = PaymentWebhookEvent.objects.create(
+            payment_intent=intent, provider=PROVIDER, event_type="tron_finalized",
+            event_id="a" * 64, payload_hash="b" * 64, status="processed",
+        )
+        LedgerEntry.objects.create(
+            order=self.order, payment_intent=intent, entry_type="credit",
+            amount=self.order.total, currency="USD",
+            reference="walletless:tron-mainnet:" + event.event_id,
+            metadata={"payment_method": PROVIDER, "network": "tron-mainnet",
+                      "tx_hash": event.event_id, "evidence_digest": event.payload_hash,
+                      "sender": receiver, "walletless_receipt_event_id": event.pk},
+        )
+        self.order.status = "paid"
+        self.order.save(update_fields=["status"])
+        CommerceFulfillment.objects.create(item=self.item, kind="subscription", status="queued")
+        access = subscription_access(self.buyer, self.item.pk)
+        self.assertEqual(access["current_week"], 1)
+        from core.models import Agent
+        from mpw_commerce.signal_research_delivery import publish_reviewed_issue, private_research_html
+        from services.mojtaba_signal_policy import EducationalSignal, RISK_DISCLAIMER
+        Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+                             mission="Educational research", active=True)
+        reviewer = get_user_model().objects.create_user(
+            username="signal_reviewer", is_staff=True, is_superuser=True)
+        moment = timezone.now()
+        record = EducationalSignal(
+            record_id="test_week_one", asset="XAUUSD", timeframe="1d",
+            scenario="Illustrative research scenario with no promised outcome or trade.",
+            invalidation="The educational scenario is invalid if its assumptions change.",
+            evidence_url="https://example.com/research", observed_at=moment,
+            reviewed_at=moment, reviewer_id=reviewer.username,
+            risk_statement=RISK_DISCLAIMER, as_of=moment)
+        with self.assertRaises(SubscriptionRejected):
+            publish_reviewed_issue(record, reviewer=self.other, source_bytes=b"fixture",
+                                   rights_reference="Test fixture only")
+        issue = publish_reviewed_issue(record, reviewer=reviewer, source_bytes=b"fixture",
+                                       rights_reference="Test fixture only")
+        self.assertEqual(publish_reviewed_issue(
+            record, reviewer=reviewer, source_bytes=b"fixture",
+            rights_reference="Test fixture only").pk, issue.pk)
+        self.assertIn("XAUUSD", private_research_html(self.buyer, self.item.pk))
+        self.assertIsNone(private_research_html(self.other, self.item.pk))
+        self.assertIsNone(subscription_access(self.other, self.item.pk))
+        self.assertIsNone(subscription_access(self.buyer, self.item.pk,
+                                              now=event.created_at + timedelta(weeks=4)))
+        LedgerEntry.objects.create(order=self.order, payment_intent=intent,
+                                   entry_type="refund", amount=Decimal("1.00"),
+                                   currency="USD", reference="signal-test-refund")
+        self.assertIsNone(subscription_access(self.buyer, self.item.pk))
+        self.assertIsNone(private_research_html(self.buyer, self.item.pk))

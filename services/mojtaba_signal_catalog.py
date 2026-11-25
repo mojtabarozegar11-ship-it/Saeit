@@ -59,12 +59,12 @@ PLANS = MappingProxyType({
     "education-monthly": SignalPlan(
         "education-monthly", "Monthly educational market brief", "monthly",
         Decimal("29.90"),
-        "Four weekly educational briefs with dated provenance, explicit market risk and limitations; no personalized advice.",
+        "Four weekly educational briefs with dated provenance, explicit market risk and limitations; no personalized advice. ECB reference-rate information is available free of charge at https://www.ecb.europa.eu/; fees cover original educational research, not access to those free rates.",
     ),
     "education-quarterly": SignalPlan(
         "education-quarterly", "Quarterly educational market brief", "quarterly",
         Decimal("79.90"),
-        "A twelve-week educational archive with source fingerprints, review status and explicit capital-loss risk; without promises of profit.",
+        "A twelve-week educational archive with source fingerprints, review status and explicit capital-loss risk; without promises of profit. ECB reference-rate information is available free of charge at https://www.ecb.europa.eu/; fees cover original educational research, not access to those free rates.",
     ),
 })
 

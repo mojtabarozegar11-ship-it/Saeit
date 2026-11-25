@@ -77,7 +77,7 @@ def _decode(intent) -> InvoiceIntent:
         raise PaymentHold("Corrupt persisted walletless invoice") from exc
 
 
-def _ready_order(order, *, buyer_id: int):
+def _ready_order(order, *, buyer_id: int, settlement_intent=None):
     from mpw_commerce.settlement import order_snapshot
     from mpw_commerce.downloads import _private_file
 
@@ -88,12 +88,25 @@ def _ready_order(order, *, buyer_id: int):
         total, items = order_snapshot(order)
     except Exception as exc:
         raise PaymentHold("Order snapshot cannot be verified") from exc
-    if len(items) != 1 or items[0][1] != "digital":
-        raise PaymentHold("Pilot requires one downloadable digital product")
-    item = items[0][0]
-    source = _private_file(item)
-    if source.is_symlink() or not source.is_file():
-        raise PaymentHold("Digital product not safely available")
+    if len(items) != 1:
+        raise PaymentHold("One merchant product required")
+    item, kind = items[0]
+    if kind == "subscription" and settlement_intent is not None:
+        # Existing valid invoices must be settleable even while new sales
+        # remain paused. Never create subscription terms during settlement.
+        from mpw_commerce.signal_subscriptions import (
+            existing_subscription_terms, SubscriptionRejected,
+        )
+        try:
+            existing_subscription_terms(item, settlement_intent)
+        except SubscriptionRejected as exc:
+            raise PaymentHold("Subscription invoice terms unavailable") from exc
+    elif kind == "digital":
+        source = _private_file(item)
+        if source.is_symlink() or not source.is_file():
+            raise PaymentHold("Digital product not safely available")
+    else:
+        raise PaymentHold("New invoices require a ready downloadable product")
     if Decimal(total) != Decimal(order.total) or Decimal(total) <= 0:
         raise PaymentHold("Order price mismatch")
     return Decimal(total), item
@@ -245,7 +258,7 @@ def settle_commercial_intent(intent_id: int, tx_hash: str,
             raise PaymentHold("Intent is no longer awaiting payment")
         invoice = _decode(intent)
         order = Order.objects.select_for_update().get(pk=intent.order_id)
-        total, item = _ready_order(order, buyer_id=invoice.customer_id)
+        total, item = _ready_order(order, buyer_id=invoice.customer_id, settlement_intent=intent)
         if total != invoice.usd_total:
             raise PaymentHold("Order price changed after quote")
         # Protect this order from competing legacy settlement, without
@@ -285,8 +298,11 @@ def settle_commercial_intent(intent_id: int, tx_hash: str,
                       "tx_hash":tx,"sender":sender,"evidence_digest":digest,
                       "walletless_receipt_event_id":event.pk},
         )
+        kind = item.product.metadata["mpw_commerce"]["fulfillment"]
         CommerceFulfillment.objects.create(
-            item=item, kind="digital", status=CommerceFulfillment.Status.READY,
+            item=item, kind=kind,
+            status=(CommerceFulfillment.Status.QUEUED if kind == "subscription"
+                    else CommerceFulfillment.Status.READY),
         )
         intent.status="paid"
         intent.save(update_fields=["status", "updated_at"])
@@ -387,6 +403,13 @@ def commercial_buyer_status(intent_id: int, buyer_id: int, *, db=None,
             or ledger.metadata.get("walletless_receipt_event_id") != receipt.pk):
         return {"status": "review", "can_download": False}
     items = list(OrderItem.objects.filter(order=intent.order)[:2])
+    if len(items) == 1 and CommerceFulfillment.objects.filter(
+        item=items[0], kind=CommerceFulfillment.Kind.SUBSCRIPTION,
+    ).exists():
+        from mpw_commerce.signal_subscriptions import subscription_access
+        access = subscription_access(intent.order.customer, items[0].pk)
+        return {"status": "paid" if access else "review",
+                "can_download": False, "subscription": access}
     if len(items) != 1 or not CommerceFulfillment.objects.filter(
         item=items[0], kind="digital", status__in=(CommerceFulfillment.Status.READY, CommerceFulfillment.Status.COMPLETE),
     ).exists():
