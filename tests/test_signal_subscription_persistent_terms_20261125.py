@@ -93,6 +93,31 @@ class SignalSubscriptionTests(TestCase):
         CommerceFulfillment.objects.create(item=self.item, kind="subscription", status="queued")
         access = subscription_access(self.buyer, self.item.pk)
         self.assertEqual(access["current_week"], 1)
+        from core.models import Agent
+        from mpw_commerce.signal_research_delivery import publish_reviewed_issue, private_research_html
+        from services.mojtaba_signal_policy import EducationalSignal, RISK_DISCLAIMER
+        Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+                             mission="Educational research", active=True)
+        reviewer = get_user_model().objects.create_user(
+            username="signal_reviewer", is_staff=True, is_superuser=True)
+        moment = timezone.now()
+        record = EducationalSignal(
+            record_id="test_week_one", asset="XAUUSD", timeframe="1d",
+            scenario="Illustrative research scenario with no promised outcome or trade.",
+            invalidation="The educational scenario is invalid if its assumptions change.",
+            evidence_url="https://example.com/research", observed_at=moment,
+            reviewed_at=moment, reviewer_id=reviewer.username,
+            risk_statement=RISK_DISCLAIMER, as_of=moment)
+        with self.assertRaises(SubscriptionRejected):
+            publish_reviewed_issue(record, reviewer=self.other, source_bytes=b"fixture",
+                                   rights_reference="Test fixture only")
+        issue = publish_reviewed_issue(record, reviewer=reviewer, source_bytes=b"fixture",
+                                       rights_reference="Test fixture only")
+        self.assertEqual(publish_reviewed_issue(
+            record, reviewer=reviewer, source_bytes=b"fixture",
+            rights_reference="Test fixture only").pk, issue.pk)
+        self.assertIn("XAUUSD", private_research_html(self.buyer, self.item.pk))
+        self.assertIsNone(private_research_html(self.other, self.item.pk))
         self.assertIsNone(subscription_access(self.other, self.item.pk))
         self.assertIsNone(subscription_access(self.buyer, self.item.pk,
                                               now=event.created_at + timedelta(weeks=4)))
@@ -100,3 +125,4 @@ class SignalSubscriptionTests(TestCase):
                                    entry_type="refund", amount=Decimal("1.00"),
                                    currency="USD", reference="signal-test-refund")
         self.assertIsNone(subscription_access(self.buyer, self.item.pk))
+        self.assertIsNone(private_research_html(self.buyer, self.item.pk))
