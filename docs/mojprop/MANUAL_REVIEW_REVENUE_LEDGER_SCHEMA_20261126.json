@@ -1,0 +1,36 @@
+{
+  "record_type": "mojprop_manual_review_sale",
+  "schema_version": "1",
+  "required_fields": [
+    "lead_reference",
+    "offer_reference",
+    "customer_acceptance_reference",
+    "service_scope",
+    "price_amount",
+    "price_currency",
+    "approved_payment_channel_reference",
+    "payment_verification_reference",
+    "delivery_reference",
+    "delivery_timestamp_utc",
+    "owner_approval_reference"
+  ],
+  "revenue_rule": "revenue is zero until payment_verification_reference and delivery_reference both exist",
+  "allowed_statuses": [
+    "lead",
+    "reviewing",
+    "offer_draft",
+    "offer_sent",
+    "accepted",
+    "payment_pending",
+    "paid_verified",
+    "delivered",
+    "closed",
+    "rejected"
+  ],
+  "forbidden_status_claims": [
+    "funded_account",
+    "guaranteed_profit",
+    "automatic_enrollment",
+    "payment_received_without_independent_verification"
+  ]
+}
