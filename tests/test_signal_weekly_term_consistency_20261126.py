@@ -1,5 +1,7 @@
 """Keep the public Signal Desk catalog and persisted terms in lockstep."""
 
+from decimal import Decimal
+
 from django.test import SimpleTestCase
 
 from mpw_commerce.signal_subscriptions import TERMS
@@ -14,4 +16,4 @@ class SignalWeeklyTermConsistencyTests(SimpleTestCase):
         self.assertEqual(TERMS["education-quarterly"], 12)
 
     def test_weekly_catalog_price_matches_persisted_contract(self):
-        self.assertEqual(PLANS["education-weekly"].price_usd, "9.90" and PLANS["education-weekly"].price_usd)
+        self.assertEqual(PLANS["education-weekly"].price_usd, Decimal("9.90"))
