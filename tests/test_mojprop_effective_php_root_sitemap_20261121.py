@@ -12,7 +12,7 @@ from xml.etree import ElementTree
 ROOT = Path(__file__).resolve().parents[1]
 LIVE_PHP_MIRROR = ROOT / "ops/cpanel/mojplaywin/sitemap/_mpw_sitemap_three_indexable_20261017.php"
 ENGLISH_SITEMAP = ROOT / "templates/moj-prop/sitemap.xml"
-BASE = "https://mojplaywin.com"
+BASE = "https://mojprop.top"
 BASELINE_MOJ_PROP = {"/moj-prop/", "/moj-prop/starter-30-trx/"}
 
 
@@ -33,7 +33,7 @@ class MojPropEffectivePHPXmlSitemapTests(unittest.TestCase):
         for url in self.locs:
             parsed = urlsplit(url)
             self.assertEqual(parsed.scheme, "https")
-            self.assertEqual(parsed.netloc, "mojplaywin.com")
+            self.assertEqual(parsed.netloc, "mojprop.top")
             self.assertTrue(parsed.path.startswith("/moj-prop/"))
             self.assertEqual(parsed.query, "")
             self.assertEqual(parsed.fragment, "")
