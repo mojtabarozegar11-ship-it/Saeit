@@ -90,7 +90,14 @@ jobs:
           fi
           REMOTE
 
-          for pair in \
+          for remote_root in \\
+            /home/zomorod2/separated-backups \\
+            /home/zomorod2/.mojplaywin-moj-prop-backups \\
+            /home/zomorod2/MojPlayWin_Private_Assets; do
+            timeout 20s ssh -T -F "$d/config" cpanel "root='$remote_root'; if test -d \"\\$root\" && test ! -L \"\\$root\"; then echo BACKUP_CANDIDATE_DIR=\"\\$root\"; echo BACKUP_CANDIDATE_FILE_COUNT=\"\\$(find \"\\$root\" -maxdepth 3 -type f | wc -l | tr -d ' ')\"; echo BACKUP_CANDIDATE_BYTES=\"\\$(du -sb \"\\$root\" | awk '{print \\$1}')\"; else echo BACKUP_CANDIDATE_DIR=\"\\$root absent\"; fi"
+          done
+
+          for pair in \\
             "BACKUP_RESTORE=${BACKUP_RESTORE:-UNSET}" \
             "ROLLBACK=${ROLLBACK:-UNSET}" \
             "TENANT_ISOLATION=${TENANT_ISOLATION:-UNSET}"; do
