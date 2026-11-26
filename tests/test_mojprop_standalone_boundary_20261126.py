@@ -12,7 +12,8 @@ from services.mojprop_standalone_boundary import (
 )
 
 
-@override_settings(ALLOWED_HOSTS=["testserver", "mojprop.top", "www.mojprop.top", "mojplaywin.com"])\nclass MojPropStandaloneBoundaryTests(SimpleTestCase):
+@override_settings(ALLOWED_HOSTS=["testserver", "mojprop.top", "www.mojprop.top", "mojplaywin.com"])
+class MojPropStandaloneBoundaryTests(SimpleTestCase):
     def test_only_dedicated_hosts_are_mojprop(self):
         self.assertEqual(MOJPROP_HOSTS, {"mojprop.top", "www.mojprop.top"})
         factory = RequestFactory()
