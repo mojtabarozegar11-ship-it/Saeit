@@ -88,22 +88,23 @@ jobs:
               echo "PRIVATE_RESTORE_EVIDENCE_DIR=absent"
               echo "PRIVATE_RESTORE_EVIDENCE_CASE_COUNT=0"
           fi
+          for remote_root in \
+            /home/zomorod2/separated-backups \
+            /home/zomorod2/.mojplaywin-moj-prop-backups \
+            /home/zomorod2/MojPlayWin_Private_Assets; do
+              if test -d "$remote_root" && test ! -L "$remote_root"; then
+                  echo "BACKUP_CANDIDATE_DIR=$remote_root"
+                  echo "BACKUP_CANDIDATE_FILE_COUNT=$(find "$remote_root" -maxdepth 3 -type f | wc -l | tr -d ' ')"
+                  echo "BACKUP_CANDIDATE_BYTES=$(du -sb "$remote_root" | awk '{print $1}')"
+              else
+                  echo "BACKUP_CANDIDATE_DIR=$remote_root absent"
+              fi
+          done
           REMOTE
 
-          for remote_root in \\
-            /home/zomorod2/separated-backups \\
-            /home/zomorod2/.mojplaywin-moj-prop-backups \\
-            /home/zomorod2/MojPlayWin_Private_Assets; do
-            timeout 20s ssh -T -F "$d/config" cpanel "root='$remote_root'; if test -d \"\\$root\" && test ! -L \"\\$root\"; then echo BACKUP_CANDIDATE_DIR=\"\\$root\"; echo BACKUP_CANDIDATE_FILE_COUNT=\"\\$(find \"\\$root\" -maxdepth 3 -type f | wc -l | tr -d ' ')\"; echo BACKUP_CANDIDATE_BYTES=\"\\$(du -sb \"\\$root\" | awk '{print \\$1}')\"; else echo BACKUP_CANDIDATE_DIR=\"\\$root absent\"; fi"
-          done
-
-          for pair in \\
-            "BACKUP_RESTORE=${BACKUP_RESTORE:-UNSET}" \
-            "ROLLBACK=${ROLLBACK:-UNSET}" \
-            "TENANT_ISOLATION=${TENANT_ISOLATION:-UNSET}"; do
-            echo "RELEASE_GATE_$pair"
-          done
-
+          echo "RELEASE_GATE_BACKUP_RESTORE=${BACKUP_RESTORE:-UNSET}"
+          echo "RELEASE_GATE_ROLLBACK=${ROLLBACK:-UNSET}"
+          echo "RELEASE_GATE_TENANT_ISOLATION=${TENANT_ISOLATION:-UNSET}"
           gate_open=false
           if [[ "${BACKUP_RESTORE:-}" == true && "${ROLLBACK:-}" == true && "${TENANT_ISOLATION:-}" == true ]]; then
             gate_open=true
