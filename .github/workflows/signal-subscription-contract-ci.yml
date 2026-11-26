@@ -1,0 +1,58 @@
+name: Signal subscription contract CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mpw_commerce/**"
+      - "services/mojtaba_signal_catalog.py"
+      - "services/mojtaba_signal_policy.py"
+      - "services/mojtaba_signal_entitlement.py"
+      - "tests/test_signal_*.py"
+      - "tests/test_mojtaba_signal_*.py"
+      - ".github/workflows/signal-subscription-contract-ci.yml"
+  pull_request:
+    paths:
+      - "mpw_commerce/**"
+      - "services/mojtaba_signal_catalog.py"
+      - "services/mojtaba_signal_policy.py"
+      - "services/mojtaba_signal_entitlement.py"
+      - "tests/test_signal_*.py"
+      - "tests/test_mojtaba_signal_*.py"
+      - ".github/workflows/signal-subscription-contract-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signal-subscription-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DEBUG: "false"
+      SECRET_KEY: "signal-contract-ci-only"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+      DATABASE_URL: "sqlite:///signal-contract-ci.sqlite3"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install declared dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile changed signal contract modules
+        run: |
+          python -m py_compile             mpw_commerce/models.py             mpw_commerce/signal_subscriptions.py             mpw_commerce/signal_research_delivery.py             mpw_commerce/migrations/0005_align_weekly_signal_terms.py             services/mojtaba_signal_catalog.py             services/mojtaba_signal_policy.py             services/mojtaba_signal_entitlement.py
+      - name: Check migration graph
+        run: python manage.py makemigrations --check --dry-run
+      - name: Apply isolated CI migrations
+        run: python manage.py migrate --noinput
+      - name: Run signal contract tests
+        run: |
+          python manage.py test             tests.test_signal_weekly_term_consistency_20261126             tests.test_signal_subscription_persistent_terms_20261125             tests.test_mojtaba_signal_catalog_20261115             tests.test_mojtaba_signal_entitlement_20261115
