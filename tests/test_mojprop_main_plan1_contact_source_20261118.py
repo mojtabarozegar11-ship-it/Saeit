@@ -128,7 +128,7 @@ class MainlinePlanOneContactGuards(unittest.TestCase):
         self.assertNotIn("eth_sendTransaction", self.text)
 
     def test_19_canonical_domain_is_correct(self):
-        self.assertIn('href="https://mojplaywin.com/moj-prop/"', self.text)
+        self.assertIn('href="https://mojprop.top/"', self.text)
 
     def test_20_no_client_pii_in_plan1_url(self):
         self.assertNotRegex(self.plan, r'href="[^"]+[?&](?:email|token|receipt|name)=')
@@ -145,7 +145,7 @@ class MainlinePlanOneContactGuards(unittest.TestCase):
 
     def test_24_primary_hero_sales_cta_is_real_plan1_contact(self):
         self.assertIn('class="btn primary" href="/moj-prop/contact/">Ask about real Plan 1', self.text)
-        self.assertIn("MOJPLAYWIN / MOJ-PROP-01 / PRELAUNCH", self.text)
+        self.assertIn("MOJPROP / MOJ-PROP-01 / PRELAUNCH", self.text)
 
     def test_25_old_catalog_is_secondary_not_first_sales_cta(self):
         hero = self.text[self.text.index('<section class="hero">'):self.text.index('</section>', self.text.index('<section class="hero">'))]
