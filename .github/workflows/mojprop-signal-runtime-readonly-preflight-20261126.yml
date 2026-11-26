@@ -1,0 +1,43 @@
+name: MojProp Signal runtime read-only preflight 20261126
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-signal-runtime-readonly-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' }}"
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source into isolated runner directory
+        uses: actions/checkout@v4
+        with:
+          path: mpw-preflight-source
+          persist-credentials: false
+          clean: true
+      - name: Run read-only MojProp runtime preflight through pinned cPanel relay
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mojprop-signal-runtime-preflight-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          test -s mpw-preflight-source/scripts/mpw_signal_runtime_preflight_20261126.py
+          timeout 120s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no -p 1396 zomorod2@zohal.pws-dns.net 'cd /home/zomorod2/Saeit-mojprop-candidate-20261122 && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < mpw-preflight-source/scripts/mpw_signal_runtime_preflight_20261126.py | tee "$d/runtime-preflight.json"
