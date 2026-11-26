@@ -507,7 +507,7 @@ class MojPropRequest(T):
     """Public Moj Prop request intake; no payment or automated advice is created."""
     ROUTE_CHOICES = (
         ("blueprint", "Prop-program design"),
-        ("signals", "Educational signals and market brief"),
+        ("signals", "Paid signal subscription (prelaunch)"),
         ("brief", "Private market brief"),
         ("audit", "mojtaba.bot.ai commercial-gate audit"),
         ("digital", "Digital product purchase inquiry"),
