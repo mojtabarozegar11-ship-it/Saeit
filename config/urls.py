@@ -34,7 +34,7 @@ def _host_aware_home(request):
     host = request.get_host().split(":")[0].lower()
     if host in {"mojprop.top", "www.mojprop.top"}:
         return TemplateView.as_view(
-            template_name="moj-prop-v4/starter-30-trx/index.html"
+            template_name="moj-prop-v4/index.html"
         )(request)
     return services(request)
 
@@ -156,6 +156,7 @@ from core.signal_free_views import signal_free_subscribe, signal_free_confirm, s
 # The public /moj-prop/ directory is served as a static product surface by Apache.
 # Keep the intake API at a root-level WSGI path so GET and POST reach Passenger.
 urlpatterns += [
+    path("moj-prop/", TemplateView.as_view(template_name="moj-prop-v4/index.html"), name="mojprop_home"),
     path("moj-prop/starter-30-trx/", TemplateView.as_view(template_name="moj-prop-v4/starter-30-trx/index.html"), name="mojprop_starter30_public"),
     path("mojprop-starter30-checkout/", starter30_checkout, name="mojprop_starter30_checkout"),
     path("mojprop-starter30-status/", starter30_status, name="mojprop_starter30_status"),
