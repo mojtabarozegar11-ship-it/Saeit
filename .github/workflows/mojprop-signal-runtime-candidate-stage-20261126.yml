@@ -1,0 +1,118 @@
+name: MojProp Signal runtime private candidate stage
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: "Exact 40-character main commit to stage"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-signal-runtime-candidate-stage
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate exact source and build allowlisted runtime package
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RELEASE_SHA" == "$GITHUB_SHA" ]]
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          root="$RUNNER_TEMP/mojprop-signal-runtime-$RUN_ID"
+          install -d -m 700 "$root/package"
+          manifest="$root/manifest.json"
+          paths=(
+            mpw_commerce
+            services/mojtaba_signal_catalog.py
+            services/mojtaba_signal_policy.py
+            services/mojtaba_signal_entitlement.py
+            services/mojtaba_tron_owner_receiver.py
+            core/canonical_content_owner.py
+            core/crown_tron_receipts.py
+            core/models.py
+            config/settings.py
+            config/urls.py
+            config/mpw_commerce_urls.py
+          )
+          for path in "${paths[@]}"; do
+            test -e "$path"
+          done
+          cp -a --parents "${paths[@]}" "$root/package/"
+          python3 - "$root/package" "$manifest" "$RELEASE_SHA" "$RUN_ID" "$RUN_ATTEMPT" <<'PY'
+          import hashlib, json, os, sys
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          files=[]
+          for path in sorted(p for p in root.rglob("*") if p.is_file()):
+              files.append({
+                  "path": path.relative_to(root).as_posix(),
+                  "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                  "bytes": path.stat().st_size,
+              })
+          payload={
+              "classification":"PRIVATE_SIGNAL_RUNTIME_CANDIDATE",
+              "release_sha":sys.argv[3],
+              "run_id":sys.argv[4],
+              "run_attempt":sys.argv[5],
+              "file_count":len(files),
+              "files":files,
+              "applied":False,
+              "published":False,
+              "migration_executed":False,
+              "payment_activation":False,
+              "passenger_restart":False,
+          }
+          Path(sys.argv[2]).write_text(json.dumps(payload,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+          print("SIGNAL_RUNTIME_CANDIDATE_MANIFEST_READY=true")
+          print("SIGNAL_RUNTIME_CANDIDATE_FILES="+str(len(files)))
+          PY
+          tar -czf "$root/package.tar.gz" -C "$root/package" .
+          tar -czf "$root/candidate.tar.gz" -C "$root" package.tar.gz manifest.json
+          sha256sum "$root/candidate.tar.gz" | tee "$root/candidate.tar.gz.sha256"
+
+      - name: Transfer to private cPanel inbox without applying
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          umask 077
+          d="$RUNNER_TEMP/mojprop-signal-runtime-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          printf 'Host cpanel\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s/key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 10\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          candidate_id="signal-runtime-${RUN_ID}-${RUN_ATTEMPT}"
+          inbox="/home/zomorod2/.codex-change-candidates/$candidate_id"
+          archive="$inbox/candidate.tar.gz"
+          timeout 30s ssh -T -F "$d/config" cpanel "set -eu; root=/home/zomorod2/.codex-change-candidates; test ! -L \$root; install -d -m 700 \$root; test ! -e '$inbox'; install -d -m 700 '$inbox'"
+          scp -F "$d/config" "$RUNNER_TEMP/mojprop-signal-runtime-$RUN_ID/candidate.tar.gz" "cpanel:$archive"
+          timeout 30s ssh -T -F "$d/config" cpanel "set -eu; test -f '$archive'; sha256sum '$archive'; tar -tzf '$archive' >/dev/null; printf 'PRIVATE_SIGNAL_RUNTIME_CANDIDATE_STAGED id=%s applied=false published=false migration_executed=false\\n' '$candidate_id'"
+          rm -rf -- "$d" "$RUNNER_TEMP/mojprop-signal-runtime-$RUN_ID"
