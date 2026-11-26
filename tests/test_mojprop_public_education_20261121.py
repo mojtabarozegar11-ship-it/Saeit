@@ -62,8 +62,8 @@ class MojPropEducationPublicationTests(unittest.TestCase):
         # weakening the strict external-source allowlist below.
         article=(ROOT/"gold-macro-scenarios-q4-2026-20261122.md").read_text(encoding="utf-8")
         for url in (
-            "https://mojplaywin.com/mojtaba.bot.ai/?utm_source=github",
-            "https://mojplaywin.com/moj-prop-intake/?format=html&service=signals&utm_source=github",
+            "https://mojprop.top/mojtaba.bot.ai/?utm_source=github",
+            "https://mojprop.top/moj-prop-intake/?format=html&service=signals&utm_source=github",
         ):
             with self.subTest(owner_link=url):
                 self.assertIn(url,article)
@@ -84,7 +84,7 @@ class MojPropEducationPublicationTests(unittest.TestCase):
                 with self.subTest(page=p.name,url=url):
                     if url in TRUSTED_EDUCATIONAL_REFERENCES:
                         continue
-                    self.assertTrue(url.startswith("https://mojplaywin.com/"))
+                    self.assertTrue(url.startswith("https://mojprop.top/"))
                     self.assertIn("utm_source=github",url)
 
 if __name__=="__main__":unittest.main()
