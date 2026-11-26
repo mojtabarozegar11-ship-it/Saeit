@@ -113,6 +113,8 @@ jobs:
               if test -f "$archive"; then
                   if gzip -t "$archive" >/dev/null 2>&1; then
                       echo "BACKUP_CANDIDATE_GZIP_OK=$archive"
+                      echo "BACKUP_CANDIDATE_GZIP_SIZE=$(stat -c '%s' "$archive")"
+                      echo "BACKUP_CANDIDATE_GZIP_SHA256=$(sha256sum "$archive" | awk '{print $1}')"
                   else
                       echo "BACKUP_CANDIDATE_GZIP_OK=$archive false"
                   fi
