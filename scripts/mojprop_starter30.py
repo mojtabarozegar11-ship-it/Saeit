@@ -1,6 +1,6 @@
-"""Moj Prop Starter 30: deterministic EDUCATIONAL journal scoring.
+"""Moj Prop Starter 30: deterministic commercial prop-challenge scorecard.
 
-The 30 TRX label is an indicative, one-time future invoice amount. This module
+The 30 TRX label is the configured challenge price for the future verified checkout. This module
 does not invoice, debit wallets, enrol users, place trades or issue funded accounts.
 A $1,000 virtual reference balance here is simulated bookkeeping only.
 """
@@ -20,14 +20,18 @@ _AMOUNT = re.compile(r"(?:0|[1-9][0-9]{0,5})(?:\.[0-9]{1,2})?\Z")
 
 
 class InvalidJournal(ValueError):
-    """Invalid log; do not produce an apparent student completion certificate."""
+    """Invalid challenge record; do not issue a pass or reward decision."""
 
 
 def public_product() -> dict:
-    """Informational offer only. Intentionally no public wallet or checkout."""
+    """Commercial product specification only; no public wallet or checkout is enabled."""
     return {
         "code": PRODUCT_ID,
-        "title": "Moj Prop Starter 30 — educational simulator assessment",
+        "title": "Moj Prop Starter 30 — paid simulated prop challenge",
+        "product_type": "prop_challenge",
+        "commercial_product": True,
+        "education_only": False,
+        "commercial_stage": "prelaunch_until_legal_payment_and_delivery_proof",
         "indicative_price_trx": PRICE_TRX,
         "price_sun": PRICE_SUN,
         "simulation_reference_usd": "1000.00",
@@ -40,9 +44,9 @@ def public_product() -> dict:
         "best_day_profit_cap_percent": "50.00",
         "journal_peak_drawdown_alert_percent": str(MAX_PEAK_DRAWDOWN_PERCENT),
         "deliverables": [
-            "60-day simulated challenge journal review",
-            "Risk-rule adherence scorecard",
-            "Individual written learning recommendations",
+            "60-day simulated challenge scorecard",
+            "Risk-limit and rule-breach report",
+            "Operator eligibility record; no guaranteed pass or reward",
         ],
         "funded_account": False,
         "withdrawals": False,
@@ -68,9 +72,9 @@ def _money(value: object) -> Decimal:
 
 
 def assess_journal(sessions: object) -> dict:
-    """Score a bounded journal within the 60-day simulated challenge window.
+    """Score a bounded challenge record within the 60-day simulated challenge window.
 
-    This is educational feedback, NEVER proof of a real trade, eligibility for
+    This is a simulated challenge record, NEVER proof of a live trade, eligibility for
     funding, brokerage performance or a paid settlement. Do not upload private
     broker credentials or personal financial records.
     """

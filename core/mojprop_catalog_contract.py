@@ -20,7 +20,7 @@ class PublicMojPropService:
 SERVICES = (
     PublicMojPropService("blueprint", "Prop-program design", "prop-blueprint", 149),
     PublicMojPropService("brief", "Private market brief", "gold-market-brief", 39),
-    PublicMojPropService("signals", "Educational signals and market brief", "educational-signal", 29),
+    PublicMojPropService("signals", "Paid signal subscription (prelaunch)", "educational-signal", 29),
     PublicMojPropService("audit", "mojtaba.bot.ai commercial-gate audit", "commercial-gate-audit", 249),
 )
 
