@@ -48,11 +48,11 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Compile changed signal contract modules
         run: |
-          python -m py_compile             mpw_commerce/models.py             mpw_commerce/signal_subscriptions.py             mpw_commerce/signal_research_delivery.py             mpw_commerce/migrations/0005_align_weekly_signal_terms.py             services/mojtaba_signal_catalog.py             services/mojtaba_signal_policy.py             services/mojtaba_signal_entitlement.py
+          python -m py_compile             mpw_commerce/models.py             mpw_commerce/signal_subscriptions.py             mpw_commerce/signal_research_delivery.py             mpw_commerce/migrations/0005_align_weekly_signal_terms.py             services/mojtaba_signal_catalog.py             services/mojtaba_signal_policy.py             services/mojtaba_signal_entitlement.py             scripts/mpw_signal_runtime_preflight_20261126.py
       - name: Check migration graph
         run: python manage.py makemigrations --check --dry-run
       - name: Apply isolated CI migrations
         run: python manage.py migrate --noinput
       - name: Run signal contract tests
         run: |
-          python manage.py test             tests.test_signal_weekly_term_consistency_20261126             tests.test_signal_subscription_persistent_terms_20261125             tests.test_mojtaba_signal_catalog_20261115             tests.test_mojtaba_signal_entitlement_20261115
+          python manage.py test             tests.test_signal_weekly_term_consistency_20261126             tests.test_signal_subscription_persistent_terms_20261125             tests.test_mojtaba_signal_catalog_20261115             tests.test_mojtaba_signal_entitlement_20261115             tests.test_signal_runtime_preflight_source_20261126
