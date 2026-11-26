@@ -16,7 +16,7 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path("/home/zomorod2/Saeit-staging")
+ROOT = Path(__file__).resolve().parents[1]
 OWNER_RECEIVER = "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73"
 PROVIDER = "mpw_walletless_trx_v1"
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
