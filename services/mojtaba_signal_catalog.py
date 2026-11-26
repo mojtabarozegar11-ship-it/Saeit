@@ -59,7 +59,7 @@ PLANS = MappingProxyType({
     "education-monthly": SignalPlan(
         "education-monthly", "Monthly live-signal subscription (prelaunch)", "monthly",
         Decimal("29.90"),
-        "Planned recurring live signal feed with four weekly deliveries, dated provenance, explicit market risk and limitations; activation requires verified delivery and renewal. No guaranteed return.",
+        "Planned recurring live signal feed with four weekly deliveries, dated provenance, explicit market risk and limitations; activation requires verified delivery and renewal. No promise of return.",
     ),
     "education-quarterly": SignalPlan(
         "education-quarterly", "Quarterly live-signal subscription (prelaunch)", "quarterly",
