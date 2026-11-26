@@ -173,7 +173,8 @@ class SignalSubscription(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                condition=(Q(plan_id="education-monthly", term_weeks=4, price_usd="29.90")
+                condition=(Q(plan_id="education-weekly", term_weeks=1, price_usd="9.90")
+                           | Q(plan_id="education-monthly", term_weeks=4, price_usd="29.90")
                            | Q(plan_id="education-quarterly", term_weeks=12, price_usd="79.90")),
                 name="mpw_signal_fixed_terms_v1",
             ),
