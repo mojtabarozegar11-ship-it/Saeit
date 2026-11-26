@@ -1,0 +1,52 @@
+name: MojProp.top standalone commercial gate
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mojprop-standalone-commercial.yml"
+      - "templates/moj-prop/**"
+      - "templates/moj-prop-v4/**"
+      - "services/mojprop_standalone_boundary.py"
+      - "config/mpw_commerce_urls.py"
+      - "tests/test_mojprop_standalone_boundary_20261126.py"
+      - "docs/mojprop/**"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-standalone-surface:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate dedicated MojProp surface
+        run: |
+          set -euo pipefail
+          python3 -m py_compile services/mojprop_standalone_boundary.py config/mpw_commerce_urls.py
+          python3 -m unittest discover -s tests -p 'test_mojprop_standalone_boundary_20261126.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          pages = [
+              Path("templates/moj-prop/index.html"),
+              Path("templates/moj-prop/contact/index.html"),
+              Path("templates/moj-prop-v4/index.html"),
+              Path("templates/moj-prop-v4/catalog/index.html"),
+              Path("templates/moj-prop-v4/starter-30-trx/index.html"),
+          ]
+          legacy = ("mojplaywin.com", "MojPlayWin", "MOJPLAYWIN")
+          for page in pages:
+              text = page.read_text(encoding="utf-8")
+              for token in legacy:
+                  if token in text:
+                      raise SystemExit(f"legacy token {token!r} remains in {page}")
+              if "mojprop.top" not in text.lower():
+                  raise SystemExit(f"dedicated host missing from {page}")
+          print("MOJPROP_STANDALONE_SURFACE=PASS")
+          PY
+      - name: Confirm no deployment path is enabled by this gate
+        run: |
+          test ! -f deploy/mojprop-production-enable.flag
+          echo "MOJPROP_DEPLOYMENT=NOT_PERFORMED"
+          echo "MOJPROP_PAYMENT=DISABLED"
+          echo "MOJPROP_RESTORE_EVIDENCE=REQUIRED"
