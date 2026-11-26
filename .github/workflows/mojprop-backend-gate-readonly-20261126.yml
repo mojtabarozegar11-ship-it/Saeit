@@ -1,0 +1,106 @@
+name: MojProp backend release gate read-only evidence 20261126
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojprop-backend-gate-readonly-20261126.yml"
+      - "mpw_commerce/**"
+      - "scripts/mpw_signal_*preflight_20261126.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-backend-gate-readonly
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 10
+    env:
+      HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+      BACKUP_RESTORE: ${{ vars.MOJPROP_BACKUP_RESTORE_VERIFIED }}
+      ROLLBACK: ${{ vars.MOJPROP_ROLLBACK_VERIFIED }}
+      TENANT_ISOLATION: ${{ vars.MOJPROP_TENANT_ISOLATION_VERIFIED }}
+      EXPECTED_CANDIDATE_SHA: 8f4e763f27946569f0ca45803b72f640b907a84e4c62682ef76e57d1cb1cfa37
+      CANDIDATE_ID: signal-runtime-45842237118-1
+    steps:
+      - name: Validate private candidate and release gate evidence read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          umask 077
+          d="$RUNNER_TEMP/mojprop-gate-readonly-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          printf 'Host cpanel\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s/key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 10\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+
+          timeout 45s ssh -T -F "$d/config" cpanel bash -s -- "$CANDIDATE_ID" "$EXPECTED_CANDIDATE_SHA" "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          candidate_id="$1"
+          expected_sha="$2"
+          run_id="$3"
+          root="/home/zomorod2/.codex-change-candidates"
+          candidate="$root/$candidate_id/candidate.tar.gz"
+          test ! -L "$root"
+          test -f "$candidate"
+          actual_sha="$(sha256sum "$candidate" | awk '{print $1}')"
+          test "$actual_sha" = "$expected_sha"
+          echo "PRIVATE_CANDIDATE_SHA256_MATCH=true"
+          echo "PRIVATE_CANDIDATE_ARCHIVE_READABLE=$(tar -tzf "$candidate" >/dev/null && echo true || echo false)"
+          manifest="$(tar -xOf "$candidate" manifest.json)"
+          printf '%s' "$manifest" | python3 -c '
+          import json,sys
+          p=json.load(sys.stdin)
+          required={
+              "classification":"PRIVATE_SIGNAL_RUNTIME_CANDIDATE",
+              "applied":False,
+              "published":False,
+              "migration_executed":False,
+              "payment_activation":False,
+              "passenger_restart":False,
+          }
+          for key,value in required.items():
+              if p.get(key) != value:
+                  raise SystemExit(f"candidate manifest mismatch: {key}={p.get(key)!r}")
+          if p.get("file_count") != 29:
+              raise SystemExit(f"unexpected candidate file_count: {p.get('file_count')!r}")
+          print("PRIVATE_CANDIDATE_MANIFEST_SAFE=true")
+          print("PRIVATE_CANDIDATE_FILE_COUNT="+str(p["file_count"]))
+          '
+          evidence_root="/home/zomorod2/.mojprop-private-db-restore-evidence"
+          if test -d "$evidence_root" && test ! -L "$evidence_root"; then
+              evidence_count="$(find "$evidence_root" -mindepth 1 -maxdepth 1 -type d ! -name '.*' | wc -l | tr -d ' ')"
+              echo "PRIVATE_RESTORE_EVIDENCE_DIR=present"
+              echo "PRIVATE_RESTORE_EVIDENCE_CASE_COUNT=$evidence_count"
+          else
+              echo "PRIVATE_RESTORE_EVIDENCE_DIR=absent"
+              echo "PRIVATE_RESTORE_EVIDENCE_CASE_COUNT=0"
+          fi
+          REMOTE
+
+          for pair in \
+            "BACKUP_RESTORE=${BACKUP_RESTORE:-UNSET}" \
+            "ROLLBACK=${ROLLBACK:-UNSET}" \
+            "TENANT_ISOLATION=${TENANT_ISOLATION:-UNSET}"; do
+            echo "RELEASE_GATE_$pair"
+          done
+
+          gate_open=false
+          if [[ "${BACKUP_RESTORE:-}" == true && "${ROLLBACK:-}" == true && "${TENANT_ISOLATION:-}" == true ]]; then
+            gate_open=true
+          fi
+          echo "RELEASE_GATE_OPEN=$gate_open"
+          echo "READ_ONLY_AUDIT=true"
+          echo "PRODUCTION_MUTATION=false"
