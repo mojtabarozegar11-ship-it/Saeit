@@ -103,6 +103,38 @@ jobs:
                   echo "BACKUP_CANDIDATE_DIR=$remote_root absent"
               fi
           done
+          echo "BACKUP_CANDIDATE_ARCHIVE_CHECKS_BEGIN=true"
+          for archive in \
+            /home/zomorod2/separated-backups/20261121/mojprop-isolated-db-consistent-20261121.sql.gz \
+            /home/zomorod2/separated-backups/20261121/mojprop-independent-db-1159017f96/mojprop-full-logical.sql.gz \
+            /home/zomorod2/separated-backups/20261121/mojprop-preflight-v2849/mojprop-full-logical.sql.gz \
+            /home/zomorod2/separated-backups/20261121/mojprop-preflight-v2849/mojprop-target-neutral.sql.gz \
+            /home/zomorod2/separated-backups/20261121/mojprop-db-security-20261121/mojprop-dedicated-20261121.sql.gz; do
+              if test -f "$archive"; then
+                  if gzip -t "$archive" >/dev/null 2>&1; then
+                      echo "BACKUP_CANDIDATE_GZIP_OK=$archive"
+                  else
+                      echo "BACKUP_CANDIDATE_GZIP_OK=$archive false"
+                  fi
+              else
+                  echo "BACKUP_CANDIDATE_ARCHIVE_ABSENT=$archive"
+              fi
+          done
+          for archive in \
+            /home/zomorod2/separated-backups/20261119/mojplaywin-store-code-20261119.tar.gz \
+            /home/zomorod2/separated-backups/20261119/catalog-scoped-recovery-20261120/catalog-and-private-assets.tar.gz \
+            /home/zomorod2/separated-backups/20261122/mojprop-two-page-static-parity/two-original-static-pages.tar.gz; do
+              if test -f "$archive"; then
+                  if tar -tzf "$archive" >/dev/null 2>&1; then
+                      echo "BACKUP_CANDIDATE_TAR_OK=$archive"
+                  else
+                      echo "BACKUP_CANDIDATE_TAR_OK=$archive false"
+                  fi
+              else
+                  echo "BACKUP_CANDIDATE_ARCHIVE_ABSENT=$archive"
+              fi
+          done
+          echo "BACKUP_CANDIDATE_ARCHIVE_CHECKS_END=true"
           REMOTE
 
           echo "RELEASE_GATE_BACKUP_RESTORE=${BACKUP_RESTORE:-UNSET}"
