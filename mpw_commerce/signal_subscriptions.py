@@ -17,7 +17,7 @@ from mpw_commerce.models import CommerceFulfillment, CommerceInvoice, SignalSubs
 from services.mojtaba_signal_catalog import get_signal_plan
 from services.mojtaba_tron_owner_receiver import APPROVED_NATIVE_TRX_RECIPIENT
 
-TERMS = {"education-monthly": 4, "education-quarterly": 12}
+TERMS = {"education-weekly": 1, "education-monthly": 4, "education-quarterly": 12}
 
 
 class SubscriptionRejected(ValueError):
