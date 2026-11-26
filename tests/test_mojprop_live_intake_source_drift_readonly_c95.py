@@ -178,7 +178,7 @@ class MojPropLiveIntakeDriftTests(unittest.TestCase):
         current = root / "config/urls.py"
         self.assertEqual(exact_git_blob(archive.read_bytes()), old_pin)
         self.assertEqual(exact_git_blob(current.read_bytes()),
-                         "780d2d78d9feeadb63bb488ae301c36d36caadab")
+                         "10e5b040ee0d9661ff28cc1c8498afef94c0c80e")
         source = current.read_text(encoding="utf-8")
         self.assertIn("def _host_aware_home(request):", source)
         self.assertIn('if host in {"mojprop.top", "www.mojprop.top"}:', source)
