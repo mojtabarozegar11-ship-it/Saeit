@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from django.http import HttpResponse
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 from django.test.client import RequestFactory
 
 from services.mojprop_standalone_boundary import (
@@ -12,7 +12,7 @@ from services.mojprop_standalone_boundary import (
 )
 
 
-class MojPropStandaloneBoundaryTests(SimpleTestCase):
+@override_settings(ALLOWED_HOSTS=["testserver", "mojprop.top", "www.mojprop.top", "mojplaywin.com"])\nclass MojPropStandaloneBoundaryTests(SimpleTestCase):
     def test_only_dedicated_hosts_are_mojprop(self):
         self.assertEqual(MOJPROP_HOSTS, {"mojprop.top", "www.mojprop.top"})
         factory = RequestFactory()
