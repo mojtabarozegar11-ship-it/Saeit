@@ -101,27 +101,41 @@ def main():
             and backup_parent.stat().st_uid==os.geteuid(),"Private backup root not verified")
     backup=backup_parent/("zomorod-trust-"+sha(data)[:16])
     backup.mkdir(mode=0o700)
+    # Keep actual recovery bytes, not only hashes, outside the public root.
+    copies={}
+    for i,p in enumerate(protected):
+        snapshot=backup/("protected-%02d.bin"%i)
+        original=p.read_bytes()
+        require(sha(original)==before[str(p)],"Concurrent protected edit during snapshot")
+        write_new(snapshot,original,0o600)
+        require(sha(snapshot.read_bytes())==before[str(p)],"Snapshot verification failed")
+        copies[str(p)]=snapshot.name
     write_new(backup/"manifest.json",json.dumps({"source_sha256":sha(data),"protected":before,
-             "target":str(target)},ensure_ascii=False).encode(),0o600)
+             "snapshots":copies,"target":str(target)},ensure_ascii=False).encode(),0o600)
+    write_new(backup/"approved.html",data,0o600)
     require(all(sha(p.read_bytes())==before[str(p)] for p in protected),"Concurrent protected edit")
-    # Stage outside web root, then atomically publish the completed file by an
-    # exclusive hard link. No live file is overwritten.
-    staged=backup/"approved.html"
+    # An independent staging inode prevents changes to public bytes from
+    # altering the private approved artifact. Never overwrite existing files.
+    staged=backup/"publish-stage.html"
     write_new(staged,data,0o644)
+    inode=staged.stat()
     target.mkdir(mode=0o755)
     dest=target/"index.html"
     published=False
     try:
         os.link(staged,dest,follow_symlinks=False)
         published=True
+        staged.unlink()
         require(regular(dest) and sha(dest.read_bytes())==sha(data),"Published bytes differ")
         code,body=get(URL)
         require(code==200 and sha(body)==sha(data),"Public HTML differs or route unavailable")
         require(all(sha(p.read_bytes())==before[str(p)] for p in protected),"Protected file changed")
     except BaseException:
-        # Withdraw only the newly published file, preserving it in private storage.
-        if published and regular(dest) and os.path.samestat(dest.stat(),staged.stat()):
+        # Withdraw only our unchanged new file; never alter concurrent edits.
+        if published and regular(dest) and os.path.samestat(dest.stat(),inode) and sha(dest.read_bytes())==sha(data):
             os.rename(dest,backup/"withdrawn.html")
+        if target.is_dir() and not target.is_symlink() and not any(target.iterdir()):
+            target.rmdir()
         raise
     print("TRUST_PUBLIC_RELEASE=verified SHA256="+sha(data))
 
