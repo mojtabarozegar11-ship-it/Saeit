@@ -16,8 +16,8 @@ If status is pending, use official support before paying again. Never send a sec
 ## Review the service before buying
 A simulated trading service does not imply a real brokerage account, ownership of virtual balances or guaranteed profit. Review its current eligibility, cancellation, delivery and reward terms.
 
-See [Moj Prop payment information](https://mojplaywin.com/moj-prop/payment/?utm_source=github&utm_medium=organic_referral&utm_campaign=invoice_education) and [Starter 30 details](https://mojplaywin.com/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=invoice_education). These links provide information, not payment instructions. Only use the current merchant-issued invoice if the secure checkout confirms availability.
+See [Moj Prop payment information](https://mojprop.top/moj-prop/payment/?utm_source=github&utm_medium=organic_referral&utm_campaign=invoice_education) and [Starter 30 details](https://mojprop.top/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=invoice_education). These links provide information, not payment instructions. Only use the current merchant-issued invoice if the secure checkout confirms availability.
 
 ---
 
-[All Moj Prop educational guides](./README.md) · [Moj Prop main site](https://mojplaywin.com/moj-prop/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+[All Moj Prop educational guides](./README.md) · [Moj Prop main site](https://mojprop.top/moj-prop/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
