@@ -96,6 +96,9 @@ jobs:
                   echo "BACKUP_CANDIDATE_DIR=$remote_root"
                   echo "BACKUP_CANDIDATE_FILE_COUNT=$(find "$remote_root" -maxdepth 3 -type f | wc -l | tr -d ' ')"
                   echo "BACKUP_CANDIDATE_BYTES=$(du -sb "$remote_root" | awk '{print $1}')"
+                  find "$remote_root" -maxdepth 3 -type f -printf '%P\\t%s\\n' 2>/dev/null | sort | head -50 | while IFS= read -r item; do
+                      echo "BACKUP_CANDIDATE_FILE=$item"
+                  done
               else
                   echo "BACKUP_CANDIDATE_DIR=$remote_root absent"
               fi
