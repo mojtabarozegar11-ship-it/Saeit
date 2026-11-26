@@ -8,7 +8,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1] / "templates" / "moj-prop"
-ORIGIN = "https://mojplaywin.com"
+ORIGIN = "https://mojprop.top"
 PUBLIC_PATHS = (
     "/moj-prop/",
     "/moj-prop/rules/",
