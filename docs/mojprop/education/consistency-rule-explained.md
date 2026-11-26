@@ -17,8 +17,8 @@ Review the concentration measure as a diagnostic rather than a reason to place a
 ## Why simulation matters
 A simulated balance is virtual. Transaction costs, market fills and available liquidity may differ from a real broker environment. Neither a positive journal nor compliance with one ratio establishes a challenge pass or reward eligibility by itself; the published rules govern.
 
-Learn more: [Moj Prop risk rules](https://mojplaywin.com/moj-prop/rules/?utm_source=github&utm_medium=organic_referral&utm_campaign=consistency_education) and [Starter 30 challenge information and journal](https://mojplaywin.com/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=consistency_education). Check the latest written conditions rather than assuming this illustration is the current contract.
+Learn more: [Moj Prop risk rules](https://mojprop.top/moj-prop/rules/?utm_source=github&utm_medium=organic_referral&utm_campaign=consistency_education) and [Starter 30 challenge information and journal](https://mojprop.top/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=consistency_education). Check the latest written conditions rather than assuming this illustration is the current contract.
 
 ---
 
-[All Moj Prop educational guides](./README.md) · [Moj Prop main site](https://mojplaywin.com/moj-prop/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+[All Moj Prop educational guides](./README.md) · [Moj Prop main site](https://mojprop.top/moj-prop/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
