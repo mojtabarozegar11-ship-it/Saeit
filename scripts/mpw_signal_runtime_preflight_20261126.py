@@ -26,16 +26,37 @@ RELEASE_FLAGS = (
 
 def collect_report() -> dict:
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-    import django
+    try:
+        import django
 
-    django.setup()
+        django.setup()
 
-    from django.apps import apps
-    from django.conf import settings
-    from django.db import connection
-    from django.db.migrations.recorder import MigrationRecorder
-    from mpw_commerce.signal_subscriptions import TERMS
-    from services.mojtaba_signal_catalog import PLANS
+        from django.apps import apps
+        from django.conf import settings
+        from django.db import connection
+        from django.db.migrations.recorder import MigrationRecorder
+        from mpw_commerce.signal_subscriptions import TERMS
+        from services.mojtaba_signal_catalog import PLANS
+    except ModuleNotFoundError as exc:
+        return {
+            "read_only": True,
+            "runtime_source_ready": False,
+            "runtime_import_error": exc.name or str(exc),
+            "signal_subscription_table": None,
+            "signal_subscription_table_exists": False,
+            "weekly_terms_migration_applied": False,
+            "terms_match_expected": False,
+            "catalog_plan_ids_match_terms": False,
+            "catalog_prices_usd": {},
+            "payment_flags": {},
+            "public_signal_subscription_enabled": False,
+            "blocking_reason": (
+                "Operational runtime is behind the reviewed source or is missing "
+                f"the required module: {exc.name or exc}. No migration or payment "
+                "activation was attempted."
+            ),
+            "note": "Read-only source/runtime compatibility preflight; no production mutation.",
+        }
 
     applied = MigrationRecorder(connection).migration_qs.filter(
         app="mpw_commerce", name="0005_align_weekly_signal_terms"
