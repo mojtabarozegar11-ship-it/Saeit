@@ -59,7 +59,7 @@ def check_pages(root, pages):
         parser = HeadParser()
         page = (root / slug / "index.html").read_text(encoding="utf-8")
         parser.feed(page.split("</head>", 1)[0])
-        url = "https://mojplaywin.com/moj-prop/" + slug
+        url = "https://mojprop.top/moj-prop/" + slug
         assert parser.canonical == [url]
         assert len(parser.titles) == 1
         title = parser.titles[0]
