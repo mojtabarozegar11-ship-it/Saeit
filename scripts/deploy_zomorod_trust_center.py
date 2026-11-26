@@ -11,6 +11,7 @@ from pathlib import Path
 import pwd
 import re
 import subprocess
+import tempfile
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -99,8 +100,8 @@ def main():
     backup_parent=HOME/".backups"
     require(backup_parent.is_dir() and backup_parent.resolve()==backup_parent
             and backup_parent.stat().st_uid==os.geteuid(),"Private backup root not verified")
-    backup=backup_parent/("zomorod-trust-"+sha(data)[:16])
-    backup.mkdir(mode=0o700)
+    # Every authorized attempt retains its own recovery evidence, even after rollback.
+    backup=Path(tempfile.mkdtemp(prefix="zomorod-trust-"+sha(data)[:16]+"-",dir=backup_parent))
     # Keep actual recovery bytes, not only hashes, outside the public root.
     copies={}
     for i,p in enumerate(protected):
