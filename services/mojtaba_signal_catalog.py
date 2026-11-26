@@ -1,6 +1,6 @@
-"""Fixed educational signal-plan catalog for the single mojtaba.bot.ai agent.
+"""Fixed prelaunch paid-signal subscription catalog for the single mojtaba.bot.ai agent.
 
-The catalog makes a product and price explicit, but it deliberately does not
+The catalog makes each planned subscription product and price explicit, but it deliberately does not
 activate billing, publication, trading, or customer delivery.
 """
 from dataclasses import dataclass
@@ -52,25 +52,25 @@ class SignalPlan:
 
 PLANS = MappingProxyType({
     "education-weekly": SignalPlan(
-        "education-weekly", "Weekly educational market brief", "weekly",
+        "education-weekly", "Weekly live-signal subscription (prelaunch)", "weekly",
         Decimal("9.90"),
-        "Source-backed scenarios, invalidation levels and risk disclosure; no personalized advice.",
+        "Planned live signal feed with dated source records, invalidation levels and capital-loss risk disclosure; activation requires verified delivery.",
     ),
     "education-monthly": SignalPlan(
-        "education-monthly", "Monthly educational market brief", "monthly",
+        "education-monthly", "Monthly live-signal subscription (prelaunch)", "monthly",
         Decimal("29.90"),
-        "Four weekly educational briefs with dated provenance, explicit market risk and limitations; no personalized advice. ECB reference-rate information is available free of charge at https://www.ecb.europa.eu/; fees cover original educational research, not access to those free rates.",
+        "Planned recurring live signal feed with four weekly deliveries, dated provenance, explicit market risk and limitations; activation requires verified delivery and renewal. No guaranteed return.",
     ),
     "education-quarterly": SignalPlan(
-        "education-quarterly", "Quarterly educational market brief", "quarterly",
+        "education-quarterly", "Quarterly live-signal subscription (prelaunch)", "quarterly",
         Decimal("79.90"),
-        "A twelve-week educational archive with source fingerprints, review status and explicit capital-loss risk; without promises of profit. ECB reference-rate information is available free of charge at https://www.ecb.europa.eu/; fees cover original educational research, not access to those free rates.",
+        "Planned twelve-week live signal feed with source fingerprints, review status and explicit capital-loss risk; activation requires verified delivery and renewal. No promise of profit.",
     ),
 })
 
 def get_signal_plan(plan_id):
     if type(plan_id) is not str or plan_id not in PLANS:
-        raise SignalCatalogError("unknown educational signal plan")
+        raise SignalCatalogError("unknown signal subscription plan")
     return PLANS[plan_id]
 
 def build_manual_signal_offer(plan_id, *, agent=_AGENT):
@@ -79,7 +79,10 @@ def build_manual_signal_offer(plan_id, *, agent=_AGENT):
         raise SignalCatalogError("only the single authorized agent may own this catalog")
     plan = get_signal_plan(plan_id)
     return {
-        "schema": "mojtaba.signal.offer.v1",
+        "schema": "mojtaba.signal.subscription.offer.v1",
+        "product_type": "signal_subscription",
+        "feed_mode": "live_signal_feed_required",
+        "training_product": False,
         "agent": _AGENT,
         "plan_id": plan.plan_id,
         "title": plan.title,
