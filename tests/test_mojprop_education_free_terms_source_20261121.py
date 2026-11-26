@@ -5,9 +5,9 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1] / "templates" / "moj-prop" / "education"
 FREE = "/moj-prop-intake/?format=html&amp;service=blueprint&amp;package=starter-30-trx"
 DOCS = (
-    ("index.html", "https://mojplaywin.com/moj-prop/education/"),
-    ("drawdown-and-position-sizing/index.html", "https://mojplaywin.com/moj-prop/education/drawdown-and-position-sizing/"),
-    ("simulated-versus-live/index.html", "https://mojplaywin.com/moj-prop/education/simulated-versus-live/"),
+    ("index.html", "https://mojprop.top/moj-prop/education/"),
+    ("drawdown-and-position-sizing/index.html", "https://mojprop.top/moj-prop/education/drawdown-and-position-sizing/"),
+    ("simulated-versus-live/index.html", "https://mojprop.top/moj-prop/education/simulated-versus-live/"),
 )
 
 
