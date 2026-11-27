@@ -193,6 +193,7 @@ def _checkout_page(request, product_id, pages_namespace):
     from django.shortcuts import render
     from core.models import Product
     from mpw_commerce.buyer_orders import _eligible
+    from mpw_commerce.signal_subscriptions import subscription_sale_ready, subscription_product_terms
     from services.mpw_trx_commercial_context import rights_cleared_for_sale
     from services.mpw_trx_commercial_web import _configured_receiver, _nocache
     from services.mpw_walletless_commercial_intent import _commercial_db
@@ -211,12 +212,16 @@ def _checkout_page(request, product_id, pages_namespace):
         raise Http404
     product = Product.objects.select_related("knowledge_article").filter(
         pk=product_id, active=True).first()
-    if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
+    if product is None or not rights_cleared_for_sale(product):
+        raise Http404
+    subscription = product.product_type == "subscription"
+    if not (subscription_sale_ready(product) if subscription else _eligible(product)):
         raise Http404
     _record_funnel_event_best_effort(request, "begin_checkout", product)
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
         "mpw_trx_easy_enabled": True, "mpw_guest_checkout": True,
+        "signal_subscription": subscription_product_terms(product) if subscription else None,
     }))
     response = pages_namespace["_checkout_csrf_referrer"](response)
     response["Content-Security-Policy"] = (

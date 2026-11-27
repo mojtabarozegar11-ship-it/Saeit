@@ -2,6 +2,7 @@
 import hashlib
 import json
 import re
+from datetime import timedelta
 from html import escape
 
 from django.db import transaction
@@ -56,11 +57,11 @@ def private_research_html(customer, item_id):
         return None
     current = timezone.now()
     issues = SignalResearchIssue.objects.filter(
-        agent__code="mojtaba-bot-ai", published_at__gte=access["starts_at"],
+        agent__code="mojtaba-bot-ai", published_at__gte=access["starts_at"]-timedelta(days=7),
         published_at__lt=access["expires_at"], published_at__lte=current,
     ).order_by("-published_at")[:100]
     parts = [
-        '<p>Prepaid educational research. No additional payment is due for this term.</p>',
+        '<p>Prepaid educational research, including issues from the seven days before your term began. No additional payment is due for this term.</p>',
         '<p>Plan: ' + escape(access["plan_id"]) + ' · Ends: '
         + escape(access["expires_at"].isoformat()) + '</p>',
     ]

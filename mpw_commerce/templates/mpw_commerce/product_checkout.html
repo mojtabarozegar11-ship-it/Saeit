@@ -26,10 +26,17 @@
 </head>
 <body>
 <main>
-  <small>MOJPLAYWIN · DIGITAL PRODUCT · TRON NETWORK</small>
+  <small>MOJPLAYWIN · {% if signal_subscription %}PREPAID RESEARCH{% else %}DIGITAL PRODUCT{% endif %} · TRON NETWORK</small>
   <h1>{{ product.title }}</h1>
   <p class="price">$ {{ price_usd }} USD</p>
-  {% if product.pk == 1467 %}
+  {% if signal_subscription %}
+  <div class="notice"><strong>What you receive</strong><ul>
+    <li>{{ signal_subscription.term_weeks }} weeks of prepaid educational research, including the latest available weekly briefs and subsequent dated issues during your term.</li>
+    <li>One payment only. No automatic renewal or wallet debit. Access through your original invoice after independently confirmed TRON payment.</li>
+    <li>ECB reference rates are freely available at <a href="https://www.ecb.europa.eu/">the ECB website</a>. EIA government inventory data are public. The fee is for original educational analysis, not access to free data.</li>
+    <li>No live execution signals, personalized financial advice, or guarantee of returns.</li>
+  </ul></div>
+  {% elif product.pk == 1467 %}
   <div class="notice">
     <strong>What you receive</strong>
     <ul>
@@ -46,7 +53,7 @@
       <li>This form creates an invoice. It does not charge you or access your wallet.</li>
       <li>Only the next invoice gives the exact native TRX amount, receiving address, and payment deadline.</li>
       <li>Send TRX on TRON mainnet only. Never send money to an expired invoice or pay twice.</li>
-      <li>Your digital download is unlocked only after independent server-side blockchain confirmation.</li>
+      <li>{% if signal_subscription %}Your private research access{% else %}Your digital download{% endif %} is unlocked only after independent server-side blockchain confirmation.</li>
     </ul>
   </div>
   <form method="post" action="/commerce/trx-easy/start/{{ product.pk }}/" accept-charset="UTF-8">
@@ -54,7 +61,7 @@
     <label for="purchase-email">{% if product.pk == 1467 %}Purchase email{% else %}Email for purchase ownership and future recovery{% endif %}</label>
     <input id="purchase-email" name="email" type="email" autocomplete="email"
            inputmode="email" maxlength="254" placeholder="you@example.com" required>
-    {% if product.pk == 1467 %}
+    {% if signal_subscription or product.pk == 1467 %}
     <p class="hint">Enter an email you control to identify your purchase. This purchase does not subscribe you to marketing. Keep your invoice reference and transaction hash for support; do not assume automatic email recovery is available.</p>
     {% else %}
     <p class="hint">Use an address you control. Keep your invoice reference; if you leave this browser, purchase recovery is available with the same email.</p>
