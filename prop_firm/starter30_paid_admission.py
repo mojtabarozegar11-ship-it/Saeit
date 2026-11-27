@@ -27,6 +27,10 @@ class Starter30PaidAdmissionHold(ValueError):
 _EVIDENCE_REF_PATTERN = re.compile(r"[A-Za-z0-9._:/-]{16,128}\Z")
 _OWNER_GATES = (
     ("MPW_MOJPROP_PAID_RULES_FINALLY_APPROVED", "accepted_paid_rules_not_approved"),
+    # 50% best-day consistency remains a proposal; generic terms approval is
+    # insufficient. Only explicit, separately evidenced owner adoption may
+    # authorize this scoring condition for NEW customer invoices.
+    ("MPW_MOJPROP_BEST_DAY_50_FINALLY_APPROVED", "best_day_50_not_approved"),
     ("MPW_MOJPROP_WRITTEN_PAID_TERMS_VERIFIED", "accepted_terms_not_verified"),
     ("MPW_MOJPROP_QUALIFIED_PAYOUT_RESERVE_VERIFIED", "real_reward_reserve_unverified"),
     ("MPW_MOJPROP_REAL_REWARD_SETTLEMENT_VERIFIED", "real_payout_rail_unverified"),
