@@ -34,6 +34,8 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_cpanel_uapi_cause_readonly_c111 -q
           python3 -B -m py_compile scripts/mojprop_domain_identity_readonly_c124.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_domain_identity_readonly_c124 -q
+          python3 -B -m py_compile scripts/mpw_mojprop_source_bundle_parity_20261122.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mpw_mojprop_source_bundle_parity_20261122 -q
           test ! -L scripts/mojprop_cpanel_uapi_cause_readonly_c111.py
           test "$(git hash-object -- scripts/mojprop_cpanel_uapi_cause_readonly_c111.py)" = "c387bd03551d96b8493a0ab9bbad0c211bd2443f"
 
@@ -69,6 +71,10 @@ jobs:
             < scripts/mojprop_domain_identity_readonly_c124.py \
             | python3 -c 'import json,sys; pre="MOJPROP_C124_DOMAIN_IDENTITY_READONLY="; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith(pre)]; assert len(rows)==1,"MISSING_SANITIZED_C124"; d=json.loads(rows[0][len(pre):]); assert d["schema"]=="mojprop.domain_identity.readonly.c124.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["uapi_binary_safe"] is True; assert all(d[k] is False for k in ("raw_provider_data_emitted","files_read","database_accessed","customer_data_accessed","files_modified","service_restarted","payment_created","email_sent","deployment_authorized","cost_incurred")); assert type(d["domain_list_contains_mojprop"]) is bool and type(d["passenger_applications_for_domain"]) is int; print(rows[0])'
           echo 'C124_DOMAIN_AND_PASSENGER_IDENTITY_READONLY=COMPLETED'
+          timeout 45s ssh -T -F "$work/config" cpanel 'python3 -B - --check' \
+            < scripts/mpw_mojprop_source_bundle_parity_20261122.py \
+            | python3 -c 'import json,sys; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith("{")]; assert len(rows)==1,"MISSING_SOURCE_PARITY"; d=json.loads(rows[0]); assert d.get("written_live_changes")==0 and d.get("scope")=="exactly_twelve_production_source_files_only"; print(json.dumps({"source_bundle_matches":d.get("source_bundle_matches"),"checked":d.get("checked"),"matched":d.get("matched"),"missing":d.get("missing"),"drift":d.get("drift"),"unsafe_or_unreadable":d.get("unsafe_or_unreadable"),"worker_reload_proven":d.get("worker_reload_proven"),"financial_release_proven":d.get("financial_release_proven")},sort_keys=True))'
+          echo 'MOJPROP_SOURCE_PARITY_READONLY=COMPLETED'
           echo 'C111_QUOTA_CAUSE_READ_ONLY_COMPLETED=PASS'
           echo 'This is cause classification, not quota verification, backup, database recovery or permission to deploy.' >> "$GITHUB_STEP_SUMMARY"
 
