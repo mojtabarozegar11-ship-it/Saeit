@@ -60,7 +60,7 @@ def _find_path(value, keys):
 
 
 def _uapi(module, function, parameters=()):
-    args = [UAPI, "--output=json", "--user=" + OWNER, module, function]
+    args = [UAPI, "--output=json", module, function]
     args.extend(parameters)
     env = {"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin",
            "HOME": "/home/zomorod2", "USER": OWNER, "LOGNAME": OWNER}
