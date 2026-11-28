@@ -72,7 +72,22 @@ def _uapi(module, function, parameters=()):
     except OSError:
         return None, "exec_error"
     if result.returncode != 0:
-        return None, "exit_nonzero"
+        err = result.stderr[:4096].decode("utf-8", "replace").lower()
+        if "unknown option" in err or "unrecognized option" in err:
+            reason = "cli_option_rejected"
+        elif "permission denied" in err or "access denied" in err:
+            reason = "permission_denied"
+        elif "invalid user" in err or "unknown user" in err or "no such user" in err:
+            reason = "account_context_rejected"
+        elif "must be run as root" in err or "must be run by root" in err:
+            reason = "root_privilege_required"
+        elif "not found" in err or "no such file" in err:
+            reason = "uapi_component_not_found"
+        elif "usage:" in err or "syntax" in err:
+            reason = "cli_syntax_rejected"
+        else:
+            reason = "other_nonzero_exit"
+        return None, reason
     if not 0 < len(result.stdout) <= MAX_OUTPUT:
         return None, "empty_or_oversize"
     try:
