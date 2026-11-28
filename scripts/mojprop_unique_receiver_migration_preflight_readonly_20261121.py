@@ -215,7 +215,19 @@ def _verify_local_backup_manifest(raw: str | None) -> dict:
 def audit(*, backup_manifest: str | None = None) -> dict:
     """Only Django migration introspection and parameter-free SELECT queries."""
     import os
+    import pwd
+    import sys
 
+    # The cPanel workflow streams this file over SSH (stdin), so Python's
+    # current directory is the account home, not the Django project root.
+    # Pin the reviewed staging application explicitly before importing Django.
+    app_root = Path("/home/zomorod2/Saeit-staging")
+    if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
+        raise PermissionError("MOJPROP_OWNER_ACCOUNT_MISMATCH")
+    if app_root.is_symlink() or not app_root.is_dir():
+        raise RuntimeError("MOJPROP_STAGING_ROOT_UNAVAILABLE")
+    os.chdir(app_root)
+    sys.path.insert(0, str(app_root))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     import django
 
