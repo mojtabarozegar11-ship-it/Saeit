@@ -16,7 +16,7 @@ import subprocess
 
 OWNER = "zomorod2"
 DOMAIN = "mojprop.top"
-UAPI = "/usr/bin/uapi"
+UAPI = "/usr/local/cpanel/bin/uapi"
 MAX_OUTPUT = 65536
 MAX_DEPTH = 8
 SAFE_PATH_PREFIX = "/home/zomorod2/"
