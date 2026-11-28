@@ -233,6 +233,9 @@ class MojPropUniqueReceiverPreflightTests(SimpleTestCase):
         self.assertIn("MigrationLoader(", source)
         self.assertIn("conn.introspection.get_constraints(", source)
         self.assertIn("connections[_DB_ALIAS]", source)
+        self.assertIn('Path("/home/zomorod2/Saeit-staging")', source)
+        self.assertIn("os.chdir(app_root)", source)
+        self.assertIn("sys.path.insert(0, str(app_root))", source)
         for forbidden in (
             "schema_editor(", "MigrationExecutor(", ".save(",
             "CREATE DATABASE", "ALTER TABLE", "DELETE FROM", "UPDATE ",
