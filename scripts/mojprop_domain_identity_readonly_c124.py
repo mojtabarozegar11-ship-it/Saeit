@@ -44,6 +44,37 @@ def _domain_in(value):
                for _, item in _walk(value))
 
 
+def _dict_records(value, depth=0):
+    if depth > MAX_DEPTH:
+        return
+    if type(value) is dict:
+        yield value
+        for item in value.values():
+            if type(item) in (dict, list):
+                yield from _dict_records(item, depth + 1)
+    elif type(value) is list:
+        for item in value[:100]:
+            if type(item) in (dict, list):
+                yield from _dict_records(item, depth + 1)
+
+
+def _direct_domain_match(record):
+    if type(record) is not dict:
+        return False
+    domain_keys = {"domain", "domains", "app_domain", "domain_name", "hostname"}
+    return any(str(key).lower() in domain_keys and _domain_in(value)
+               for key, value in record.items())
+
+
+def _direct_field(record, keys):
+    if type(record) is not dict:
+        return None
+    for key, value in record.items():
+        if str(key).lower() in keys:
+            return value
+    return None
+
+
 def _safe_home_path(value):
     if type(value) is not str or not value.startswith(SAFE_PATH_PREFIX):
         return None
@@ -150,6 +181,7 @@ def inspect():
         "passenger_application_uri": None,
         "passenger_startup_file": None,
         "passenger_enabled": None,
+        "passenger_application_metadata_keys": [],
         "raw_provider_data_emitted": False,
         "files_read": False,
         "database_accessed": False,
@@ -196,29 +228,28 @@ def inspect():
         out["uapi_io_diagnostics"]["passenger_list"] = dict(_LAST_UAPI_IO)
         if passenger_status == "success":
             out["passenger_list_query_succeeded"] = True
-            records = apps if type(apps) is list else [apps]
-            matches = [item for item in records
-                       if type(item) is dict and _domain_in(item)]
+            matches = [item for item in _dict_records(apps)
+                       if _direct_domain_match(item)]
             out["passenger_applications_for_domain"] = min(len(matches), 20)
             if matches:
                 app = matches[0]
-                out["passenger_application_root"] = _find_path(
-                    app, {"path", "app_root", "application_root", "root"}
+                out["passenger_application_metadata_keys"] = sorted(
+                    str(key).lower()[:64] for key in app.keys()
+                )[:30]
+                out["passenger_application_root"] = _safe_home_path(
+                    _direct_field(app, {"path", "app_root", "application_root", "root"})
                 )
-                out["passenger_application_uri"] = next(
-                    (v[:160] for k, v in _walk(app)
-                     if k in {"base_uri", "app_uri", "uri"}
-                     and type(v) is str and v.startswith("/")), None
+                uri = _direct_field(app, {"base_uri", "app_uri", "uri"})
+                out["passenger_application_uri"] = (
+                    uri[:160] if type(uri) is str and uri.startswith("/") else None
                 )
-                out["passenger_startup_file"] = next(
-                    (v[:128] for k, v in _walk(app)
-                     if k in {"startup_file", "startupfile"}
-                     and type(v) is str and "/" not in v and "\\" not in v), None
+                startup = _direct_field(app, {"startup_file", "startupfile"})
+                out["passenger_startup_file"] = (
+                    startup[:128] if type(startup) is str
+                    and "/" not in startup and "\\" not in startup else None
                 )
-                enabled = next((v for k, v in _walk(app)
-                                if k in {"enabled", "is_enabled"}
-                                and type(v) is bool), None)
-                out["passenger_enabled"] = enabled
+                enabled = _direct_field(app, {"enabled", "is_enabled"})
+                out["passenger_enabled"] = enabled if type(enabled) is bool else None
     except (OSError, subprocess.SubprocessError, ValueError, KeyError):
         pass
     return out
