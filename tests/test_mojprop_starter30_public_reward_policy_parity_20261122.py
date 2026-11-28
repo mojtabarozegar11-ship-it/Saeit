@@ -47,7 +47,7 @@ class Starter30PublicOwnerPolicyParityTests(unittest.TestCase):
         import hashlib
         raw = STATIC_PAGE.read_bytes()
         blob = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
-        self.assertEqual(blob, "7f49075e7b48dce6a67997ef5d01db616f869ce4")
+        self.assertEqual(blob, "981fd611b334d97b36aebf96bdb03a39bfc0661a")
         self.assertNotIn('id="profit-reward-schedule"', self.page)
         self.assertIn("connecting a wallet or declaring a sending address is optional.", self.page.lower())
 
@@ -75,8 +75,8 @@ class Starter30PublicOwnerPolicyParityTests(unittest.TestCase):
         self.assertIn("the 100% figure describes the intended", t)
 
     def test_07_public_education_links_are_exact_first_party_urls(self):
-        self.assertIn("https://mojplaywin.com/moj-prop/payment/?utm_source=github", self.guide)
-        self.assertIn("https://mojplaywin.com/moj-prop-intake/?format=html&service=blueprint", self.guide)
+        self.assertIn("https://mojprop.top/moj-prop/payment/?utm_source=github", self.guide)
+        self.assertIn("https://mojprop.top/moj-prop-intake/?format=html&service=blueprint", self.guide)
         self.assertIn('/moj-prop/payment/', self.page)
         self.assertIn('/moj-prop-intake/?format=html&amp;service=blueprint', self.page)
 

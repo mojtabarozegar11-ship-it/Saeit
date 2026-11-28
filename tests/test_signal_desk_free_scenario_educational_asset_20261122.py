@@ -61,9 +61,9 @@ class SignalDeskEducationalAssetTests(unittest.TestCase):
                          d("net_reward_to_risk"))
 
     def test_05_real_service_is_unpaid_and_uses_only_central_portal(self):
-        self.assertIn("https://mojplaywin.com/moj-prop-intake/?format=html&service=signals", self.article)
-        self.assertIn("https://mojplaywin.com/moj-prop/signals/", self.article)
-        self.assertIn("https://mojplaywin.com/mojtaba.bot.ai/", self.article)
+        self.assertIn("https://mojprop.top/moj-prop-intake/?format=html&service=signals", self.article)
+        self.assertIn("https://mojprop.top/moj-prop/signals/", self.article)
+        self.assertIn("https://mojprop.top/mojtaba.bot.ai/", self.article)
         for text in ("does **not** create a paid subscription",
                      "Do not send TRX without an individual",
                      "do not send broker passwords", "no-trade", "not customer data"):
@@ -87,7 +87,7 @@ class SignalDeskEducationalAssetTests(unittest.TestCase):
         import re
         for path in (ARTICLE, DIR / "README.md"):
             text = path.read_text(encoding="utf-8")
-            for url in re.findall(r"\]\((https://mojplaywin[.]com/[^)]+)\)", text):
+            for url in re.findall(r"\]\((https://mojprop[.]top/[^)]+)\)", text):
                 with self.subTest(file=path.name, url=url):
                     self.assertEqual(url.count("?"), 1)
                     self.assertEqual(url.count("utm_source=github"), 1)

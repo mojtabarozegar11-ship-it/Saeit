@@ -4,8 +4,8 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-SUPPORT = "support@mojplaywin.com"
-MAILTO = "mailto:support@mojplaywin.com?subject=Moj%20Prop%20Manual%20Service%20Enquiry"
+SUPPORT = "mojtaba.rozegar11@gmail.com"
+MAILTO = "mailto:mojtaba.rozegar11@gmail.com?subject=Moj%20Prop%20Manual%20Service%20Enquiry"
 
 
 class _Links(HTMLParser):
@@ -20,14 +20,15 @@ class _Links(HTMLParser):
 
 class MojPropManualSupportFallbackTests(unittest.TestCase):
     def test_published_support_identity_is_not_a_new_or_unverified_address(self):
-        published = (ROOT / "scripts/mpw_dynamic_main_shell_20261019.php").read_text()
-        self.assertIn("$mail='support@mojplaywin.com';", published)
+        published = (ROOT / "templates/moj-prop/contact/index.html").read_text()
+        self.assertIn(SUPPORT, published)
+        self.assertNotIn("support@mojplaywin.com", published)
 
     def test_v4_main_customer_page_keeps_actual_request_and_fallback(self):
         page = (ROOT / "templates/moj-prop-v4/index.html").read_text()
         links = _Links()
         links.feed(page)
-        self.assertIn("/contact/", links.links)
+        self.assertIn("/moj-prop/contact/", links.links)
         self.assertNotIn(MAILTO, links.links)
         self.assertNotIn("mailto:", page.lower())
         self.assertIn("/moj-prop-intake/?format=html", links.links)
@@ -41,7 +42,8 @@ class MojPropManualSupportFallbackTests(unittest.TestCase):
         links = _Links()
         links.feed(page)
         self.assertIn(MAILTO, links.links)
-        self.assertNotIn("mojtaba.rozegar11@gmail.com", page)
+        self.assertIn(SUPPORT, page)
+        self.assertNotIn("support@mojplaywin.com", page)
         self.assertIn("/moj-prop/#request", links.links)
         self.assertIn("no payment details or private credentials", page)
         self.assertIn("no response time is promised", page)

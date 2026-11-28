@@ -10,7 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1] / "templates/moj-prop"
 IMAGE = (
-    "https://mojplaywin.com/design-preview-20261017/static/site/heroes/"
+    "https://mojprop.top/design-preview-20261017/static/site/heroes/"
     "education-detail.ae7381d4181d.webp"
 )
 GUIDES = [
@@ -67,13 +67,13 @@ class MojPropFacebookCards(unittest.TestCase):
 
     def test_public_canonical_still_matches_the_existing_english_route(self):
         for page in PAGES:
-            url = "https://mojplaywin.com/moj-prop/" + page.removesuffix("index.html")
+            url = "https://mojprop.top/moj-prop/" + page.removesuffix("index.html")
             with self.subTest(page=page):
                 _, meta = self.load_page(page)
                 canonicals = [a.get("href") for a in meta.links
                               if a.get("rel") == "canonical"]
                 self.assertEqual(canonicals, [url])
-                self.assertEqual(urlsplit(IMAGE).hostname, "mojplaywin.com")
+                self.assertEqual(urlsplit(IMAGE).hostname, "mojprop.top")
 
     def test_education_js_continuity_and_trader_selection_are_preserved(self):
         for page in GUIDES:

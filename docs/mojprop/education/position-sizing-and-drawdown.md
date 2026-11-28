@@ -20,8 +20,8 @@ Record the instrument, entry assumption, stop, quantity, planned maximum loss, f
 ## Review the experiment
 Compare planned and realized risk. Note correlated positions and slippage assumptions. A disciplined decision to skip a trade can be more informative than an unusually large gain. Simulated outcomes do not establish future real performance.
 
-Further reading: [Moj Prop rules](https://mojplaywin.com/moj-prop/rules/?utm_source=github&utm_medium=organic_referral&utm_campaign=risk_education), [free practice journal and Starter 30 information](https://mojplaywin.com/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=risk_education). Review current eligibility and checkout conditions before deciding. No profit or pass is promised.
+Further reading: [Moj Prop rules](https://mojprop.top/moj-prop/rules/?utm_source=github&utm_medium=organic_referral&utm_campaign=risk_education), [free practice journal and Starter 30 information](https://mojprop.top/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=risk_education). Review current eligibility and checkout conditions before deciding. No profit or pass is promised.
 
 ---
 
-[All Moj Prop educational guides](./README.md) · [Moj Prop main site](https://mojplaywin.com/moj-prop/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+[All Moj Prop educational guides](./README.md) · [Moj Prop main site](https://mojprop.top/moj-prop/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)

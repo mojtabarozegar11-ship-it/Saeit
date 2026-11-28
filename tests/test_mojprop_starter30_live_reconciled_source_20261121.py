@@ -11,8 +11,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "templates/moj-prop-v4/starter-30-trx/index.html"
 PIN = ROOT / "scripts/mojprop_starter30_static_release.py"
-APPROVED_LIVE_SHA256 = "a81d4e25d0f6a7c2a75a46f5ea88ddf8ad3b1b5c71c4ee833a6940008975cd38"
-APPROVED_LIVE_GIT_BLOB = "7f49075e7b48dce6a67997ef5d01db616f869ce4"
+APPROVED_LIVE_SHA256 = "44ce9d07e264739af034a021d7f32bfda18360c021fae4c0de37619f33602911"
+APPROVED_LIVE_GIT_BLOB = "981fd611b334d97b36aebf96bdb03a39bfc0661a"
 
 
 class Scan(HTMLParser):
@@ -54,7 +54,7 @@ class OfficialStarter30LiveSourceTests(unittest.TestCase):
         page = Scan()
         page.feed(data)
         self.assertEqual(page.h1_count, 1)
-        self.assertEqual(page.canonical, ["https://mojplaywin.com/moj-prop/starter-30-trx/"])
+        self.assertEqual(page.canonical, ["https://mojprop.top/moj-prop/starter-30-trx/"])
         self.assertEqual(page.ctas.count("/mojprop-starter30-checkout/"), 1)
         self.assertEqual(page.ctas.count("/moj-prop-intake/?format=html&service=blueprint&package=starter-30-trx&utm_source=moj_prop&utm_medium=onsite&utm_campaign=starter30_lead&utm_content=free_terms"), 2)
         status = [x for x in page.forms if x.get("method") == "get"

@@ -1,6 +1,6 @@
 # Moj Prop — Simulated Trading Education Library
 
-**[Read the free English risk-management and simulated-challenge articles on the official MOJ PROP website](https://mojplaywin.com/moj-prop/education/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_launch_20261121).** The live article hub covers position sizing, drawdown, a 60-day practice plan, profit consistency and the limits of simulated execution; each article links back to the current program rules and product conditions. Site publication does not establish Google indexing, paid enrolment or an actual reward payout.
+**[Read the free English risk-management and simulated-challenge articles on the official MOJ PROP website](https://mojprop.top/moj-prop/education/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_launch_20261121).** The live article hub covers position sizing, drawdown, a 60-day practice plan, profit consistency and the limits of simulated execution; each article links back to the current program rules and product conditions. Site publication does not establish Google indexing, paid enrolment or an actual reward payout.
 
 **Five free educational guides about simulated trading, evaluation risk, and secure crypto invoicing.** These materials explain concepts; they are not investment advice, broker services, promises of profits, or guarantees of passing a challenge.
 
@@ -15,30 +15,30 @@
 
 ## Free dated gold macro research — no live calls
 
-- [**Q4 2026 gold macro-scenario brief (published 22 November)**](./gold-macro-scenarios-q4-2026-20261122.md) — original economic research on real yields, demand channels and conflicting scenarios, with named FRED, Treasury, World Gold Council and IMF source links; no live price feed, trade, return claim or execution. [Read the indexable article on the official website](https://mojplaywin.com/moj-prop/signals/gold-q4-2026/?utm_source=github&utm_medium=organic_referral&utm_campaign=gold_macro_q4_20261122). No paid subscription or invoice is created.
+- [**Q4 2026 gold macro-scenario brief (published 22 November)**](./gold-macro-scenarios-q4-2026-20261122.md) — original economic research on real yields, demand channels and conflicting scenarios, with named FRED, Treasury, World Gold Council and IMF source links; no live price feed, trade, return claim or execution. [Read the indexable article on the official website](https://mojprop.top/moj-prop/signals/gold-q4-2026/?utm_source=github&utm_medium=organic_referral&utm_campaign=gold_macro_q4_20261122). No paid subscription or invoice is created.
 
 ## Free Signal Desk sample — no live trades
 
 - [**See an auditable, fictional market-scenario brief**](./signal-desk-free-scenario-sample.md) — a fully specified bullish/bearish/no-trade teaching case, with costs, loss budget, invalidation and explicit disclosure that it is not a live signal or achieved return.
 - [**Download the machine-readable example record (CSV)**](./signal-desk-free-scenario-record.csv) — one fabricated, unexecuted example with inspectable calculations; no customer, market feed or trading history.
-- [**Request free written Signal Desk terms on the official site**](https://mojplaywin.com/moj-prop-intake/?format=html&service=signals&utm_source=github&utm_medium=organic_referral&utm_campaign=signal_sample_20261122). No payment, invoice or subscription is created by this request.
+- [**Request free written Signal Desk terms on the official site**](https://mojprop.top/moj-prop-intake/?format=html&service=signals&utm_source=github&utm_medium=organic_referral&utm_campaign=signal_sample_20261122). No payment, invoice or subscription is created by this request.
 
 ## Free practice journal downloads
 
-- [Download the simulated trading journal CSV](https://mojplaywin.com/moj-prop/starter-30-trx/journal-template.csv?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
-- [Read the journal instructions](https://mojplaywin.com/moj-prop/starter-30-trx/journal-guide.txt?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+- [Download the simulated trading journal CSV](https://mojprop.top/moj-prop/starter-30-trx/journal-template.csv?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+- [Read the journal instructions](https://mojprop.top/moj-prop/starter-30-trx/journal-guide.txt?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
 
 Both links were checked against the public site. They are free educational files, not a paid account or a challenge pass.
 
 ## Explore the official Moj Prop pages
 
-- [Overview and rules](https://mojplaywin.com/moj-prop/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
-- [Published risk rules](https://mojplaywin.com/moj-prop/rules/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
-- [Starter 30 simulated challenge and practice journal](https://mojplaywin.com/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
-- [Payment information](https://mojplaywin.com/moj-prop/payment/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+- [Overview and rules](https://mojprop.top/moj-prop/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+- [Published risk rules](https://mojprop.top/moj-prop/rules/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+- [Starter 30 simulated challenge and practice journal](https://mojprop.top/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+- [Payment information](https://mojprop.top/moj-prop/payment/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
 
 A simulated balance is virtual and is not cash belonging to a participant. Any advertised evaluation fee, current eligibility, order process or conditional reward must be checked on the official product and checkout pages before payment. A visible checkout form does not establish that a real invoice or a customer payment has been completed.
 
 **Editorial scope:** Original educational writing released in the public MojPlayWin/Saeit repository. No personal customer data, trading passwords, receiving wallet keys, testimonials or performance claims are published. No financial promotion is paid for or guaranteed to be indexed by search engines.
 
-[Return to MojPlayWin](https://mojplaywin.com/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+[Return to MojPlayWin](https://mojprop.top/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)

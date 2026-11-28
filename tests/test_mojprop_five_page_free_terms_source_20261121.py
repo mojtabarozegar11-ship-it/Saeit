@@ -64,7 +64,7 @@ class EnglishFreeTermsSourceParityTests(unittest.TestCase):
             with self.subTest(path=path.name):
                 txt = path.read_text(encoding="utf-8")
                 self.assertIn('<link rel="canonical"', txt)
-                self.assertIn("mojplaywin.com/moj-prop/", txt)
+                self.assertIn("mojprop.top/moj-prop/", txt)
 
 
     def test_english_home_primary_free_terms_cta_matches_public_release(self):

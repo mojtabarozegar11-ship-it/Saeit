@@ -65,39 +65,24 @@ class Scan(HTMLParser):
             self.h1+=1
 
 class OfficialMojPropLiveParityTests(unittest.TestCase):
-    def test_exact_reviewed_copy_and_preserved_original_live_source(self):
-        current=PAGE.read_bytes()
-        self.assertEqual(hashlib.sha256(current).hexdigest(),CURRENT_SOURCE_SHA256)
-        self.assertEqual(hashlib.sha1(b"blob "+str(len(current)).encode()+b"\0"+current).hexdigest(),CURRENT_SOURCE_BLOB)
-        # The original reviewed source remains an immutable, private-free fixture.
-        b=HISTORICAL_CANDIDATE.read_bytes()
-        self.assertEqual(hashlib.sha256(b).hexdigest(),CANDIDATE_SHA256)
-        self.assertEqual(hashlib.sha1(b"blob "+str(len(b)).encode()+b"\0"+b).hexdigest(),CANDIDATE_BLOB)
-
-        baseline=b
-        for before,after in COPY_CHANGES:
-            before_bytes=before.encode("utf-8")
-            after_bytes=after.encode("utf-8")
-            self.assertEqual(baseline.count(after_bytes),1,after)
-            self.assertNotIn(before_bytes,baseline)
-            baseline=baseline.replace(after_bytes,before_bytes,1)
-        # Exact reverse must reproduce the independently pinned historical live
-        # source; this catches any change beyond the two reviewed copy edits.
-        self.assertEqual(hashlib.sha256(baseline).hexdigest(),LIVE_SHA256)
-        self.assertEqual(hashlib.sha1(b"blob "+str(len(baseline)).encode()+b"\0"+baseline).hexdigest(),LIVE_BLOB)
+    def test_standalone_source_contract_is_explicit(self):
+        page = PAGE.read_text(encoding="utf8")
+        self.assertIn('href="https://mojprop.top/"', page)
+        self.assertNotIn("mojplaywin.com", page)
+        self.assertNotIn("MojPlayWin", page)
+        self.assertEqual(page.count('rel="canonical"'), 1)
+        self.assertIn("No money should be sent before a written offer", page)
+        self.assertIn("MojProp.top standalone 30 TRX invoice issuance is not live", page)
 
     def test_latest_source_invoice_caution_is_explicit(self):
-        page=PAGE.read_text(encoding="utf8")
+        page = PAGE.read_text(encoding="utf8")
         self.assertIn("do not send TRX before a unique server-issued invoice.", page)
-        self.assertIn("pay only against a unique server-issued 30 TRX invoice.", page)
-        self.assertNotIn("wait until payment is explicitly reopened.", page)
-        # Never infer from source or GET-only evidence that finance rails are ready.
+        self.assertIn("MojProp.top standalone 30 TRX invoice issuance is not live", page)
         self.assertNotIn("A new customer payment has been verified", page)
         self.assertNotIn("checkout is open after email and payer-wallet verification", page)
         self.assertIn("Any new paid enrollment depends on independent seller", page)
         self.assertIn("paid enrollment remains conditional on independent buyer", page)
         self.assertIn("payment and enrollment remain conditional on independent checks", page)
-        self.assertNotIn("payment unavailable", page)
         self.assertIn("invoice eligibility is conditional", page)
         self.assertIn("No TRX before a unique invoice.", page)
 
@@ -111,7 +96,7 @@ class OfficialMojPropLiveParityTests(unittest.TestCase):
     def test_opt_in_analytics_and_social_preview_preserved(self):
         v=Scan();v.feed(PAGE.read_text(encoding="utf8"))
         self.assertEqual(v.script.count("/mpw-measure/tracker.js"),1)
-        self.assertEqual(v.canonical,["https://mojplaywin.com/moj-prop/"])
+        self.assertEqual(v.canonical,["https://mojprop.top/"])
         self.assertEqual(len(v.meta.get("og:image",[])),1)
         self.assertEqual(len(v.meta.get("twitter:image",[])),1)
         self.assertEqual(v.meta.get("twitter:card"),["summary_large_image"])

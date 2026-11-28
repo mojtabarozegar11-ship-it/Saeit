@@ -19,8 +19,8 @@ Read the current rulebook, service scope, eligibility, refund policy and any rew
 
 Ask what happens at a failed evaluation, how violations are calculated and what evidence is needed to resolve a dispute. Do not infer that a simulated pass creates a live broker account.
 
-Read [Moj Prop rules](https://mojplaywin.com/moj-prop/rules/?utm_source=github&utm_medium=organic_referral&utm_campaign=simulation_education) and [Starter 30 information](https://mojplaywin.com/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=simulation_education). Review current availability and terms. No pass or profit is guaranteed.
+Read [Moj Prop rules](https://mojprop.top/moj-prop/rules/?utm_source=github&utm_medium=organic_referral&utm_campaign=simulation_education) and [Starter 30 information](https://mojprop.top/moj-prop/starter-30-trx/?utm_source=github&utm_medium=organic_referral&utm_campaign=simulation_education). Review current availability and terms. No pass or profit is guaranteed.
 
 ---
 
-[All Moj Prop educational guides](./README.md) · [Moj Prop main site](https://mojplaywin.com/moj-prop/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)
+[All Moj Prop educational guides](./README.md) · [Moj Prop main site](https://mojprop.top/moj-prop/?utm_source=github&utm_medium=organic_referral&utm_campaign=education_library)

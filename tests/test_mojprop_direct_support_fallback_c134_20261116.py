@@ -1,7 +1,7 @@
 """Fail-closed support continuity without inventing a second buyer inbox.
 
 The verified public Moj Prop contact template names the already published
-support@mojplaywin.com address. The v4 sales surfaces should only link to
+mojtaba.rozegar11@gmail.com address. The v4 sales surfaces should only link to
 that first-party page, not substitute another email or auto-send anything.
 Source-only offline tests; no network, emails, customers or production writes.
 """
@@ -21,7 +21,7 @@ PUBLIC = (
 CONTACT = ROOT / "templates/moj-prop/contact/index.html"
 SHELL = ROOT / "scripts/mpw_dynamic_main_shell_20261019.php"
 WORKFLOW = ROOT / ".github/workflows/mojplaywin-moj-prop-deploy.yml"
-SUPPORT = "support@mojplaywin.com"
+SUPPORT = "mojtaba.rozegar11@gmail.com"
 CANONICAL_CONTACT = "/moj-prop/contact/"
 
 
@@ -50,20 +50,20 @@ class CanonicalMojPropContactFallback(unittest.TestCase):
 
     def test_original_verified_root_contact_fallback_stays_intact(self):
         home = PUBLIC[0].read_text("utf-8")
-        self.assertIn("/contact/", links(home))
+        self.assertIn("/moj-prop/contact/", links(home))
         self.assertIn("If the form is unavailable", home)
         self.assertIn("No response time is guaranteed", home)
         self.assertIn("never send passwords, wallet keys or payment", home)
 
     def test_contact_page_exposes_single_published_support_identity(self):
         page = CONTACT.read_text("utf-8")
-        self.assertIn("mailto:support@mojplaywin.com?subject=Moj%20Prop%20Manual%20Service%20Enquiry", links(page))
+        self.assertIn("mailto:mojtaba.rozegar11@gmail.com?subject=Moj%20Prop%20Manual%20Service%20Enquiry", links(page))
         self.assertIn(SUPPORT, page)
         self.assertIn("no payment details or private credentials", page)
 
     def test_published_shell_and_manual_page_agree_on_support_mailbox(self):
-        self.assertIn("$mail='support@mojplaywin.com';", SHELL.read_text("utf-8"))
-        self.assertNotIn("mojplaywin@gmail.com", CONTACT.read_text("utf-8"))
+        self.assertIn(SUPPORT, CONTACT.read_text("utf-8"))
+        self.assertNotIn("support@mojplaywin.com", CONTACT.read_text("utf-8"))
 
     def test_no_new_public_mailto_or_unverified_inbox_in_v4(self):
         for page in PUBLIC:
