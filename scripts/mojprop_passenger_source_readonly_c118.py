@@ -119,6 +119,7 @@ def report() -> dict:
         "staging_path_literal_found": False,
         "entry_sha256": None,
         "staging_sources": {p: "unavailable" for p in SOURCE_FILES},
+        "public_sources": {p: "unavailable" for p in SOURCE_FILES},
         "runtime_worker_identity_proven": False,
         "full_db_app_media_restore_proven": False,
         "crm_lead_created": False,
@@ -136,6 +137,13 @@ def report() -> dict:
         out["webroot_safe"] = True
         out["staging_sources"] = {
             name: _owned_safe_file(ROOT / name, root=ROOT)
+            for name in SOURCE_FILES
+        }
+        # Passenger entrypoint is in WEBROOT and imports config.wsgi from its
+        # own BASE_DIR. Inspect that exact code root separately; staging files
+        # must never be presented as the public worker source tree.
+        out["public_sources"] = {
+            name: _owned_safe_file(WEBROOT / name, root=WEBROOT)
             for name in SOURCE_FILES
         }
         state = _owned_safe_file(ENTRY, root=WEBROOT)
