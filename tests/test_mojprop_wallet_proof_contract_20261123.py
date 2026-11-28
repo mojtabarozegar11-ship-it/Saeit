@@ -67,6 +67,9 @@ class Starter30WalletProofContractTests(SimpleTestCase):
 
     def test_challenge_has_no_financial_action_and_precisely_bound_terms(self):
         ticket, message = self.issue()
+        self.assertIn("MojProp Starter30 wallet ownership", message)
+        self.assertIn("Origin: https://mojprop.top", message)
+        self.assertNotIn("mojplaywin.com", message)
         self.assertIn("Amount: 30000000 SUN (30 TRX)", message)
         self.assertIn("Purpose: Prove sending wallet control, not a transfer", message)
         self.assertIn(INVOICE, message)
