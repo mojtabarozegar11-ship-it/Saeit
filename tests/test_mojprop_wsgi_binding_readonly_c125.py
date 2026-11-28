@@ -14,10 +14,12 @@ class C125Tests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "passenger_wsgi.py"
             path.write_text(
-                "import os, sys\\nAPP='/home/zomorod2/Saeit-mojprop-candidate-20261122'\\n"
-                "sys.path.insert(0, APP)\\nos.chdir(APP)\\n"
-                "from django.core.wsgi import get_wsgi_application\\n"
-                "application = get_wsgi_application()\\n",
+                "import os, sys" + chr(10)
+                + "APP='/home/zomorod2/Saeit-mojprop-candidate-20261122'" + chr(10)
+                + "sys.path.insert(0, APP)" + chr(10)
+                + "os.chdir(APP)" + chr(10)
+                + "from django.core.wsgi import get_wsgi_application" + chr(10)
+                + "application = get_wsgi_application()" + chr(10),
                 encoding="utf-8",
             )
             with patch.object(probe, "HOME", Path("/home/zomorod2")):
@@ -31,7 +33,11 @@ class C125Tests(unittest.TestCase):
             self.assertNotIn("SECRET", str(result))
 
     def test_report_is_fail_closed(self):
-        self.assertIn('"files_modified": False', probe.__dict__["main"].__code__.co_consts.__str__())
+        source = Path(probe.__file__).read_text(encoding="utf-8")
+        for key in ("files_modified", "service_restarted", "database_accessed",
+                    "customer_data_accessed", "payment_created", "email_sent",
+                    "deployment_authorized", "cost_incurred"):
+            self.assertIn('"' + key + '": False', source)
 
 if __name__ == "__main__":
     unittest.main()
