@@ -47,6 +47,20 @@ class C124DomainIdentityTests(unittest.TestCase):
                 self.assertEqual(actual, expected)
                 self.assertNotIn(raw.decode(), actual)
 
+    def test_uapi_io_diagnostics_are_metadata_only(self):
+        from scripts import mojprop_domain_identity_readonly_c124 as module
+        module._LAST_UAPI_IO.clear()
+        module._LAST_UAPI_IO.update({
+            "exit_code": 1,
+            "stdout_bytes": 0,
+            "stderr_bytes": 42,
+            "stderr_empty": False,
+            "stdout_empty": True,
+        })
+        self.assertEqual(module._LAST_UAPI_IO["exit_code"], 1)
+        self.assertEqual(module._LAST_UAPI_IO["stderr_bytes"], 42)
+        self.assertNotIn("stderr", module._LAST_UAPI_IO.keys() - {"stderr_bytes", "stderr_empty"})
+
     def test_target_domain_constant_is_exact(self):
         self.assertEqual(DOMAIN, "mojprop.top")
 
