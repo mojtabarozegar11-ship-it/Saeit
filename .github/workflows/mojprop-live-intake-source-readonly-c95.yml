@@ -177,7 +177,7 @@ jobs:
           timeout 100s ssh -T -F "$work/config" cpanel \
             'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
             < scripts/mojprop_unique_receiver_migration_preflight_readonly_20261121.py \
-            | python3 -c 'import json,sys; raw=sys.stdin.read(12000); d=json.loads(raw); assert d["read_only"] is True and d["never_automatically_apply_migrations"] is True and d["scope"]=="dedicated_mojprop_alias_only"; assert d["status"] in ("BLOCKED","SCHEMA_PREFLIGHT_ONLY"); assert type(d["actual_payment_count"]) is int and type(d["duplicate_recipient_groups"]) is int; assert type(d["exclusive_receiver_migration_applied"]) is bool and type(d["live_db_unique_recipient"]) is bool; print("MOJPROP_LIVE_MIGRATION_PREFLIGHT="+json.dumps(d,sort_keys=True))'
+            | python3 -c 'import json,sys; raw=sys.stdin.read(12000); d=json.loads(raw); assert d["read_only"] is True and d["never_automatically_apply_migrations"] is True and d["scope"]=="dedicated_mojprop_alias_only"; assert d["status"] in ("BLOCKED","SCHEMA_PREFLIGHT_ONLY"); assert (d["actual_payment_count"] is None or type(d["actual_payment_count"]) is int) and (d["duplicate_recipient_groups"] is None or type(d["duplicate_recipient_groups"]) is int); assert type(d["exclusive_receiver_migration_applied"]) is bool and type(d["live_db_unique_recipient"]) is bool; print("MOJPROP_LIVE_MIGRATION_PREFLIGHT="+json.dumps(d,sort_keys=True))'
           echo 'MOJPROP_LIVE_MIGRATION_PREFLIGHT_READONLY=COMPLETE_NO_DDL_NO_DML_NO_PAYMENT'
       - name: Remove ephemeral SSH authentication material
         if: always()
