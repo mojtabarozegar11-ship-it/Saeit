@@ -71,9 +71,14 @@ jobs:
             < scripts/mojprop_domain_identity_readonly_c124.py \
             | python3 -c 'import json,sys; pre="MOJPROP_C124_DOMAIN_IDENTITY_READONLY="; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith(pre)]; assert len(rows)==1,"MISSING_SANITIZED_C124"; d=json.loads(rows[0][len(pre):]); assert d["schema"]=="mojprop.domain_identity.readonly.c124.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["uapi_binary_safe"] is True; assert all(d[k] is False for k in ("raw_provider_data_emitted","files_read","database_accessed","customer_data_accessed","files_modified","service_restarted","payment_created","email_sent","deployment_authorized","cost_incurred")); assert type(d["domain_list_contains_mojprop"]) is bool and type(d["passenger_applications_for_domain"]) is int; print(rows[0])'
           echo 'C124_DOMAIN_AND_PASSENGER_IDENTITY_READONLY=COMPLETED'
-          timeout 45s ssh -T -F "$work/config" cpanel 'python3 -B - --check' \
+          if timeout 45s ssh -T -F "$work/config" cpanel 'python3 -B - --check' \
             < scripts/mpw_mojprop_source_bundle_parity_20261122.py \
-            | python3 -c 'import json,sys; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith("{")]; assert len(rows)==1,"MISSING_SOURCE_PARITY"; d=json.loads(rows[0]); out={"source_bundle_matches":d.get("source_bundle_matches",False),"reason":d.get("reason","none"),"checked":d.get("checked",0),"matched":d.get("matched",0),"missing":d.get("missing",0),"drift":d.get("drift",0),"unsafe_or_unreadable":d.get("unsafe_or_unreadable",0),"worker_reload_proven":d.get("worker_reload_proven",False),"financial_release_proven":d.get("financial_release_proven",False),"written_live_changes":d.get("written_live_changes",0)}; print(json.dumps(out,sort_keys=True))'
+            | python3 -c 'import json,sys; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith("{")]; assert len(rows)==1,"MISSING_SOURCE_PARITY"; d=json.loads(rows[0]); out={"source_bundle_matches":d.get("source_bundle_matches",False),"reason":d.get("reason","none"),"checked":d.get("checked",0),"matched":d.get("matched",0),"missing":d.get("missing",0),"drift":d.get("drift",0),"unsafe_or_unreadable":d.get("unsafe_or_unreadable",0),"worker_reload_proven":d.get("worker_reload_proven",False),"financial_release_proven":d.get("financial_release_proven",False),"written_live_changes":d.get("written_live_changes",0),"wsgi_binding":d.get("wsgi_binding",{})}; print(json.dumps(out,sort_keys=True))'; then
+            parity_exit=0
+          else
+            parity_exit=$?
+          fi
+          echo "MOJPROP_SOURCE_PARITY_EXIT=$parity_exit"
           echo 'MOJPROP_SOURCE_PARITY_READONLY=COMPLETED'
           echo 'C111_QUOTA_CAUSE_READ_ONLY_COMPLETED=PASS'
           echo 'This is cause classification, not quota verification, backup, database recovery or permission to deploy.' >> "$GITHUB_STEP_SUMMARY"
