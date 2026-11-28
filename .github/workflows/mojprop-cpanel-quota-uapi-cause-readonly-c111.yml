@@ -32,6 +32,8 @@ jobs:
           set -euo pipefail
           python3 -B -m py_compile scripts/mojprop_cpanel_uapi_cause_readonly_c111.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_cpanel_uapi_cause_readonly_c111 -q
+          python3 -B -m py_compile scripts/mojprop_domain_identity_readonly_c124.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_domain_identity_readonly_c124 -q
           test ! -L scripts/mojprop_cpanel_uapi_cause_readonly_c111.py
           test "$(git hash-object -- scripts/mojprop_cpanel_uapi_cause_readonly_c111.py)" = "c387bd03551d96b8493a0ab9bbad0c211bd2443f"
 
@@ -63,6 +65,10 @@ jobs:
             'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
             < scripts/mojprop_cpanel_uapi_cause_readonly_c111.py \
             | python3 -c 'import json,sys; raw=sys.stdin.read(6000); pre="MOJPROP_UAPI_CAUSE_C111="; lines=[x for x in raw.splitlines() if x.startswith(pre)]; assert len(lines)==1,"MISSING_SANITIZED_PROBE"; p=json.loads(lines[0][len(pre):]); assert p["schema"]=="mojprop.cpanel.uapi_cause.readonly.v1" and p["read_only"] is True and p["capacity_confirmed"] is False and p["production_deploy_authorized"] is False and p["payment_collected"] is False and len(p["probes"]) in (0,2); print(lines[0])'
+          timeout 45s ssh -T -F "$work/config" cpanel 'python3 -B -' \
+            < scripts/mojprop_domain_identity_readonly_c124.py \
+            | python3 -c 'import json,sys; pre="MOJPROP_C124_DOMAIN_IDENTITY_READONLY="; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith(pre)]; assert len(rows)==1,"MISSING_SANITIZED_C124"; d=json.loads(rows[0][len(pre):]); assert d["schema"]=="mojprop.domain_identity.readonly.c124.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["uapi_binary_safe"] is True; assert all(d[k] is False for k in ("raw_provider_data_emitted","files_read","database_accessed","customer_data_accessed","files_modified","service_restarted","payment_created","email_sent","deployment_authorized","cost_incurred")); assert type(d["domain_list_contains_mojprop"]) is bool and type(d["passenger_applications_for_domain"]) is int; print(rows[0])'
+          echo 'C124_DOMAIN_AND_PASSENGER_IDENTITY_READONLY=COMPLETED'
           echo 'C111_QUOTA_CAUSE_READ_ONLY_COMPLETED=PASS'
           echo 'This is cause classification, not quota verification, backup, database recovery or permission to deploy.' >> "$GITHUB_STEP_SUMMARY"
 
