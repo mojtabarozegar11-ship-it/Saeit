@@ -35,6 +35,7 @@ class C124DomainIdentityTests(unittest.TestCase):
         cases = (
             (b"Permission denied for API call", "permission_denied"),
             (b"Unknown module DomainInfo", "uapi_module_not_found"),
+            (b"Failed to execute UAPI as user", "uapi_execution_context_failed"),
             (b"Unknown function list_domains", "uapi_function_not_found"),
             (b"API access disabled", "uapi_access_disabled"),
             (b"Internal server error: private detail", "cpanel_runtime_error"),
