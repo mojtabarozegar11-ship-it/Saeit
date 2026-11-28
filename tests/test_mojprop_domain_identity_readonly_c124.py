@@ -1,7 +1,7 @@
 import unittest
 
 from scripts.mojprop_domain_identity_readonly_c124 import (
-    DOMAIN, _domain_in, _find_path, _safe_home_path,
+    DOMAIN, _classify_uapi_error, _domain_in, _find_path, _safe_home_path,
 )
 
 
@@ -29,6 +29,23 @@ class C124DomainIdentityTests(unittest.TestCase):
             _find_path({"secret": "/home/zomorod2/private"},
                        {"documentroot", "docroot"}),
         )
+
+
+    def test_uapi_error_classifier_returns_only_safe_categories(self):
+        cases = (
+            (b"Permission denied for API call", "permission_denied"),
+            (b"Unknown module DomainInfo", "uapi_module_not_found"),
+            (b"Unknown function list_domains", "uapi_function_not_found"),
+            (b"API access disabled", "uapi_access_disabled"),
+            (b"Internal server error: private detail", "cpanel_runtime_error"),
+            (b"unrecognized option --bad", "cli_option_rejected"),
+            (b"opaque provider message with account data", "unclassified_nonzero_exit"),
+        )
+        for raw, expected in cases:
+            with self.subTest(raw=raw):
+                actual = _classify_uapi_error(raw)
+                self.assertEqual(actual, expected)
+                self.assertNotIn(raw.decode(), actual)
 
     def test_target_domain_constant_is_exact(self):
         self.assertEqual(DOMAIN, "mojprop.top")
