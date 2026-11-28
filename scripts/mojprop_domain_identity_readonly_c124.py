@@ -17,7 +17,7 @@ import subprocess
 
 OWNER = "zomorod2"
 DOMAIN = "mojprop.top"
-UAPI = "/usr/local/cpanel/bin/uapi"
+UAPI = "/usr/bin/uapi"
 MAX_OUTPUT = 65536
 MAX_DEPTH = 8
 SAFE_PATH_PREFIX = "/home/zomorod2/"
@@ -103,7 +103,7 @@ def _classify_uapi_error(stderr):
 
 def _uapi(module, function, parameters=()):
     _LAST_UAPI_IO.clear()
-    args = [UAPI, "--user=" + OWNER, "--output=json", module, function]
+    args = [UAPI, "--output=json", module, function]
     args.extend(parameters)
     env = {"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin",
            "HOME": "/home/zomorod2", "USER": OWNER, "LOGNAME": OWNER}
