@@ -109,7 +109,7 @@ def inspect():
         if pwd.getpwuid(os.geteuid()).pw_name != OWNER:
             return out
         out["owner_identity_verified"] = True
-        meta = os.lstat(UAPI)
+        meta = os.stat(UAPI)
         if (not stat.S_ISREG(meta.st_mode) or meta.st_mode & 0o022
                 or meta.st_uid not in (0, os.geteuid())):
             return out
