@@ -103,7 +103,8 @@ def _classify_uapi_error(stderr):
 
 def _uapi(module, function, parameters=()):
     _LAST_UAPI_IO.clear()
-    args = [UAPI, "--user=" + OWNER, "--output=json", module, function]
+    # SSH already verifies the process is OWNER; do not ask UAPI to switch users again.
+    args = [UAPI, "--output=json", module, function]
     args.extend(parameters)
     env = {"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin",
            "HOME": "/home/zomorod2", "USER": OWNER, "LOGNAME": OWNER}
