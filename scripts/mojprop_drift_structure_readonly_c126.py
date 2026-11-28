@@ -65,8 +65,32 @@ def behavior_summary(node):
             parameters.append("*" + args.vararg.arg[:63])
         if args.kwarg:
             parameters.append("**" + args.kwarg.arg[:62])
+    node_counts = {}
+    operator_counts = {}
+    branch_tests = []
+    exception_types = set()
+    keyword_names = set()
+    operator_nodes = (ast.operator, ast.unaryop, ast.boolop, ast.cmpop)
+    for item in ast.walk(node):
+        kind = type(item).__name__
+        node_counts[kind] = node_counts.get(kind, 0) + 1
+        if isinstance(item, operator_nodes):
+            operator_counts[kind] = operator_counts.get(kind, 0) + 1
+        if isinstance(item, (ast.If, ast.While, ast.Assert)):
+            branch_tests.append({"kind": kind, "shape_sha256": safe_shape(item.test)})
+        elif isinstance(item, (ast.For, ast.AsyncFor)):
+            branch_tests.append({"kind": kind, "shape_sha256": safe_shape(item.iter)})
+        if isinstance(item, ast.ExceptHandler):
+            exception_types.add(dotted(item.type) if item.type is not None else "bare")
+        if isinstance(item, ast.Call):
+            keyword_names.update(x.arg for x in item.keywords if x.arg)
     return {"parameters": parameters, "control_flow_counts": dict(sorted(counts.items())),
-            "call_targets": sorted(calls)[:100]}
+            "call_targets": sorted(calls)[:100],
+            "node_type_counts": dict(sorted(node_counts.items())),
+            "operator_counts": dict(sorted(operator_counts.items())),
+            "branch_test_fingerprints": sorted(branch_tests, key=lambda x: (x["kind"], x["shape_sha256"])),
+            "exception_handler_types": sorted(exception_types),
+            "keyword_argument_names": sorted(keyword_names)}
 
 def signature(path):
     result = {"file": Path(path).name, "exists": False, "regular": False,
