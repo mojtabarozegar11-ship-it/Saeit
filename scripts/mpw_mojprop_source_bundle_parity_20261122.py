@@ -13,6 +13,7 @@ No subprocesses, HTTP, writes, crontab changes, payments or app restarts.
 from __future__ import annotations
 
 import hashlib
+import ast
 import json
 import os
 import stat
@@ -109,24 +110,55 @@ def wsgi_binding_summary(wsgi: Path, expected: Path) -> dict:
         if not result["regular_file"] or result["symlink"] or info.st_nlink != 1:
             return result
         lines = wsgi.read_text(encoding="utf-8").splitlines()
+        tree = ast.parse("\\n".join(lines))
         assignments = []
-        for line in lines:
-            stripped = line.strip()
-            if "=" not in stripped:
-                continue
-            left, right = stripped.split("=", 1)
-            value = right.strip()
-            if left.strip() == "APP" and len(value) >= 2 and value[0] in ("'", '"') and value[-1] == value[0]:
-                assignments.append(value[1:-1])
+        safe_literals = set()
+        import_modules = set()
+        has_sys_path_insert = False
+        has_os_chdir = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                if isinstance(node.value, ast.Constant) and type(node.value.value) is str:
+                    value = node.value.value
+                    if value.startswith("/home/zomorod2/") and ".." not in Path(value).parts:
+                        safe_literals.add(value)
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "APP" and isinstance(node.value, ast.Constant) and type(node.value.value) is str:
+                        assignments.append(node.value.value)
+            elif isinstance(node, ast.Import):
+                import_modules.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                import_modules.add(node.module)
+            elif isinstance(node, ast.Call):
+                fn = node.func
+                if (isinstance(fn, ast.Attribute) and fn.attr == "insert"
+                    and isinstance(fn.value, ast.Attribute) and fn.value.attr == "path"
+                    and isinstance(fn.value.value, ast.Name) and fn.value.value.id == "sys"):
+                    has_sys_path_insert = True
+                if (isinstance(fn, ast.Attribute) and fn.attr == "chdir"
+                    and isinstance(fn.value, ast.Name) and fn.value.id == "os"):
+                    has_os_chdir = True
         result["single_app_assignment"] = len(assignments) == 1
         if len(assignments) == 1:
             candidate = Path(assignments[0])
             if (candidate.is_absolute() and str(candidate).startswith("/home/zomorod2/")
                     and ".." not in candidate.parts):
                 result["app_root"] = str(candidate)
-                result["matches_expected_root"] = candidate == expected
         result["has_os_chdir_app"] = "os.chdir(APP)" in lines
         result["has_sys_path_insert_app"] = any("sys.path.insert(0, APP)" in line for line in lines)
+        # Modern cPanel WSGI layout: exact approved project-root literal,
+        # sys.path insertion and the project's Django WSGI module import.
+        modern_binding = (
+            str(expected) in safe_literals
+            and has_sys_path_insert
+            and "config.wsgi" in import_modules
+        )
+        legacy_binding = (
+            result["app_root"] == str(expected)
+            and result["has_os_chdir_app"]
+            and result["has_sys_path_insert_app"]
+        )
+        result["matches_expected_root"] = modern_binding or legacy_binding
     except (OSError, UnicodeError):
         pass
     return result
