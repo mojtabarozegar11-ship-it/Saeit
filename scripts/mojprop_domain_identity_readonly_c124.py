@@ -20,6 +20,7 @@ UAPI = "/usr/local/cpanel/bin/uapi"
 MAX_OUTPUT = 65536
 MAX_DEPTH = 8
 SAFE_PATH_PREFIX = "/home/zomorod2/"
+_LAST_UAPI_IO = {}
 
 
 def _walk(value, depth=0):
@@ -83,6 +84,7 @@ def _classify_uapi_error(stderr):
 
 
 def _uapi(module, function, parameters=()):
+    _LAST_UAPI_IO.clear()
     args = [UAPI, "--user=" + OWNER, "--output=json", module, function]
     args.extend(parameters)
     env = {"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin",
@@ -90,10 +92,13 @@ def _uapi(module, function, parameters=()):
     try:
         result = subprocess.run(args, capture_output=True, timeout=18,
                                 check=False, env=env)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        _LAST_UAPI_IO.update({"timeout": True, "stdout_bytes": len(exc.stdout or b""), "stderr_bytes": len(exc.stderr or b"")})
         return None, "timeout"
-    except OSError:
+    except OSError as exc:
+        _LAST_UAPI_IO.update({"exec_error_type": type(exc).__name__})
         return None, "exec_error"
+    _LAST_UAPI_IO.update({"exit_code": int(result.returncode), "stdout_bytes": len(result.stdout), "stderr_bytes": len(result.stderr), "stderr_empty": len(result.stderr) == 0, "stdout_empty": len(result.stdout) == 0})
     if result.returncode != 0:
         reason = _classify_uapi_error(result.stderr)
         return None, reason
@@ -138,6 +143,7 @@ def inspect():
         "deployment_authorized": False,
         "cost_incurred": False,
         "uapi_diagnostics": {},
+        "uapi_io_diagnostics": {},
     }
     try:
         if pwd.getpwuid(os.geteuid()).pw_name != OWNER:
@@ -151,6 +157,7 @@ def inspect():
 
         domains, domain_status = _uapi("DomainInfo", "list_domains")
         out["uapi_diagnostics"]["domain_list"] = domain_status
+        out["uapi_io_diagnostics"]["domain_list"] = dict(_LAST_UAPI_IO)
         if domain_status == "success":
             out["domain_list_query_succeeded"] = True
             out["domain_list_contains_mojprop"] = _domain_in(domains)
@@ -159,6 +166,7 @@ def inspect():
             "DomainInfo", "single_domain_data", ("domain=" + DOMAIN,)
         )
         out["uapi_diagnostics"]["single_domain"] = single_status
+        out["uapi_io_diagnostics"]["single_domain"] = dict(_LAST_UAPI_IO)
         if single_status == "success":
             out["single_domain_query_succeeded"] = True
             out["domain_docroot"] = _find_path(
@@ -167,6 +175,7 @@ def inspect():
 
         apps, passenger_status = _uapi("PassengerApps", "list_applications")
         out["uapi_diagnostics"]["passenger_list"] = passenger_status
+        out["uapi_io_diagnostics"]["passenger_list"] = dict(_LAST_UAPI_IO)
         if passenger_status == "success":
             out["passenger_list_query_succeeded"] = True
             records = apps if type(apps) is list else [apps]
