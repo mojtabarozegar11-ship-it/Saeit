@@ -11,6 +11,7 @@ on:
       - "tests/test_mojprop_wsgi_binding_readonly_c125.py"
       - "scripts/mpw_mojprop_source_bundle_parity_20261122.py"
       - "tests/test_mpw_mojprop_source_bundle_parity_20261122.py"
+      - "scripts/mojprop_drift_structure_readonly_c126.py"
 
 permissions:
   contents: read
@@ -45,6 +46,8 @@ jobs:
           python3 -B -m py_compile scripts/mpw_mojprop_source_bundle_parity_20261122.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mpw_mojprop_source_bundle_parity_20261122 -q
           test ! -L scripts/mojprop_cpanel_uapi_cause_readonly_c111.py
+          python3 -B -m py_compile scripts/mojprop_drift_structure_readonly_c126.py
+          test ! -L scripts/mojprop_drift_structure_readonly_c126.py
           test "$(git hash-object -- scripts/mojprop_cpanel_uapi_cause_readonly_c111.py)" = "c387bd03551d96b8493a0ab9bbad0c211bd2443f"
 
       - name: Connect existing VPS to pinned owner cPanel SSH
@@ -92,6 +95,13 @@ jobs:
           fi
           echo "MOJPROP_SOURCE_PARITY_EXIT=$parity_exit"
           echo 'MOJPROP_SOURCE_PARITY_READONLY=COMPLETED'
+          expected="$(python3 -B scripts/mojprop_drift_structure_readonly_c126.py --expected)"
+          live="$(timeout 45s ssh -T -F "$work/config" cpanel 'python3 -B - --live' < scripts/mojprop_drift_structure_readonly_c126.py)"
+          python3 -c 'import json,sys; a=json.loads(sys.argv[1]); b=json.loads(sys.argv[2]); assert a.get("schema")==b.get("schema")=="mojprop.ast.structure.c126.v1"; fields=("classes","functions","imports","module_assignments","decorators","top_level_statement_counts"); aa={x["file"]:x for x in a["files"]}; bb={x["file"]:x for x in b["files"]}; assert aa.keys()==bb.keys(); rows=[]
+for name in sorted(aa):
+ x,y=aa[name],bb[name]; delta={f:{"expected":x.get(f),"live":y.get(f)} for f in fields if x.get(f)!=y.get(f)}; rows.append({"file":name,"expected_parseable":x.get("parseable"),"live_parseable":y.get("parseable"),"structural_match":not bool(delta),"differences":delta})
+print(json.dumps({"schema":"mojprop.ast.structure.comparison.c126.v1","read_only":True,"source_values_emitted":False,"secrets_emitted":False,"database_accessed":False,"customer_data_accessed":False,"files_modified":False,"service_restarted":False,"payment_created":False,"email_sent":False,"cost_incurred":False,"files":rows,"structural_match":all(x["structural_match"] and x["live_parseable"] and x["expected_parseable"] for x in rows)},sort_keys=True))' "$expected" "$live"
+          echo "MOJPROP_AST_STRUCTURE_C126_READONLY=COMPLETED"
           echo 'C111_QUOTA_CAUSE_READ_ONLY_COMPLETED=PASS'
           echo 'This is cause classification, not quota verification, backup, database recovery or permission to deploy.' >> "$GITHUB_STEP_SUMMARY"
 
