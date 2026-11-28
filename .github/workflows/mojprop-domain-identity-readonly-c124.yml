@@ -1,0 +1,73 @@
+name: MojProp exact cPanel domain identity — read only C124
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mojprop-domain-identity-readonly-c124.yml"
+      - "scripts/mojprop_domain_identity_readonly_c124.py"
+      - "tests/test_mojprop_domain_identity_readonly_c124.py"
+
+permissions:
+  contents: read
+
+jobs:
+  mojprop_domain_identity_readonly:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - name: Checkout exact owner-authored PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate diagnostic and privacy tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mojprop_domain_identity_readonly_c124.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_domain_identity_readonly_c124 -q
+
+      - name: Connect through pinned owner cPanel route
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/mojprop-c124"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); s=s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)); sys.stdout.write(s.rstrip()+chr(10))' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 30s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -x /usr/bin/uapi'
+
+      - name: Discover mojprop.top document root and Passenger binding via UAPI — read only
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-c124"
+          timeout 45s ssh -T -F "$work/config" cpanel 'python3 -B -' < scripts/mojprop_domain_identity_readonly_c124.py | python3 -c 'import json,sys; p="MOJPROP_C124_DOMAIN_IDENTITY_READONLY="; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith(p)]; assert len(rows)==1,"MISSING_SANITIZED_C124"; d=json.loads(rows[0][len(p):]); assert d["schema"]=="mojprop.domain_identity.readonly.c124.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["uapi_binary_safe"] is True; assert all(d[k] is False for k in ("raw_provider_data_emitted","files_read","database_accessed","customer_data_accessed","files_modified","service_restarted","payment_created","email_sent","deployment_authorized","cost_incurred")); assert type(d["domain_list_contains_mojprop"]) is bool and type(d["passenger_applications_for_domain"]) is int; print(rows[0])'
+          echo 'C124_DOMAIN_AND_PASSENGER_IDENTITY_READONLY=COMPLETE_NO_CHANGES' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove ephemeral SSH authentication material
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-c124"
+          if [ -d "$work" ]; then
+            rm -f "$work/host.key" "$work/known" "$work/config"
+            rmdir "$work" 2>/dev/null || true
+          fi
