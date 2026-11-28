@@ -106,7 +106,8 @@ def signature(path):
             elif isinstance(node, ast.ClassDef):
                 classes.add(node.name)
                 decorators.update(dotted(x) for x in node.decorator_list)
-                callable_rows.append({"kind": kind, "name": node.name, "shape_sha256": safe_shape(node)})                for member in ast.walk(node):
+                callable_rows.append({"kind": kind, "name": node.name, "shape_sha256": safe_shape(node)})
+                for member in ast.walk(node):
                     if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         behavior_rows.append({"kind": type(member).__name__,
                                               "name": node.name + "." + member.name,
