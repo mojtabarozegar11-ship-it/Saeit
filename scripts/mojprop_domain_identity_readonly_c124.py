@@ -59,6 +59,29 @@ def _find_path(value, keys):
     return None
 
 
+def _classify_uapi_error(stderr):
+    """Map provider stderr to a fixed safe category; never return its contents."""
+    err = stderr[:4096].decode("utf-8", "replace").lower()
+    rules = (
+        (("unknown option", "unrecognized option"), "cli_option_rejected"),
+        (("permission denied", "access denied", "not authorized", "not permitted"), "permission_denied"),
+        (("invalid user", "unknown user", "no such user", "user does not exist"), "account_context_rejected"),
+        (("must be run as root", "must be run by root", "root privileges"), "root_privilege_required"),
+        (("module not found", "unknown module", "no such module"), "uapi_module_not_found"),
+        (("function not found", "unknown function", "no such function"), "uapi_function_not_found"),
+        (("api disabled", "uapi disabled", "api access disabled"), "uapi_access_disabled"),
+        (("not found", "no such file"), "uapi_component_not_found"),
+        (("usage:", "syntax", "invalid argument", "too many arguments"), "cli_syntax_rejected"),
+        (("internal server error", "server error", "fatal error"), "cpanel_runtime_error"),
+        (("perl", "exception", "traceback"), "cpanel_runtime_exception"),
+        (("session", "authentication", "login required"), "cpanel_session_error"),
+    )
+    for needles, category in rules:
+        if any(needle in err for needle in needles):
+            return category
+    return "unclassified_nonzero_exit"
+
+
 def _uapi(module, function, parameters=()):
     args = [UAPI, "--user=" + OWNER, "--output=json", module, function]
     args.extend(parameters)
@@ -72,21 +95,7 @@ def _uapi(module, function, parameters=()):
     except OSError:
         return None, "exec_error"
     if result.returncode != 0:
-        err = result.stderr[:4096].decode("utf-8", "replace").lower()
-        if "unknown option" in err or "unrecognized option" in err:
-            reason = "cli_option_rejected"
-        elif "permission denied" in err or "access denied" in err:
-            reason = "permission_denied"
-        elif "invalid user" in err or "unknown user" in err or "no such user" in err:
-            reason = "account_context_rejected"
-        elif "must be run as root" in err or "must be run by root" in err:
-            reason = "root_privilege_required"
-        elif "not found" in err or "no such file" in err:
-            reason = "uapi_component_not_found"
-        elif "usage:" in err or "syntax" in err:
-            reason = "cli_syntax_rejected"
-        else:
-            reason = "other_nonzero_exit"
+        reason = _classify_uapi_error(result.stderr)
         return None, reason
     if not 0 < len(result.stdout) <= MAX_OUTPUT:
         return None, "empty_or_oversize"
