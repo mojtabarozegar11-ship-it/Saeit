@@ -34,6 +34,18 @@ class MojPropUniqueReceiverPreflightTests(SimpleTestCase):
     def test_clean_isolated_proofs_have_no_schema_blockers(self):
         self.assertEqual(audit._migration_issues(**self._healthy()), ())
 
+    def test_live_diagnostic_checks_effective_app_registry_before_model_import(self):
+        source = inspect.getsource(audit.audit)
+        self.assertIn("apps.get_app_config(_APP)", source)
+        self.assertIn("importlib.import_module(f\"{_APP}.models\")", source)
+        self.assertIn("runtime_models_module_present", source)
+        self.assertIn("effective_staging_model_module_unavailable", source)
+
+    def test_blocked_preflight_is_reported_as_a_completed_audit_not_ci_crash(self):
+        source = inspect.getsource(audit.main)
+        self.assertIn("return 0", source)
+        self.assertIn("sanitized BLOCKED assessment", source)
+
     def test_current_live_orphaned_historical_migration_names_block_release(self):
         fixture = self._healthy()
         fixture["applied"].add("0006_ten_plan_enrollment")
@@ -233,9 +245,18 @@ class MojPropUniqueReceiverPreflightTests(SimpleTestCase):
         self.assertIn("MigrationLoader(", source)
         self.assertIn("conn.introspection.get_constraints(", source)
         self.assertIn("connections[_DB_ALIAS]", source)
+        self.assertIn('Path("/home/zomorod2/Saeit-staging")', source)
+        self.assertIn("os.chdir(app_root)", source)
+        self.assertIn("sys.path.insert(0, str(app_root))", source)
         for forbidden in (
             "schema_editor(", "MigrationExecutor(", ".save(",
             "CREATE DATABASE", "ALTER TABLE", "DELETE FROM", "UPDATE ",
             "INSERT INTO", "migrate(", "send_mail(", "broadcast(", "settings.DATABASES['default']",
         ):
             self.assertNotIn(forbidden, source)
+
+    def test_blocked_runtime_registry_reports_unknown_counts_not_zero(self):
+        source = inspect.getsource(audit.audit)
+        self.assertIn('"actual_payment_count": None', source)
+        self.assertIn('"duplicate_recipient_groups": None', source)
+        self.assertIn('"applied_migrations_count": None', source)

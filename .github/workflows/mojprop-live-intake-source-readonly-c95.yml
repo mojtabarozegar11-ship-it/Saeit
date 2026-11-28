@@ -4,7 +4,9 @@ on:
     paths:
       - ".github/workflows/mojprop-live-intake-source-readonly-c95.yml"
       - "scripts/mojprop_live_intake_source_drift_readonly_c95.py"
+      - "scripts/mojprop_unique_receiver_migration_preflight_readonly_20261121.py"
       - "tests/test_mojprop_live_intake_source_drift_readonly_c95.py"
+      - "tests/test_mojprop_unique_receiver_migration_preflight_readonly_20261121.py"
       - "scripts/mojprop_passenger_source_readonly_c118.py"
       - "tests/test_mojprop_passenger_source_readonly_c118.py"
       - "scripts/mojprop_owner_backup_catalog_readonly_c120.py"
@@ -13,6 +15,8 @@ on:
       - "tests/test_mojprop_owner_local_archive_readonly_c120.py"
       - "scripts/mojprop_starter30_public_presence_readonly_c122.py"
       - "tests/test_mojprop_starter30_public_presence_readonly_c122.py"
+      - "scripts/mojprop_path_permissions_readonly_c123.py"
+      - "tests/test_mojprop_path_permissions_readonly_c123.py"
 
 permissions:
   contents: read
@@ -53,9 +57,11 @@ jobs:
           test ! -L scripts/mojprop_owner_backup_catalog_readonly_c120.py
           test "$(git hash-object -- scripts/mojprop_owner_backup_catalog_readonly_c120.py)" = "a48c1160dc2c2ec54249101d601c8a82c7579ddc"
           test ! -L scripts/mojprop_passenger_source_readonly_c118.py
-          test "$(git hash-object -- scripts/mojprop_passenger_source_readonly_c118.py)" = "f6507179c762bdea1e1bb28ea17d5e420e2b4dcb"
+          test "$(git hash-object -- scripts/mojprop_passenger_source_readonly_c118.py)" = "51ed4f16a2cbed093b26b02922a4247d40281e7c"
           test ! -L scripts/mojprop_live_intake_source_drift_readonly_c95.py
           test "$(git hash-object -- scripts/mojprop_live_intake_source_drift_readonly_c95.py)" = "c37b1e9dcafdeaf774382f5807984954f91bef9c"
+          python3 -B -m py_compile scripts/mojprop_path_permissions_readonly_c123.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_path_permissions_readonly_c123 -q
       - name: Connect only through pinned factory runner to the existing cPanel
         shell: bash
         env:
@@ -93,8 +99,18 @@ jobs:
           timeout 80s ssh -T -F "$work/config" cpanel \
             'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
             < scripts/mojprop_passenger_source_readonly_c118.py \
-            | python3 -c 'import json,sys; raw=sys.stdin.read(7000); prefix="MOJPROP_C118_PASSENGER_SOURCE_READONLY="; lines=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_C118"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.passenger.source_identity.readonly.c118.v1" and d["read_only"] is True and d["crm_lead_created"] is False and d["payment_created"] is False and d["email_sent"] is False and d["deploy_authorized"] is False and d["runtime_worker_identity_proven"] is False and d["full_db_app_media_restore_proven"] is False; assert set(d["staging_sources"])=={"core/mojprop_views.py","core/mojprop_receipts.py","core/mojprop_accessible_intake.py","config/urls.py","core/management/commands/mojprop_sales_action_queue.py"}; assert all(v in ("present","missing","unsafe","unavailable") for v in d["staging_sources"].values()); print(lines[0])'
+            | python3 -c 'import json,sys; raw=sys.stdin.read(7000); prefix="MOJPROP_C118_PASSENGER_SOURCE_READONLY="; lines=[x for x in raw.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_C118"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.passenger.source_identity.readonly.c118.v1" and d["read_only"] is True and d["crm_lead_created"] is False and d["payment_created"] is False and d["email_sent"] is False and d["deploy_authorized"] is False and d["runtime_worker_identity_proven"] is False and d["full_db_app_media_restore_proven"] is False; assert set(d["staging_sources"])=={"core/mojprop_views.py","core/mojprop_receipts.py","core/mojprop_accessible_intake.py","config/urls.py","core/management/commands/mojprop_sales_action_queue.py"}; assert all(v in ("present","missing","unsafe","unavailable") for v in d["staging_sources"].values()); assert set(d["public_sources"])==set(d["staging_sources"]); assert all(v in ("present","missing","unsafe","unavailable") for v in d["public_sources"].values()); print(lines[0])'
           echo 'C118_OWNER_PASSENGER_AST_READONLY=COMPLETE_NOT_DEPLOY_PROOF' >> "$GITHUB_STEP_SUMMARY"
+      - name: Classify fixed public and staging directory ownership/modes — read only
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 40s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_path_permissions_readonly_c123.py \
+            | python3 -c 'import json,sys; p="MOJPROP_C123_PATH_PERMISSIONS_READONLY="; rows=[x for x in sys.stdin.read(7000).splitlines() if x.startswith(p)]; assert len(rows)==1,"MISSING_SANITIZED_C123"; d=json.loads(rows[0][len(p):]); assert d["schema"]=="mojprop.path_permissions.readonly.c123.v1" and d["read_only"] is True and d["owner_identity_verified"] is True; assert d["customer_data_accessed"] is False and d["file_contents_read"] is False and d["database_accessed"] is False and d["files_modified"] is False and d["payment_created"] is False and d["email_sent"] is False and d["deployment_authorized"] is False; assert len(d["paths"])==10; print(rows[0])'
+          echo 'MOJPROP_C123_PATH_PERMISSION_CLASSIFICATION=COMPLETE_NO_CHANGES'
       - name: Inventory only existing account backup metadata via documented UAPI — no restoration
         shell: bash
         run: |
@@ -167,6 +183,16 @@ jobs:
           set -euo pipefail
           work="$RUNNER_TEMP/mojprop-source-c95"
           timeout 60s ssh -T -F "$work/config" cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < scripts/mpw_db_backup_scope_readonly_20261119.py
+      - name: Audit live isolated MojProp migration lineage and recipient collisions — SELECT only
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-source-c95"
+          timeout 100s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_unique_receiver_migration_preflight_readonly_20261121.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(12000); d=json.loads(raw); assert d["read_only"] is True and d["never_automatically_apply_migrations"] is True and d["scope"]=="dedicated_mojprop_alias_only"; assert d["status"] in ("BLOCKED","SCHEMA_PREFLIGHT_ONLY"); assert (d["actual_payment_count"] is None or type(d["actual_payment_count"]) is int) and (d["duplicate_recipient_groups"] is None or type(d["duplicate_recipient_groups"]) is int); assert type(d["exclusive_receiver_migration_applied"]) is bool and type(d["live_db_unique_recipient"]) is bool; print("MOJPROP_LIVE_MIGRATION_PREFLIGHT="+json.dumps(d,sort_keys=True))'
+          echo 'MOJPROP_LIVE_MIGRATION_PREFLIGHT_READONLY=COMPLETE_NO_DDL_NO_DML_NO_PAYMENT'
       - name: Remove ephemeral SSH authentication material
         if: always()
         shell: bash
