@@ -167,9 +167,9 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             root.mkdir()
             wsgi = Path(tmp) / "passenger_wsgi.py"
             wsgi.write_text(
-                "APP='" + str(root) + "'\\n"
-                "if APP not in sys.path: sys.path.insert(0, APP)\\n"
-                "os.chdir(APP)\\n", encoding="utf-8"
+                "APP='" + str(root) + "'" + chr(10)
+                + "if APP not in sys.path: sys.path.insert(0, APP)" + chr(10)
+                + "os.chdir(APP)" + chr(10), encoding="utf-8"
             )
             with patch.object(MOD.os, "geteuid", return_value=wsgi.stat().st_uid):
                 summary = MOD.wsgi_binding_summary(wsgi, root)
