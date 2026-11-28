@@ -32,7 +32,7 @@ def dotted(node):
 
 
 def signature(path):
-    result = {"file": path, "exists": False, "regular": False,
+    result = {"file": Path(path).name, "exists": False, "regular": False,
               "parseable": False, "classes": [], "functions": [],
               "imports": [], "module_assignments": [], "decorators": [],
               "top_level_statement_counts": {}, "error": None}
