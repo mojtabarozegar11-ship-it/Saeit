@@ -254,3 +254,9 @@ class MojPropUniqueReceiverPreflightTests(SimpleTestCase):
             "INSERT INTO", "migrate(", "send_mail(", "broadcast(", "settings.DATABASES['default']",
         ):
             self.assertNotIn(forbidden, source)
+
+    def test_blocked_runtime_registry_reports_unknown_counts_not_zero(self):
+        source = inspect.getsource(audit.audit)
+        self.assertIn('"actual_payment_count": None', source)
+        self.assertIn('"duplicate_recipient_groups": None', source)
+        self.assertIn('"applied_migrations_count": None', source)
