@@ -163,8 +163,7 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
 
     def test_12_wsgi_binding_summary_exposes_only_safe_app_metadata(self):
         with TemporaryDirectory() as tmp:
-            root = Path(tmp) / "candidate"
-            root.mkdir()
+            root = Path("/home/zomorod2/test-app")
             wsgi = Path(tmp) / "passenger_wsgi.py"
             wsgi.write_text(
                 "APP='" + str(root) + "'" + chr(10)
