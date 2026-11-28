@@ -64,18 +64,27 @@ def _uapi(module, function, parameters=()):
     args.extend(parameters)
     env = {"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin",
            "HOME": "/home/zomorod2", "USER": OWNER, "LOGNAME": OWNER}
-    result = subprocess.run(args, capture_output=True, timeout=18,
-                            check=False, env=env)
-    if result.returncode != 0 or not 0 < len(result.stdout) <= MAX_OUTPUT:
-        return None
+    try:
+        result = subprocess.run(args, capture_output=True, timeout=18,
+                                check=False, env=env)
+    except subprocess.TimeoutExpired:
+        return None, "timeout"
+    except OSError:
+        return None, "exec_error"
+    if result.returncode != 0:
+        return None, "exit_nonzero"
+    if not 0 < len(result.stdout) <= MAX_OUTPUT:
+        return None, "empty_or_oversize"
     try:
         payload = json.loads(result.stdout)
     except (UnicodeError, ValueError, TypeError):
-        return None
+        return None, "invalid_json"
     envelope = payload.get("result") if type(payload) is dict else None
-    if type(envelope) is not dict or envelope.get("status") != 1:
-        return None
-    return envelope.get("data")
+    if type(envelope) is not dict:
+        return None, "missing_result_envelope"
+    if envelope.get("status") != 1:
+        return None, "uapi_status_not_success"
+    return envelope.get("data"), "success"
 
 
 def inspect():
@@ -104,6 +113,7 @@ def inspect():
         "email_sent": False,
         "deployment_authorized": False,
         "cost_incurred": False,
+        "uapi_diagnostics": {},
     }
     try:
         if pwd.getpwuid(os.geteuid()).pw_name != OWNER:
@@ -115,21 +125,25 @@ def inspect():
             return out
         out["uapi_binary_safe"] = True
 
-        domains = _uapi("DomainInfo", "list_domains")
-        if domains is not None:
+        domains, domain_status = _uapi("DomainInfo", "list_domains")
+        out["uapi_diagnostics"]["domain_list"] = domain_status
+        if domain_status == "success":
             out["domain_list_query_succeeded"] = True
             out["domain_list_contains_mojprop"] = _domain_in(domains)
 
-        domain_data = _uapi("DomainInfo", "single_domain_data",
-                            ("domain=" + DOMAIN,))
-        if domain_data is not None:
+        domain_data, single_status = _uapi(
+            "DomainInfo", "single_domain_data", ("domain=" + DOMAIN,)
+        )
+        out["uapi_diagnostics"]["single_domain"] = single_status
+        if single_status == "success":
             out["single_domain_query_succeeded"] = True
             out["domain_docroot"] = _find_path(
                 domain_data, {"documentroot", "document_root", "docroot"}
             )
 
-        apps = _uapi("PassengerApps", "list_applications")
-        if apps is not None:
+        apps, passenger_status = _uapi("PassengerApps", "list_applications")
+        out["uapi_diagnostics"]["passenger_list"] = passenger_status
+        if passenger_status == "success":
             out["passenger_list_query_succeeded"] = True
             records = apps if type(apps) is list else [apps]
             matches = [item for item in records
