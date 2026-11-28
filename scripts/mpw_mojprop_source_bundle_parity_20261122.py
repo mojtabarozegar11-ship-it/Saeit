@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import stat
 import sys
 from pathlib import Path
@@ -91,6 +92,42 @@ def check_bundle(root: Path) -> dict:
     return summary
 
 
+def wsgi_binding_summary(wsgi: Path, expected: Path) -> dict:
+    """Expose only safe WSGI binding metadata; never emit file contents."""
+    result = {
+        "exists": False, "regular_file": False, "symlink": False,
+        "owner_uid_matches_account": False, "single_app_assignment": False,
+        "app_root": None, "has_os_chdir_app": False,
+        "has_sys_path_insert_app": False, "matches_expected_root": False,
+    }
+    try:
+        info = wsgi.lstat()
+        result["exists"] = True
+        result["regular_file"] = stat.S_ISREG(info.st_mode)
+        result["symlink"] = stat.S_ISLNK(info.st_mode)
+        result["owner_uid_matches_account"] = info.st_uid == os.geteuid()
+        if not result["regular_file"] or result["symlink"] or info.st_nlink != 1:
+            return result
+        lines = wsgi.read_text(encoding="utf-8").splitlines()
+        assignments = []
+        for line in lines:
+            match = re.fullmatch(r"\\s*APP\\s*=\\s*(['\"])([^'\"]+)\\1\\s*", line)
+            if match:
+                assignments.append(match.group(2))
+        result["single_app_assignment"] = len(assignments) == 1
+        if len(assignments) == 1:
+            candidate = Path(assignments[0])
+            if (candidate.is_absolute() and str(candidate).startswith("/home/zomorod2/")
+                    and ".." not in candidate.parts):
+                result["app_root"] = str(candidate)
+                result["matches_expected_root"] = candidate == expected
+        result["has_os_chdir_app"] = "os.chdir(APP)" in lines
+        result["has_sys_path_insert_app"] = any("sys.path.insert(0, APP)" in line for line in lines)
+    except (OSError, UnicodeError):
+        pass
+    return result
+
+
 def wsgi_root_matches(wsgi: Path, expected: Path) -> bool:
     """Fail closed if the actual public Passenger shim points elsewhere."""
     try:
@@ -110,14 +147,17 @@ def main(args: list[str]) -> int:
     if args != ["--check"]:
         print("Only read-only --check is supported.", file=sys.stderr)
         return 64
+    binding = wsgi_binding_summary(PUBLIC_WSGI, PUBLIC_EFFECTIVE_ROOT)
     if not wsgi_root_matches(PUBLIC_WSGI, PUBLIC_EFFECTIVE_ROOT):
         print(json.dumps({
             "source_bundle_matches": False,
             "reason": "effective_public_wsgi_root_unverified",
+            "wsgi_binding": binding,
             "written_live_changes": 0,
         }, sort_keys=True))
         return 2
     report = check_bundle(PUBLIC_EFFECTIVE_ROOT)
+    report["wsgi_binding"] = binding
     print(json.dumps(report, sort_keys=True, ensure_ascii=True))
     return 0 if report["source_bundle_matches"] else 2
 
