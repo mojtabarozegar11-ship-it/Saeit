@@ -7,6 +7,8 @@ on:
       - "templates/moj-prop/**"
       - "templates/moj-prop-v4/**"
       - "services/mojprop_standalone_boundary.py"
+      - "prop_firm/starter30_wallet_proof_contract.py"
+      - "tests/test_mojprop_wallet_proof_contract_20261123.py"
       - "config/mpw_commerce_urls.py"
       - "tests/test_mojprop_standalone_boundary_20261126.py"
       - "docs/mojprop/**"
@@ -44,11 +46,11 @@ jobs:
       - name: Compile the boundary and URL registry
         run: |
           set -euo pipefail
-          python -m py_compile services/mojprop_standalone_boundary.py config/mpw_commerce_urls.py
+          python -m py_compile services/mojprop_standalone_boundary.py config/mpw_commerce_urls.py prop_firm/starter30_wallet_proof_contract.py
       - name: Run MojProp HTTP and HTTPS regression tests
         run: |
           set -euo pipefail
-          python -m pytest -q tests/test_mojprop_standalone_boundary_20261126.py
+          python -m pytest -q tests/test_mojprop_standalone_boundary_20261126.py tests/test_mojprop_wallet_proof_contract_20261123.py
       - name: Validate dedicated MojProp surface
         run: |
           set -euo pipefail
