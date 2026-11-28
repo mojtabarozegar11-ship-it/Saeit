@@ -158,7 +158,8 @@ def wsgi_binding_summary(wsgi: Path, expected: Path) -> dict:
             and "config.wsgi" in import_modules
         )
         legacy_binding = (
-            result["app_root"] == str(expected)
+            len(assignments) == 1
+            and assignments[0] == str(expected)
             and result["has_os_chdir_app"]
             and result["has_sys_path_insert_app"]
         )
