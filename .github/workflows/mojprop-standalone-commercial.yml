@@ -17,13 +17,41 @@ permissions:
 jobs:
   validate-standalone-surface:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "mojprop-branch-ci-only-not-production"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,mojprop.top,www.mojprop.top,mojplaywin.com"
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+      - name: Install native build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config default-libmysqlclient-dev
+      - name: Install declared project dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Compile the boundary and URL registry
+        run: |
+          set -euo pipefail
+          python -m py_compile services/mojprop_standalone_boundary.py config/mpw_commerce_urls.py
+      - name: Run MojProp HTTP and HTTPS regression tests
+        run: |
+          set -euo pipefail
+          python -m pytest -q tests/test_mojprop_standalone_boundary_20261126.py
       - name: Validate dedicated MojProp surface
         run: |
           set -euo pipefail
-          python3 -m py_compile services/mojprop_standalone_boundary.py config/mpw_commerce_urls.py
           python3 - <<'PY'
           from pathlib import Path
           pages = [
@@ -45,6 +73,7 @@ jobs:
           PY
       - name: Confirm no deployment path is enabled by this gate
         run: |
+          set -euo pipefail
           test ! -f deploy/mojprop-production-enable.flag
           echo "MOJPROP_DEPLOYMENT=NOT_PERFORMED"
           echo "MOJPROP_PAYMENT=DISABLED"
