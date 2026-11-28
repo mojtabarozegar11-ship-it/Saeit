@@ -70,6 +70,25 @@ class C124DomainIdentityTests(unittest.TestCase):
         self.assertEqual(module._LAST_UAPI_IO["stderr_bytes"], 42)
         self.assertNotIn("stderr", module._LAST_UAPI_IO.keys() - {"stderr_bytes", "stderr_empty"})
 
+    def test_uapi_does_not_attempt_to_switch_from_verified_owner_context(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from scripts import mojprop_domain_identity_readonly_c124 as module
+
+        payload = b'{"result":{"status":1,"data":{}}}'
+        with patch.object(module.subprocess, "run", return_value=SimpleNamespace(
+            returncode=0, stdout=payload, stderr=b""
+        )) as run:
+            data, status = module._uapi("DomainInfo", "list_domains")
+        self.assertEqual(status, "success")
+        self.assertEqual(data, {})
+        command = run.call_args.args[0]
+        self.assertEqual(command, [
+            module.UAPI, "--output=json", "DomainInfo", "list_domains"
+        ])
+        self.assertNotIn("--user=" + module.OWNER, command)
+        self.assertEqual(run.call_args.kwargs["env"]["USER"], module.OWNER)
+
     def test_target_domain_constant_is_exact(self):
         self.assertEqual(DOMAIN, "mojprop.top")
 
