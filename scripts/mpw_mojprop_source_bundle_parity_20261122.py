@@ -169,18 +169,15 @@ def wsgi_binding_summary(wsgi: Path, expected: Path) -> dict:
 
 
 def wsgi_root_matches(wsgi: Path, expected: Path) -> bool:
-    """Fail closed if the actual public Passenger shim points elsewhere."""
-    try:
-        if wsgi.is_symlink() or not wsgi.is_file() or expected.is_symlink():
-            return False
-        lines = wsgi.read_text(encoding="utf-8").splitlines()
-        return (
-            lines.count("APP='" + str(expected) + "'") == 1
-            and "os.chdir(APP)" in lines
-            and any("sys.path.insert(0, APP)" in item for item in lines)
-        )
-    except (OSError, UnicodeError):
-        return False
+    """Accept only a safe legacy or AST-verified modern WSGI binding."""
+    binding = wsgi_binding_summary(wsgi, expected)
+    return (
+        binding["exists"]
+        and binding["regular_file"]
+        and not binding["symlink"]
+        and binding["owner_uid_matches_account"]
+        and binding["matches_expected_root"]
+    )
 
 
 def main(args: list[str]) -> int:
