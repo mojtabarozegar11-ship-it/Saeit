@@ -1,4 +1,4 @@
-name: Moj Prop C111 actual cPanel Quota API reason — read only
+name: Moj Prop C111 actual cPanel Quota API reason — read only (verified owner context)
 on:
   pull_request:
     paths:
