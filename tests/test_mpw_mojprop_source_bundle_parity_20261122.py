@@ -177,13 +177,28 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             self.assertEqual(summary["app_root"], str(root))
             self.assertNotIn("contents", summary)
 
-    def test_13_effective_reviewed_root_is_the_cpanel_passenger_target(self):
+    def test_13_modern_wsgi_layout_accepts_exact_root_literal_and_django_import(self):
+        with TemporaryDirectory() as tmp:
+            expected = Path("/home/zomorod2/Saeit-mojprop-candidate-20261122")
+            wsgi = Path(tmp) / "passenger_wsgi.py"
+            wsgi.write_text(
+                "import sys" + chr(10)
+                + "sys.path.insert(0, '/home/zomorod2/Saeit-mojprop-candidate-20261122')" + chr(10)
+                + "from config.wsgi import application" + chr(10),
+                encoding="utf-8",
+            )
+            with patch.object(MOD.os, "geteuid", return_value=wsgi.stat().st_uid):
+                summary = MOD.wsgi_binding_summary(wsgi, expected)
+            self.assertTrue(summary["matches_expected_root"])
+            self.assertTrue(summary["has_sys_path_insert_app"])
+
+    def test_14_effective_reviewed_root_is_the_cpanel_passenger_target(self):
         self.assertEqual(MOD.PUBLIC_EFFECTIVE_ROOT,
             Path("/home/zomorod2/Saeit-mojprop-candidate-20261122"))
         self.assertEqual(MOD.PUBLIC_WSGI,
             Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py"))
 
-    def test_14_reviewed_new_invoice_receiver_is_exclusively_owner_approved(self):
+    def test_15_reviewed_new_invoice_receiver_is_exclusively_owner_approved(self):
         source = (ROOT / "prop_firm/starter30_receiver_pool.py").read_text(
             encoding="utf-8"
         )
