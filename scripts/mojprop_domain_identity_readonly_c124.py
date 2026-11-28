@@ -79,6 +79,8 @@ def _safe_error_tokens(stderr):
 def _classify_uapi_error(stderr):
     """Map provider stderr to a fixed safe category; never return its contents."""
     err = stderr[:4096].decode("utf-8", "replace").lower()
+    if all(token in err for token in ("failed", "uapi", "as", "user")):
+        return "uapi_execution_context_failed"
     rules = (
         (("unknown option", "unrecognized option"), "cli_option_rejected"),
         (("permission denied", "access denied", "not authorized", "not permitted"), "permission_denied"),
