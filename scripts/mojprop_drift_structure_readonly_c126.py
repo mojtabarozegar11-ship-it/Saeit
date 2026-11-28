@@ -7,6 +7,7 @@ credentials, addresses, environment values, database rows, or file hashes.
 from __future__ import annotations
 
 import ast
+import copy
 import hashlib
 import json
 import os
@@ -38,7 +39,7 @@ class MaskConstants(ast.NodeTransformer):
 
 
 def safe_shape(node):
-    masked = MaskConstants().visit(ast.fix_missing_locations(ast.parse(ast.unparse(node)).body[0]))
+    masked = MaskConstants().visit(copy.deepcopy(node))
     return hashlib.sha256(ast.dump(masked, include_attributes=False).encode("utf-8")).hexdigest()
 
 
