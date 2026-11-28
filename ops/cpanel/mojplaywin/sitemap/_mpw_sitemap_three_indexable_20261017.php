@@ -4,7 +4,7 @@ declare(strict_types=1);
  * Moj Play Win public sitemap live augmentation, isolated from shared Django.
  * It fetches the existing MojPlayWin sitemap via a strictly same-origin HTTPS
  * bypass, then adds only market, industry and economy URLs when absent.
- * The original dynamic sitemap entries remain byte-for-byte unchanged.
+ * Original dynamic entries are preserved except retired standalone MojProp URLs.
  */
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
@@ -52,38 +52,12 @@ if (strlen($original) < 250 || strlen($original) > 950000
     || substr_count($original, '<loc>') > 3000
     || strpos($original, 'https://mojplaywin.com/') === false
     || strpos($original, 'https://zomorodmelal.ir/') !== false) fallbackSitemap();
-$mojPropPaths = ['/moj-prop/rules/', '/moj-prop/signals/', '/moj-prop/payment/', '/moj-prop/contact/', '/moj-prop/selected-traders/', '/moj-prop/education/', '/moj-prop/education/risk-management/', '/moj-prop/education/drawdown-and-position-sizing/', '/moj-prop/education/sixty-day-simulated-challenge/', '/moj-prop/education/best-day-consistency/', '/moj-prop/education/simulated-versus-live/', '/moj-prop/catalog/'];
-// 2026-11-22: 21 independently verified, self-canonical, indexable live language pages.
-// The already-submitted root sitemap previously omitted these; preserve the original
-// low-count passthrough branch and all existing English + public robot/store URLs.
-$mojPropLocalePaths = [
-    '/moj-prop/languages/',
-    '/moj-prop/languages/ar-eg/',
-    '/moj-prop/languages/ar/',
-    '/moj-prop/languages/bn/',
-    '/moj-prop/languages/de/',
-    '/moj-prop/languages/en/',
-    '/moj-prop/languages/es/',
-    '/moj-prop/languages/fr/',
-    '/moj-prop/languages/hi/',
-    '/moj-prop/languages/id/',
-    '/moj-prop/languages/ja/',
-    '/moj-prop/languages/mr/',
-    '/moj-prop/languages/pcm/',
-    '/moj-prop/languages/pt/',
-    '/moj-prop/languages/ru/',
-    '/moj-prop/languages/sw/',
-    '/moj-prop/languages/te/',
-    '/moj-prop/languages/tr/',
-    '/moj-prop/languages/ur/',
-    '/moj-prop/languages/vi/',
-    '/moj-prop/languages/zh/',
-];
-if (count($mojPropLocalePaths) !== 21
-    || count(array_unique($mojPropLocalePaths)) !== 21) fallbackSitemap();
-array_push($mojPropPaths, ...$mojPropLocalePaths);
-// LIVE-VERIFIED BOT SITEMAP PRESERVATION: public landing only; no API, paid checkout or status.
-$mojPropPaths[] = '/mojtaba.bot.ai/';
+$mpwLowCountPaths = ['/mojtaba.bot.ai/'];
+// Keep the MojPlayWin bot landing page on this host; standalone MojProp URLs belong only to mojprop.top.
+// Retire old MojPlayWin /moj-prop/ sitemap entries without touching unrelated public URLs.
+$filteredOriginal = preg_replace('~<url>\s*<loc>https://mojplaywin\.com/moj-prop/[^<]*</loc>\s*</url>~', '', $original);
+if (!is_string($filteredOriginal)) fallbackSitemap();
+$original = $filteredOriginal;
 $locCount = substr_count($original, '<loc>');
 if ($locCount < 20) {
     preg_match_all('~<loc>([^<]+)</loc>~', $original, $matchedLocs);
@@ -93,7 +67,7 @@ if ($locCount < 20) {
         if (strpos($existingLoc, 'https://mojplaywin.com/') !== 0) fallbackSitemap();
     }
     $extra = '';
-    foreach ($mojPropPaths as $path) {
+    foreach ($mpwLowCountPaths as $path) {
         $loc = '<loc>https://mojplaywin.com' . $path . '</loc>';
         $seen = substr_count($original, $loc);
         if ($seen > 1) fallbackSitemap();
@@ -103,14 +77,13 @@ if ($locCount < 20) {
     if ($closing === false) fallbackSitemap();
     $body = substr($original, 0, $closing) . $extra . substr($original, $closing);
     header('Content-Type: application/xml; charset=utf-8');
-    header('X-MPW-Sitemap-Augmentation: moj-prop-only-low-count');
+    header('X-MPW-Sitemap-Augmentation: mpw-only-low-count');
     echo $body;
     exit;
 }
 $paths = ['/market/', '/industry/', '/economy/'];
 // LIVE-VERIFIED STORE SITEMAP PRESERVATION: three approved public product detail pages.
 $paths = array_merge($paths, ['/store/product/72/', '/store/product/225/', '/store/product/879/']);
-$paths = array_merge($paths, $mojPropPaths);
 $extra = '';
 // MPW_REVENUE_SITEMAP_LINKS_20261020 -- 13 additional verified indexable main-domain pages
 $mpwRevenuePages20261020 = ['/mpw-editorial/revenue/index.html','/mpw-editorial/revenue/website-doctor/index.html','/mpw-editorial/revenue/landing-page-studio/index.html','/mpw-editorial/revenue/ai-automation/index.html','/mpw-editorial/revenue/business-spreadsheets/index.html','/mpw-editorial/revenue/website-templates/index.html','/mpw-editorial/revenue/social-media-kits/index.html','/mpw-editorial/revenue/resume-builder/index.html','/mpw-editorial/revenue/logo-studio/index.html','/mpw-editorial/revenue/browser-games/index.html','/mpw-editorial/revenue/marketing-ai/index.html','/mpw-editorial/revenue/business-calculators/index.html','/mpw-editorial/revenue/website-care/index.html'];
