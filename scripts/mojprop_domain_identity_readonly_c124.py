@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import pwd
+import re
 import stat
 import subprocess
 
@@ -60,6 +61,21 @@ def _find_path(value, keys):
     return None
 
 
+def _safe_error_tokens(stderr):
+    """Return only generic allow-listed CLI words; never emit provider text."""
+    allowed = {
+        "uapi", "unknown", "unrecognized", "option", "argument", "arguments",
+        "user", "permission", "error", "usage", "command", "not", "found",
+        "invalid", "api", "root", "must", "run", "as", "requires", "module",
+        "function", "disabled", "failed", "could", "cannot", "execute",
+        "perl", "json", "output", "help", "version", "syntax", "access",
+        "denied", "missing", "parameter", "parameters", "required", "specify",
+        "specified", "incorrect", "unknown", "supported", "available",
+    }
+    words = re.findall(r"[a-zA-Z][a-zA-Z_-]{1,24}", stderr[:4096].decode("utf-8", "replace").lower())
+    return sorted({word for word in words if word in allowed})[:20]
+
+
 def _classify_uapi_error(stderr):
     """Map provider stderr to a fixed safe category; never return its contents."""
     err = stderr[:4096].decode("utf-8", "replace").lower()
@@ -98,7 +114,7 @@ def _uapi(module, function, parameters=()):
     except OSError as exc:
         _LAST_UAPI_IO.update({"exec_error_type": type(exc).__name__})
         return None, "exec_error"
-    _LAST_UAPI_IO.update({"exit_code": int(result.returncode), "stdout_bytes": len(result.stdout), "stderr_bytes": len(result.stderr), "stderr_empty": len(result.stderr) == 0, "stdout_empty": len(result.stdout) == 0})
+    _LAST_UAPI_IO.update({"exit_code": int(result.returncode), "stdout_bytes": len(result.stdout), "stderr_bytes": len(result.stderr), "stderr_empty": len(result.stderr) == 0, "stdout_empty": len(result.stdout) == 0, "stderr_safe_tokens": _safe_error_tokens(result.stderr)})
     if result.returncode != 0:
         reason = _classify_uapi_error(result.stderr)
         return None, reason
