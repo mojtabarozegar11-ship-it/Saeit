@@ -161,13 +161,30 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             self.assertIn("effective_public_wsgi_root_unverified", buf.getvalue())
             self.assertEqual(len(list(root.rglob("*.py"))), 12)
 
-    def test_12_effective_reviewed_root_is_the_cpanel_passenger_target(self):
+    def test_12_wsgi_binding_summary_exposes_only_safe_app_metadata(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "candidate"
+            root.mkdir()
+            wsgi = Path(tmp) / "passenger_wsgi.py"
+            wsgi.write_text(
+                "APP='" + str(root) + "'\\n"
+                "if APP not in sys.path: sys.path.insert(0, APP)\\n"
+                "os.chdir(APP)\\n", encoding="utf-8"
+            )
+            with patch.object(MOD.os, "geteuid", return_value=wsgi.stat().st_uid):
+                summary = MOD.wsgi_binding_summary(wsgi, root)
+            self.assertTrue(summary["single_app_assignment"])
+            self.assertTrue(summary["matches_expected_root"])
+            self.assertEqual(summary["app_root"], str(root))
+            self.assertNotIn("contents", summary)
+
+    def test_13_effective_reviewed_root_is_the_cpanel_passenger_target(self):
         self.assertEqual(MOD.PUBLIC_EFFECTIVE_ROOT,
             Path("/home/zomorod2/Saeit-mojprop-candidate-20261122"))
         self.assertEqual(MOD.PUBLIC_WSGI,
             Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py"))
 
-    def test_13_reviewed_new_invoice_receiver_is_exclusively_owner_approved(self):
+    def test_14_reviewed_new_invoice_receiver_is_exclusively_owner_approved(self):
         source = (ROOT / "prop_firm/starter30_receiver_pool.py").read_text(
             encoding="utf-8"
         )
