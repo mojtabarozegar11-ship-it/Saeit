@@ -31,7 +31,10 @@ def _walk(value, depth=0):
             yield from _walk(item, depth + 1)
     elif type(value) is list:
         for item in value[:100]:
-            yield from _walk(item, depth + 1)
+            if type(item) in (str, int, float, bool) or item is None:
+                yield "", item
+            else:
+                yield from _walk(item, depth + 1)
 
 
 def _domain_in(value):
