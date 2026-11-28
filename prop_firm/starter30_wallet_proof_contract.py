@@ -22,7 +22,7 @@ from django.core import signing
 from services.mpw_trx_merchant_binding import validate_tron_recipient
 
 _TAG = "mojprop-starter30-wallet-control-v1"
-_DOMAIN = "mojplaywin.com"
+_DOMAIN = "mojprop.top"
 _NETWORK = "tron-mainnet"
 _AMOUNT_SUN = 30_000_000
 _MAX_AGE_SECONDS = 600
@@ -51,8 +51,8 @@ def _validated_public_address(value: str) -> str:
 def _message(payload: dict) -> str:
     """Canonical plaintext: no JSON stringify/locale/timezone ambiguities."""
     return "\n".join((
-        "MojPlayWin Starter30 wallet ownership",
-        "Origin: https://mojplaywin.com",
+        "MojProp Starter30 wallet ownership",
+        "Origin: https://mojprop.top",
         "Network: tron-mainnet",
         "Purpose: Prove sending wallet control, not a transfer",
         f"Buyer identity SHA256: {payload['buyer']}",

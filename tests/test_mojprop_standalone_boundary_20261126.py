@@ -46,3 +46,19 @@ class MojPropStandaloneBoundaryTests(SimpleTestCase):
             self.assertNotIn("MojPlayWin", text)
             self.assertNotIn("MOJPLAYWIN", text)
             self.assertIn("mojprop.top", text.lower())
+
+    def test_http_mojprop_host_is_also_guarded(self):
+        factory = RequestFactory()
+        request = factory.get("/commerce/trx-easy/invoice/54/", secure=False, HTTP_HOST="mojprop.top")
+        self.assertFalse(request.is_secure())
+        self.assertTrue(is_mojprop_host(request))
+        view = guard_legacy_commerce(lambda request: HttpResponse("legacy"))
+        response = view(request)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["X-MojProp-Commerce"], "standalone-not-released")
+
+    def test_http_legacy_host_keeps_legacy_behavior(self):
+        factory = RequestFactory()
+        view = guard_legacy_commerce(lambda request: HttpResponse("legacy"))
+        request = factory.get("/commerce/trx-easy/", secure=False, HTTP_HOST="mojplaywin.com")
+        self.assertEqual(view(request).content, b"legacy")
