@@ -110,7 +110,7 @@ def wsgi_binding_summary(wsgi: Path, expected: Path) -> dict:
         if not result["regular_file"] or result["symlink"] or info.st_nlink != 1:
             return result
         lines = wsgi.read_text(encoding="utf-8").splitlines()
-        tree = ast.parse("\\n".join(lines))
+        tree = ast.parse(chr(10).join(lines))
         assignments = []
         safe_literals = set()
         import_modules = set()
