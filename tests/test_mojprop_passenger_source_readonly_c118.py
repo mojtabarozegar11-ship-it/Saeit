@@ -139,3 +139,10 @@ class PassengerIdentityC118Tests(unittest.TestCase):
                        "sqlite3", "pymysql", "shutil"):
             self.assertNotIn(banned, imports)
         self.assertIn("runtime_worker_identity_proven\": False", file.read_text())
+
+    def test_report_distinguishes_public_worker_tree_from_staging_tree(self):
+        file = Path(__file__).resolve().parents[1] / "scripts/mojprop_passenger_source_readonly_c118.py"
+        source = file.read_text()
+        self.assertIn('"public_sources": {p: "unavailable" for p in SOURCE_FILES}', source)
+        self.assertIn('_owned_safe_file(WEBROOT / name, root=WEBROOT)', source)
+        self.assertIn('_owned_safe_file(ROOT / name, root=ROOT)', source)
