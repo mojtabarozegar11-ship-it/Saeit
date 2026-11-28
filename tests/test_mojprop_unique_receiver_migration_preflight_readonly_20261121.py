@@ -34,6 +34,18 @@ class MojPropUniqueReceiverPreflightTests(SimpleTestCase):
     def test_clean_isolated_proofs_have_no_schema_blockers(self):
         self.assertEqual(audit._migration_issues(**self._healthy()), ())
 
+    def test_live_diagnostic_checks_effective_app_registry_before_model_import(self):
+        source = inspect.getsource(audit.audit)
+        self.assertIn("apps.get_app_config(_APP)", source)
+        self.assertIn("importlib.import_module(f\"{_APP}.models\")", source)
+        self.assertIn("runtime_models_module_present", source)
+        self.assertIn("effective_staging_model_module_unavailable", source)
+
+    def test_blocked_preflight_is_reported_as_a_completed_audit_not_ci_crash(self):
+        source = inspect.getsource(audit.main)
+        self.assertIn("return 0", source)
+        self.assertIn("sanitized BLOCKED assessment", source)
+
     def test_current_live_orphaned_historical_migration_names_block_release(self):
         fixture = self._healthy()
         fixture["applied"].add("0006_ten_plan_enrollment")
