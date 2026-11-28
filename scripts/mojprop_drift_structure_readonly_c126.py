@@ -7,6 +7,7 @@ credentials, addresses, environment values, database rows, or file hashes.
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import os
 import stat
@@ -31,11 +32,23 @@ def dotted(node):
     return type(node).__name__
 
 
+class MaskConstants(ast.NodeTransformer):
+    def visit_Constant(self, node):
+        return ast.copy_location(ast.Constant(value=type(node.value).__name__), node)
+
+
+def safe_shape(node):
+    masked = MaskConstants().visit(ast.fix_missing_locations(ast.parse(ast.unparse(node)).body[0]))
+    return hashlib.sha256(ast.dump(masked, include_attributes=False).encode("utf-8")).hexdigest()
+
+
 def signature(path):
     result = {"file": Path(path).name, "exists": False, "regular": False,
               "parseable": False, "classes": [], "functions": [],
               "imports": [], "module_assignments": [], "decorators": [],
-              "top_level_statement_counts": {}, "error": None}
+              "top_level_statement_counts": {}, "callable_fingerprints": [],
+              "module_assignment_fingerprints": [], "literal_type_counts": {},
+              "error": None}
     try:
         p = Path(path)
         st = p.lstat()
@@ -48,15 +61,24 @@ def signature(path):
         result["parseable"] = True
         classes, funcs, imports, assignments, decorators = set(), set(), set(), set(), set()
         counts = {}
+        callable_rows = []
+        assignment_rows = []
+        literal_counts = {}
+        for item in ast.walk(tree):
+            if isinstance(item, ast.Constant):
+                key = type(item.value).__name__
+                literal_counts[key] = literal_counts.get(key, 0) + 1
         for node in tree.body:
             kind = type(node).__name__
             counts[kind] = counts.get(kind, 0) + 1
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 funcs.add(node.name)
                 decorators.update(dotted(x) for x in node.decorator_list)
+                callable_rows.append({"kind": kind, "name": node.name, "shape_sha256": safe_shape(node)})
             elif isinstance(node, ast.ClassDef):
                 classes.add(node.name)
                 decorators.update(dotted(x) for x in node.decorator_list)
+                callable_rows.append({"kind": kind, "name": node.name, "shape_sha256": safe_shape(node)})
             elif isinstance(node, ast.Import):
                 imports.update(a.name for a in node.names)
             elif isinstance(node, ast.ImportFrom):
@@ -66,9 +88,15 @@ def signature(path):
                 for target in targets:
                     if isinstance(target, ast.Name):
                         assignments.add(target.id)
+                        value = getattr(node, "value", None)
+                        if value is not None:
+                            assignment_rows.append({"name": target.id, "shape_sha256": safe_shape(value)})
         result.update(classes=sorted(classes), functions=sorted(funcs),
                       imports=sorted(imports), module_assignments=sorted(assignments),
-                      decorators=sorted(decorators), top_level_statement_counts=dict(sorted(counts.items())))
+                      decorators=sorted(decorators), top_level_statement_counts=dict(sorted(counts.items())),
+                      callable_fingerprints=sorted(callable_rows, key=lambda x: (x["kind"], x["name"])),
+                      module_assignment_fingerprints=sorted(assignment_rows, key=lambda x: x["name"]),
+                      literal_type_counts=dict(sorted(literal_counts.items())))
     except (OSError, UnicodeError, SyntaxError, ValueError):
         result["error"] = "unreadable_or_invalid_python"
     return result
