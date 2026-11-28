@@ -5,6 +5,12 @@ on:
       - ".github/workflows/mojprop-cpanel-quota-uapi-cause-readonly-c111.yml"
       - "scripts/mojprop_cpanel_uapi_cause_readonly_c111.py"
       - "tests/test_mojprop_cpanel_uapi_cause_readonly_c111.py"
+      - "scripts/mojprop_domain_identity_readonly_c124.py"
+      - "tests/test_mojprop_domain_identity_readonly_c124.py"
+      - "scripts/mojprop_wsgi_binding_readonly_c125.py"
+      - "tests/test_mojprop_wsgi_binding_readonly_c125.py"
+      - "scripts/mpw_mojprop_source_bundle_parity_20261122.py"
+      - "tests/test_mpw_mojprop_source_bundle_parity_20261122.py"
 
 permissions:
   contents: read
