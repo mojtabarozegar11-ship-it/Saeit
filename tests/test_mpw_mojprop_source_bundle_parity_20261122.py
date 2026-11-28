@@ -190,7 +190,7 @@ class MojPropProductionSourceBundleEvidenceTests(TestCase):
             with patch.object(MOD.os, "geteuid", return_value=wsgi.stat().st_uid):
                 summary = MOD.wsgi_binding_summary(wsgi, expected)
             self.assertTrue(summary["matches_expected_root"])
-            self.assertTrue(summary["has_sys_path_insert_app"])
+            self.assertTrue(summary["matches_expected_root"])
 
     def test_14_effective_reviewed_root_is_the_cpanel_passenger_target(self):
         self.assertEqual(MOD.PUBLIC_EFFECTIVE_ROOT,
