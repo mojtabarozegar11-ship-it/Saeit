@@ -122,13 +122,13 @@ def wsgi_binding_summary(wsgi: Path, expected: Path) -> dict:
                     value = node.value.value
                     if value.startswith("/home/zomorod2/") and ".." not in Path(value).parts:
                         safe_literals.add(value)
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "APP" and isinstance(node.value, ast.Constant) and type(node.value.value) is str:
+                        assignments.append(node.value.value)
             if isinstance(node, ast.Constant) and type(node.value) is str:
                 value = node.value
                 if value.startswith("/home/zomorod2/") and ".." not in Path(value).parts:
                     safe_literals.add(value)
-                for target in node.targets:
-                    if isinstance(target, ast.Name) and target.id == "APP" and isinstance(node.value, ast.Constant) and type(node.value.value) is str:
-                        assignments.append(node.value.value)
             elif isinstance(node, ast.Import):
                 import_modules.update(alias.name for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module:
