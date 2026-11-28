@@ -34,6 +34,8 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_cpanel_uapi_cause_readonly_c111 -q
           python3 -B -m py_compile scripts/mojprop_domain_identity_readonly_c124.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_domain_identity_readonly_c124 -q
+          python3 -B -m py_compile scripts/mojprop_wsgi_binding_readonly_c125.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_wsgi_binding_readonly_c125 -q
           python3 -B -m py_compile scripts/mpw_mojprop_source_bundle_parity_20261122.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mpw_mojprop_source_bundle_parity_20261122 -q
           test ! -L scripts/mojprop_cpanel_uapi_cause_readonly_c111.py
@@ -71,6 +73,10 @@ jobs:
             < scripts/mojprop_domain_identity_readonly_c124.py \
             | python3 -c 'import json,sys; pre="MOJPROP_C124_DOMAIN_IDENTITY_READONLY="; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith(pre)]; assert len(rows)==1,"MISSING_SANITIZED_C124"; d=json.loads(rows[0][len(pre):]); assert d["schema"]=="mojprop.domain_identity.readonly.c124.v1" and d["read_only"] is True and d["owner_identity_verified"] is True and d["uapi_binary_safe"] is True; assert all(d[k] is False for k in ("raw_provider_data_emitted","files_read","database_accessed","customer_data_accessed","files_modified","service_restarted","payment_created","email_sent","deployment_authorized","cost_incurred")); assert type(d["domain_list_contains_mojprop"]) is bool and type(d["passenger_applications_for_domain"]) is int; print(rows[0])'
           echo 'C124_DOMAIN_AND_PASSENGER_IDENTITY_READONLY=COMPLETED'
+          timeout 45s ssh -T -F "$work/config" cpanel 'python3 -B -' \
+            < scripts/mojprop_wsgi_binding_readonly_c125.py \
+            | python3 -c 'import json,sys; pre="MOJPROP_C125_WSGI_BINDING="; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith(pre)]; assert len(rows)==1,"MISSING_C125"; d=json.loads(rows[0][len(pre):]); assert d["schema"]=="mojprop.wsgi.binding.readonly.c125.v1" and d["read_only"] is True and d["owner_verified"] is True; assert all(d[k] is False for k in ("files_modified","service_restarted","database_accessed","customer_data_accessed","payment_created","email_sent","deployment_authorized","cost_incurred")); print(rows[0])'
+          echo 'C125_WSGI_BINDING_READONLY=COMPLETED'
           if timeout 45s ssh -T -F "$work/config" cpanel 'python3 -B - --check' \
             < scripts/mpw_mojprop_source_bundle_parity_20261122.py \
             | python3 -c 'import json,sys; rows=[x for x in sys.stdin.read(12000).splitlines() if x.startswith("{")]; assert len(rows)==1,"MISSING_SOURCE_PARITY"; d=json.loads(rows[0]); out={"source_bundle_matches":d.get("source_bundle_matches",False),"reason":d.get("reason","none"),"checked":d.get("checked",0),"matched":d.get("matched",0),"missing":d.get("missing",0),"drift":d.get("drift",0),"unsafe_or_unreadable":d.get("unsafe_or_unreadable",0),"worker_reload_proven":d.get("worker_reload_proven",False),"financial_release_proven":d.get("financial_release_proven",False),"written_live_changes":d.get("written_live_changes",0),"wsgi_binding":d.get("wsgi_binding",{})}; print(json.dumps(out,sort_keys=True))'; then
