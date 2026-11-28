@@ -15,7 +15,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import stat
 import sys
 from pathlib import Path
@@ -112,9 +111,13 @@ def wsgi_binding_summary(wsgi: Path, expected: Path) -> dict:
         lines = wsgi.read_text(encoding="utf-8").splitlines()
         assignments = []
         for line in lines:
-            match = re.fullmatch(r"\\s*APP\\s*=\\s*(['\"])([^'\"]+)\\1\\s*", line)
-            if match:
-                assignments.append(match.group(2))
+            stripped = line.strip()
+            if "=" not in stripped:
+                continue
+            left, right = stripped.split("=", 1)
+            value = right.strip()
+            if left.strip() == "APP" and len(value) >= 2 and value[0] in ("'", '"') and value[-1] == value[0]:
+                assignments.append(value[1:-1])
         result["single_app_assignment"] = len(assignments) == 1
         if len(assignments) == 1:
             candidate = Path(assignments[0])
