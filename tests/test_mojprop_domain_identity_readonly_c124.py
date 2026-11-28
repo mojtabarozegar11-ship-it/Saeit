@@ -1,7 +1,7 @@
 import unittest
 
 from scripts.mojprop_domain_identity_readonly_c124 import (
-    DOMAIN, _classify_uapi_error, _domain_in, _find_path, _safe_home_path,
+    DOMAIN, _classify_uapi_error, _safe_error_tokens, _domain_in, _find_path, _safe_home_path,
 )
 
 
@@ -46,6 +46,14 @@ class C124DomainIdentityTests(unittest.TestCase):
                 actual = _classify_uapi_error(raw)
                 self.assertEqual(actual, expected)
                 self.assertNotIn(raw.decode(), actual)
+
+    def test_safe_error_tokens_filter_provider_text(self):
+        tokens = _safe_error_tokens(
+            b"uapi: invalid option for user secret-account-123"
+        )
+        self.assertEqual(tokens, ["invalid", "option", "uapi", "user"])
+        self.assertNotIn("secret", tokens)
+        self.assertNotIn("account", tokens)
 
     def test_uapi_io_diagnostics_are_metadata_only(self):
         from scripts import mojprop_domain_identity_readonly_c124 as module
