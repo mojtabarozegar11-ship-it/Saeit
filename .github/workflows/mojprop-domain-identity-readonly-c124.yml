@@ -51,7 +51,7 @@ jobs:
           test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
           printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
           chmod 600 "$work/config"
-          timeout 30s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -x /usr/local/cpanel/bin/uapi'
+          timeout 30s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -x /usr/bin/uapi'
 
       - name: Discover mojprop.top document root and Passenger binding via UAPI — read only
         shell: bash
