@@ -89,6 +89,23 @@ class C124DomainIdentityTests(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs["env"]["USER"], "zomorod2")
         self.assertNotIn("--user=zomorod2", run.call_args.args[0])
 
+    def test_passenger_matching_uses_direct_domain_record_not_nested_first_path(self):
+        from scripts.mojprop_domain_identity_readonly_c124 import (
+            _dict_records, _direct_domain_match, _direct_field,
+        )
+        payload = {"applications": [
+            {"domain": "other.example", "path": "/home/zomorod2/wrong",
+             "uri": "/wrong"},
+            {"domain": "mojprop.top", "path": "/home/zomorod2/mojprop",
+             "uri": "/"},
+        ]}
+        records = list(_dict_records(payload))
+        matches = [record for record in records if _direct_domain_match(record)]
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(_direct_field(matches[0], {"path"}),
+                         "/home/zomorod2/mojprop")
+        self.assertEqual(_direct_field(matches[0], {"uri"}), "/")
+
     def test_target_domain_constant_is_exact(self):
         self.assertEqual(DOMAIN, "mojprop.top")
 
