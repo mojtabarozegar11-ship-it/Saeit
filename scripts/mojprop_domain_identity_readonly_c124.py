@@ -62,8 +62,17 @@ def _direct_domain_match(record):
     if type(record) is not dict:
         return False
     domain_keys = {"domain", "domains", "app_domain", "domain_name", "hostname"}
-    return any(str(key).lower() in domain_keys and _domain_in(value)
-               for key, value in record.items())
+    for key, value in record.items():
+        if str(key).lower() not in domain_keys:
+            continue
+        if type(value) is str and value.rstrip(".").lower() == DOMAIN:
+            return True
+        if type(value) is list and any(
+            type(item) is str and item.rstrip(".").lower() == DOMAIN
+            for item in value[:100]
+        ):
+            return True
+    return False
 
 
 def _direct_field(record, keys):
