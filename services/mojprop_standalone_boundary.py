@@ -21,7 +21,7 @@ def request_host(request) -> str:
 
 
 def is_mojprop_host(request) -> bool:
-    return request.is_secure() and request_host(request) in MOJPROP_HOSTS
+    return request_host(request) in MOJPROP_HOSTS
 
 
 def standalone_commerce_unavailable(request, *args, **kwargs):
