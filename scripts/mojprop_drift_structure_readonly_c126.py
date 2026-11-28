@@ -43,6 +43,31 @@ def safe_shape(node):
     return hashlib.sha256(ast.dump(masked, include_attributes=False).encode("utf-8")).hexdigest()
 
 
+def behavior_summary(node):
+    """Return identifier-only control-flow metadata; never emit literal values."""
+    counts = {}
+    calls = set()
+    for item in ast.walk(node):
+        kind = type(item).__name__
+        if kind in {"If", "For", "AsyncFor", "While", "Try", "TryStar", "Return",
+                    "Raise", "Assert", "BoolOp", "Compare", "Await", "Yield",
+                    "YieldFrom", "Break", "Continue", "Match", "With", "AsyncWith"}:
+            counts[kind] = counts.get(kind, 0) + 1
+        if isinstance(item, ast.Call):
+            name = dotted(item.func)
+            if name and name != "Name" and len(name) <= 160:
+                calls.add(name)
+    args = getattr(node, "args", None)
+    parameters = []
+    if args is not None:
+        parameters = [x.arg[:64] for x in list(args.posonlyargs) + list(args.args) + list(args.kwonlyargs)]
+        if args.vararg:
+            parameters.append("*" + args.vararg.arg[:63])
+        if args.kwarg:
+            parameters.append("**" + args.kwarg.arg[:62])
+    return {"parameters": parameters, "control_flow_counts": dict(sorted(counts.items())),
+            "call_targets": sorted(calls)[:100]}
+
 def signature(path):
     result = {"file": Path(path).name, "exists": False, "regular": False,
               "parseable": False, "classes": [], "functions": [],
@@ -63,6 +88,7 @@ def signature(path):
         classes, funcs, imports, assignments, decorators = set(), set(), set(), set(), set()
         counts = {}
         callable_rows = []
+        behavior_rows = []
         assignment_rows = []
         literal_counts = {}
         for item in ast.walk(tree):
@@ -76,6 +102,7 @@ def signature(path):
                 funcs.add(node.name)
                 decorators.update(dotted(x) for x in node.decorator_list)
                 callable_rows.append({"kind": kind, "name": node.name, "shape_sha256": safe_shape(node)})
+                behavior_rows.append({"kind": kind, "name": node.name, **behavior_summary(node)})
             elif isinstance(node, ast.ClassDef):
                 classes.add(node.name)
                 decorators.update(dotted(x) for x in node.decorator_list)
@@ -96,6 +123,7 @@ def signature(path):
                       imports=sorted(imports), module_assignments=sorted(assignments),
                       decorators=sorted(decorators), top_level_statement_counts=dict(sorted(counts.items())),
                       callable_fingerprints=sorted(callable_rows, key=lambda x: (x["kind"], x["name"])),
+                      callable_behavior=sorted(behavior_rows, key=lambda x: (x["kind"], x["name"])),
                       module_assignment_fingerprints=sorted(assignment_rows, key=lambda x: x["name"]),
                       literal_type_counts=dict(sorted(literal_counts.items())))
     except (OSError, UnicodeError, SyntaxError, ValueError):
